@@ -23,6 +23,7 @@ plugins:
             trim_doctest_flags: false
 
 nav:
+  - Back: ../index.html
   - General: index.md
   - Cost provider: cost_provider.md
   - Lots optimizer: lots_optimizer.md

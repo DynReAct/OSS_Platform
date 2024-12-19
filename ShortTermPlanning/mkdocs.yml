@@ -27,6 +27,7 @@ plugins:
             trim_doctest_flags: false
 
 nav:
+  - Back: ../index.html
   - General: index.md
   - Agent: agent.md
   - Material: material.md

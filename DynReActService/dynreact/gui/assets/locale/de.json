@@ -1,0 +1,49 @@
+{
+  "menu": {
+    "site_header":{ "text": "Standort", "title": "Standorttab öffnen"},
+    "ltp_header": { "text": "Langzeitplanung", "title": "Tab für die Langzeitplanung öffnen"},
+    "ltp-new_header": { "text": "Langzeitplanung", "title": "Tab für die Langzeitplanung öffnen"},
+    "ltp-planned_header": { "text": "Resultate", "title": "Tab für die Ergebnisse der Langzeitplanung öffnen"},
+    "lots_header": {"text": "Loserzeugung", "title": "Tab für die Loserzeugung öffnen"},
+    "lots-planned_header": {"text": "Losplanung", "title": "Losplanung"},
+    "lots-creation_header": {"text": "Loserzeugung", "title": "Tab für die Loserzeugung öffnen"},
+    "lots2-creation_header": {"text": "Loserzeugung", "title": "Tab für die Loserzeugung öffnen"},
+    "agents_header": {"text": "Agenten", "title": "Tab für das Empfehlungssystem öffnen"},
+    "snaps_header": { "text": "Snapshot", "title": "Snapshot Tab öffnen" },
+    "user_title_loggedin": "Benutzerinformationen und Logout anzeigen",
+    "user_title_loggedout": "Login-Seite anzeigen"
+  },
+  "login": {
+    "title": {"text": "Bitte loggen Sie sich ein:"},
+    "user": {"placeholder": "Benutzername"},
+    "pw": {"placeholder": "Passwort"},
+    "login_failed": "Login fehlgeschlagen"
+  },
+  "user": {
+    "title": "Benutzerinformationen",
+    "logout_title": "Klicken zum Ausloggen"
+  },
+  "ltp": {
+    "title": "Langzeitplanung"
+  },
+  "coa": {
+    "title": "Ring-Auftrag Zuordnung"
+  },
+  "lots": {
+    "title": "Loserzeugung"
+  },
+  "snapshot": {
+    "title": "Snapshot Seite",
+    "active": {"text":  "Aktiver Snapshot: "},
+    "selection_range": "Auswahlbereich: ",
+    "select_header": "Snapshot Auswahl",
+    "details_header": "Snapshot Details",
+    "display_label": "Anzeige: "
+  },
+  "site": {
+    "header": "Standort"
+
+  }
+
+
+}

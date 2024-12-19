@@ -1,0 +1,50 @@
+{
+  "menu": {
+    "site_header":{ "text": "Ubicación", "title": "Pestaña de ubicación"},
+    "ltp_header": { "text": "Largo Plazo", "title": "Pestaña para Planificación a Largo Plazo"},
+    "coa_header": { "text": "Bobinas / Órdenes", "title": "Asignación de Bobinas a Órdenes"},
+    "lots_header": {"text": "Lotes", "title": "Pestaña para creación de lotes"},
+    "lots-planned_header": {"text": "Planificación de Lotes", "title": "Planificación de Lotes"},
+    "lots-creation_header": {"text": "Creación de Lotes", "title": "Pestaña de creación de lotes"},
+    "agents_header": {"text": "Corto Plazo", "title": "Sistema de Recomendaciones"},
+    "snaps_header": { "text": "Datos", "title": "Abrir Imagen de datos"},
+    "user_title_loggedin": "Información de usuario y cerrar sesión", 
+    "user_title_loggedout": "Página de inicio de sesión"
+  },
+  "login": {
+    "title": {"text": "Por favor, inicie sesión:"},
+    "user": {"placeholder": "Usuario"},
+    "pw": {"placeholder": "Contraseña"},
+    "login_failed": "Acceso fallido"
+  },
+  "user": {
+    "title": "Información de usuario",
+    "logout_title": "Pulse para cerrar sesión"
+  },
+  "ltp": {
+    "title": "Planificación a Largo Plazo"
+  },
+  "coa": {
+    "title": "Asignación de órdenes"
+  },
+  "lots": {
+    "title": "Creación de Lotes"
+  },
+  "agp": {
+   "title": "Planificación a Corto Plazo"
+  },
+  "snapshot": {
+    "title": "Página de Datos Actuales",
+    "active": {"text":  "Datos activos: "},
+    "selection_range": "Área de Selección: ",
+    "select_header": "Selección de Datos",
+    "details_header": "Detalle de Página de Datos",
+    "display_label": "Anuncio: "
+  },
+  "site": {
+    "header": "Unicación"
+
+  }
+
+
+}

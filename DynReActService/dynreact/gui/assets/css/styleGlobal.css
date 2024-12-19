@@ -1,0 +1,11 @@
+@import url("./fontOutfit.css");
+
+body {
+  font-family: "Outfit", sans-serif;
+  font-style: normal;
+  font-weight: normal;
+}
+
+h1,h2,h3 {
+    color:  rgba(2, 69, 17, 1);
+}

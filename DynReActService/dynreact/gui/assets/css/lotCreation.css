@@ -1,0 +1,195 @@
+.create-selector-flex {
+    display: flex;
+    column-gap: 2em;
+}
+
+.create-selector-flex>div {
+    display: flex;
+    column-gap: 1em;
+    flex-wrap: nowrap;
+    align-items: center;
+}
+
+.create-selector-flex>div[hidden] {
+    display: none;
+}
+
+.process-selector {
+    min-width: 6em;
+}
+
+.create-control-row {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 2em;
+    row-gap: 1em;
+    align-items: flex-start;
+}
+
+.create-control-row>.lot-creation-graph {
+    margin-top: -2em;
+}
+
+.create-control-box {
+    margin: 1em 0em;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid gray;
+}
+
+.create-control-box>.create-control-header {
+    padding: 1em 2em;
+    background-color: lightgray;
+    font-weight: bold;
+}
+
+.create-control-box>.create-control-panel {
+    display: flex;
+    column-gap: 2em;
+    align-items: center;
+    min-height: 5em;
+}
+
+.create-control-panel>.create-iterations {
+    display: flex;
+    flex-direction: column;
+    row-gap: 1em;
+}
+
+.create-control-panel>.create-iterations>div {
+    display: flex;
+    column-gap: 0.5em;
+    flex-wrap: nowrap;
+}
+
+.create-control-panel>.create-horizon {
+    display: flex;
+    flex-direction: column;
+    row-gap: 1em;
+    padding-left: 2em;
+}
+
+.create-control-panel>.create-horizon>div {
+    display: flex;
+    flex-wrap: nowrap;
+    column-gap: 0.5em;
+}
+
+.create-control-panel>.create-horizon>div>input {
+    max-width: 5em;
+
+}
+
+.create-control-panel>.create-control-btns {
+    padding-right: 2em;
+}
+
+.create-panel-col {
+    display: flex;
+    flex-direction: column;
+    row-gap: 0.3em;
+}
+
+.create-existing-sol-selector {
+    min-width: 12em;
+}
+
+.create-existing-sol-selector[hidden] {
+    display: none;
+}
+
+/* For settings modal */
+
+dialog#create-details-modal {
+    min-width: 70vw;
+}
+
+.create-popup-settings-button {
+    padding: 0.5em;
+}
+
+.create-popup-settings-button:hover:not([disabled]) {
+    cursor: pointer;
+}
+
+.create-plants-targets {
+    display: grid;
+    grid-template-columns: auto auto auto;
+    column-gap: 1em;
+    row-gap: 0.5em;
+    justify-content: start;
+}
+
+.create-order-backlog-popup {
+    background: white;
+    z-index: 2;
+    padding: 2em;
+    padding-top: 1em;
+}
+
+.create-order-backlog-popup>.grid {
+    display: grid;
+    grid-template-columns: repeat(6, auto);
+    column-gap: 1em;
+    row-grap: 0.5em;
+}
+
+.create-order-backlog-popup>.grid>.create-order-coil-header {
+    font-weight: bold;
+}
+
+.orders-backlog-settings-buttons {
+    display: flex;
+    align-items: center;
+    column-gap: 1em;
+    row-gap: 0.5em;
+}
+
+.orders-selection-overview {
+    display: flex;
+    flex-wrap: nowrap;
+    column-gap: 0.5em;
+    align-items: center;
+}
+
+.orders-lots-editor {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    column-gap: 0.5em;
+}
+
+/* ugly way to add spacing */
+.orders-lots-editor #create-orders-lots-order-total {
+    padding-right: 0.5em;
+}
+
+.orders-lots-editor .order-lots-selector {
+    min-width: 12em;
+}
+
+.planning-swimlane-mode {
+    display: flex;
+    column-gap: 1em;
+    align-items: center;
+    font-size: 0.9em;
+    padding-bottom: 1em;
+}
+
+.planning-swimlane-mode>.dash-dropdown {
+    min-width: 8em;
+}
+
+.production-performance-split {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 6em;
+}
+
+.create-performance-models {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    column-gap: 1em;
+    row-gap: 1em;
+}
+

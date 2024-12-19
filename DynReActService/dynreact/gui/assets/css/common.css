@@ -1,0 +1,69 @@
+.dynreact-button {
+    padding: 0.5em;
+}
+
+.dynreact-button:hover:not([disabled]) {
+    cursor: pointer;
+}
+
+.dynreact-button-small {
+    padding: 0.3em;
+}
+
+.flex {
+    display: flex;
+}
+
+gap-05 {
+    column-gap: 0.5em;
+}
+
+gap-1 {
+    column-gap: 1em;
+}
+
+/*
+* Control panel of the form
+* <div class=control-panel>
+*   <div class="control-panel-header>  <!-- TODO use :first-child instead? -->
+*   <div class="control-panel-main>    <!-- TODO use :nth-child(2) instead? -->
+* </div>
+*/
+
+.control-panel {  /*create-control-box*/
+    margin: 1em 0em;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid gray;
+}
+
+.control-panel>div:first-child {
+    padding: 1em 2em;
+    background-color: lightgray;
+    font-weight: bold;
+}
+
+.control-panel>div:nth-child(2) {
+    display: flex;
+    column-gap: 2em;
+    align-items: center;
+    min-height: 5em;
+    padding-left: 1em;
+}
+
+/* For vertical stacking of entries within the control-panel */
+.control-panel-entry {
+    display: flex;
+    flex-direction: column;
+    row-gap: 0.8em;
+}
+
+/* Dialog filled */
+
+dialog.dialog-filled {
+    padding: 0;
+}
+
+dialog.dialog-filled>* {
+    padding: 1em;
+}

@@ -1,0 +1,26 @@
+.snapshots-selector-row {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 2em;
+    align-items: center;
+}
+
+.snapshots-selector-row>div {
+    display: flex;
+    flex-wrap: nowrap;
+    column-gap: 1em;
+    align-items: center;
+}
+
+.snap-select {
+    min-width: 15em;
+}
+
+.coil-order-row {
+    display: flex;
+    flex-wrap: nowrap;
+    column-gap: 1em;
+    align-items: center;
+}
+
+

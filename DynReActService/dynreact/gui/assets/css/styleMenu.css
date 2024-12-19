@@ -1,0 +1,112 @@
+div.menu-container {
+    text-align: center;
+    background-color: rgb(242, 244, 248);
+}
+
+div.menu-container>img.menu-background {
+    opacity: 0.2;
+}
+
+div.main-menu {
+    position: absolute;
+    top: 1em;
+    right: 2em;
+    display: flex;
+    flex-wrap: nowrap;
+    column-gap: 0.2em;
+    height: 3.5em;
+    align-items: center;
+}
+
+.menu-link-base {
+
+}
+
+.menu-link {
+    border: 2px solid rgba(5, 111, 19, 0.8);
+    border-radius: 2px;
+    color: rgba(5, 111, 19, 1);
+    background-color: rgba(146, 237, 148, 0.6);
+    height: 3.5em;
+    padding: 0em 1em;
+    min-width: 5em;
+    max-width: 9em;
+    white-space: normal;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.menu-link>a {
+    color: rgba(5, 111, 19, 1);
+    text-decoration: none;
+}
+
+.menu-link:hover, .menu-link:hover>a {
+    cursor: pointer;
+    font-weight: bold;
+    color: rgba(237, 245, 238, 1);
+    background-color: rgba(5, 111, 19, 1);
+}
+
+.main-menu.logged-out>.login-required {
+    display: none;
+}
+
+
+.lang-selector {
+    min-width: 5em;
+    min-height: 1em;
+}
+
+.lang-selector:hover>img {
+    display: none;
+}
+
+.lang-selector>.dash-dropdown {
+    display: none;
+}
+
+.lang-selector:hover>.dash-dropdown {
+    display: inline;
+}
+
+
+.menu-logo {
+    position: absolute;
+    top: 1em;
+    left: 1.5em;
+    opacity: 0.8;
+    z-index: 1;
+    width: 400px;
+}
+
+
+.login-row {
+    display: flex;
+    column-gap: 1em;
+}
+
+.logout-row {
+    display: flex;
+    column-gap: 1em;
+}
+
+.hidden {
+    display: none;
+}
+
+.submenu-content {
+    display: none;
+    position: absolute;
+    top: 3.6em;
+    left: -0.1em;
+    z-index: 1;
+}
+
+/* Show the dropdown menu on hover */
+.menu-link:hover .submenu-content {
+    display: block;
+}

@@ -1,0 +1,15 @@
+id;order;storage;plant;process;weight;order_position;order_weight;material_width;material_thickness_initial;material_thickness_final;material_finishing_type;allowed_plants
+12345;order1;A;PKL01;1;10;1;23;1000;2;0.1;ftype1;1,2,3,4,5,6,7
+12346;order1;A;PKL01;1;12;2;23;1050;2;0.1;ftype1;1,2,3,4,5,6,7
+12351;order2;A;PKL01;1;9;1;9;950;1.8;0.2;ftype2;1,2,3,4,5,6,7
+14191;order3;C;FIN01;3;15;1;40;980;0.6;0.25;ftype1;6,7
+14192;order3;C;FIN01;3;12;2;40;990;0.8;0.25;ftype1;6,7
+14193;order3;C;FIN01;3;14;3;40;990;0.75;0.25;ftype1;6,7
+14394;order4;C;;3;16;1;42;1050;0.9;0.3;ftype2;6,7
+14395;order4;C;;3;12;2;42;985;1.2;0.18;ftype2;6,7
+14396;order4;C; ;3;14;3;42;995;1.;0.2;ftype2;6,7
+14397;order5;C;;3;15;1;25;975;1.;0.25;ftype1;7
+14398;order5;C;;3;10;2;25;970;0.8;0.2;ftype1;7
+14401;order6;C;;3;15;1;25;995;1.;0.25;ftype1;6
+14402;order6;C;FIN01;3;10;2;25;990;0.8;0.2;ftype1;6
+14403;order7;C;FIN02;3;11;2;25;995;0.6;0.2;ftype1;6

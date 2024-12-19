@@ -1,0 +1,75 @@
+:root {
+  --ltp-portfolio-base: blue;
+  --ltp-portfolio-light: lightblue;
+  --ltp-portfolio-lighter: lightblue;
+  --ltp-portfolio-dark: darkblue;
+}
+
+@supports (background-color: color-mix(in srgb, red 50%, blue 50%)) {
+    :root {
+        --ltp-portfolio-base: #4169E1;
+        --ltp-portfolio-light: color-mix(in srgb, var(--ltp-portfolio-base), white);
+        --ltp-portfolio-lighter: color-mix(in srgb, var(--ltp-portfolio-base), white 75%);
+        --ltp-portfolio-dark: color-mix(in srgb, var(--ltp-portfolio-base), black);
+    }
+}
+
+
+/* In central control panel */
+
+.ltp-horizon-widget {
+    display: flex;
+    column-gap: 1em;
+    align-items: center;
+}
+
+.ltp-horizon-widget>input {
+    max-width: 9em;
+}
+
+.ltp-starttime-block {
+    display: flex;
+    flex-direction: column;
+    row-gap: 0.6em;
+}
+
+.ltp-starttime-block>input {
+    padding: 0.3em;
+}
+
+.ltp-result-container {
+    display: flex;
+    column-gap: 1em;
+}
+
+.ltp-result-container[hidden] {
+    display: none;
+}
+
+/* In structure portfolio popup */
+
+.ltp-production-total {
+    display: flex;
+    column-gap: 1em;
+    align-items: center;
+    padding-bottom: 1em;
+}
+
+.ltp-production-total>input {
+    max-width: 8em;
+}
+
+.ltp-materials-buttons {
+    display: flex;
+    justify-content: flex-end;
+    column-gap: 0.5em;
+    padding-top: 1em;
+}
+
+/* In calendar popup */
+
+.ltp-calendar-plant-row {
+    display: flex;
+    column-gap: 1em;
+    padding-bottom: 1em;
+}

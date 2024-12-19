@@ -1,0 +1,272 @@
+:root {
+  --lots2-tabs-border: 1px solid black;
+  /* greys, from light to darker: #ededed, #dfdfdf, #d1d1d1, #c0c0c0, #a7a7a7, #898989, #383838, #000000 */
+    /*
+  --lots2-tabs-button-color: black;
+  --lots2-tabs-button-background: lightgrey;
+  --lots2-tabs-button-hover-color: black;
+  --lots2-tabs-button-hover-background: grey;
+  */
+  --lots2-tabs-button-color: #383838;
+  --lots2-tabs-button-background: #ededed;
+  --lots2-tabs-button-hover-color: #383838;
+  --lots2-tabs-button-hover-background: #c0c0c0;
+  --lots2-tabs-button-active-color: black;
+  --lots2-tabs-button-active-background: white;
+}
+
+
+.lots2-selector-flex {
+    display: flex;
+    column-gap: 2em;
+}
+
+.lots2-selector-flex>div {
+    display: flex;
+    column-gap: 1em;
+    flex-wrap: nowrap;
+    align-items: center;
+}
+
+.lots2-selector-flex>div[hidden] {
+    display: none;
+}
+
+.lots2-process-selector {
+    min-width: 6em;
+}
+
+/* Settings menu */
+
+.lots2-settings-tabs {
+    padding-top: 1em;
+    min-width: 30em;
+    display: inline-block;
+}
+
+.lots2-settings-tabs[hidden] {
+    display: none;
+}
+
+
+.lots2-settings-tabs>.lots-settings-header {
+    display: flex;
+    border: var(--lots2-tabs-border);
+    border-bottom: none;
+}
+
+.lots2-settings-tabs>.lots-settings-header>div {
+    flex-grow: 1;  /* placeholder element */
+    /*border-bottom: var(--lots2-tabs-border);*/
+    background-color: var(--lots2-tabs-button-background);
+}
+
+.lots2-settings-tabs>.lots-settings-body {
+    border: var(--lots2-tabs-border);
+    border-top: none;
+    border-bottom: none;
+    min-height: 4em;
+    padding: 0.5em;
+}
+
+.lots2-settings-tabs>.lots-settings-body>div {
+    padding-top: 1em;
+}
+
+.lots2-settings-tabs>.lots-settings-nav {
+    display: flex;
+    column-gap: 0.5em;
+    justify-content: flex-end;
+    padding-right: 0.5em;
+    padding-bottom: 0.5em;
+    border: var(--lots2-tabs-border);
+    border-top: none;
+}
+
+.lots2-tab-button {
+    background-color: var(--lots2-tabs-button-background);
+    color: var(--lots2-tabs-button-color);
+    border: none;
+    /*border-bottom: var(--lots2-tabs-border);*/
+    border-radius: 0;
+    font-size: 1em;
+    padding: 0.7em;
+}
+
+.lots2-tab-button-active {
+    background-color: var(--lots2-tabs-button-active-background);
+    color: var(--lots2-tabs-button-active-color);
+    font-weight: bold;
+}
+
+
+.lots2-tab-button:hover {
+    background-color: var(--lots2-tabs-button-hover-background);
+    color: var(--lots2-tabs-button-hover-color);
+    cursor: pointer;
+    border-bottom: none;  /* FIXME this is really foreseen for the active tab button */
+}
+
+/* Targets tab */
+
+.lots-target-buttons {
+    display: flex;
+    column-gap: 1em;
+    padding-bottom: 1em;
+}
+
+.lots2-plants-targets {
+    display: grid;
+    grid-template-columns: auto auto auto;
+    column-gap: 1em;
+    row-gap: 0.5em;
+    justify-content: start;
+}
+
+.lots2-production-performance-split {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 6em;
+}
+
+.lots2-performance-models {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    column-gap: 1em;
+    row-gap: 1em;
+}
+
+.lots2-horizon {
+    display: flex;
+    flex-direction: row;
+    column-gap: 1em;
+}
+
+.lots2-horizon>div {
+    display: flex;
+    flex-wrap: nowrap;
+    column-gap: 0.5em;
+}
+
+.lots2-horizon>div>input {
+    max-width: 5em;
+}
+
+/* Orders tab */
+
+.lots2-orders-selection-overview {
+    display: flex;
+    flex-wrap: nowrap;
+    column-gap: 0.5em;
+    align-items: center;
+}
+
+.lots2-orders-init-menu {
+    display: flex;
+    column-gap: 1em;
+    align-items: center;
+}
+
+.lots2-orders-init-method {
+    min-width: 12em;
+}
+
+.lots2-orders-init-submenu {
+    display: grid;
+    grid-template-columns: auto auto;
+    column-gap: 1em;
+    row-gap: 0.5em;
+    justify-content: start;
+    align-items: center;
+    padding-top: 1em;
+}
+
+.lots2-orders-init-submenu[hidden] {
+    display: none;
+}
+
+.lots2-orders-init-buttons {
+    display: flex;
+    justify-content: flex-end;
+    column-gap: 0.5em;
+}
+
+.lots2-orders-lots-editor {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    column-gap: 0.5em;
+}
+
+/* ugly way to add spacing */
+.lots2-orders-lots-editor #lots2-orders-lots-order-total {
+    padding-right: 0.5em;
+}
+
+.lots2-orders-lots-editor .lots2-order-lots-selector {
+    min-width: 12em;
+}
+
+.lots2-orders-backlog-settings-buttons {
+    display: flex;
+    align-items: center;
+    column-gap: 1em;
+    row-gap: 0.5em;
+}
+
+.lots2-orders-grouped-menu {
+    margin-top: 0.5em;
+}
+
+/* Settings tab */
+
+.lots2-settings-tab-grid {
+    display: grid;
+    grid-template-columns: auto auto;
+    justify-content: start;
+    align-items: center;
+    column-gap: 1em;
+    row-gap: 0.7em;
+    align-items: center;
+}
+
+.lots2-init-selector {
+    min-width: 10em;
+}
+
+.lots2-iterations-view {
+   display: flex;
+   column-gap: 0.5em;
+}
+
+.lots2-control-btns {
+    padding-top: 1em;
+    display: flex;
+    column-gap: 0.2em;
+}
+
+
+/* Control row (tabs + graph) */
+
+.lots2-control-row {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 2em;
+    row-gap: 1em;
+    align-items: flex-start;
+}
+
+/*
+.lots2-control-row .lots2-creation-graph {
+    margin-top: -2em;
+}
+*/
+
+.lots2-ltp-dialog {
+    min-width: 50vw;
+}
+
+.lots2-ltp-cancel {
+    margin-top: 0.5em;
+}
+

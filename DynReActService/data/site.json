@@ -1,0 +1,47 @@
+{
+  "processes": [{
+    "name_short": "PKL",
+    "process_ids": [1],
+    "name": "Pickling",
+    "next_steps": ["CRL"]
+  }, {
+    "name_short": "CRL",
+    "process_ids": [2],
+    "name": "Cold rolling",
+    "next_steps": ["CRL"]
+  },{
+    "name_short": "FIN",
+    "process_ids": [3],
+    "name": "Finishing"
+  }],
+  "equipment": [
+    {"id": 1, "name_short": "PKL01", "process":  "PKL", "storage_in": "A", "storage_out": "B"},
+    {"id": 2, "name_short": "PKL02", "process":  "PKL", "storage_in": "A", "storage_out": "B"},
+    {"id": 3, "name_short": "CRL01", "process":  "CRL", "storage_in": "B", "storage_out": "C"},
+    {"id": 4, "name_short": "CRL02", "process":  "CRL", "storage_in": "B", "storage_out": "C"},
+    {"id": 5, "name_short": "CRL03", "process":  "CRL", "storage_in": "B", "storage_out": "C"},
+    {"id": 6, "name_short": "FIN01", "process":  "FIN", "storage_in": "C", "storage_out": "DONE"},
+    {"id": 7, "name_short": "FIN02", "process":  "FIN", "storage_in": "C", "storage_out": "DONE"}
+  ],
+  "storages": [
+    {"name_short": "A", "equipment":  [1, 2]},
+    {"name_short": "B", "equipment":  [3, 4, 5]},
+    {"name_short": "C", "equipment":  [6, 7]},
+    {"name_short": "DONE", "equipment":  []}
+  ],
+  "material_categories": [
+    {
+      "id": "rollingType", "name": "Rolling type",
+      "classes": [
+        { "id": "rtype1", "name": "Rolling material 1", "is_default": true, "category": "rollingType" },
+        { "id": "rtype2", "name": "Rolling material 2", "category": "rollingType" }
+      ]
+    }, {
+      "id": "finishingType", "name": "Finishing type",
+      "classes": [
+        { "id": "ftype1", "name": "Finishing material 1", "is_default": true, "category": "finishingType" },
+        { "id": "ftype2", "name": "Finishing material 2", "category": "finishingType" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+Icons downloaded from https://icons.getbootstrap.com/icons
+License: MIT
+
+* globe.svg: 2024-04-22

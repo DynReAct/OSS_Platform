@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="img/favicon.ico" />
+    <title>ShortTermPlanning - Dynreact ShortTermPlanning</title>
+    <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "ShortTermPlanning";
+        var mkdocs_page_input_path = "shorttermplanning.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="index.html" class="icon icon-home"> Dynreact ShortTermPlanning
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="" href="../index.html">Back</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="index.html">General</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="agent.html">Agent</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="material.html">Material</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="equipment.html">Equipment</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="common.html">Common</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="log.html">Log</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="functions.html">Functions</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="cleankafka.html">Clean_kafka</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">ShortTermPlanning</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#delete_all_topics-function">delete_all_topics function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.ShortTermPlanning.delete_all_topics">delete_all_topics</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#run_script-function">run_script function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.ShortTermPlanning.run_script">run_script</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#run_general_agents-function">run_general_agents function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.ShortTermPlanning.run_general_agents">run_general_agents</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#create_auction-function">create_auction function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.ShortTermPlanning.create_auction">create_auction</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#start_auction-function">start_auction function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.ShortTermPlanning.start_auction">start_auction</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#ask_results-function">ask_results function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.ShortTermPlanning.ask_results">ask_results</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#end_auction-function">end_auction function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.ShortTermPlanning.end_auction">end_auction</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#sleep-function">sleep function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.ShortTermPlanning.sleep">sleep</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Dynreact ShortTermPlanning</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="index.html" class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">ShortTermPlanning</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="shorttermplanning-module">ShortTermPlanning module</h1>
+<p>This program runs the scripts required to start the general agents,
+clones them for an auction with the resources indicated by the user,
+and starts the auction, waiting for its completion.</p>
+<hr />
+<h2 id="delete_all_topics-function">delete_all_topics function</h2>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+<a id="dynreact.shortterm.ShortTermPlanning.delete_all_topics"></a>
+    <div class="doc doc-contents first">
+
+        <p>Delete all hanging topics in the Kafka broker.
+This is necessary when a previous execution did not finish correctly
+and there are messages left in the general topic which may break subsequent executions.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>admin_client</code></b>
+                  (<code>object</code>)
+              –
+              <div class="doc-md-description">
+                <p>A Kafka AdminClient instance</p>
+              </div>
+            </li>
+            <li>
+              <b><code>verbose</code></b>
+                  (<code>int</code>)
+              –
+              <div class="doc-md-description">
+                <p>Verbosity level</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div><h2 id="run_script-function">run_script function</h2>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+<a id="dynreact.shortterm.ShortTermPlanning.run_script"></a>
+    <div class="doc doc-contents first">
+
+        <p>Run the given script and notify the LOG about it.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>script</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                <p>Path to the script to run</p>
+              </div>
+            </li>
+            <li>
+              <b><code>producer</code></b>
+                  (<code>object</code>)
+              –
+              <div class="doc-md-description">
+                <p>A Kafka Producer instance</p>
+              </div>
+            </li>
+            <li>
+              <b><code>base</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                <p>Path to the configuration file (with the IP address)</p>
+              </div>
+            </li>
+            <li>
+              <b><code>verbose</code></b>
+                  (<code>int</code>)
+              –
+              <div class="doc-md-description">
+                <p>Verbosity level</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div><h2 id="run_general_agents-function">run_general_agents function</h2>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+<a id="dynreact.shortterm.ShortTermPlanning.run_general_agents"></a>
+    <div class="doc doc-contents first">
+
+        <p>Creates the general agents by running the corresponding scripts.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>producer</code></b>
+                  (<code>object</code>)
+              –
+              <div class="doc-md-description">
+                <p>A Kafka Producer instance</p>
+              </div>
+            </li>
+            <li>
+              <b><code>base</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                <p>Path to the configuration file (with the IP address)</p>
+              </div>
+            </li>
+            <li>
+              <b><code>verbose</code></b>
+                  (<code>int</code>)
+              –
+              <div class="doc-md-description">
+                <p>Verbosity level</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div><h2 id="create_auction-function">create_auction function</h2>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+<a id="dynreact.shortterm.ShortTermPlanning.create_auction"></a>
+    <div class="doc doc-contents first">
+
+        <p>Creates an auction by instructing the master LOG, RESOURCE and MATERIAL to clone themselves to follow a new topic</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>resources</code></b>
+                  (<code>list</code>)
+              –
+              <div class="doc-md-description">
+                <p>List of resource IDs that will participate in the auction</p>
+              </div>
+            </li>
+            <li>
+              <b><code>producer</code></b>
+                  (<code>object</code>)
+              –
+              <div class="doc-md-description">
+                <p>A Kafka Producer instance</p>
+              </div>
+            </li>
+            <li>
+              <b><code>verbose</code></b>
+                  (<code>int</code>)
+              –
+              <div class="doc-md-description">
+                <p>Verbosity level</p>
+              </div>
+            </li>
+            <li>
+              <b><code>counterbid_wait</code></b>
+                  (<code>float</code>)
+              –
+              <div class="doc-md-description">
+                <p>Number of seconds to wait for the materials to counterbid</p>
+              </div>
+            </li>
+            <li>
+              <b><code>nmaterials</code></b>
+                  (<code>int</code>, default:
+                      <code>None</code>
+)
+              –
+              <div class="doc-md-description">
+                <p>Maximum number of materials cloned for each resource (default is to clone all)</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>tuple(str,int)</code>
+              –
+              <div class="doc-md-description">
+                <p>Topic name of the auction and number of agents</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div><h2 id="start_auction-function">start_auction function</h2>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+<a id="dynreact.shortterm.ShortTermPlanning.start_auction"></a>
+    <div class="doc doc-contents first">
+
+        <p>Starts an auction by instructing the LOG to check the presence of all agents</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>topic</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                <p>Topic name of the auction we want to start</p>
+              </div>
+            </li>
+            <li>
+              <b><code>producer</code></b>
+                  (<code>object</code>)
+              –
+              <div class="doc-md-description">
+                <p>A Kafka Producer instance</p>
+              </div>
+            </li>
+            <li>
+              <b><code>num_agents</code></b>
+                  (<code>int</code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+            <li>
+              <b><code>verbose</code></b>
+                  (<code>int</code>)
+              –
+              <div class="doc-md-description">
+                <p>Verbosity level</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div><h2 id="ask_results-function">ask_results function</h2>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+<a id="dynreact.shortterm.ShortTermPlanning.ask_results"></a>
+    <div class="doc doc-contents first">
+
+        <p>Asks the LOG of the auction to get the results of the auction.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>topic</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                <p>Topic name of the auction we want to start</p>
+              </div>
+            </li>
+            <li>
+              <b><code>producer</code></b>
+                  (<code>object</code>)
+              –
+              <div class="doc-md-description">
+                <p>A Kafka Producer instance</p>
+              </div>
+            </li>
+            <li>
+              <b><code>consumer</code></b>
+                  (<code>object</code>)
+              –
+              <div class="doc-md-description">
+                <p>A Kafka Consumer instance</p>
+              </div>
+            </li>
+            <li>
+              <b><code>verbose</code></b>
+                  (<code>int</code>)
+              –
+              <div class="doc-md-description">
+                <p>Verbosity level</p>
+              </div>
+            </li>
+            <li>
+              <b><code>wait_answer</code></b>
+                  (<code>float</code>, default:
+                      <code>5.0</code>
+)
+              –
+              <div class="doc-md-description">
+                <p>Number of seconds to wait for an answer</p>
+              </div>
+            </li>
+            <li>
+              <b><code>max_iters</code></b>
+                  (<code>int</code>, default:
+                      <code>10</code>
+)
+              –
+              <div class="doc-md-description">
+                <p>Maximum iterations with no message (if this parameter is 1, the loop will stop once there are no more messages)</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div><h2 id="end_auction-function">end_auction function</h2>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+<a id="dynreact.shortterm.ShortTermPlanning.end_auction"></a>
+    <div class="doc doc-contents first">
+
+        <p>Ends an auction by instructing all RESOURCE, MATERIAL and LOG children of the auction to exit</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>topic</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                <p>Topic name of the auction we want to end</p>
+              </div>
+            </li>
+            <li>
+              <b><code>producer</code></b>
+                  (<code>object</code>)
+              –
+              <div class="doc-md-description">
+                <p>A Kafka Producer instance</p>
+              </div>
+            </li>
+            <li>
+              <b><code>verbose</code></b>
+                  (<code>int</code>)
+              –
+              <div class="doc-md-description">
+                <p>Verbosity level</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div><h2 id="sleep-function">sleep function</h2>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+<a id="dynreact.shortterm.ShortTermPlanning.sleep"></a>
+    <div class="doc doc-contents first">
+
+        <p>Sleep for the specified number of seconds and notify the general LOG about it.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>seconds</code></b>
+                  (<code>float</code>)
+              –
+              <div class="doc-md-description">
+                <p>Number of seconds to be waited.</p>
+              </div>
+            </li>
+            <li>
+              <b><code>producer</code></b>
+                  (<code>object</code>)
+              –
+              <div class="doc-md-description">
+                <p>Kafka object producer.</p>
+              </div>
+            </li>
+            <li>
+              <b><code>verbose</code></b>
+                  (<code>int</code>)
+              –
+              <div class="doc-md-description">
+                <p>Level of verbosity.</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="cleankafka.html" class="btn btn-neutral float-left" title="Clean_kafka"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="cleankafka.html" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+  </span>
+</div>
+    <script src="js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = ".";</script>
+    <script src="js/theme_extra.js"></script>
+    <script src="js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

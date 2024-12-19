@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="img/favicon.ico" />
+    <title>Common - Dynreact ShortTermPlanning</title>
+    <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Common";
+        var mkdocs_page_input_path = "common.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="index.html" class="icon icon-home"> Dynreact ShortTermPlanning
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="" href="../index.html">Back</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="index.html">General</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="agent.html">Agent</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="material.html">Material</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="equipment.html">Equipment</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Common</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#vaction-class">VAction class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.common.VAction">VAction</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.common.VAction.__call__">__call__</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#sendmsgtopic-function">sendmsgtopic function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.common.sendmsgtopic">sendmsgtopic</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="log.html">Log</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="functions.html">Functions</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="cleankafka.html">Clean_kafka</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="shorttermplanning.html">ShortTermPlanning</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Dynreact ShortTermPlanning</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="index.html" class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Common</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="common-module">Common module</h1>
+<p>Describe here the module purpose</p>
+<blockquote>
+<p>Then the actual documentation of the classes and their functions starts</p>
+</blockquote>
+<hr />
+<h2 id="vaction-class">VAction class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.shortterm.common.VAction"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="argparse.Action">Action</span></code></p>
+
+
+        <p>Custom action for argparse to handle verbosity levels.
+From https://stackoverflow.com/questions/6076690/
+verbose-level-with-argparse-and-multiple-v-options</p>
+<p>Attributes:
+    option_strings (str): String with options to be considered.
+    dest  (str): Variable name storing the result.
+    nargs (int): Number of Arguments.
+    const (bool): Constant or variable.
+    default (str): Default value when absent.
+    type (str): Type of data being processed.
+    choices (str): Set of values .
+    required (bool): Required or not.
+    help (str): String describing the meaning of the parameter for help.
+    metavar (str):</p>
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.common.VAction.__call__" class="doc doc-heading">
+            <code class="highlight language-python">__call__(parser, args, values, option_string=None)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Function able to handle the arguments.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>parser</code></b>
+                  (<code>object</code>)
+              –
+              <div class="doc-md-description">
+                <p>Object in charge of processing the operation.</p>
+              </div>
+            </li>
+            <li>
+              <b><code>dict</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                <p>Dictionary of arguments.</p>
+              </div>
+            </li>
+            <li>
+              <b><code>values</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                <p>Dictionary of values.</p>
+              </div>
+            </li>
+            <li>
+              <b><code>option_string</code></b>
+                  (<code>str</code>, default:
+                      <code>None</code>
+)
+              –
+              <div class="doc-md-description">
+                <p>Options requested.</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="sendmsgtopic-function">sendmsgtopic function</h2>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+<a id="dynreact.shortterm.common.sendmsgtopic"></a>
+    <div class="doc doc-contents first">
+
+        <p>Send message to a Kafka topic.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>producer</code></b>
+                  (<code>object</code>)
+              –
+              <div class="doc-md-description">
+                <p>The Kafka producer instance.</p>
+              </div>
+            </li>
+            <li>
+              <b><code>tsend</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                <p>The topic to send the message to.</p>
+              </div>
+            </li>
+            <li>
+              <b><code>topic</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                <p>The topic of the message.</p>
+              </div>
+            </li>
+            <li>
+              <b><code>source</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                <p>The source of the message.</p>
+              </div>
+            </li>
+            <li>
+              <b><code>dest</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                <p>The destination of the message.</p>
+              </div>
+            </li>
+            <li>
+              <b><code>action</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                <p>The action to be performed.</p>
+              </div>
+            </li>
+            <li>
+              <b><code>payload</code></b>
+                  (<code>dict</code>, default:
+                      <code>None</code>
+)
+              –
+              <div class="doc-md-description">
+                <p>The payload of the message. Defaults to {"msg": "-"}</p>
+              </div>
+            </li>
+            <li>
+              <b><code>vb</code></b>
+                  (<code>int</code>, default:
+                      <code>0</code>
+)
+              –
+              <div class="doc-md-description">
+                <p>Verbosity level. Defaults to 0.</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="equipment.html" class="btn btn-neutral float-left" title="Equipment"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="log.html" class="btn btn-neutral float-right" title="Log">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="equipment.html" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="log.html" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = ".";</script>
+    <script src="js/theme_extra.js"></script>
+    <script src="js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

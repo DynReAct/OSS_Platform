@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="img/favicon.ico" />
+    <title>Snapshot provider - Dynreact Base</title>
+    <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Snapshot provider";
+        var mkdocs_page_input_path = "snapshot_provider.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="index.html" class="icon icon-home"> Dynreact Base
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="" href="../index.html">Back</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="index.html">General</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="cost_provider.html">Cost provider</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="lots_optimizer.html">Lots optimizer</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="model.html">Model</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Snapshot provider</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#snapshotprovider-class">SnapshotProvider class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.SnapshotProvider">SnapshotProvider</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.SnapshotProvider.store">store</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.SnapshotProvider.snapshots">snapshots</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.SnapshotProvider.size">size</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.SnapshotProvider.previous">previous</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.SnapshotProvider.next">next</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.SnapshotProvider.load">load</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.SnapshotProvider.order_plant_assignment_from_snapshot">order_plant_assignment_from_snapshot</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.SnapshotProvider.target_weights_from_snapshot">target_weights_from_snapshot</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.SnapshotProvider.eligible_orders">eligible_orders</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#snapshotprovider-class_1">SnapshotProvider class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.OrderInitMethod">OrderInitMethod</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.OrderInitMethod.CURRENT_PLANNING">CURRENT_PLANNING</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.OrderInitMethod.INACTIVE_LOTS">INACTIVE_LOTS</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_CURRENT_LOT">OMIT_CURRENT_LOT</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_SUBSEQUENT_LOT">OMIT_SUBSEQUENT_LOT</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_ACTIVE_LOTS">OMIT_ACTIVE_LOTS</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_INACTIVE_LOTS">OMIT_INACTIVE_LOTS</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.OrderInitMethod.ACTIVE_PROCESS">ACTIVE_PROCESS</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.OrderInitMethod.ACTIVE_PLANT">ACTIVE_PLANT</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="longtermplanning.html">Long term planning</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Dynreact Base</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="index.html" class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Snapshot provider</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="snapshot-provider">Snapshot provider</h1>
+<p>The SnapshotProvider module defines the SnapshotProvider interface. The FileSnapshotProvider implementation
+is provided as part of the software, which can parse CSV files. Custom implementations can be used
+for more complex use cases.</p>
+<hr />
+<h2 id="snapshotprovider-class"><strong>SnapshotProvider</strong> class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.SnapshotProvider.SnapshotProvider"></a>
+    <div class="doc doc-contents first">
+
+
+        <p>A snapshot provider loads snapshots of the current production status, e.g. from an MES.
+Implementation expected in module dynreact.snapshot.SnapshotProviderImpl</p>
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.store" class="doc doc-heading">
+            <code class="highlight language-python">store(snapshot, *args, **kwargs)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Optional method, may not be implemented</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.snapshots" class="doc doc-heading">
+            <code class="highlight language-python">snapshots(start_time, end_time, order='asc')</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Retrieve snapshot ids.</p>
+<p>Parameters:
+    start_time:
+    end_time:
+    order:</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.size" class="doc doc-heading">
+            <code class="highlight language-python">size(start_time, end_time)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Retrieve estimated number of available snapshots in the specified time interval.</p>
+<p>Parameters:
+    start_time:
+    end_time:</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.previous" class="doc doc-heading">
+            <code class="highlight language-python">previous(time=None)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Get the timestamp of the previous snapshot.</p>
+<p>Parameters:
+    time:</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.next" class="doc doc-heading">
+            <code class="highlight language-python">next(time)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Get the id of the next snapshot</p>
+<p>Parameters:
+    time:</p>
+<p>Returns:
+    snapshot id</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.load" class="doc doc-heading">
+            <code class="highlight language-python">load(*args, time=None, **kwargs)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Load the snapshot for a specific timestamp.</p>
+<p>Parameters:
+    time:</p>
+<p>Returns:
+     the snapshot object, if there is a snapshot for the specified timestamp, else None.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.order_plant_assignment_from_snapshot" class="doc doc-heading">
+            <code class="highlight language-python">order_plant_assignment_from_snapshot(snapshot, process, include_inactive_lots=False)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>snapshot</code></b>
+                  (<code><a class="autorefs autorefs-internal" title="dynreact.base.model.Snapshot" href="model.html#dynreact.base.model.Snapshot">Snapshot</a></code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+            <li>
+              <b><code>process</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>dict[str, int]</code>
+              –
+              <div class="doc-md-description">
+                <p>keys: order ids, values: plant ids</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.target_weights_from_snapshot" class="doc doc-heading">
+            <code class="highlight language-python">target_weights_from_snapshot(snapshot, process, include_inactive_lots=False)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>snapshot</code></b>
+                  (<code><a class="autorefs autorefs-internal" title="dynreact.base.model.Snapshot" href="model.html#dynreact.base.model.Snapshot">Snapshot</a></code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+            <li>
+              <b><code>process</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>dict[int, float]</code>
+              –
+              <div class="doc-md-description">
+                <p>keys: plant ids, values: target weights</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.eligible_orders" class="doc doc-heading">
+            <code class="highlight language-python">eligible_orders(snapshot, process, planning_horizon, method=[OrderInitMethod.ACTIVE_PROCESS, OrderInitMethod.CURRENT_PLANNING, OrderInitMethod.INACTIVE_LOTS, OrderInitMethod.OMIT_CURRENT_LOT])</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Determine the orders eligible for planning/lot creation for a specific process.
+This method can be overridden in a derived implementation.
+TODO this is unfinished, will need more input data, such as predecessor stage planning, etc</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>snapshot</code></b>
+                  (<code><a class="autorefs autorefs-internal" title="dynreact.base.model.Snapshot" href="model.html#dynreact.base.model.Snapshot">Snapshot</a></code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+            <li>
+              <b><code>process</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+            <li>
+              <b><code>planning_horizon</code></b>
+                  (<code>tuple[<span title="datetime.datetime">datetime</span>, <span title="datetime.datetime">datetime</span>]</code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+            <li>
+              <b><code>method</code></b>
+                  (<code><a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod" href="#dynreact.base.SnapshotProvider.OrderInitMethod">OrderInitMethod</a> | <span title="typing.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod" href="#dynreact.base.SnapshotProvider.OrderInitMethod">OrderInitMethod</a>]</code>, default:
+                      <code>[<a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod.ACTIVE_PROCESS" href="#dynreact.base.SnapshotProvider.OrderInitMethod.ACTIVE_PROCESS">ACTIVE_PROCESS</a>, <a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod.CURRENT_PLANNING" href="#dynreact.base.SnapshotProvider.OrderInitMethod.CURRENT_PLANNING">CURRENT_PLANNING</a>, <a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod.INACTIVE_LOTS" href="#dynreact.base.SnapshotProvider.OrderInitMethod.INACTIVE_LOTS">INACTIVE_LOTS</a>, <a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_CURRENT_LOT" href="#dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_CURRENT_LOT">OMIT_CURRENT_LOT</a>]</code>
+)
+              –
+              <div class="doc-md-description">
+                <ul>
+<li>current_planning: based on the lots already in the snapshot * active_process (default): based on the current process ids of the coils * active_plant: based on the current plant (location) of the coils</li>
+</ul>
+              </div>
+            </li>
+            <li>
+              <b><code>include_scheduled_orders</code></b>
+              –
+              <div class="doc-md-description">
+                <p>include those orders that are contained in a lot for the specified process already</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>list[str]</code>
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="snapshotprovider-class_1"><strong>SnapshotProvider</strong> class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.SnapshotProvider.OrderInitMethod"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="enum.StrEnum">StrEnum</span></code></p>
+
+
+        <p>Specifies different methods to initialize the order backlog for the planning optimization.
+TODO implement new specifiers.</p>
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.CURRENT_PLANNING" class="doc doc-heading">
+            <code class="highlight language-python">CURRENT_PLANNING = 'current_planning'</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Include orders from planned lots of the active snapshot as input for the planning optimization.
+This can be further refined by means of the OMIT_CURRENT_LOT and OMIT_SUBSEQUENT_LOT specifiers. 
+It is incompatible with OMIT_PLANNED_LOTS; 
+if CURRENT_PLANNING and OMIT_PLANNED_LOTS are both active then an error is thrown.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.INACTIVE_LOTS" class="doc doc-heading">
+            <code class="highlight language-python">INACTIVE_LOTS = 'inactive_lots'</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Include orders from inactive lots of the currently active snapshot as input for the planning optimization.
+Active by default.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_CURRENT_LOT" class="doc doc-heading">
+            <code class="highlight language-python">OMIT_CURRENT_LOT = 'omit_current_lot'</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Used in conjunction with CURRENT_PLANNING to exclude the currently processed lot.
+Has no effect if CURRENT_PLANNING is not active. 
+Active by default.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_SUBSEQUENT_LOT" class="doc doc-heading">
+            <code class="highlight language-python">OMIT_SUBSEQUENT_LOT = 'omit_subsequent_lot'</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Used in conjunction with CURRENT_PLANNING and OMIT_CURRENT_LOT to exclude the subsequent lot.
+Has no effect if CURRENT_PLANNING or OMIT_CURRENT_LOT are not active. 
+Inactive by default.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_ACTIVE_LOTS" class="doc doc-heading">
+            <code class="highlight language-python">OMIT_ACTIVE_LOTS = 'omit_active_lots'</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The opposite of CURRENT_PLANNING: ensure orders from currently planned lots are not added to the order backlog.
+Incompatible with CURRENT_PLANNING; if CURRENT_PLANNING and OMIT_ACTIVE_LOTS are both active an error is thrown.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_INACTIVE_LOTS" class="doc doc-heading">
+            <code class="highlight language-python">OMIT_INACTIVE_LOTS = 'omit_inactive_lots'</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The opposite of INACTIVE_LOTS: ensure orders from current inactive lots are not added to the order backlog.
+Incompatible with INACTIVE_LOTS; if INACTIVE_LOTS and OMIT_INACTIVE_LOTS are both active an error is thrown.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.ACTIVE_PROCESS" class="doc doc-heading">
+            <code class="highlight language-python">ACTIVE_PROCESS = 'active_process'</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Include all orders in the backlog whose active process matches the planning process.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.ACTIVE_PLANT" class="doc doc-heading">
+            <code class="highlight language-python">ACTIVE_PLANT = 'active_plant'</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Include all orders located at an applicable plant for the planning process stage.</p>
+    </div>
+
+</div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="model.html" class="btn btn-neutral float-left" title="Model"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="longtermplanning.html" class="btn btn-neutral float-right" title="Long term planning">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="model.html" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="longtermplanning.html" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = ".";</script>
+    <script src="js/theme_extra.js"></script>
+    <script src="js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

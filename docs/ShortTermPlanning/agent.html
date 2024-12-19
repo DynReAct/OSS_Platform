@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="img/favicon.ico" />
+    <title>Agent - Dynreact ShortTermPlanning</title>
+    <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Agent";
+        var mkdocs_page_input_path = "agent.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="index.html" class="icon icon-home"> Dynreact ShortTermPlanning
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="" href="../index.html">Back</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="index.html">General</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Agent</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#agent-class">Agent class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.agent.Agent">Agent</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.agent.Agent.__init__">__init__</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.agent.Agent.write_log">write_log</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.agent.Agent.handle_ping_action">handle_ping_action</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.agent.Agent.handle_exit_action">handle_exit_action</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.agent.Agent.process_message">process_message</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.agent.Agent.callback_before_message">callback_before_message</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.agent.Agent.callback_on_topic_not_available">callback_on_topic_not_available</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.agent.Agent.callback_on_not_match">callback_on_not_match</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.agent.Agent.read_message">read_message</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.agent.Agent.follow_topic">follow_topic</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="material.html">Material</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="equipment.html">Equipment</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="common.html">Common</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="log.html">Log</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="functions.html">Functions</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="cleankafka.html">Clean_kafka</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="shorttermplanning.html">ShortTermPlanning</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Dynreact ShortTermPlanning</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="index.html" class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Agent</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="agent-module">Agent module</h1>
+<p>Describe here the module purpose</p>
+<blockquote>
+<p>Then the actual documentation of the classes and their functions starts</p>
+</blockquote>
+<hr />
+<h2 id="agent-class">Agent class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.shortterm.agent.Agent"></a>
+    <div class="doc doc-contents first">
+
+
+        <p>Class Generic Agent. supporting the basic concepts.</p>
+<p>Attributes:
+    topic     (str): Topic driving the relevant converstaion.
+    agent     (str): Name of the agent creating the object.
+    kafka_ip  (str): IP address and TCP port of the broker.
+    verbose   (int): Level of details being saved.</p>
+<p>.. _Google Python Style Guide:
+   https://google.github.io/styleguide/pyguide.html</p>
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.agent.Agent.__init__" class="doc doc-heading">
+            <code class="highlight language-python">__init__(topic, agent, kafka_ip, verbose=1)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Constructor function for the Log Class</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>topic</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                <p>Topic driving the relevant converstaion.</p>
+              </div>
+            </li>
+            <li>
+              <b><code>agent</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                <p>Name of the agent creating the object.</p>
+              </div>
+            </li>
+            <li>
+              <b><code>kafka_ip</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                <p>IP address and TCP port of the broker.</p>
+              </div>
+            </li>
+            <li>
+              <b><code>verbose</code></b>
+                  (<code>int</code>, default:
+                      <code>1</code>
+)
+              –
+              <div class="doc-md-description">
+                <p>Level of details being saved.</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.agent.Agent.write_log" class="doc doc-heading">
+            <code class="highlight language-python">write_log(msg)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Write the given message in the topic's LOG</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>msg</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                <p>Message sent by the agent</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.agent.Agent.handle_ping_action" class="doc doc-heading">
+            <code class="highlight language-python">handle_ping_action(dctmsg)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Send a message to the pinging agent (the LOG) to confirm the presence of this AGENT</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>dctmsg</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                <p>Message Dictionary</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>Logger object</code>
+              –
+              <div class="doc-md-description">
+                <p>Logger object</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.agent.Agent.handle_exit_action" class="doc doc-heading">
+            <code class="highlight language-python">handle_exit_action(dctmsg=None)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Handles the EXIT action.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>dctmsg</code></b>
+                  (<code>dict</code>, default:
+                      <code>None</code>
+)
+              –
+              <div class="doc-md-description">
+                <p>Message dictionary</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>str</code>
+              –
+              <div class="doc-md-description">
+                <p>Status of the handling</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.agent.Agent.process_message" class="doc doc-heading">
+            <code class="highlight language-python">process_message(action, dctmsg)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Processes a Kafka message.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>action</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                <p>Action to be performed</p>
+              </div>
+            </li>
+            <li>
+              <b><code>dctmsg</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                <p>Message dictionary</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>str</code>
+              –
+              <div class="doc-md-description">
+                <p>Status of the handling</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.agent.Agent.callback_before_message" class="doc doc-heading">
+            <code class="highlight language-python">callback_before_message()</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Function executed before a message is polled.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>str</code>
+              –
+              <div class="doc-md-description">
+                <p>Status of the callback.</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.agent.Agent.callback_on_topic_not_available" class="doc doc-heading">
+            <code class="highlight language-python">callback_on_topic_not_available()</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Function executed when 'Subscribed topic not available'</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.agent.Agent.callback_on_not_match" class="doc doc-heading">
+            <code class="highlight language-python">callback_on_not_match(dctmsg)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Function executed when the agent is not the destination of the message</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.agent.Agent.read_message" class="doc doc-heading">
+            <code class="highlight language-python">read_message()</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Poll and read a Kafka message</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>str</code>
+              –
+              <div class="doc-md-description">
+                <p>Status after reading the message</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.agent.Agent.follow_topic" class="doc doc-heading">
+            <code class="highlight language-python">follow_topic()</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Loop in which an AGENT follows the general topic or an auction's topic.
+The AGENT can act both as a producer and a consumer.</p>
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="index.html" class="btn btn-neutral float-left" title="General"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="material.html" class="btn btn-neutral float-right" title="Material">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="index.html" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="material.html" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = ".";</script>
+    <script src="js/theme_extra.js"></script>
+    <script src="js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="img/favicon.ico" />
+    <title>Functions - Dynreact ShortTermPlanning</title>
+    <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Functions";
+        var mkdocs_page_input_path = "functions.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="index.html" class="icon icon-home"> Dynreact ShortTermPlanning
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="" href="../index.html">Back</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="index.html">General</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="agent.html">Agent</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="material.html">Material</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="equipment.html">Equipment</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="common.html">Common</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="log.html">Log</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Functions</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#calculate_bidding_price-function">calculate_bidding_price function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.functions.calculate_bidding_price">calculate_bidding_price</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#calculate_production_cost-function">calculate_production_cost function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.functions.calculate_production_cost">calculate_production_cost</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#get_new_equipment_status-function">get_new_equipment_status function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.functions.get_new_equipment_status">get_new_equipment_status</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="cleankafka.html">Clean_kafka</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="shorttermplanning.html">ShortTermPlanning</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Dynreact ShortTermPlanning</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="index.html" class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Functions</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="functions-module">Functions module</h1>
+<p>Functions that depend on the material parameters and resource status.
+These functions depend on how these values are given.</p>
+<hr />
+<h2 id="calculate_bidding_price-function">calculate_bidding_price function</h2>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+<a id="dynreact.shortterm.functions.calculate_bidding_price"></a>
+    <div class="doc doc-contents first">
+
+        <p>Calculates the bidding price that the MATERIAL would pay to be processed in the RESOURCE with the given status.
+Returns None if the RESOURCE's status is not compatible with the MATERIAL's parameters.
+Otherwise, returns the bidding price as a float, which depends on the MATERIAL's parameters and the previous
+bidding price (but not on the RESOURCE's status).</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>resource_status</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                <p>Status of the RESOURCE</p>
+              </div>
+            </li>
+            <li>
+              <b><code>material_params</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                <p>Parameters of the MATERIAL</p>
+              </div>
+            </li>
+            <li>
+              <b><code>previous_price</code></b>
+                  (<code>float</code>)
+              –
+              <div class="doc-md-description">
+                <p>Bidding price in the RESOURCE's previous round</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>float</code>
+              –
+              <div class="doc-md-description">
+                <p>Bidding price, or None if the MATERIAL cannot be processed by that equipment</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+            <details class="quote">
+              <summary>Source code in <code>dynreact\shortterm\functions.py</code></summary>
+              <pre class="highlight"><code class="language-python">def calculate_bidding_price(material_params: dict, resource_status: dict, previous_price: float | None) -&gt; float | None:
+    """
+    Calculates the bidding price that the MATERIAL would pay to be processed in the RESOURCE with the given status.
+    Returns None if the RESOURCE's status is not compatible with the MATERIAL's parameters.
+    Otherwise, returns the bidding price as a float, which depends on the MATERIAL's parameters and the previous
+    bidding price (but not on the RESOURCE's status).
+
+    :param dict resource_status: Status of the RESOURCE
+    :param dict material_params: Parameters of the MATERIAL
+    :param float previous_price: Bidding price in the RESOURCE's previous round
+
+    :return: Bidding price, or None if the MATERIAL cannot be processed by that equipment
+    :rtype: float
+    """
+    # Reject offer is equipment is not among the allowed equipments of the material
+    if resource_status['plant'] not in material_params['order']['allowed_plants']:
+        return None
+
+    # For now, the bidding price is greater when the delivery date is sooner
+    delivery_date = material_params['order']['due_date']
+    delivery_date = datetime.strptime(delivery_date, '%Y-%m-%dT%H:%M:%SZ')
+    bidding_price = 150 / (delivery_date - datetime(2020, 1, 1)).days
+
+    # For now, the bidding price is simply increased by the previous bidding price
+    if previous_price is not None:
+        bidding_price += previous_price
+
+    return bidding_price</code></pre>
+            </details>
+    </div>
+
+</div><h2 id="calculate_production_cost-function">calculate_production_cost function</h2>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+<a id="dynreact.shortterm.functions.calculate_production_cost"></a>
+    <div class="doc doc-contents first">
+
+        <p>Calculates the production cost incurred by processing the given MATERIAL
+with the given RESOURCE. Returns None if the equipment cannot process the material.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>resource_status</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                <p>Status of the EQUIPMENT</p>
+              </div>
+            </li>
+            <li>
+              <b><code>material_params</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                <p>Parameters of the MATERIAL</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>float</code>
+              –
+              <div class="doc-md-description">
+                <p>Production cost</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div><h2 id="get_new_equipment_status-function">get_new_equipment_status function</h2>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+<a id="dynreact.shortterm.functions.get_new_equipment_status"></a>
+    <div class="doc doc-contents first">
+
+        <p>Get the status of the EQUIPMENT after processing the given MATERIAL</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>resource_status</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                <p>Status of the EQUIPMENT</p>
+              </div>
+            </li>
+            <li>
+              <b><code>material_params</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                <p>Parameters of the MATERIAL</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>float</code>
+              –
+              <div class="doc-md-description">
+                <p>New equipment status</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="log.html" class="btn btn-neutral float-left" title="Log"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="cleankafka.html" class="btn btn-neutral float-right" title="Clean_kafka">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="log.html" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="cleankafka.html" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = ".";</script>
+    <script src="js/theme_extra.js"></script>
+    <script src="js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

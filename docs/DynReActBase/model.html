@@ -1,0 +1,3481 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="img/favicon.ico" />
+    <title>Model - Dynreact Base</title>
+    <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Model";
+        var mkdocs_page_input_path = "model.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="index.html" class="icon icon-home"> Dynreact Base
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="" href="../index.html">Back</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="index.html">General</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="cost_provider.html">Cost provider</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="lots_optimizer.html">Lots optimizer</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Model</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#model-class">Model class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Model">Model</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#labeleditem-class">LabeledItem class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.LabeledItem">LabeledItem</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#processinformation-class">ProcessInformation class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.ProcessInformation">ProcessInformation</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.ProcessInformation.throughput_capacity">throughput_capacity</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#process-class">Process class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Process">Process</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Process.name_short">name_short</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Process.process_ids">process_ids</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Process.synonyms">synonyms</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Process.next_steps">next_steps</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Process.process_group">process_group</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#equipment-class">Equipment class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Equipment">Equipment</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Equipment.storage_in">storage_in</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Equipment.storage_out">storage_out</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#storage-class">Storage class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Storage">Storage</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Storage.equipment">equipment</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Storage.capacity_tonnage">capacity_tonnage</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Storage.capacity_items">capacity_items</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Storage.target_filling_level">target_filling_level</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#equipmentdowntime-class">EquipmentDowntime class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentDowntime">EquipmentDowntime</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentDowntime.start">start</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentDowntime.end">end</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#equipmentavailability-class">EquipmentAvailability class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentAvailability">EquipmentAvailability</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentAvailability.period">period</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentAvailability.daily_baseline">daily_baseline</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentAvailability.deltas">deltas</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#material-class">Material class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Material">Material</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Material.id">id</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Material.weight">weight</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Material.order_position">order_position</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Material.current_storage">current_storage</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Material.current_process">current_process</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Material.current_process_name">current_process_name</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Material.properties">properties</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#order-class">Order class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Order">Order</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Order.due_date">due_date</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Order.target_weight">target_weight</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Order.actual_weight">actual_weight</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Order.lot">lot</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Order.lots">lots</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Order.lot_position">lot_position</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Order.lot_positions">lot_positions</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Order.material_properties">material_properties</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#lot-class">Lot class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Lot">Lot</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#materialorderdata-class">MaterialOrderData class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.MaterialOrderData">MaterialOrderData</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#planningdata-class">PlanningData class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.PlanningData">PlanningData</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.PlanningData.target_fct">target_fct</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.PlanningData.lot_weights">lot_weights</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.PlanningData.delta_weight">delta_weight</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#equipmentstatus-class">EquipmentStatus class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentStatus">EquipmentStatus</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentStatus.target_weight">target_weight</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentStatus.current_order">current_order</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentStatus.previous_order">previous_order</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentStatus.current_material">current_material</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentStatus.current">current</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentStatus.previous">previous</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentStatus.planning">planning</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#equipmentproduction-class">EquipmentProduction class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentProduction">EquipmentProduction</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.EquipmentProduction.material_weights">material_weights</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#productiontargets-class">ProductionTargets class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.ProductionTargets">ProductionTargets</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.ProductionTargets.target_weight">target_weight</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#storagelevel-class">StorageLevel class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.StorageLevel">StorageLevel</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.StorageLevel.storage">storage</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.StorageLevel.filling_level">filling_level</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.StorageLevel.timestamp">timestamp</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.StorageLevel.material_levels">material_levels</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#orderassignment-class">OrderAssignment class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.OrderAssignment">OrderAssignment</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#productionplanning-class">ProductionPlanning class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.ProductionPlanning">ProductionPlanning</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.ProductionPlanning.get_lots">get_lots</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.ProductionPlanning.get_num_lots">get_num_lots</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.ProductionPlanning.get_targets">get_targets</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#materialclass-class">MaterialClass class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.MaterialClass">MaterialClass</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.MaterialClass.id">id</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.MaterialClass.category">category</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.MaterialClass.allowed_equipment">allowed_equipment</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.MaterialClass.is_default">is_default</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#materialcategory-class">MaterialCategory class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.MaterialCategory">MaterialCategory</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.MaterialCategory.id">id</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.MaterialCategory.classes">classes</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#site-class">Site class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Site">Site</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Site.get_process">get_process</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Site.get_process_by_id">get_process_by_id</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Site.get_equipment">get_equipment</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Site.get_equipment_by_name">get_equipment_by_name</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Site.get_process_equipment">get_process_equipment</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Site.get_storage">get_storage</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Site.get_process_all_equipment">get_process_all_equipment</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#snapshot-class">Snapshot class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Snapshot">Snapshot</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Snapshot.get_order">get_order</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Snapshot.get_material">get_material</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Snapshot.get_order_lot">get_order_lot</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Snapshot.get_material_equipment">get_material_equipment</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Snapshot.get_orders_equipment">get_orders_equipment</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.Snapshot.get_material_selected_orders">get_material_selected_orders</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#longtermtargets-class">LongTermTargets class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.LongTermTargets">LongTermTargets</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#midtermtargets-class">MidTermTargets class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.model.MidTermTargets">MidTermTargets</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="snapshot_provider.html">Snapshot provider</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="longtermplanning.html">Long term planning</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Dynreact Base</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="index.html" class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Model</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="model">Model</h1>
+<p>This module contains the basic domain model for the DynReAct production planning software.
+It provides the definition of Equipment to be scheduled and Material as the unit of production,
+as well as Orders (think production orders), which represent batches of Materials with common
+properties.</p>
+<p>The classes defined in this module are serializable and can be made accessible via a REST interface.</p>
+<hr />
+<h2 id="model-class">Model class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.Model"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code></p>
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="labeleditem-class">LabeledItem class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.LabeledItem"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code></p>
+
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="processinformation-class">ProcessInformation class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.ProcessInformation"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code></p>
+
+
+        <p>An abstract class containing common information for process-related subclasses</p>
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class ProcessInformation(Model):
+    """
+    An abstract class containing common information for process-related subclasses
+    """
+    throughput_capacity: float | None = None
+    "unit: t/h"
+    """
+    FIXME in general this will be dependent on the material class
+    """</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.ProcessInformation.throughput_capacity" class="doc doc-heading">
+            <code class="highlight language-python">throughput_capacity: float | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>unit: t/h</p>
+    </div>
+
+</div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="process-class">Process class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.Process"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.LabeledItem" href="#dynreact.base.model.LabeledItem">LabeledItem</a></code>, <code><a class="autorefs autorefs-internal" title="dynreact.base.model.ProcessInformation" href="#dynreact.base.model.ProcessInformation">ProcessInformation</a></code></p>
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class Process(LabeledItem, ProcessInformation):
+    name_short: str = Field(..., examples=["VA", "BZ"], min_length=1)
+    "Short name uniquely identifying the process2."
+    process_ids: list[int]
+    "Internal process id(s)"
+    synonyms: list[str]|None = Field(None, examples=["VEA"], min_length=1)
+    "Alternative short names."
+    next_steps: list[str]|None = None
+    "Possible follow-up process steps."
+    process_group: str|None = None
+    "Id for a group of processes."</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Process.name_short" class="doc doc-heading">
+            <code class="highlight language-python">name_short: str = Field(..., examples=['VA', 'BZ'], min_length=1)</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Short name uniquely identifying the process2.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Process.process_ids" class="doc doc-heading">
+            <code class="highlight language-python">process_ids: list[int]</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Internal process id(s)</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Process.synonyms" class="doc doc-heading">
+            <code class="highlight language-python">synonyms: list[str] | None = Field(None, examples=['VEA'], min_length=1)</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Alternative short names.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Process.next_steps" class="doc doc-heading">
+            <code class="highlight language-python">next_steps: list[str] | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Possible follow-up process steps.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Process.process_group" class="doc doc-heading">
+            <code class="highlight language-python">process_group: str | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Id for a group of processes.</p>
+    </div>
+
+</div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="equipment-class">Equipment class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.Equipment"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.LabeledItem" href="#dynreact.base.model.LabeledItem">LabeledItem</a></code>, <code><a class="autorefs autorefs-internal" title="dynreact.base.model.ProcessInformation" href="#dynreact.base.model.ProcessInformation">ProcessInformation</a></code></p>
+
+
+        <p>Equipment, such as a production plant.</p>
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class Equipment(LabeledItem, ProcessInformation):
+    """
+    Equipment, such as a production plant.
+    """
+
+    id: int
+    name_short: str
+    process: str
+
+    storage_in: str = None
+    "Default storage location of material waiting to be processed by this equipment"
+    storage_out: str = None
+    "Default storage locations of material processed by this equipment"
+
+    def get_equipment_name(self, idp: int):
+        return self.name_short
+
+    def get_equipment_id(self):
+        return self.id</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Equipment.storage_in" class="doc doc-heading">
+            <code class="highlight language-python">storage_in: str = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Default storage location of material waiting to be processed by this equipment</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Equipment.storage_out" class="doc doc-heading">
+            <code class="highlight language-python">storage_out: str = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Default storage locations of material processed by this equipment</p>
+    </div>
+
+</div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="storage-class">Storage class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.Storage"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.LabeledItem" href="#dynreact.base.model.LabeledItem">LabeledItem</a></code></p>
+
+
+        <p>Storage for materials.</p>
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class Storage(LabeledItem):
+    """
+    Storage for materials.
+    """
+    name_short: str
+    equipment: list[int]
+    "Equipment served by this storage primarily."
+    #secondary_plants: list[int]|None = Field(None, description="Plants served by this storage.")
+    capacity_tonnage: float|None = None
+    "Capacity in t."
+    capacity_items: int|None = None
+    "Capacity in items / material."
+    target_filling_level: float|None = None  # TODO rather need a range
+    "A number between 0 and 1"</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Storage.equipment" class="doc doc-heading">
+            <code class="highlight language-python">equipment: list[int]</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Equipment served by this storage primarily.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Storage.capacity_tonnage" class="doc doc-heading">
+            <code class="highlight language-python">capacity_tonnage: float | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Capacity in t.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Storage.capacity_items" class="doc doc-heading">
+            <code class="highlight language-python">capacity_items: int | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Capacity in items / material.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Storage.target_filling_level" class="doc doc-heading">
+            <code class="highlight language-python">target_filling_level: float | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>A number between 0 and 1</p>
+    </div>
+
+</div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="equipmentdowntime-class">EquipmentDowntime class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.EquipmentDowntime"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code></p>
+
+
+        <p>@beta: currently not used</p>
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class EquipmentDowntime(Model):
+    """
+    @beta: currently not used
+    """
+
+    equipment: int
+    start: datetime | None = None
+    "Start of downtime, if known"
+    end: datetime | None = None
+    "End of downtime, if known. This is the scheduled end if in the future. TODO: do we need to model more uncertain situations?"
+    reason: str|None = None</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.EquipmentDowntime.start" class="doc doc-heading">
+            <code class="highlight language-python">start: datetime | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Start of downtime, if known</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.EquipmentDowntime.end" class="doc doc-heading">
+            <code class="highlight language-python">end: datetime | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>End of downtime, if known. This is the scheduled end if in the future. TODO: do we need to model more uncertain situations?</p>
+    </div>
+
+</div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="equipmentavailability-class">EquipmentAvailability class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.EquipmentAvailability"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code></p>
+
+
+        <p>@beta</p>
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class EquipmentAvailability(Model):
+    """
+    @beta
+    """
+    equipment: int
+    period: tuple[date, date]
+    "The period this refers to, typically a month"
+    daily_baseline: timedelta|None = None
+    "The baseline availability, such as 24h or 1d. Default is 1d."
+    deltas: dict[date, float]|None = None
+    "Deviations from the baseline per day. Defaults to 0 if a day is missing or the field is unset."</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.EquipmentAvailability.period" class="doc doc-heading">
+            <code class="highlight language-python">period: tuple[date, date]</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The period this refers to, typically a month</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.EquipmentAvailability.daily_baseline" class="doc doc-heading">
+            <code class="highlight language-python">daily_baseline: timedelta | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The baseline availability, such as 24h or 1d. Default is 1d.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.EquipmentAvailability.deltas" class="doc doc-heading">
+            <code class="highlight language-python">deltas: dict[date, float] | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Deviations from the baseline per day. Defaults to 0 if a day is missing or the field is unset.</p>
+    </div>
+
+</div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="material-class">Material class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.Material"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code></p>
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class Material(Model):
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    "The material id"
+    order: str
+    weight: float
+    "Material weight in t"
+    order_position: int|None = None
+    "1-based index of material in order"
+    current_equipment_name: str | None = None
+    current_equipment: int | None = None
+    current_storage: str | None = None
+    "Note: this field is only relevant for short-term planning. The mid-term planning is based on current_equipment only."
+    current_process: int
+    "Process id, cf. field Process#process_ids"
+    current_process_name: str|None = None
+    "Process stage"
+    properties: PROPERTIES|None = None
+    "Material-specific properties."
+
+    def get_current_equipment_name(self) -&gt; str|None:
+        return self.current_equipment_name
+
+    def get_id(self) -&gt; str:
+        return self.id
+
+    def get_order(self) -&gt; str:
+        return self.order</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Material.id" class="doc doc-heading">
+            <code class="highlight language-python">id: str</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The material id</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Material.weight" class="doc doc-heading">
+            <code class="highlight language-python">weight: float</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Material weight in t</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Material.order_position" class="doc doc-heading">
+            <code class="highlight language-python">order_position: int | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>1-based index of material in order</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Material.current_storage" class="doc doc-heading">
+            <code class="highlight language-python">current_storage: str | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Note: this field is only relevant for short-term planning. The mid-term planning is based on current_equipment only.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Material.current_process" class="doc doc-heading">
+            <code class="highlight language-python">current_process: int</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Process id, cf. field Process#process_ids</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Material.current_process_name" class="doc doc-heading">
+            <code class="highlight language-python">current_process_name: str | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Process stage</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Material.properties" class="doc doc-heading">
+            <code class="highlight language-python">properties: PROPERTIES | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Material-specific properties.</p>
+    </div>
+
+</div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="order-class">Order class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.Order"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code>, <code><span title="typing.Generic">Generic</span>[<span title="dynreact.base.model.MATERIAL_PROPERTIES">MATERIAL_PROPERTIES</span>]</code></p>
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
+    id: str
+    due_date: datetime|None = None
+    "Due date"
+    target_weight: float
+    "Target weight in t"
+    actual_weight: float
+    "Sum of individual material weights in t"
+    allowed_equipment: list[int]   # TODO dict[process, list[int]]?
+    current_equipment: list[int] | None = None
+    # @deprecated
+    current_processes: list[int]
+    active_processes: dict[int, Literal["PENDING", "STARTED", "FINISHED"]]
+    # FIXME a single order can be assigned to multiple orders at different process steps!
+    # @deprecated
+    lot: str|None = Field(None, deprecated=True)
+    "DEPRECATED, use lots field instead"
+    lots: dict[str, str]|None = None
+    "Lot ids by process steps"
+    # @deprecated
+    lot_position: int|None = Field(None, deprecated=True)
+    "DEPRECATED: use lot_positions instead. (1-based index of order in lot)"
+    lot_positions: dict[str, int]|None = None
+    "1-based index of order in lots, by process step"
+    # FIXME this dict type with arbitrary_types_allowed is just a temporary workaround, need to find a better solution...
+    material_properties: dict[str, Any] | MATERIAL_PROPERTIES
+    "Use-case specific material characteristics."</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Order.due_date" class="doc doc-heading">
+            <code class="highlight language-python">due_date: datetime | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Due date</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Order.target_weight" class="doc doc-heading">
+            <code class="highlight language-python">target_weight: float</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Target weight in t</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Order.actual_weight" class="doc doc-heading">
+            <code class="highlight language-python">actual_weight: float</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Sum of individual material weights in t</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Order.lot" class="doc doc-heading">
+            <code class="highlight language-python">lot: str | None = Field(None, deprecated=True)</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>DEPRECATED, use lots field instead</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Order.lots" class="doc doc-heading">
+            <code class="highlight language-python">lots: dict[str, str] | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Lot ids by process steps</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Order.lot_position" class="doc doc-heading">
+            <code class="highlight language-python">lot_position: int | None = Field(None, deprecated=True)</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>DEPRECATED: use lot_positions instead. (1-based index of order in lot)</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Order.lot_positions" class="doc doc-heading">
+            <code class="highlight language-python">lot_positions: dict[str, int] | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>1-based index of order in lots, by process step</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.Order.material_properties" class="doc doc-heading">
+            <code class="highlight language-python">material_properties: dict[str, Any] | MATERIAL_PROPERTIES</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Use-case specific material characteristics.</p>
+    </div>
+
+</div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="lot-class">Lot class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.Lot"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code></p>
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class Lot(Model):
+    id: str
+    equipment: int
+    active: bool
+    # TODO documentation
+    status: int  # ?
+    orders: list[str]
+    processing_status: Literal["PENDING", "STARTED", "FINISHED"]|None = None</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="materialorderdata-class">MaterialOrderData class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.MaterialOrderData"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code></p>
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class MaterialOrderData(Model):
+    order: str
+    material: str | None = None</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="planningdata-class">PlanningData class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.PlanningData"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code></p>
+
+
+        <p>This class holds the internal state of the optimization algorithm</p>
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class PlanningData(Model):
+    """
+    This class holds the internal state of the optimization algorithm
+    """
+    model_config = ConfigDict(extra="allow", use_attribute_docstrings=True)
+
+    target_fct: float = 0.0
+    "Current value of the target function"
+    # lots: list[list[str]] TODO?
+    transition_costs: float = 0.0
+    lots_count: int = 0
+    lot_weights: list[float] = []
+    "Lot weights in tons."
+    orders_count: int = 0
+    delta_weight: float = 0.0
+    "Deviation from target weight in t. Positive for missing tonnage."
+    min_due_date: datetime|None = None</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.PlanningData.target_fct" class="doc doc-heading">
+            <code class="highlight language-python">target_fct: float = 0.0</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Current value of the target function</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.PlanningData.lot_weights" class="doc doc-heading">
+            <code class="highlight language-python">lot_weights: list[float] = []</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Lot weights in tons.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.PlanningData.delta_weight" class="doc doc-heading">
+            <code class="highlight language-python">delta_weight: float = 0.0</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Deviation from target weight in t. Positive for missing tonnage.</p>
+    </div>
+
+</div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="equipmentstatus-class">EquipmentStatus class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.EquipmentStatus"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code>, <code><span title="typing.Generic">Generic</span>[<span title="dynreact.base.model.P">P</span>]</code></p>
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class EquipmentStatus(Model, Generic[P]):
+
+    equipment: int
+    target_weight: float
+    "Target weight in t for this equipment"
+    snapshot_id: datetime
+    planning_period: tuple[datetime, datetime]
+    current_order: str|None  = None
+    "Current order id"
+    previous_order: str | None = None
+    "Previous order id"
+    current_material: list[str] | None = None
+    "Material ids belonging to the currently processed order, if not the complete order"
+    # @deprecated
+    current: str|None = Field(None, deprecated=True)
+    "DEPRECATED: use current_order and current_coils instead. (Either a coil id or order id)"
+    # @deprecated
+    previous: str|None = Field(None, deprecated=True)
+    "DEPRECATED: use previous_order instead. (Either a coil id or order id)"
+    #next: str|None = Field(None, description="Either a coil id or order id")
+    planning: P|None = Field(None)  # FIXME should never be None?
+    "Internal state of the optimization"</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.EquipmentStatus.target_weight" class="doc doc-heading">
+            <code class="highlight language-python">target_weight: float</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Target weight in t for this equipment</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.EquipmentStatus.current_order" class="doc doc-heading">
+            <code class="highlight language-python">current_order: str | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Current order id</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.EquipmentStatus.previous_order" class="doc doc-heading">
+            <code class="highlight language-python">previous_order: str | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Previous order id</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.EquipmentStatus.current_material" class="doc doc-heading">
+            <code class="highlight language-python">current_material: list[str] | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Material ids belonging to the currently processed order, if not the complete order</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.EquipmentStatus.current" class="doc doc-heading">
+            <code class="highlight language-python">current: str | None = Field(None, deprecated=True)</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>DEPRECATED: use current_order and current_coils instead. (Either a coil id or order id)</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.EquipmentStatus.previous" class="doc doc-heading">
+            <code class="highlight language-python">previous: str | None = Field(None, deprecated=True)</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>DEPRECATED: use previous_order instead. (Either a coil id or order id)</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.EquipmentStatus.planning" class="doc doc-heading">
+            <code class="highlight language-python">planning: P | None = Field(None)</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Internal state of the optimization</p>
+    </div>
+
+</div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="equipmentproduction-class">EquipmentProduction class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.EquipmentProduction"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code></p>
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class EquipmentProduction(Model):
+
+    equipment: int
+    total_weight: float
+    material_weights: dict[str, float]|None = None
+    "Produced quantity by material class id, in t."</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.EquipmentProduction.material_weights" class="doc doc-heading">
+            <code class="highlight language-python">material_weights: dict[str, float] | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Produced quantity by material class id, in t.</p>
+    </div>
+
+</div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="productiontargets-class">ProductionTargets class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.ProductionTargets"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code></p>
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class ProductionTargets(Model):
+
+    process: str
+    target_weight: dict[int, EquipmentProduction]
+    "Target production by equipment id"
+    period: tuple[datetime, datetime]</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.ProductionTargets.target_weight" class="doc doc-heading">
+            <code class="highlight language-python">target_weight: dict[int, EquipmentProduction]</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Target production by equipment id</p>
+    </div>
+
+</div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="storagelevel-class">StorageLevel class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.StorageLevel"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code></p>
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class StorageLevel(Model):
+
+    storage: str
+    "Reference to the storage id"
+    filling_level: float
+    "Total filling level. Must be a value between 0 and 1."
+    timestamp: datetime|None = None
+    "The timestamp when the level was recorded or for which it is predicted."
+    material_levels: dict[str, float]|None = None
+    "Material-specific filling levels in the range 0 - 1, referring to the total storage capacity. Keys: material class ids."</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.StorageLevel.storage" class="doc doc-heading">
+            <code class="highlight language-python">storage: str</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Reference to the storage id</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.StorageLevel.filling_level" class="doc doc-heading">
+            <code class="highlight language-python">filling_level: float</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Total filling level. Must be a value between 0 and 1.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.StorageLevel.timestamp" class="doc doc-heading">
+            <code class="highlight language-python">timestamp: datetime | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The timestamp when the level was recorded or for which it is predicted.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.StorageLevel.material_levels" class="doc doc-heading">
+            <code class="highlight language-python">material_levels: dict[str, float] | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Material-specific filling levels in the range 0 - 1, referring to the total storage capacity. Keys: material class ids.</p>
+    </div>
+
+</div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="orderassignment-class">OrderAssignment class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.OrderAssignment"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code></p>
+
+
+        <p>"Unassigned" is realized in terms of equipment=-1, lot="", lot_idx=-1</p>
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class OrderAssignment(Model):  # base for SolutionElement
+    """
+    "Unassigned" is realized in terms of equipment=-1, lot="", lot_idx=-1
+    """
+    equipment: int
+    order: str
+    lot: str
+    lot_idx: int</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="productionplanning-class">ProductionPlanning class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.ProductionPlanning"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code>, <code><span title="typing.Generic">Generic</span>[<span title="dynreact.base.model.P">P</span>]</code></p>
+
+
+        <p>The optimization needs to generate an object of this type</p>
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class ProductionPlanning(Model, Generic[P]):
+    """
+    The optimization needs to generate an object of this type
+    """
+
+    process: str
+    order_assignments: dict[str, OrderAssignment]   # "sbest"
+    "keys: order ids"
+    equipment_status: dict[int, EquipmentStatus[P]]                  # "vbest"
+    "keys: equipment ids"
+
+    # TODO cache results?
+    def get_lots(self) -&gt; dict[int, list[Lot]]:
+        """
+        :return: dictionary with keys = equipment ids, values = lots
+        """
+        result: dict[int, dict[str, dict[int, str]]] = {}  # keys: equipment, lot_id, lot_idx, order
+        for order, assignment in self.order_assignments.items():
+            plant = assignment.equipment
+            if plant &lt; 0:
+                continue
+            if plant not in result:
+                result[plant] = {}
+            lot_id: str = assignment.lot
+            lot_idx: int = assignment.lot_idx
+            if lot_id not in result[plant]:
+                result[plant][lot_id] = {}
+            lot_orders: dict[int, str] = result[plant][lot_id]
+            lot_orders[lot_idx] = order
+        result_sorted: dict[int, list[Lot]] = {}
+        for plant_id, lots in result.items():
+            lots_sorted: list[str] = sorted(lots)
+            plant_lots: list[Lot] = []
+            for lot_id in lots_sorted:  # TODO test
+                order_data: dict[int, str] = lots[lot_id]
+                lot_indices: list[int] = sorted(order_data)
+                lot = Lot(id=lot_id, equipment=plant_id, active=True, status=0, orders=[order_data[idx] for idx in lot_indices])
+                plant_lots.append(lot)
+            result_sorted[plant_id] = plant_lots
+        return result_sorted
+
+    def get_num_lots(self) -&gt; int:
+        return sum(status.planning.lots_count for status in self.equipment_status.values() if status.planning is not None)
+
+    def get_targets(self) -&gt; ProductionTargets:
+        if len(self.equipment_status) == 0:
+            return None  # ?
+        period: tuple[datetime, datetime] = next(iter(self.equipment_status.values())).planning_period
+        targets: dict[int, EquipmentProduction] = {plant: EquipmentProduction(equipment=plant, total_weight=status.target_weight) for plant, status in self.equipment_status.items()}
+        return ProductionTargets(process=self.process, target_weight=targets, period=period)</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.model.ProductionPlanning.get_lots" class="doc doc-heading">
+            <code class="highlight language-python">get_lots()</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>dict[int, list[<a class="autorefs autorefs-internal" title="dynreact.base.model.Lot" href="#dynreact.base.model.Lot">Lot</a>]]</code>
+              –
+              <div class="doc-md-description">
+                <p>dictionary with keys = equipment ids, values = lots</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\model.py</code></summary>
+              <pre class="highlight"><code class="language-python">def get_lots(self) -&gt; dict[int, list[Lot]]:
+    """
+    :return: dictionary with keys = equipment ids, values = lots
+    """
+    result: dict[int, dict[str, dict[int, str]]] = {}  # keys: equipment, lot_id, lot_idx, order
+    for order, assignment in self.order_assignments.items():
+        plant = assignment.equipment
+        if plant &lt; 0:
+            continue
+        if plant not in result:
+            result[plant] = {}
+        lot_id: str = assignment.lot
+        lot_idx: int = assignment.lot_idx
+        if lot_id not in result[plant]:
+            result[plant][lot_id] = {}
+        lot_orders: dict[int, str] = result[plant][lot_id]
+        lot_orders[lot_idx] = order
+    result_sorted: dict[int, list[Lot]] = {}
+    for plant_id, lots in result.items():
+        lots_sorted: list[str] = sorted(lots)
+        plant_lots: list[Lot] = []
+        for lot_id in lots_sorted:  # TODO test
+            order_data: dict[int, str] = lots[lot_id]
+            lot_indices: list[int] = sorted(order_data)
+            lot = Lot(id=lot_id, equipment=plant_id, active=True, status=0, orders=[order_data[idx] for idx in lot_indices])
+            plant_lots.append(lot)
+        result_sorted[plant_id] = plant_lots
+    return result_sorted</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.model.ProductionPlanning.get_num_lots" class="doc doc-heading">
+            <code class="highlight language-python">get_num_lots()</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\model.py</code></summary>
+              <pre class="highlight"><code class="language-python">def get_num_lots(self) -&gt; int:
+    return sum(status.planning.lots_count for status in self.equipment_status.values() if status.planning is not None)</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.model.ProductionPlanning.get_targets" class="doc doc-heading">
+            <code class="highlight language-python">get_targets()</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\model.py</code></summary>
+              <pre class="highlight"><code class="language-python">def get_targets(self) -&gt; ProductionTargets:
+    if len(self.equipment_status) == 0:
+        return None  # ?
+    period: tuple[datetime, datetime] = next(iter(self.equipment_status.values())).planning_period
+    targets: dict[int, EquipmentProduction] = {plant: EquipmentProduction(equipment=plant, total_weight=status.target_weight) for plant, status in self.equipment_status.items()}
+    return ProductionTargets(process=self.process, target_weight=targets, period=period)</code></pre>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="materialclass-class">MaterialClass class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.MaterialClass"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code></p>
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class MaterialClass(Model):
+
+    id: str
+    "A unique material class id"
+    name: str | None = None
+    name_de: str | None = None
+    category: str
+    "A reference to the material category this class belongs to."
+    description: str|None = None
+    allowed_equipment: dict[str, list[int]] | None = None
+    "Keys: process ids, values: equipment ids. "
+    is_default: bool = False
+    "A class can be assigned the default role within a material category."
+    default_share: float|None = None</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.MaterialClass.id" class="doc doc-heading">
+            <code class="highlight language-python">id: str</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>A unique material class id</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.MaterialClass.category" class="doc doc-heading">
+            <code class="highlight language-python">category: str</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>A reference to the material category this class belongs to.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.MaterialClass.allowed_equipment" class="doc doc-heading">
+            <code class="highlight language-python">allowed_equipment: dict[str, list[int]] | None = None</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Keys: process ids, values: equipment ids.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.MaterialClass.is_default" class="doc doc-heading">
+            <code class="highlight language-python">is_default: bool = False</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>A class can be assigned the default role within a material category.</p>
+    </div>
+
+</div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="materialcategory-class">MaterialCategory class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.MaterialCategory"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code></p>
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class MaterialCategory(Model):
+
+    id: str
+    "A unique material category id"
+    name: str|None = None
+    name_de: str | None = None
+    description: str|None = None
+    classes: list[MaterialClass]
+    """
+    Mutually exclusive material classes. It is assumed
+    that every product and order can be assigned to exactly one class within the category.
+    """</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.MaterialCategory.id" class="doc doc-heading">
+            <code class="highlight language-python">id: str</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>A unique material category id</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h2 id="dynreact.base.model.MaterialCategory.classes" class="doc doc-heading">
+            <code class="highlight language-python">classes: list[MaterialClass]</code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Mutually exclusive material classes. It is assumed
+that every product and order can be assigned to exactly one class within the category.</p>
+    </div>
+
+</div>
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="site-class">Site class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.Site"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.LabeledItem" href="#dynreact.base.model.LabeledItem">LabeledItem</a></code></p>
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class Site(LabeledItem):
+    processes: list[Process]
+    equipment: list[Equipment]
+    storages: list[Storage]
+    material_categories: list[MaterialCategory]
+    logistic_costs: dict[int, dict[int, float]]|None = None
+    """
+    Logistic costs for transfer of a complete order(?) from one plant to another (only within a single process stage, not considering
+    transfer costs between processes)
+    """
+
+    def get_process(self, process: str, do_raise: bool=False) -&gt; Process|None:
+        if process is None:
+            return None
+        proc = next((p for p in self.processes if p.name_short == process or p.synonyms is not None and process in p.synonyms), None)
+        if proc is None and do_raise:
+            raise Exception("Process not found: " + str(process))
+        return proc
+
+    def get_process_by_id(self, process_id: int, do_raise: bool=False) -&gt; Process|None:
+        if process_id is None:
+            return None
+        proc = next((p for p in self.processes if process_id in p.process_ids), None)
+        if proc is None and do_raise:
+            raise Exception("Process not found: " + str(process_id))
+        return proc
+
+    def get_equipment(self, plant_id: int, do_raise: bool=False) -&gt; Equipment|None:
+        if plant_id is None:
+            return None
+        plant = next((p for p in self.equipment if p.id == plant_id), None)
+        if plant is None and do_raise:
+            raise Exception("Plant not found: " + str(plant_id))
+        return plant
+
+    def get_equipment_by_name(self, plant_name: str, do_raise: bool=False) -&gt; Equipment|None:
+        if plant_name is None:
+            return None
+        plant = next((p for p in self.equipment if p.name_short == plant_name), None)
+        if plant is None and do_raise:
+            raise Exception("Plant not found by name: " + str(plant_name))
+        return plant
+
+    def get_process_equipment(self, process: str) -&gt; list[Equipment]:
+        return [p for p in self.equipment if p.process == process]
+
+    def get_storage(self, storage: str, do_raise: bool=False) -&gt; Storage|None:
+        if storage is None:
+            return None
+        stg = next((s for s in self.storages if s.name_short == storage), None)
+        if stg is None and do_raise:
+            raise Exception("Storage not found " + str(storage))
+        return stg
+
+# Some changes in methods made by JOM / UPM)
+    def get_process_all_equipment(self) -&gt; list[Equipment]:
+        return [p for p in self.equipment]</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.model.Site.get_process" class="doc doc-heading">
+            <code class="highlight language-python">get_process(process, do_raise=False)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\model.py</code></summary>
+              <pre class="highlight"><code class="language-python">def get_process(self, process: str, do_raise: bool=False) -&gt; Process|None:
+    if process is None:
+        return None
+    proc = next((p for p in self.processes if p.name_short == process or p.synonyms is not None and process in p.synonyms), None)
+    if proc is None and do_raise:
+        raise Exception("Process not found: " + str(process))
+    return proc</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.model.Site.get_process_by_id" class="doc doc-heading">
+            <code class="highlight language-python">get_process_by_id(process_id, do_raise=False)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\model.py</code></summary>
+              <pre class="highlight"><code class="language-python">def get_process_by_id(self, process_id: int, do_raise: bool=False) -&gt; Process|None:
+    if process_id is None:
+        return None
+    proc = next((p for p in self.processes if process_id in p.process_ids), None)
+    if proc is None and do_raise:
+        raise Exception("Process not found: " + str(process_id))
+    return proc</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.model.Site.get_equipment" class="doc doc-heading">
+            <code class="highlight language-python">get_equipment(plant_id, do_raise=False)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\model.py</code></summary>
+              <pre class="highlight"><code class="language-python">def get_equipment(self, plant_id: int, do_raise: bool=False) -&gt; Equipment|None:
+    if plant_id is None:
+        return None
+    plant = next((p for p in self.equipment if p.id == plant_id), None)
+    if plant is None and do_raise:
+        raise Exception("Plant not found: " + str(plant_id))
+    return plant</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.model.Site.get_equipment_by_name" class="doc doc-heading">
+            <code class="highlight language-python">get_equipment_by_name(plant_name, do_raise=False)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\model.py</code></summary>
+              <pre class="highlight"><code class="language-python">def get_equipment_by_name(self, plant_name: str, do_raise: bool=False) -&gt; Equipment|None:
+    if plant_name is None:
+        return None
+    plant = next((p for p in self.equipment if p.name_short == plant_name), None)
+    if plant is None and do_raise:
+        raise Exception("Plant not found by name: " + str(plant_name))
+    return plant</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.model.Site.get_process_equipment" class="doc doc-heading">
+            <code class="highlight language-python">get_process_equipment(process)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\model.py</code></summary>
+              <pre class="highlight"><code class="language-python">def get_process_equipment(self, process: str) -&gt; list[Equipment]:
+    return [p for p in self.equipment if p.process == process]</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.model.Site.get_storage" class="doc doc-heading">
+            <code class="highlight language-python">get_storage(storage, do_raise=False)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\model.py</code></summary>
+              <pre class="highlight"><code class="language-python">def get_storage(self, storage: str, do_raise: bool=False) -&gt; Storage|None:
+    if storage is None:
+        return None
+    stg = next((s for s in self.storages if s.name_short == storage), None)
+    if stg is None and do_raise:
+        raise Exception("Storage not found " + str(storage))
+    return stg</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.model.Site.get_process_all_equipment" class="doc doc-heading">
+            <code class="highlight language-python">get_process_all_equipment()</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\model.py</code></summary>
+              <pre class="highlight"><code class="language-python">def get_process_all_equipment(self) -&gt; list[Equipment]:
+    return [p for p in self.equipment]</code></pre>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="snapshot-class">Snapshot class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.Snapshot"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code>, <code><span title="typing.Generic">Generic</span>[<span title="dynreact.base.model.MATERIAL_PROPERTIES">MATERIAL_PROPERTIES</span>]</code></p>
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class Snapshot(Model, Generic[MATERIAL_PROPERTIES]):
+    timestamp: datetime
+    "The timestamp serves as the unique snapshot id"
+    orders: list[Order[MATERIAL_PROPERTIES]]
+    material: list[Material]
+    inline_material: dict[int, list[MaterialOrderData]]
+    "Material ids currently being processed. Keys: plant ids, values: list of materials references."
+    lots: dict[int, list[Lot]] = Field(..., examples=[{1: [{"id": "PLANT1.01", "equipment": 1, "active": True, "status": 1, "orders": ["1", "2", "3"]}]}])
+    "Lots by plant ids. Keys: plant id, values: Lots"
+
+    def get_order(self, order_id: str, do_raise: bool=False) -&gt; Order[MATERIAL_PROPERTIES]|None:
+        order = next((o for o in self.orders if o.id == order_id), None)
+        if order is None and do_raise:
+            raise Exception("Order " + str(order_id) + " not found")
+        return order
+
+    def get_material(self, material_id: str, do_raise: bool=False) -&gt; Material | None:
+        material = next((c for c in self.material if c.id == material_id), None)
+        if material is None and do_raise:
+            raise Exception("Material " + str(material_id) + " not found")
+        return material
+
+    def get_order_lot(self, site: Site, order_id: str, process: str) -&gt; Lot|None:
+        if self.lots is None:
+            return None
+        plant_ids: list[int] = [p.id for p in site.get_process_equipment(process)]
+        for plant in plant_ids:
+            if plant not in self.lots:
+                continue
+            lots: list[Lot] = self.lots[plant]
+            lot: Lot|None = next((l for l in lots if order_id in l.orders), None)
+            if lot is not None:
+                return lot
+        return None
+
+    def get_material_equipment(self, site: Site, equipment_name: str, storage:str, assigned: int=-1) -&gt; list[str]:
+        if assigned &lt; 0:
+            return([coil.id for coil in self.material if \
+                        equipment_name in [site.get_equipment(ieq).name_short \
+                                for ieq in self.get_order(coil.order).allowed_equipment] \
+                        and coil.current_storage == storage and \
+                        coil.current_equipment is None])
+        else:
+            return([coil.id for coil in self.material if \
+                        equipment_name in [site.get_equipment(ieq).name_short \
+                                for ieq in self.get_order(coil.order).allowed_equipment] \
+                            and coil.current_storage == storage and \
+                                coil.current_equipment is not None and \
+                                coil.current_equipment_name != equipment_name])
+
+    def get_orders_equipment(self, site: Site, equipment_name: str, storage:str, assigned:int=-1) -&gt; list[str]:
+        if assigned &lt; 0:
+            return(list(set([coil.order for coil in self.material if \
+                            equipment_name in [site.get_equipment(ieq).name_short \
+                                for ieq in self.get_order(coil.order).allowed_equipment] \
+                            and coil.current_storage == storage and \
+                            coil.current_equipment is None] )) )
+        else:
+            return(list(set([coil.order for coil in self.material if \
+                            equipment_name in [site.get_equipment(ieq).name_short \
+                                for ieq in self.get_order(coil.order).allowed_equipment] \
+                            and coil.current_storage == storage and \
+                                coil.current_equipment is not None and \
+                                coil.current_equipment_name != equipment_name] )) )
+
+
+    def get_material_selected_orders(self, orders: list[str], plant_names: list[str], site: Site) -&gt; list[str]:
+        tmp = [(coil.id,coil.order) for coil in self.material if \
+                    coil.current_equipment_name in plant_names and coil.order in orders ]
+        unique_ord = {}
+        # Iterate over the list of tuples to find coils representing the targeted orders
+        for a, b in tmp:
+            mat = self.get_coil(a).current_storage
+            stg_valid = [site.get_plant_by_name(plt).storage_in for plt in plant_names]
+            if b not in unique_ord and mat in stg_valid:  # Only add if 'b' is not already in the dictionary
+                unique_ord[b] = a
+        # Extract only the 'coil' components
+        res = list(unique_ord.values())        
+        return(res)</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.model.Snapshot.get_order" class="doc doc-heading">
+            <code class="highlight language-python">get_order(order_id, do_raise=False)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\model.py</code></summary>
+              <pre class="highlight"><code class="language-python">def get_order(self, order_id: str, do_raise: bool=False) -&gt; Order[MATERIAL_PROPERTIES]|None:
+    order = next((o for o in self.orders if o.id == order_id), None)
+    if order is None and do_raise:
+        raise Exception("Order " + str(order_id) + " not found")
+    return order</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.model.Snapshot.get_material" class="doc doc-heading">
+            <code class="highlight language-python">get_material(material_id, do_raise=False)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\model.py</code></summary>
+              <pre class="highlight"><code class="language-python">def get_material(self, material_id: str, do_raise: bool=False) -&gt; Material | None:
+    material = next((c for c in self.material if c.id == material_id), None)
+    if material is None and do_raise:
+        raise Exception("Material " + str(material_id) + " not found")
+    return material</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.model.Snapshot.get_order_lot" class="doc doc-heading">
+            <code class="highlight language-python">get_order_lot(site, order_id, process)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\model.py</code></summary>
+              <pre class="highlight"><code class="language-python">def get_order_lot(self, site: Site, order_id: str, process: str) -&gt; Lot|None:
+    if self.lots is None:
+        return None
+    plant_ids: list[int] = [p.id for p in site.get_process_equipment(process)]
+    for plant in plant_ids:
+        if plant not in self.lots:
+            continue
+        lots: list[Lot] = self.lots[plant]
+        lot: Lot|None = next((l for l in lots if order_id in l.orders), None)
+        if lot is not None:
+            return lot
+    return None</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.model.Snapshot.get_material_equipment" class="doc doc-heading">
+            <code class="highlight language-python">get_material_equipment(site, equipment_name, storage, assigned=-1)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\model.py</code></summary>
+              <pre class="highlight"><code class="language-python">def get_material_equipment(self, site: Site, equipment_name: str, storage:str, assigned: int=-1) -&gt; list[str]:
+    if assigned &lt; 0:
+        return([coil.id for coil in self.material if \
+                    equipment_name in [site.get_equipment(ieq).name_short \
+                            for ieq in self.get_order(coil.order).allowed_equipment] \
+                    and coil.current_storage == storage and \
+                    coil.current_equipment is None])
+    else:
+        return([coil.id for coil in self.material if \
+                    equipment_name in [site.get_equipment(ieq).name_short \
+                            for ieq in self.get_order(coil.order).allowed_equipment] \
+                        and coil.current_storage == storage and \
+                            coil.current_equipment is not None and \
+                            coil.current_equipment_name != equipment_name])</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.model.Snapshot.get_orders_equipment" class="doc doc-heading">
+            <code class="highlight language-python">get_orders_equipment(site, equipment_name, storage, assigned=-1)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\model.py</code></summary>
+              <pre class="highlight"><code class="language-python">def get_orders_equipment(self, site: Site, equipment_name: str, storage:str, assigned:int=-1) -&gt; list[str]:
+    if assigned &lt; 0:
+        return(list(set([coil.order for coil in self.material if \
+                        equipment_name in [site.get_equipment(ieq).name_short \
+                            for ieq in self.get_order(coil.order).allowed_equipment] \
+                        and coil.current_storage == storage and \
+                        coil.current_equipment is None] )) )
+    else:
+        return(list(set([coil.order for coil in self.material if \
+                        equipment_name in [site.get_equipment(ieq).name_short \
+                            for ieq in self.get_order(coil.order).allowed_equipment] \
+                        and coil.current_storage == storage and \
+                            coil.current_equipment is not None and \
+                            coil.current_equipment_name != equipment_name] )) )</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.model.Snapshot.get_material_selected_orders" class="doc doc-heading">
+            <code class="highlight language-python">get_material_selected_orders(orders, plant_names, site)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\model.py</code></summary>
+              <pre class="highlight"><code class="language-python">def get_material_selected_orders(self, orders: list[str], plant_names: list[str], site: Site) -&gt; list[str]:
+    tmp = [(coil.id,coil.order) for coil in self.material if \
+                coil.current_equipment_name in plant_names and coil.order in orders ]
+    unique_ord = {}
+    # Iterate over the list of tuples to find coils representing the targeted orders
+    for a, b in tmp:
+        mat = self.get_coil(a).current_storage
+        stg_valid = [site.get_plant_by_name(plt).storage_in for plt in plant_names]
+        if b not in unique_ord and mat in stg_valid:  # Only add if 'b' is not already in the dictionary
+            unique_ord[b] = a
+    # Extract only the 'coil' components
+    res = list(unique_ord.values())        
+    return(res)</code></pre>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="longtermtargets-class">LongTermTargets class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.LongTermTargets"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.Model" href="#dynreact.base.model.Model">Model</a></code></p>
+
+
+        <p>Long term production targets for different product categories, as input for the long-term
+planning component.
+The source of this could be user input, an order backlog, etc.</p>
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class LongTermTargets(Model):
+    """
+    Long term production targets for different product categories, as input for the long-term
+    planning component.
+    The source of this could be user input, an order backlog, etc.
+    """
+    source: str|None = None
+    "Identifier specifying the source of the long-term targets."
+    comment: str|None = None
+    "Optional description"
+    period: tuple[datetime, datetime]
+    production_targets: dict[str, float]
+    """
+    Production targets for the planning period by material class. Note that the material classes are not disjoint, 
+    only those belonging to a single material category are. Keys: material class ids, values: tons
+    """
+    total_production: float
+    "Total production target in tons."</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="midtermtargets-class">MidTermTargets class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.model.MidTermTargets"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="dynreact.base.model.LongTermTargets" href="#dynreact.base.model.LongTermTargets">LongTermTargets</a></code></p>
+
+
+        <p>Production targets assigned to shorter periods such as days or shifts.
+Note: this class extends LongTermTargets in order to retain information about its source.</p>
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\model.py</code></summary>
+                <pre class="highlight"><code class="language-python">class MidTermTargets(LongTermTargets):
+    """
+    Production targets assigned to shorter periods such as days or shifts.
+    Note: this class extends LongTermTargets in order to retain information about its source.
+    """
+    scheduler: str|None = None
+    "Identifier specifying the source of the mid-term targets."
+    sub_periods: list[tuple[datetime, datetime]]
+    """
+    A chronological list of non-overlapping time intervals within the larger planning period,
+    typically corresponding to production shifts.
+    """
+    production_sub_targets: dict[str, list[ProductionTargets]]
+    "Production targets for the planning sub periods. Keys: process ids, values: list of production targets, covering all planning sub periods chronologically."</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="lots_optimizer.html" class="btn btn-neutral float-left" title="Lots optimizer"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="snapshot_provider.html" class="btn btn-neutral float-right" title="Snapshot provider">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="lots_optimizer.html" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="snapshot_provider.html" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = ".";</script>
+    <script src="js/theme_extra.js"></script>
+    <script src="js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

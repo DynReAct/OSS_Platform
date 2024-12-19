@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="img/favicon.ico" />
+    <title>Equipment - Dynreact ShortTermPlanning</title>
+    <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Equipment";
+        var mkdocs_page_input_path = "equipment.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="index.html" class="icon icon-home"> Dynreact ShortTermPlanning
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="" href="../index.html">Back</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="index.html">General</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="agent.html">Agent</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="material.html">Material</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Equipment</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#resource-class">Resource class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.equipment.Resource">Resource</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.equipment.Resource.move_to_next_round">move_to_next_round</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.equipment.Resource.handle_create_action">handle_create_action</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.equipment.Resource.handle_start_action">handle_start_action</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.equipment.Resource.handle_counterbid_action">handle_counterbid_action</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.equipment.Resource.handle_askconfirm_action">handle_askconfirm_action</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.equipment.Resource.handle_confirm_action">handle_confirm_action</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.equipment.Resource.handle_assigned_action">handle_assigned_action</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.equipment.Resource.callback_before_message">callback_before_message</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#create_resource-function">create_resource function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.shortterm.equipment.create_resource">create_resource</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="common.html">Common</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="log.html">Log</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="functions.html">Functions</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="cleankafka.html">Clean_kafka</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="shorttermplanning.html">ShortTermPlanning</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Dynreact ShortTermPlanning</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="index.html" class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Equipment</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="resource-module">Resource module</h1>
+<p>First Prototype of Kubernetes oriented solution for the MATERIAL agent</p>
+<hr />
+<h2 id="resource-class">Resource class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.shortterm.equipment.Resource"></a>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="agent.Agent">Agent</span></code></p>
+
+
+        <p>Class Resource supporting the equipment agents.</p>
+<p>Arguments:
+    topic     (str): Topic driving the relevant converstaion.
+    agent     (str): Name of the agent creating the object.
+    status   (dict): Status of the equipment
+    kafka_ip  (str): IP address and TCP port of the broker.
+    counterbid_wait (float): Number of seconds granted for waiting confirmation.
+    verbose   (int): Level of details being saved.</p>
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\shortterm\equipment.py</code></summary>
+                <pre class="highlight"><code class="language-python">class Resource(Agent):
+    """
+    Class Resource supporting the equipment agents.
+
+    Arguments:
+        topic     (str): Topic driving the relevant converstaion.
+        agent     (str): Name of the agent creating the object.
+        status   (dict): Status of the equipment
+        kafka_ip  (str): IP address and TCP port of the broker.
+        counterbid_wait (float): Number of seconds granted for waiting confirmation.
+        verbose   (int): Level of details being saved.
+
+    """
+    def __init__(self, topic: str, agent: str, status: dict, kafka_ip: str, counterbid_wait: float, verbose: int = 1):
+
+        super().__init__(topic=topic, agent=agent, kafka_ip=kafka_ip, verbose=verbose)
+        """
+           Constructor function for the Resource Class
+
+        :param str topic: Topic driving the relevant converstaion.
+        :param str agent: Name of the agent creating the object.
+        :param dict status: Status of the equipment
+        :param str kafka_ip: IP address and TCP port of the broker.
+        :param float counterbid_wait: Number of seconds granted for waiting confirmation.
+        :param int verbose: Level of details being saved.
+        """
+        self.action_methods.update({
+            'CREATE': self.handle_create_action, 'START': self.handle_start_action,
+            'COUNTERBID': self.handle_counterbid_action, 'ASKCONFIRM': self.handle_askconfirm_action,
+            'CONFIRM': self.handle_confirm_action, 'ASSIGNED': self.handle_assigned_action
+        })
+
+        self.round_number = 0
+        self.status = status
+        self.counterbid_wait = counterbid_wait
+
+        self.iter_post_bid = 0
+        self.bids = []
+        self.last_bid_time = None
+        self.bid_to_confirm = dict()
+        self.previous_price = None
+
+        if self.verbose &gt; 1:
+            self.write_log(f"Finished creating the agent {self.agent} with status {self.status}.")
+
+    def move_to_next_round(self, material_params: dict):
+        """
+        Moves the equipment to the next round by updating its status according to the assigned material's parameters,
+        updating its name with the next round number, and starting the round.
+
+        :param dict material_params:
+        """
+        self.status = get_new_equipment_status(material_params=material_params, resource_status=self.status)
+        roundless_name = self.agent[:self.agent.rfind(":")]
+        self.round_number += 1
+        self.agent = roundless_name + f":{self.round_number}"
+        if self.verbose &gt; 1:
+            self.write_log(f"Moved equipment {roundless_name} to round {self.round_number}. New status: {self.status}")
+
+        self.iter_post_bid = 0
+        self.bids = []
+        self.last_bid_time = None
+        self.bid_to_confirm = dict()
+
+        full_msg = dict(
+            source=self.agent, dest=self.agent, topic=self.topic, action='START',
+            payload=dict(price=self.previous_price)
+        )
+        self.handle_start_action(full_msg)
+
+    def handle_create_action(self, dctmsg: dict) -&gt; str:
+        """
+        Handles the CREATE action. It clones the master RESOURCE for one auction.
+        This instruction should only be given to the general RESOURCE.
+
+        :param dict dctmsg: Message dictionary
+        :return: Status of the handling
+        :rtype: str
+        """
+
+        topic = dctmsg['topic']
+        payload = dctmsg['payload']
+        resource = payload['id']
+        counterbid_wait = payload['counterbid_wait']
+        agent = f"RESOURCE:{topic}:{resource}:0"
+        status = get_equipment_status(resource)
+
+        init_kwargs = dict(
+            topic=topic, agent=agent, status=status, kafka_ip=self.kafka_ip,
+            counterbid_wait=counterbid_wait, verbose=self.verbose,
+        )
+        if self.verbose &gt; 1:
+            self.write_log(f"Creating equipment with configuration {init_kwargs}...")
+
+        pool = Pool(processes=2)
+        pool.apply_async(create_resource, (init_kwargs,))
+        pool.close()
+
+        return 'CONTINUE'
+
+    def handle_start_action(self, dctmsg: dict) -&gt; str:
+        """
+        Handles the START action. It starts the RESOURCE's auction by instructing the MATERIALs to start bidding.
+        This instruction should only be given to the RESOURCE children of the auction.
+
+        :param dict dctmsg: Message dictionary
+        :return: Status of the handling
+        :rtype: str
+        """
+        topic = dctmsg['topic']
+        payload = dctmsg['payload']
+        previous_price = None
+        if 'price' in payload:
+            previous_price = payload['price']
+
+        sendmsgtopic(
+            producer=self.producer,
+            tsend=topic,
+            topic=topic,
+            source=self.agent,
+            dest="MATERIAL:" + topic + ":.*",
+            action="BID",
+            payload=dict(id=self.agent, status=self.status, previous_price=previous_price),
+            vb=self.verbose
+        )
+        if self.verbose &gt; 2:
+            self.write_log(f"Instructed all MATERIAL:{topic} to bid")
+
+        # Reset bidding status
+        self.iter_post_bid = 0
+        self.last_bid_time = time.perf_counter()
+
+        return 'CONTINUE'
+
+    def handle_counterbid_action(self, dctmsg: dict) -&gt; str:
+        """
+        Handles the COUNTERBID action. It gets the material ID, its parameters, and its bidding price
+        to calculate the profit (price minus producation cost) for the equipment.
+        This instruction should only be given to the EQUIPMENT children of the auction.
+
+        :param dict dctmsg: Message dictionary
+        :return: Status of the handling
+        :rtype: str
+        """
+        payload = dctmsg['payload']
+        material_params = payload['material_params']
+        bidding_price = payload['price']
+
+        prod_cost = calculate_production_cost(material_params=material_params, resource_status=self.status)
+        if prod_cost is None:
+            if self.verbose &gt; 1:
+                self.write_log(
+                    f"Rejected offer from material {payload['id']}. "
+                    f"The transition function to this material returns null"
+                )
+            return 'CONTINUE'
+
+        profit = bidding_price - prod_cost
+        bid = dict(material=payload['id'], profit=profit, price=bidding_price)
+
+        # Reset bidding status
+        self.iter_post_bid = 0
+        self.last_bid_time = time.perf_counter()
+
+        # Add the bid to the list
+        self.bids.append(bid)
+        if self.verbose &gt; 1:
+            self.write_log(f"Added {bid} to the list of bids, {self.bids}")
+
+        return 'CONTINUE'
+
+    def handle_askconfirm_action(self, dctmsg: dict) -&gt; str:
+        """
+        Handles the ASKCONFIRM action. It asks the material for confirmation to settle the equipment-material assignment.
+
+        :param dict dctmsg: Message dictionary
+        :return: Status of the handling
+        :rtype: str
+        """
+        topic = dctmsg['topic']
+        material = dctmsg['payload']['id']
+        sendmsgtopic(
+            producer=self.producer,
+            tsend=topic,
+            topic=topic,
+            source=self.agent,
+            dest=material,
+            action="ASKCONFIRM",
+            payload=dict(id=self.agent),
+            vb=self.verbose
+        )
+        return 'CONTINUE'
+
+    def handle_confirm_action(self, dctmsg: dict) -&gt; str:
+        """
+        Handles the CONFIRM action. It receives the confirmation from the material and moves to the next round.
+        This instruction should only be given to the RESOURCE children of the auction,
+        and only from the MATERIAL that the equipment previously asked for confirmation.
+
+        :param dict dctmsg: Message dictionary
+        :return: Status of the handling
+        :rtype: str
+        """
+        payload = dctmsg['payload']
+        material = payload['id']
+        material_params = payload['material_params']
+
+        if material != self.bid_to_confirm['material']:
+            error_msg = (
+                f"The sender of the confirmation {material} does not match "
+                f"the pending material {self.bid_to_confirm['material']}"
+            )
+            if self.verbose &gt; 1:
+                self.write_log(f"ERROR: {error_msg}")
+            raise RuntimeError(error_msg)
+
+        self.previous_price = self.bid_to_confirm['price']
+        if self.verbose &gt; 1:
+            self.write_log(
+                f"The equipment will be assigned to material {material} with bid {self.bid_to_confirm}. "
+                f"Moving to the next round..."
+            )
+        self.move_to_next_round(material_params=material_params)
+        return 'CONTINUE'
+
+    def handle_assigned_action(self, dctmsg: dict) -&gt; str:
+        """
+        Handles the ASSIGNED action. It removes the material from the list of bids or,
+        if the material matches the pending material, it no longer waits for its confirmation.
+        This instruction should only be given to the RESOURCE children of the auction.
+
+        :param dict dctmsg: Message dictionary
+        :return: Status of the handling
+        :rtype: str
+        """
+        payload = dctmsg['payload']
+        material = payload['id']
+
+        if self.bid_to_confirm and material == self.bid_to_confirm['material']:
+            if self.verbose &gt; 1:
+                self.write_log(f"The material {material} has been assigned to another equipment.")
+            self.bid_to_confirm = dict()
+            return 'CONTINUE'
+
+        for index, bid in enumerate(self.bids):
+            if bid['material'] == material:
+                self.bids.pop(index)
+                if self.verbose &gt; 1:
+                    self.write_log(f"Removed the assigned material, {material}, from the list of bids: {self.bids}")
+        return 'CONTINUE'
+
+    def callback_before_message(self) -&gt; str:
+        """
+        Checks the bidding and confirmation status
+        :return: Status of the callback
+        :rtype: str
+        """
+        if self.last_bid_time is None:
+            return 'CONTINUE'
+
+        # A bid has already happened; increment the number of iterations post-bid
+        self.iter_post_bid += 1
+        time_after_bid = time.perf_counter() - self.last_bid_time
+        if (self.verbose &gt; 1) and ((self.iter_post_bid - 1) % 15 == 0):
+            self.write_log(
+                f"Iteration {self.iter_post_bid - 1} after bid. Passed {time_after_bid:.2f}s after last bid"
+            )
+
+        # Do not proceed if not enough time has passed since the last bid or
+        # the equipment is waiting for a material to confirm
+        if time_after_bid &lt; self.counterbid_wait or self.bid_to_confirm:
+            return 'CONTINUE'
+
+        # Kill this equipment child if there are no more materials to ask
+        if len(self.bids) == 0:
+            if self.verbose &gt; 1:
+                self.write_log(
+                    f"No more bids to process. The equipment will not be assigned to any material. "
+                    f"Killing the agent..."
+                )
+            return 'END'
+
+        # Ask the (next) best material for confirmation
+        self.bids.sort(key=lambda item: item['profit'])
+        best_bid = self.bids.pop()
+        if self.verbose &gt; 1:
+            self.write_log(f"Removed the best bid, {best_bid}, from the list of bids: {self.bids}")
+
+        dctmsg = dict(topic=self.topic, payload=dict(id=best_bid['material']))
+        self.process_message(action='ASKCONFIRM', dctmsg=dctmsg)
+
+        self.bid_to_confirm = best_bid
+        if self.verbose &gt; 1:
+            self.write_log(f"Asked material {best_bid['material']} for confirmation.")
+
+        return 'CONTINUE'</code></pre>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.equipment.Resource.move_to_next_round" class="doc doc-heading">
+            <code class="highlight language-python">move_to_next_round(material_params)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Moves the equipment to the next round by updating its status according to the assigned material's parameters,
+updating its name with the next round number, and starting the round.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>material_params</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+            <details class="quote">
+              <summary>Source code in <code>dynreact\shortterm\equipment.py</code></summary>
+              <pre class="highlight"><code class="language-python">def move_to_next_round(self, material_params: dict):
+    """
+    Moves the equipment to the next round by updating its status according to the assigned material's parameters,
+    updating its name with the next round number, and starting the round.
+
+    :param dict material_params:
+    """
+    self.status = get_new_equipment_status(material_params=material_params, resource_status=self.status)
+    roundless_name = self.agent[:self.agent.rfind(":")]
+    self.round_number += 1
+    self.agent = roundless_name + f":{self.round_number}"
+    if self.verbose &gt; 1:
+        self.write_log(f"Moved equipment {roundless_name} to round {self.round_number}. New status: {self.status}")
+
+    self.iter_post_bid = 0
+    self.bids = []
+    self.last_bid_time = None
+    self.bid_to_confirm = dict()
+
+    full_msg = dict(
+        source=self.agent, dest=self.agent, topic=self.topic, action='START',
+        payload=dict(price=self.previous_price)
+    )
+    self.handle_start_action(full_msg)</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.equipment.Resource.handle_create_action" class="doc doc-heading">
+            <code class="highlight language-python">handle_create_action(dctmsg)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Handles the CREATE action. It clones the master RESOURCE for one auction.
+This instruction should only be given to the general RESOURCE.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>dctmsg</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                <p>Message dictionary</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>str</code>
+              –
+              <div class="doc-md-description">
+                <p>Status of the handling</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+            <details class="quote">
+              <summary>Source code in <code>dynreact\shortterm\equipment.py</code></summary>
+              <pre class="highlight"><code class="language-python">def handle_create_action(self, dctmsg: dict) -&gt; str:
+    """
+    Handles the CREATE action. It clones the master RESOURCE for one auction.
+    This instruction should only be given to the general RESOURCE.
+
+    :param dict dctmsg: Message dictionary
+    :return: Status of the handling
+    :rtype: str
+    """
+
+    topic = dctmsg['topic']
+    payload = dctmsg['payload']
+    resource = payload['id']
+    counterbid_wait = payload['counterbid_wait']
+    agent = f"RESOURCE:{topic}:{resource}:0"
+    status = get_equipment_status(resource)
+
+    init_kwargs = dict(
+        topic=topic, agent=agent, status=status, kafka_ip=self.kafka_ip,
+        counterbid_wait=counterbid_wait, verbose=self.verbose,
+    )
+    if self.verbose &gt; 1:
+        self.write_log(f"Creating equipment with configuration {init_kwargs}...")
+
+    pool = Pool(processes=2)
+    pool.apply_async(create_resource, (init_kwargs,))
+    pool.close()
+
+    return 'CONTINUE'</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.equipment.Resource.handle_start_action" class="doc doc-heading">
+            <code class="highlight language-python">handle_start_action(dctmsg)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Handles the START action. It starts the RESOURCE's auction by instructing the MATERIALs to start bidding.
+This instruction should only be given to the RESOURCE children of the auction.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>dctmsg</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                <p>Message dictionary</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>str</code>
+              –
+              <div class="doc-md-description">
+                <p>Status of the handling</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+            <details class="quote">
+              <summary>Source code in <code>dynreact\shortterm\equipment.py</code></summary>
+              <pre class="highlight"><code class="language-python">def handle_start_action(self, dctmsg: dict) -&gt; str:
+    """
+    Handles the START action. It starts the RESOURCE's auction by instructing the MATERIALs to start bidding.
+    This instruction should only be given to the RESOURCE children of the auction.
+
+    :param dict dctmsg: Message dictionary
+    :return: Status of the handling
+    :rtype: str
+    """
+    topic = dctmsg['topic']
+    payload = dctmsg['payload']
+    previous_price = None
+    if 'price' in payload:
+        previous_price = payload['price']
+
+    sendmsgtopic(
+        producer=self.producer,
+        tsend=topic,
+        topic=topic,
+        source=self.agent,
+        dest="MATERIAL:" + topic + ":.*",
+        action="BID",
+        payload=dict(id=self.agent, status=self.status, previous_price=previous_price),
+        vb=self.verbose
+    )
+    if self.verbose &gt; 2:
+        self.write_log(f"Instructed all MATERIAL:{topic} to bid")
+
+    # Reset bidding status
+    self.iter_post_bid = 0
+    self.last_bid_time = time.perf_counter()
+
+    return 'CONTINUE'</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.equipment.Resource.handle_counterbid_action" class="doc doc-heading">
+            <code class="highlight language-python">handle_counterbid_action(dctmsg)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Handles the COUNTERBID action. It gets the material ID, its parameters, and its bidding price
+to calculate the profit (price minus producation cost) for the equipment.
+This instruction should only be given to the EQUIPMENT children of the auction.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>dctmsg</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                <p>Message dictionary</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>str</code>
+              –
+              <div class="doc-md-description">
+                <p>Status of the handling</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+            <details class="quote">
+              <summary>Source code in <code>dynreact\shortterm\equipment.py</code></summary>
+              <pre class="highlight"><code class="language-python">def handle_counterbid_action(self, dctmsg: dict) -&gt; str:
+    """
+    Handles the COUNTERBID action. It gets the material ID, its parameters, and its bidding price
+    to calculate the profit (price minus producation cost) for the equipment.
+    This instruction should only be given to the EQUIPMENT children of the auction.
+
+    :param dict dctmsg: Message dictionary
+    :return: Status of the handling
+    :rtype: str
+    """
+    payload = dctmsg['payload']
+    material_params = payload['material_params']
+    bidding_price = payload['price']
+
+    prod_cost = calculate_production_cost(material_params=material_params, resource_status=self.status)
+    if prod_cost is None:
+        if self.verbose &gt; 1:
+            self.write_log(
+                f"Rejected offer from material {payload['id']}. "
+                f"The transition function to this material returns null"
+            )
+        return 'CONTINUE'
+
+    profit = bidding_price - prod_cost
+    bid = dict(material=payload['id'], profit=profit, price=bidding_price)
+
+    # Reset bidding status
+    self.iter_post_bid = 0
+    self.last_bid_time = time.perf_counter()
+
+    # Add the bid to the list
+    self.bids.append(bid)
+    if self.verbose &gt; 1:
+        self.write_log(f"Added {bid} to the list of bids, {self.bids}")
+
+    return 'CONTINUE'</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.equipment.Resource.handle_askconfirm_action" class="doc doc-heading">
+            <code class="highlight language-python">handle_askconfirm_action(dctmsg)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Handles the ASKCONFIRM action. It asks the material for confirmation to settle the equipment-material assignment.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>dctmsg</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                <p>Message dictionary</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>str</code>
+              –
+              <div class="doc-md-description">
+                <p>Status of the handling</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+            <details class="quote">
+              <summary>Source code in <code>dynreact\shortterm\equipment.py</code></summary>
+              <pre class="highlight"><code class="language-python">def handle_askconfirm_action(self, dctmsg: dict) -&gt; str:
+    """
+    Handles the ASKCONFIRM action. It asks the material for confirmation to settle the equipment-material assignment.
+
+    :param dict dctmsg: Message dictionary
+    :return: Status of the handling
+    :rtype: str
+    """
+    topic = dctmsg['topic']
+    material = dctmsg['payload']['id']
+    sendmsgtopic(
+        producer=self.producer,
+        tsend=topic,
+        topic=topic,
+        source=self.agent,
+        dest=material,
+        action="ASKCONFIRM",
+        payload=dict(id=self.agent),
+        vb=self.verbose
+    )
+    return 'CONTINUE'</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.equipment.Resource.handle_confirm_action" class="doc doc-heading">
+            <code class="highlight language-python">handle_confirm_action(dctmsg)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Handles the CONFIRM action. It receives the confirmation from the material and moves to the next round.
+This instruction should only be given to the RESOURCE children of the auction,
+and only from the MATERIAL that the equipment previously asked for confirmation.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>dctmsg</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                <p>Message dictionary</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>str</code>
+              –
+              <div class="doc-md-description">
+                <p>Status of the handling</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+            <details class="quote">
+              <summary>Source code in <code>dynreact\shortterm\equipment.py</code></summary>
+              <pre class="highlight"><code class="language-python">def handle_confirm_action(self, dctmsg: dict) -&gt; str:
+    """
+    Handles the CONFIRM action. It receives the confirmation from the material and moves to the next round.
+    This instruction should only be given to the RESOURCE children of the auction,
+    and only from the MATERIAL that the equipment previously asked for confirmation.
+
+    :param dict dctmsg: Message dictionary
+    :return: Status of the handling
+    :rtype: str
+    """
+    payload = dctmsg['payload']
+    material = payload['id']
+    material_params = payload['material_params']
+
+    if material != self.bid_to_confirm['material']:
+        error_msg = (
+            f"The sender of the confirmation {material} does not match "
+            f"the pending material {self.bid_to_confirm['material']}"
+        )
+        if self.verbose &gt; 1:
+            self.write_log(f"ERROR: {error_msg}")
+        raise RuntimeError(error_msg)
+
+    self.previous_price = self.bid_to_confirm['price']
+    if self.verbose &gt; 1:
+        self.write_log(
+            f"The equipment will be assigned to material {material} with bid {self.bid_to_confirm}. "
+            f"Moving to the next round..."
+        )
+    self.move_to_next_round(material_params=material_params)
+    return 'CONTINUE'</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.equipment.Resource.handle_assigned_action" class="doc doc-heading">
+            <code class="highlight language-python">handle_assigned_action(dctmsg)</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Handles the ASSIGNED action. It removes the material from the list of bids or,
+if the material matches the pending material, it no longer waits for its confirmation.
+This instruction should only be given to the RESOURCE children of the auction.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>dctmsg</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                <p>Message dictionary</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>str</code>
+              –
+              <div class="doc-md-description">
+                <p>Status of the handling</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+            <details class="quote">
+              <summary>Source code in <code>dynreact\shortterm\equipment.py</code></summary>
+              <pre class="highlight"><code class="language-python">def handle_assigned_action(self, dctmsg: dict) -&gt; str:
+    """
+    Handles the ASSIGNED action. It removes the material from the list of bids or,
+    if the material matches the pending material, it no longer waits for its confirmation.
+    This instruction should only be given to the RESOURCE children of the auction.
+
+    :param dict dctmsg: Message dictionary
+    :return: Status of the handling
+    :rtype: str
+    """
+    payload = dctmsg['payload']
+    material = payload['id']
+
+    if self.bid_to_confirm and material == self.bid_to_confirm['material']:
+        if self.verbose &gt; 1:
+            self.write_log(f"The material {material} has been assigned to another equipment.")
+        self.bid_to_confirm = dict()
+        return 'CONTINUE'
+
+    for index, bid in enumerate(self.bids):
+        if bid['material'] == material:
+            self.bids.pop(index)
+            if self.verbose &gt; 1:
+                self.write_log(f"Removed the assigned material, {material}, from the list of bids: {self.bids}")
+    return 'CONTINUE'</code></pre>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.shortterm.equipment.Resource.callback_before_message" class="doc doc-heading">
+            <code class="highlight language-python">callback_before_message()</code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Checks the bidding and confirmation status</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>str</code>
+              –
+              <div class="doc-md-description">
+                <p>Status of the callback</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+            <details class="quote">
+              <summary>Source code in <code>dynreact\shortterm\equipment.py</code></summary>
+              <pre class="highlight"><code class="language-python">def callback_before_message(self) -&gt; str:
+    """
+    Checks the bidding and confirmation status
+    :return: Status of the callback
+    :rtype: str
+    """
+    if self.last_bid_time is None:
+        return 'CONTINUE'
+
+    # A bid has already happened; increment the number of iterations post-bid
+    self.iter_post_bid += 1
+    time_after_bid = time.perf_counter() - self.last_bid_time
+    if (self.verbose &gt; 1) and ((self.iter_post_bid - 1) % 15 == 0):
+        self.write_log(
+            f"Iteration {self.iter_post_bid - 1} after bid. Passed {time_after_bid:.2f}s after last bid"
+        )
+
+    # Do not proceed if not enough time has passed since the last bid or
+    # the equipment is waiting for a material to confirm
+    if time_after_bid &lt; self.counterbid_wait or self.bid_to_confirm:
+        return 'CONTINUE'
+
+    # Kill this equipment child if there are no more materials to ask
+    if len(self.bids) == 0:
+        if self.verbose &gt; 1:
+            self.write_log(
+                f"No more bids to process. The equipment will not be assigned to any material. "
+                f"Killing the agent..."
+            )
+        return 'END'
+
+    # Ask the (next) best material for confirmation
+    self.bids.sort(key=lambda item: item['profit'])
+    best_bid = self.bids.pop()
+    if self.verbose &gt; 1:
+        self.write_log(f"Removed the best bid, {best_bid}, from the list of bids: {self.bids}")
+
+    dctmsg = dict(topic=self.topic, payload=dict(id=best_bid['material']))
+    self.process_message(action='ASKCONFIRM', dctmsg=dctmsg)
+
+    self.bid_to_confirm = best_bid
+    if self.verbose &gt; 1:
+        self.write_log(f"Asked material {best_bid['material']} for confirmation.")
+
+    return 'CONTINUE'</code></pre>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="create_resource-function">create_resource function</h2>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+<a id="dynreact.shortterm.equipment.create_resource"></a>
+    <div class="doc doc-contents first">
+
+        <p>Helper function to create Resource instances asynchronously with Python's multiprocessing.
+The reason for this function is that multiprocessing can handle functions but not methods.
+Source: https://stackoverflow.com/questions/41000818/can-i-pass-a-method-to-apply-async-or-map-in-python-multiprocessing</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>init_kwargs</code></b>
+                  (<code>dict</code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+            <details class="quote">
+              <summary>Source code in <code>dynreact\shortterm\equipment.py</code></summary>
+              <pre class="highlight"><code class="language-python">def create_resource(init_kwargs: dict)-&gt; None:
+    """
+    Helper function to create Resource instances asynchronously with Python's multiprocessing.
+    The reason for this function is that multiprocessing can handle functions but not methods.
+    Source: https://stackoverflow.com/questions/41000818/can-i-pass-a-method-to-apply-async-or-map-in-python-multiprocessing
+
+    :param dict init_kwargs:
+    """
+
+    resource = Resource(**init_kwargs)
+    resource.follow_topic()</code></pre>
+            </details>
+    </div>
+
+</div>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="material.html" class="btn btn-neutral float-left" title="Material"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="common.html" class="btn btn-neutral float-right" title="Common">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="material.html" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="common.html" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = ".";</script>
+    <script src="js/theme_extra.js"></script>
+    <script src="js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

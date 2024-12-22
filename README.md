@@ -20,16 +20,9 @@
 
 <img src="images/Fig7.png" height="380" title="Hierarchical concept" style="float: center;"/>
 
-Within the DynReAct PDP, it is foreseen to develop an open-source platform for dynamic 
-production planning as shown in previous Figure.
-This platform will be realized as SOA enabling a modular connection of multiple
-planning relevant components.
-The backbone of this platform will be the hierarchical planning system developed in 
-the former DynReAct project.
-
-Accordingly, the core of the DynReAct software platform will be published under an 
-open-source license, on a code-hosting platform such as GitHub.
-
+This repository contains the DynReAct open-source platform for dynamic 
+production planning. It consists of several modules, as shown in previous Figure.
+The backbone of this platform is the hierarchical planning system, consisting of long-term planning (time horizon of weeks to months), mid-term planning (horizon: hours to days) and short-term planning (horizon: minutes to hours) modules.
 
 ## Structure
 

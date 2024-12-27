@@ -133,7 +133,7 @@ Navigate to folder *DynReActService* and run
 python -m uvicorn run:fastapi_app --reload --port 8050 --log-level debug
 ```
 
-The frontend will be available at http://localhost:8050/dash and the service documentation at http://localhost:8050/docs. 
+The frontend will be available at http://localhost:8050/dash and the service documentation at http://localhost:8050/docs. See [app_config.py](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/dynreact/app_config.py) for configuration options.
 
 #### Long-term planning
 

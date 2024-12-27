@@ -108,6 +108,12 @@ or use your IDE for this purpose. Activate the virtual environment and navigate 
 pip install -r requirements.txt -r requirements_local.txt 
 ```
 
+Navigate to the subfolder *ShortTermPlanning* and also run
+
+```commandline
+pip install -r requirements.txt
+```
+
 ### IDE settings
 
 #### PyCharm
@@ -131,7 +137,7 @@ The frontend will be available at http://localhost:8050/dash and the service doc
 
 #### Long-term planning
 
-TODO
+The open-source platform currently only contains a dummy implementation of the long-term planning. It is started alongside the [service](#service) and could be replaced by a custom implementation, if needed. Source code of the dummy long-term planning is available here: [SimpleLongTermPlanning.py](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActBase/dynreact/base/impl/SimpleLongTermPlanning.py).
 
 #### Mid-term planning
 

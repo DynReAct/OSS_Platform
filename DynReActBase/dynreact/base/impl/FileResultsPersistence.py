@@ -7,6 +7,7 @@ import pydantic_core
 from pydantic import BaseModel, TypeAdapter
 
 from dynreact.base.LotsOptimizer import LotsOptimizationState
+from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import EquipmentStatus, Site, Process, ProductionPlanning, MidTermTargets, StorageLevel
@@ -29,7 +30,7 @@ class FileResultsPersistence(ResultsPersistence):
         super().__init__(uri, site)
         uri_lower = uri.lower()
         if not uri_lower.startswith("default+file:"):
-            raise Exception("Unexpected URI for file results persistence: " + str(uri))
+            raise NotApplicableException("Unexpected URI for file results persistence: " + str(uri))
         folder = uri[len("default+file:"):]
         self._folder = folder
         os.makedirs(folder, exist_ok=True)

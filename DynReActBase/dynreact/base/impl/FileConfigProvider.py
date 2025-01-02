@@ -1,4 +1,5 @@
 from dynreact.base.ConfigurationProvider import ConfigurationProvider
+from dynreact.base.NotApplicableException import NotApplicableException
 
 from dynreact.base.model import Site
 
@@ -11,7 +12,7 @@ class FileConfigProvider(ConfigurationProvider):
         super().__init__(uri)
         uri = uri.lower()
         if not uri.startswith("default+file:"):
-            raise Exception("Unexpected URI for file config provider: " + str(uri))
+            raise NotApplicableException("Unexpected URI for file config provider: " + str(uri))
         self._file = uri[len("default+file:"):]
         js = None
         with open(self._file, "r", encoding="utf-8") as file:

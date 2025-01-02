@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from dynreact.base.LongTermPlanning import LongTermPlanning
+from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import LongTermTargets, MidTermTargets, Site, Equipment, ProductionTargets, EquipmentProduction, \
     StorageLevel, EquipmentAvailability
@@ -16,7 +17,7 @@ class SimpleLongTermPlanning(LongTermPlanning):
     def __init__(self, uri: str, site: Site):
         super().__init__(uri, site)
         if not uri.startswith("default:"):
-            raise Exception("Unexpected URI for simple long term planning provider: " + str(uri))
+            raise NotApplicableException("Unexpected URI for simple long term planning provider: " + str(uri))
         props: dict[str, str] = {pair[0]: pair[1] for pair in (prop.split("=") for prop in uri[len("default:"):].split(",")) if len(pair) == 2}
         self._shift_duration: str = props.get("shiftDuration", "8h")
         duration: timedelta | None = DatetimeUtils.parse_duration(self._shift_duration)

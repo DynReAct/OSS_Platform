@@ -7,6 +7,7 @@ from typing import Literal, Iterator
 
 import pandas as pd
 
+from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Snapshot, Site, Equipment, Process, Material, Order, Lot
@@ -25,7 +26,7 @@ class FileSnapshotProvider(SnapshotProvider):
         super().__init__(uri, site)
         uri = uri.lower()
         if not uri.startswith("default+file:"):
-            raise Exception("Unexpected URI for file snapshot provider: " + str(uri))
+            raise NotApplicableException("Unexpected URI for file snapshot provider: " + str(uri))
         self._folder = uri[len("default+file:"):]
         self._file_type: Literal["csv", "json", "pickle"] = file_type
         Path(self._folder).mkdir(parents=True, exist_ok=True)

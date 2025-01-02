@@ -7,6 +7,7 @@ from dynreact.base.ConfigurationProvider import ConfigurationProvider
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.DowntimeProvider import DowntimeProvider
 from dynreact.base.LongTermPlanning import LongTermPlanning
+from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.ShortTermPlanning import ShortTermPlanning
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo
@@ -177,7 +178,6 @@ class Plugins:
         errors = []
         if mod is None:
             spec_res = importlib.util.find_spec(module, package=None)
-            # TODO what if multiple are found?
             mod = importlib.util.module_from_spec(spec_res)
             sys.modules[module] = mod
             spec_res.loader.exec_module(mod)
@@ -185,13 +185,14 @@ class Plugins:
             try:
                 if inspect.isclass(element) and issubclass(element, clzz) and element != clzz:
                     return element(*args, **kwargs)
-            except Exception as e:  # TODO remember errors in case none other is found?
-                errors.append(e)
-                if do_raise:
-                    raise
+            except Exception as e:
+                if not isinstance(e, NotApplicableException):
+                    errors.append(e)
+                    if do_raise:
+                        raise
         if len(errors) > 0:
-            print(f"Failed to load module {module} of type {clzz}: {errors[-1]}")
-            raise errors[0]  # FIXME
+            print(f"Failed to load module {module} of type {clzz}: {errors[0]}")
+            raise errors[0]
         return None
 
 

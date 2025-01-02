@@ -272,7 +272,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
                 continue
         orders_by_lot[lot.id] = lot_orders
     all_due_dates = {lot: [o.due_date for o in orders if o is not None] for lot, orders in orders_by_lot.items()}
-    first_due_dates = {lot: min((o.due_date for o in orders if o is not None), default=DatetimeUtils.to_datetime(0)) for lot, orders in orders_by_lot.items()}
+    first_due_dates = {lot: min((o.due_date for o in orders if o is not None and o.due_date is not None), default=DatetimeUtils.to_datetime(0)) for lot, orders in orders_by_lot.items()}
     total_weights = {lot: sum(o.actual_weight if o.actual_weight is not None else (o.target_weight if o.target_weight is not None else 0)
                 for o in orders if o is not None) for lot, orders in orders_by_lot.items()}
     all_coils_by_orders: dict[str, list[Material]] = state.get_coils_by_order(snapshot)

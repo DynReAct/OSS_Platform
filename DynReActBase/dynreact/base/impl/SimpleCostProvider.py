@@ -2,6 +2,7 @@ from copy import deepcopy
 from datetime import datetime
 
 from dynreact.base.CostProvider import CostProvider
+from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.model import Site, Equipment, Order, Material, EquipmentStatus, Snapshot, OrderAssignment, PlanningData
 
 
@@ -24,7 +25,7 @@ class SimpleCostProvider(CostProvider):
                  minimum_possible_costs: float = 0):
         super().__init__(url, site)
         if url is not None and not url.startswith("simple:"):
-            raise Exception("Unexpected URI for simple cost provider: " + str(url))
+            raise NotApplicableException("Unexpected URI for simple cost provider: " + str(url))
         self._transition_costs = transition_costs
         self._new_lot_costs = new_lot_costs
         self._missing_weight_costs = missing_weight_costs

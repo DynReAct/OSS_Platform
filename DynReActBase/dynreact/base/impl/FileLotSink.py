@@ -1,6 +1,7 @@
 import os
 
 from dynreact.base.LotSink import LotSink
+from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.impl.PathUtils import PathUtils
 from dynreact.base.model import Site, Lot, Snapshot
 
@@ -11,7 +12,7 @@ class FileLotSink(LotSink):
         super().__init__(uri, site)
         uri_lower = uri.lower()
         if not uri_lower.startswith("default+file:"):
-            raise Exception("Unexpected URI for file file lot sink: " + str(uri))
+            raise NotApplicableException("Unexpected URI for file file lot sink: " + str(uri))
         folder = uri[len("default+file:"):]
         self._folder = os.path.join(folder, "lots") if not folder.lower().endswith("lots") else folder
         os.makedirs(self._folder, exist_ok=True)

@@ -4,6 +4,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field, BeforeValidator
 
+from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Site, Order, Material
@@ -63,7 +64,7 @@ class TestPerformanceModel(PlantPerformanceModel):
             data = url[len("test+data:"):]
             self._config: TestPerformanceConfig = TestPerformanceConfig.model_validate_json(data)
         else:
-            raise Exception("Unexpected URI for test performance model: " + str(url))
+            raise NotApplicableException("Unexpected URI for test performance model: " + str(url))
 
     def id(self):
         return self._config.id

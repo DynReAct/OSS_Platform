@@ -2,6 +2,7 @@ from datetime import datetime, date
 import glob
 import os
 
+from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
 from dynreact.base.model import Site, EquipmentAvailability
 
@@ -12,7 +13,7 @@ class FileAvailabilityPersistence(PlantAvailabilityPersistence):
         super().__init__(uri, site)
         uri_lower = uri.lower()
         if not uri_lower.startswith("default+file:"):
-            raise Exception("Unexpected URI for file availability persistence: " + str(uri))
+            raise NotApplicableException("Unexpected URI for file availability persistence: " + str(uri))
         folder = uri[len("default+file:"):]
         self._folder = os.path.join(folder, "availability") if not folder.lower().endswith("availability") else folder
         os.makedirs(folder, exist_ok=True)

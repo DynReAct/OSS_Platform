@@ -4,6 +4,7 @@ from typing import Iterator, Literal
 from pydantic import TypeAdapter
 
 from dynreact.base.DowntimeProvider import DowntimeProvider
+from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.FileConfigProvider import FileConfigProvider
 
@@ -19,7 +20,7 @@ class FileDowntimeProvider(DowntimeProvider):
         super().__init__(uri, site)
         uri = uri.lower()
         if not uri.startswith("default+file:"):
-            raise Exception("Unexpected URI for file config provider: " + str(uri))
+            raise NotApplicableException("Unexpected URI for file config provider: " + str(uri))
         self._file = uri[len("default+file:"):]
         js = None
         with open(self._file, "r", encoding="utf-8") as file:

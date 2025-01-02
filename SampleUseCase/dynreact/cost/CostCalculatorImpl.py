@@ -3,6 +3,7 @@ from datetime import datetime
 import numpy as np
 
 from dynreact.base.CostProvider import CostProvider
+from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.model import Equipment, Material, Order, Snapshot, EquipmentStatus, Site, OrderAssignment, PlanningData
 from dynreact.cost.CostConfig import CostConfig
 from dynreact.sample.model import SampleMaterial
@@ -13,7 +14,7 @@ class SampleCostProvider(CostProvider):
     def __init__(self, url: str|None, site: Site, config: CostConfig|None = None):
         super().__init__(url, site)
         if url is not None and not url.startswith("sampleuc:"):
-            raise Exception("Unexpected URI for sample use case cost provider: " + str(url))
+            raise NotApplicableException("Unexpected URI for sample use case cost provider: " + str(url))
         self._plant_ids: list[int] = [p.id for p in site.equipment]
         self._config = config if config is not None else CostConfig()
 
@@ -98,7 +99,7 @@ class SampleCostProvider(CostProvider):
                                      current_material=current_coils)
         target_fct = self.objective_function(new_status)
         new_planning.target_fct = target_fct
-        return new_status,
+        return new_status, target_fct
 
     def objective_function(self, status: EquipmentStatus[PlanningData]) -> float:
         """

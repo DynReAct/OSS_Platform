@@ -1,7 +1,7 @@
 import importlib
 import sys
 import traceback
-from typing import Any
+from typing import Any, Iterator
 
 from dynreact.base.ConfigurationProvider import ConfigurationProvider
 from dynreact.base.CostProvider import CostProvider
@@ -173,27 +173,50 @@ class Plugins:
 
     @staticmethod
     def _load_module(module: str, clzz, *args, **kwargs) -> Any|None:   # returns an instance of the clzz, if found
-        mod = sys.modules.get(module)
+        mod0 = sys.modules.get(module)
         do_raise = kwargs.pop("do_raise", False)
         errors = []
-        if mod is None:
-            spec_res = importlib.util.find_spec(module, package=None)
-            mod = importlib.util.module_from_spec(spec_res)
-            sys.modules[module] = mod
-            spec_res.loader.exec_module(mod)
-        for name, element in inspect.getmembers(mod):
-            try:
-                if inspect.isclass(element) and issubclass(element, clzz) and element != clzz:
-                    return element(*args, **kwargs)
-            except Exception as e:
-                if not isinstance(e, NotApplicableException):
-                    errors.append(e)
-                    if do_raise:
-                        raise
+        mod_set: bool = mod0 is not None
+        mod_iterator: Iterator = iter([mod0]) if mod_set else _ModIterator(module)
+        for mod in mod_iterator:
+            for name, element in inspect.getmembers(mod):
+                try:
+                    if inspect.isclass(element) and issubclass(element, clzz) and element != clzz:
+                        result = element(*args, **kwargs)
+                        if not mod_set:
+                            sys.modules[module] = mod
+                        return result
+                except Exception as e:
+                    if not isinstance(e, NotApplicableException):
+                        errors.append(e)
+                        if do_raise:
+                            raise
         if len(errors) > 0:
             print(f"Failed to load module {module} of type {clzz}: {errors[0]}")
             raise errors[0]
         return None
+
+
+class _ModIterator(Iterator):   # returns loaded modules
+
+    def __init__(self, module: str):
+        # Note: this works if there are duplicates in editable installations,
+        # but not if there are duplicate modules in separate wheels
+        self._importers = iter(sys.meta_path)
+        self._module = module
+
+    def __next__(self):
+        while True:
+            importer = next(self._importers)
+            try:
+                spec_res = importer.find_spec(self._module, path=None)
+                if spec_res is not None:
+                    mod = importlib.util.module_from_spec(spec_res)
+                    # sys.modules[module] = mod  # we'll check first if this is the correct module
+                    spec_res.loader.exec_module(mod)
+                    return mod
+            except:
+                pass
 
 
 # for testing

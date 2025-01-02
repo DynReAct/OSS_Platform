@@ -1,4 +1,4 @@
-# DynReActSrv2
+# DynReActService
 
 DynReAct service and GUI.
 
@@ -16,10 +16,10 @@ Activate this environment, e.g. via the IDE, or on Windows in the Anaconda Promp
 
 ### Install dependencies
 
-This project depends on [DynReActBase](https://github.com/DynReAct/DynReActBase), [LotCreation](https://github.com/DynReAct/LotCreation) and [LotCreationRas](https://github.com/DynReAct/LotCreationRas),
+This project depends on [DynReActBase](https://github.com/DynReAct/OSS_Platform/tree/main/DynReActBase), [LotCreation](https://github.com/DynReAct/OSS_Platform/tree/main/MidTermPlanning) and [SampleUseCase](https://github.com/DynReAct/OSS_Platform/tree/main/SampleUseCase),
 although the latter should be thought of as a plugin that could be replaced by another use-case specific implementation.
 
-1) build the dependencies; either creating a virtual environment for each of them and installing the respective dependencies, or creating a common environment (TODO test). Then execute
+1) build the dependencies; either creating a virtual environment for each of them and installing the respective dependencies, or creating a common environment. Then execute
   
   ```commandline
   pip wheel . --no-cache-dir --disable-pip-version-check --no-deps --wheel-dir dist
@@ -38,10 +38,12 @@ although the latter should be thought of as a plugin that could be replaced by a
 
 ### Update dependencies
 
-If any of the dependencies `dynreact_base`, `dynreact_lotcreation_core` or one of the plugins, such as `dynreact_plugin_ras` have changed, uninstall them:
+(section is outdated - use of editable dependencies is now encouraged)
+
+If any of the dependencies `dynreact_base`, `dynreact_lotcreation_core` or one of the plugins, such as `dynreact_plugin_sampleuc` have changed, uninstall them:
 
 ```commandline
-pip uninstall dynreact_base dynreact_lotcreation_core dynreact_plugin_ras
+pip uninstall dynreact_base dynreact_lotcreation_core dynreact_plugin_sampleuc
 ```
 
 rebuild the dependencies, and reinstall:
@@ -52,14 +54,9 @@ python -m pip install -r requirements.txt -r requirements_local.txt
 
 ### Configuration
 
-Create a *.env* file in this folder with content:
+Environment variables can be configured via a *.env* file in this folder. See [app_config.py](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/dynreact/app_config.py) for applicable variables.
 
-```
-SNAPSHOT_PROVIDER=ras+file:./data
-```
-
-Furthermore, create a subfolder *data* and copy the files [site.json](https://github.com/DynReAct/data/blob/main/config/site.json)
-and [snapshot.csv](https://github.com/DynReAct/data/blob/main/snapshots/snapshot_N6179_5_20240919141253.csv) to this folder. 
+Furthermore, the *data* subfolder contains site configuration [site.json](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/data/site.json) and [snapshot data](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/data/snapshot_2024-12-31T00_00.csv).
 
 ## Run
 

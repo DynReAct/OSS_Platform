@@ -1,12 +1,14 @@
 import threading
 import traceback
-from datetime import datetime
+from datetime import datetime, date
 from typing import Iterable
 import uuid
 
 import dash
 from dash import html, callback, Input, Output, dcc, State, clientside_callback, ClientsideFunction
 import dash_ag_grid as dash_ag
+from pydantic.fields import FieldInfo
+
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationState
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
@@ -72,7 +74,8 @@ def layout(*args, **kwargs):
                 # style={"height": "70vh", "width": "100%", "margin-bottom": "5em"},
                 columnSizeOptions={"defaultMinWidth": 125},
                 columnSize="responsiveSizeToFit",
-                dashGridOptions={"rowSelection": "single"}
+                dashGridOptions={"rowSelection": "single", "domLayout": "autoHeight"},
+                style={"height": None}
                 ## tooltipField is not used, but it must match an existing field for the tooltip to be shown
                 #defaultColDef={"tooltipComponent": "CoilsTooltip", "tooltipField": "id"},
                 #dashGridOptions={"rowSelection": "multiple", "suppressRowClickSelection": True, "animateRows": False,
@@ -100,11 +103,29 @@ def layout(*args, **kwargs):
                                 {"field": "active"},
                                 ],
                     defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
-                    dashGridOptions={"tooltipShowDelay": 250, "rowSelection": "single"},
+                    dashGridOptions={"tooltipShowDelay": 250, "rowSelection": "single", "domLayout": "autoHeight"},
                     rowData=[],
                     getRowId="params.data.id",
                     className="ag-theme-alpine",  # ag-theme-alpine-dark
+                    # style={"height": None, "width": "100%", "margin-bottom": "5em"},
+                    style={"height": None},   # required with autoHeight
+                    columnSizeOptions={"defaultMinWidth": 125},
+                    columnSize="responsiveSizeToFit",
+                )
+            ),
+            html.H2("Orders"),
+            html.Div(
+                dash_ag.AgGrid(
+                    id="planning-lots-order-table",
+                    columnDefs=[{"field": "order", "pinned": True},
+                                {"field": "lot"}],
+                    # defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
+                    # dashGridOptions={"tooltipShowDelay": 250, "rowSelection": "single"},
+                    rowData=[],
+                    getRowId="params.data.order",
+                    className="ag-theme-alpine",  # ag-theme-alpine-dark
                     # style={"height": "70vh", "width": "100%", "margin-bottom": "5em"},
+                    style={"margin-bottom": "10em"},
                     columnSizeOptions={"defaultMinWidth": 125},
                     columnSize="responsiveSizeToFit",
                 )
@@ -236,6 +257,8 @@ def solution_selected(selected_rows: list[dict[str, any]]|None) -> str|None:
     Output("planning-lots-table", "rowData"),
     Output("planning-solution-data", "data"),
     Output("planning-lotsview-header", "hidden"),
+    Output("planning-lots-order-table", "columnDefs"),
+    Output("planning-lots-order-table", "rowData"),
     State("selected-snapshot", "data"),
     State("process-selector-lotplanning", "value"),
     Input("planning-selected-solution", "data"),
@@ -243,7 +266,7 @@ def solution_selected(selected_rows: list[dict[str, any]]|None) -> str|None:
 def solution_changed(snapshot: str|datetime|None, process: str|None, solution: str|None):
     snapshot = DatetimeUtils.parse_date(snapshot)
     if not dash_authenticated(config) or process is None or snapshot is None or solution is None:
-        return True, None, None, True
+        return True, None, None, True, None, None
     best_result: ProductionPlanning
     if solution == "_SNAPSHOT_":
         best_result = state.get_snapshot_solution(process, snapshot)[0]
@@ -252,7 +275,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
     else:
         result: LotsOptimizationState = state.get_results_persistence().load(snapshot, process, solution)
         if result is None or result.best_solution is None:
-            return True, None, None, True
+            return True, None, None, True, None, None
         best_result = result.best_solution
     lots: list[Lot] = [lot for plant_lots in best_result.get_lots().values() for lot in plant_lots]
     plants = {p.id: p for p in state.get_site().equipment}
@@ -292,7 +315,29 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
             "total_weight": total_weights[lot.id]
         }
     data = sorted([row_for_lot(lot) for lot in lots], key=lambda lot: lot["id"])
-    return False, data, data, False
+
+    def column_def_for_field(field: str, info: FieldInfo):
+        filter_id = "agNumberColumnFilter" if info.annotation == float or info.annotation == int else \
+            "agDateColumnFilter" if info.annotation == datetime or info.annotation == date else "agTextColumnFilter"
+        col_def = {"field": field, "filter": filter_id}
+        return col_def
+
+    props = snap_obj.orders[0].material_properties
+    if props is None:
+        return False, data, data, False, None, None
+
+    fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True}, {"field": "tons" }] + \
+             [column_def_for_field(key, info) for key, info in props.model_fields.items()]
+
+    def order_to_json(o: Order, lot: str):
+        as_dict = o.material_properties.model_dump(exclude_none=True, exclude_unset=True)
+        as_dict["order"] = o.id
+        as_dict["lot"] = lot
+        as_dict["tons"] = o.actual_weight
+        return as_dict
+
+    order_rows = [order_to_json(o, lot) for lot, orders in orders_by_lot.items() for o in orders]
+    return False, data, data, False, fields, order_rows
 
 
 @callback(

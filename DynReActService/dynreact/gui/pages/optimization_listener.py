@@ -7,6 +7,7 @@ class FrontendOptimizationListener(OptimizationListener):
 
     def __init__(self, id: str, persistence: ResultsPersistence|None, store_results: bool,
                  initial_state: LotsOptimizationState|None = None, parameters: dict[str, any]|None = None):
+        super().__init__()
         self._active: bool = True
         self._id: str = id
         self._persistence = persistence

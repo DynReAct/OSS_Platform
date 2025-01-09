@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from dynreact.base.model import EquipmentStatus
+from dynreact.base.model import EquipmentStatus, ProductionPlanning, ProductionTargets
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -24,3 +24,40 @@ class EquipmentTransitionStateful(EquipmentTransition):
 
     equipment_status: EquipmentStatus
     "Optimization status, typically retrieved either from a previous optimization run, or from the ...init function"
+
+
+class LotsOptimizationInput(BaseModel):
+    model_config = ConfigDict(use_attribute_docstrings=True)
+
+    snapshot: datetime
+    "Snapshot id"
+    targets: ProductionTargets
+    "Production targets"
+    orders: list[str]
+    "Orders to include in the optimization."
+    initial_solution: ProductionPlanning|None = None
+    "Starting point for the optimization"
+    min_due_date: datetime|None = None,
+    "Minimum due date"
+    trace_results: bool = False
+    "Set to true in order to store all intermediate results"
+
+
+class LotsOptimizationResults(BaseModel):
+
+    model_config = ConfigDict(use_attribute_docstrings=True)
+
+    snapshot: datetime
+    "Snapshot id"
+    targets: ProductionTargets
+    "Production targets"
+    orders: list[str]
+    "Orders included in the optimization."
+
+    results: list[ProductionPlanning]
+    "Note: if trace_results in the input data was False, this list will contain a single entry. Otherwise all intermediate results"
+    objective_function: list[float]
+    "Values of the objective function for all intermediate results, irrespectively of whether trace_results is set or not"
+    done: bool
+    "Optimization completed?"
+

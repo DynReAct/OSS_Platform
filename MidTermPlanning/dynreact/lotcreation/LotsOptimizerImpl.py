@@ -115,12 +115,12 @@ class TabuSearch(LotsOptimizer):
             target_vbest_global = target_vbest
             self._state.best_solution = vbest
             self._state.best_objective_value = target_vbest
+        interrupted: bool = False
         for listener in self._listeners:
             listener.update_solution(self._state.current_solution, self._state.current_object_value)
             if not listener.update_iteration(niter, vbest.get_num_lots(), self._state.current_object_value):
-                return copy(self._state)
-
-        while niter < ntotal:
+                interrupted = True
+        while niter < ntotal and not interrupted:
             # planning: ProductionPlanning = self._costs.evaluate_order_assignments(self._process, s_best, self._targets, self._snapshot)
             # target_vbest = FTarget(vbest, self.PDict, self.params)
             # target_vbest = self._costs.process_objective_function(vbest)
@@ -216,17 +216,14 @@ class TabuSearch(LotsOptimizer):
             if debug:
                 print(niter, "th iteration: nlots:", nlots, ", target value: ", target_sval, ", swap:", swp)
 
-            do_break: bool = False
             for listener in self._listeners:
                 listener.update_solution(self._state.current_solution, self._state.current_object_value)
                 if not listener.update_iteration(niter, nlots, self._state.current_object_value):
-                    do_break = True
+                    interrupted = True
                 #listener.UpdateSolution(self.sol, PSDict, self.PM, self.LM, self.ODict, self.PDict, self.OCt)
                 #if not listener.UpdateIteration(niter, nlots, delta, iLC, iNCaps, iNCDiam, iClottot, iTarget[niter],
                 #                                swp):
                 #    do_break = True
-            if do_break:
-                break
             niter += 1
 
         if pool is not None:
@@ -238,6 +235,9 @@ class TabuSearch(LotsOptimizer):
             self._state.current_object_value = target_vbest
             self._state.history.append(target_vbest)
             self._state.best_objective_value = target_vbest
+
+        for listener in self._listeners:
+            listener._completed()
 
         #if threading.current_thread() is threading.main_thread():  # ?
         #    plt.plot(range(niter), iTarget[0:niter])

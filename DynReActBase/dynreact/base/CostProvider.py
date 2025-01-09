@@ -96,6 +96,15 @@ class CostProvider:
     def optimum_possible_costs(self, process: str, num_plants: int):
         return 0
 
+    def relevant_fields(self, equipment: Equipment) -> None|list[str]:
+        """
+        Optional method, for display purposes only. To be overridden in derived class.
+        Convention: "order.material_properties.<$FIELD_NAME>", "material.properties.<$FIELD_NAME>"
+        :param equipment:
+        :return:
+        """
+        return None
+
     def equipment_status(self, snapshot: Snapshot, plant: Equipment, planning_period: tuple[datetime, datetime], target_weight: float,
                          coil_based: bool = False,
                          current: Order|None=None, previous: Order|None=None,

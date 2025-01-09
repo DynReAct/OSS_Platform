@@ -1,3 +1,6 @@
+import random
+import sys
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Iterator, Literal, Annotated
 
@@ -12,7 +15,9 @@ from pydantic import AliasChoices
 
 from dynreact.app import config, state
 from dynreact.auth.authentication import fastapi_authentication
-from dynreact.service.model import EquipmentTransition, EquipmentTransitionStateful
+from dynreact.service.model import EquipmentTransition, EquipmentTransitionStateful, LotsOptimizationInput, \
+    LotsOptimizationResults
+from dynreact.service.optim_listener import LotsOptimizationListener
 
 fastapi_app = FastAPI(
     title="DynReAct production planning service",
@@ -263,6 +268,56 @@ def target_function_update(transition: EquipmentTransitionStateful, username = u
     new_status: EquipmentStatus = optimizer.update_transition_costs(plant, current_order, next_order, status,
                                                                     snapshot, current_material=current_coil, next_material=next_coil)[0]
     return new_status
+
+
+lots_optimization: tuple[int, LotsOptimizationListener]|None = None
+
+
+@fastapi_app.post("/lots/optimization",
+                tags=["dynreact"],
+                status_code=202,
+                summary="Invoke mid term service/lots creation.")
+def run_lots_optimization(data: LotsOptimizationInput, username = username) -> int:
+    global lots_optimization
+    if lots_optimization is not None and not lots_optimization[1].is_done():
+        raise HTTPException(status_code=..., detail="There is an ongoing optimization which needs to be stopped before starting a new one.")
+    optimizer = state.get_lots_optimization()
+    snapshot: Snapshot = state.get_snapshot(data.snapshot)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail=f"Snapshot {data.snapshot} not found")
+    instance = optimizer.create_instance(data.targets.process, snapshot, state.get_cost_provider(),
+                targets=data.targets, initial_solution=data.initial_solution, min_due_date=data.min_due_date,
+                orders=data.orders)
+    instance_id: int = random.randint(0, sys.maxsize)
+    listener = LotsOptimizationListener(data.snapshot, data.targets, data.orders, data.trace_results)
+    instance.add_listener(listener)
+    thread = threading.Thread(target=lambda: instance.run(), name=f"Service-LotsOptimization-{instance_id}")
+    thread.run()
+    lots_optimization = (instance_id, instance)
+    return instance_id
+
+
+@fastapi_app.delete("/lots/optimization/{optimization_id}",
+                tags=["dynreact"],
+                summary="Stop the lots optimization. Returns true if the optimization was stopped, false if it was not running")
+def stop_lots_optimization(optimization_id: int, username = username) -> bool:
+    global lots_optimization
+    if lots_optimization is None or lots_optimization[0] != optimization_id:
+        return False
+    was_done = lots_optimization[1].is_done()
+    lots_optimization[1].stop()
+    return not was_done
+
+
+@fastapi_app.get("/lots/optimization/{optimization_id}",
+                tags=["dynreact"],
+                summary="Query the optimization result. Returns intermediate results while not done.")
+def get_lots_optimization_results(optimization_id: int, username = username) -> LotsOptimizationResults:
+    global lots_optimization
+    if lots_optimization is None or lots_optimization[0] != optimization_id:
+        raise HTTPException(status_code=404, detail=f"No such optimization id: {optimization_id}")
+    listener = lots_optimization[1]
+    return listener.get_results()
 
 
 def parse_datetime_str(dt: str) -> datetime:

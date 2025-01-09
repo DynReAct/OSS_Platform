@@ -12,7 +12,7 @@ from pydantic.fields import FieldInfo
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationState
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import ProductionPlanning, EquipmentStatus, Lot, Order, Material, Snapshot
+from dynreact.base.model import ProductionPlanning, EquipmentStatus, Lot, Order, Material, Snapshot, Equipment
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
@@ -120,7 +120,7 @@ def layout(*args, **kwargs):
                     columnDefs=[{"field": "order", "pinned": True},
                                 {"field": "lot"}],
                     # defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
-                    # dashGridOptions={"tooltipShowDelay": 250, "rowSelection": "single"},
+                    dashGridOptions={"tooltipShowDelay": 250, "rowSelection": "single"},
                     rowData=[],
                     getRowId="params.data.order",
                     className="ag-theme-alpine",  # ag-theme-alpine-dark
@@ -326,14 +326,39 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
     if props is None:
         return False, data, data, False, None, None
 
-    fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True}, {"field": "tons" }] + \
-             [column_def_for_field(key, info) for key, info in props.model_fields.items()]
+    costs = state.get_cost_provider()
+    relevant_fields = costs.relevant_fields(plants[lots[0].equipment])
+    if relevant_fields is not None:
+        l = len("order.material_properties.")
+        relevant_fields = [f[l:] for f in relevant_fields if f.startswith("order.material_properties.")]
+    fields_0 = dict(sorted(props.model_fields.items(), key=lambda item: relevant_fields.index(item[0]) if item[0] in relevant_fields else len(relevant_fields))) \
+                      if relevant_fields is not None else props.model_fields
+    fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True},
+                {"field": "costs", "headerTooltip": "Transition costs from previous order."},
+                {"field": "weight", "headerTooltip": "Order weight in tons." }] + \
+             [column_def_for_field(key, info) for key, info in fields_0.items()]
+
+    last_plant: int|None = None
+    last_order: Order|None = None
+    plant_obj: Equipment|None = None
 
     def order_to_json(o: Order, lot: str):
+        nonlocal last_plant
+        nonlocal last_order
+        nonlocal plant_obj
         as_dict = o.material_properties.model_dump(exclude_none=True, exclude_unset=True)
         as_dict["order"] = o.id
         as_dict["lot"] = lot
-        as_dict["tons"] = o.actual_weight
+        as_dict["weight"] = o.actual_weight
+        lot_obj = next(l for l in lots if l.id == lot)
+        plant: int = lot_obj.equipment
+        if plant == last_plant:
+            tr_costs = costs.transition_costs(plant_obj, last_order, o)
+            as_dict["costs"] = tr_costs
+        else:
+            plant_obj = plants[plant]
+        last_plant = plant
+        last_order = o
         return as_dict
 
     order_rows = [order_to_json(o, lot) for lot, orders in orders_by_lot.items() for o in orders]

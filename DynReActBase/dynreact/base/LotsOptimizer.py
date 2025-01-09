@@ -17,6 +17,9 @@ from dynreact.base.model import ProductionPlanning, PlanningData, ProductionTarg
 
 class OptimizationListener:
 
+    def __init__(self):
+        self._done: bool = False
+
     def update_solution(self, planning: ProductionPlanning, objective_value: float):
         pass
 
@@ -25,6 +28,12 @@ class OptimizationListener:
         :return: false to interrupt the iteration
         """
         return True
+
+    def _completed(self):
+        self._done = True
+
+    def is_done(self) -> bool:
+        return self._done
 
 
 P = TypeVar("P", bound=PlanningData)

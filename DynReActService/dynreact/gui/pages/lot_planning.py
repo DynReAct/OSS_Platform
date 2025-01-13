@@ -278,6 +278,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
             return True, None, None, True, None, None
         best_result = result.best_solution
     lots: list[Lot] = [lot for plant_lots in best_result.get_lots().values() for lot in plant_lots]
+    unassigned_order_ids: list[str] = [ass.order for ass in best_result.order_assignments.values() if ass.lot == ""]
     plants = {p.id: p for p in state.get_site().equipment}
     snap_obj = state.get_snapshot(snapshot)
     orders_by_lot: dict[str, list[Order|None]] = {}
@@ -294,6 +295,12 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
             except ValueError:
                 continue
         orders_by_lot[lot.id] = lot_orders
+    unassigned_orders: dict[str, Order] = {}
+    for order in snap_obj.orders:
+        if order.id in unassigned_order_ids:
+            unassigned_orders[order.id] = order
+            if len(unassigned_orders) == len(unassigned_order_ids):
+                break
     all_due_dates = {lot: [o.due_date for o in orders if o is not None] for lot, orders in orders_by_lot.items()}
     first_due_dates = {lot: min((o.due_date for o in orders if o is not None and o.due_date is not None), default=DatetimeUtils.to_datetime(0)) for lot, orders in orders_by_lot.items()}
     total_weights = {lot: sum(o.actual_weight if o.actual_weight is not None else (o.target_weight if o.target_weight is not None else 0)
@@ -342,14 +349,16 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
     last_order: Order|None = None
     plant_obj: Equipment|None = None
 
-    def order_to_json(o: Order, lot: str):
+    def order_to_json(o: Order, lot: str|None):
         nonlocal last_plant
         nonlocal last_order
         nonlocal plant_obj
         as_dict = o.material_properties.model_dump(exclude_none=True, exclude_unset=True)
         as_dict["order"] = o.id
-        as_dict["lot"] = lot
+        as_dict["lot"] = lot or ""
         as_dict["weight"] = o.actual_weight
+        if lot is None:
+            return as_dict
         lot_obj = next(l for l in lots if l.id == lot)
         plant: int = lot_obj.equipment
         if plant == last_plant:
@@ -361,7 +370,8 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         last_order = o
         return as_dict
 
-    order_rows = [order_to_json(o, lot) for lot, orders in orders_by_lot.items() for o in orders]
+    order_rows = [order_to_json(o, lot) for lot, orders in orders_by_lot.items() for o in orders] + \
+        [order_to_json(o, None) for o in unassigned_orders.values()]
     return False, data, data, False, fields, order_rows
 
 

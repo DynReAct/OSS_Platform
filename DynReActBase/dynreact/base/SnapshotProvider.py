@@ -182,7 +182,7 @@ class SnapshotProvider:
             if plant_id not in snapshot.lots:
                 target_weights[plant_id] = 0
                 continue
-            order_ids = [order for lot in snapshot.lots[plant_id] for order in lot.order if lot.active or include_inactive_lots]
+            order_ids = [order for lot in snapshot.lots[plant_id] for order in lot.orders if lot.active or include_inactive_lots]
             orders: dict[str, Order | None] = {order_id: next((o for o in snapshot.orders if o.id == order_id), None)
                                                for order_id in order_ids}
             none_orders = [order_id for order_id, order in orders.items() if order is None]

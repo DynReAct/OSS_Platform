@@ -210,6 +210,7 @@ class PlanningData(Model):
     lot_weights: list[float] = []
     "Lot weights in tons."
     orders_count: int = 0
+    # TODO this is difficult to translate into costs
     delta_weight: float = 0.0
     "Deviation from target weight in t. Positive for missing tonnage."
     min_due_date: datetime|None = None

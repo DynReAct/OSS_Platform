@@ -543,3 +543,9 @@ class MidTermTargets(LongTermTargets):
     "Production targets for the planning sub periods. Keys: process ids, values: list of production targets, covering all planning sub periods chronologically."
 
 
+class ServiceHealth(Model):
+
+    status: int
+    "0: ok"
+    running_since: datetime|None=None
+

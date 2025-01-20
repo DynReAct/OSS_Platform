@@ -130,5 +130,33 @@ and in the container shell, execute
 ldapsearch -H ldap://localhost:1389 -x -b dc=example,dc=org objectclass=*
 ```
 
+## Usage
+### Snapshot
+In the tab "Snapshot" the user can select the current snapshot.
+In the detailed area there are two views possible:  list of orders or list of material.
+All details of orders or of material are listed, concerning equipment and processes.
+
+### Lot creation
+In the tab "Lot creation" you first have to select the process for lot creation.
+
+![lot creation](../images/doc/lot_creation_01.png)
+
+The following dialogue consists of three tabs. In the first tab named "Targets" you have to mark the desired equipments and insert a target production /t
+
+![lot creation](../images/doc/lot_creation_02.png)
+
+In the second tab named "Orders" all orders are listed. You can select some orders for lot creation.
+The number of selected orders is displayed and with the button "Update" the total weight of the selected orders is displayed.
+
+![lot creation](../images/doc/lot_creation_03.png)
+
+In third tab named "Optimization" you can select the optimization settings 
+such as initialization method and number of iterations. 
+With the button "Start" you can start the optimization. 
+You will see the optimization running and as result a figure of used iterations.
+
+![lot creation](../images/doc/lot_creation_04.png)
+
+
 
 

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import TypeAlias
 
 from pydantic import BaseModel, Field
 
@@ -17,17 +18,37 @@ class PerformanceEstimation(BaseModel, use_attribute_docstrings=True):
     #estimated_duration: datetime|None = None
 
 
+class PlantPerformanceResultsSuccess(BaseModel, use_attribute_docstrings=True):
+    results: list[PerformanceEstimation]
+
+
+class PlantPerformanceResultsFailed(BaseModel, use_attribute_docstrings=True):
+
+    reason: int
+    "http status code, or 1 for service not available"
+    message: str|None=None
+
+
+# TODO upon dropping Python 3.11 support we can replace ...: TypeAlias = by type ... =
+PlantPerformanceResults: TypeAlias = PlantPerformanceResultsSuccess | PlantPerformanceResultsFailed
+
+
 class PlantPerformanceInput(BaseModel, use_attribute_docstrings=True):
 
     equipment: int
     orders: list[Order]
 
 
-class PlantPerformanceModel:
+class PerformanceModelMetadata(BaseModel, use_attribute_docstrings=True):
 
-    def __init__(self, url: str, site: Site):
-        self._url = url
-        self._site = site
+    id: str
+    label: str
+    description: str|None = None
+    processes: list[str]|None = None
+    equipment: list[int]|None = None
+
+
+class PlantPerformanceModel:
 
     def id(self) -> str:
         raise Exception("not implemented")
@@ -38,30 +59,29 @@ class PlantPerformanceModel:
     def description(self, lang: str="en") -> str|None:
         return None
 
-    def applicable_processes_and_plants(self) -> tuple[list[str], list[int]|None]:
+    def status(self) -> int:
         """
-        :return: a list of process ids, and optionally of plant ids. If the returned plant ids are None, then
-        all plants belonging to the returned processes are covered.
+        :return: 0: service running, 1: service not available, > 10: custom error codes
         """
-        return [p.name_short for p in self._site.processes], None
+        return 0
 
-    def performance(self, equipment: int, order: Order, coil: Material | None = None) -> PerformanceEstimation:
+    def applicable_processes_and_plants(self) -> tuple[list[str]|None, list[int]|None]:
         """
-        Note: the performance is always evaluated at the query time
-        :param equipment:
-        :param order:
-        :param coil:
-        :return:
+        :return: a list of process ids and equipment ids. One or both of the results may be None, which should be understood
+        as unrestricted.
         """
-        return PerformanceEstimation(performance=1, equipment=equipment.id, order=order.id)
+        return None, None
 
-    def bulk_performance(self, plant: int, orders: list[Order] #, coils: list[Material] | None = None
-                        ) -> list[PerformanceEstimation]:
-        results = None
-        #if coils is not None:
-        #    order_for_coil = [next(o for o in orders if o.id == coil.order) for idx, coil in enumerate(coils)]
-        #    results = (self.performance(plant, order_for_coil[idx], coil=coil) for idx, coil in enumerate(coils))
-        #else:
-        results = (self.performance(plant, order) for order in orders)
-        return [r for r in results if r.performance != 1]
+    #def performance(self, equipment: int, order: Order, coil: Material | None = None) -> PerformanceEstimation:
+    #    """
+    #    Note: the performance is always evaluated at the query time
+    #    :param equipment:
+    #    :param order:
+    #    :param coil:
+    #    :return:
+    #    """
+    #    return PerformanceEstimation(performance=1, equipment=equipment.id, order=order.id)
+
+    def bulk_performance(self, plant: int, orders: list[Order]) -> PlantPerformanceResults:
+        raise Exception("not implemented")
 

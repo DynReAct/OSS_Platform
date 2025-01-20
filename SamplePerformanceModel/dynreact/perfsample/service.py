@@ -2,7 +2,7 @@ import random
 from typing import Annotated
 
 from SamplePerformanceModel.dynreact.perfsample.config import ServiceConfig
-from dynreact.base.PlantPerformanceModel import PlantPerformanceInput, PerformanceEstimation
+from dynreact.base.PlantPerformanceModel import PlantPerformanceInput, PerformanceEstimation, PerformanceModelMetadata
 from dynreact.base.model import ServiceHealth, Order
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +30,14 @@ if config.cors:
         allow_headers=["*"],
     )
 
+meta = PerformanceModelMetadata(
+    id=config.id,
+    label=config.label,
+    description=config.description,
+    processes=config.applicable_processes,
+    equipment=config.applicable_equipment
+)
+
 
 def check_secret(token: str|None):
     if token != config.secret:
@@ -44,6 +52,17 @@ def health(x_token: Annotated[list[str] | None, Header()] = None) -> ServiceHeal
     if config.secret:
         check_secret(x_token)
     return ServiceHealth(status=0)
+
+
+@app.get("/model",
+         tags=["dynreact"],
+         response_model_exclude_unset=True,
+         response_model_exclude_none=True,
+         summary="Plant performance model description")
+def model(x_token: Annotated[list[str] | None, Header()] = None) -> PerformanceModelMetadata:
+    if config.secret:
+        check_secret(x_token)
+    return meta
 
 
 @app.post("/performance",

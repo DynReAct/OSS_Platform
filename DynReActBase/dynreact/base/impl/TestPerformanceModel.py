@@ -5,7 +5,8 @@ from typing import Annotated, Literal, Union
 from pydantic import BaseModel, Field, BeforeValidator
 
 from dynreact.base.NotApplicableException import NotApplicableException
-from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation
+from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation, PlantPerformanceResults, \
+    PlantPerformanceResultsSuccess
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Site, Order, Material
 
@@ -46,9 +47,10 @@ class TestPerformanceConfig(BaseModel):
 
 # TODO HttpPerformanceModel + corresponding server
 class TestPerformanceModel(PlantPerformanceModel):
+    """@deprecated"""
 
     def __init__(self, url: str, site: Site, config: TestPerformanceConfig | None = None):
-        super().__init__(url, site)
+        # super().__init__(url, site)
         uri_lower = url.lower()
         if config is not None:
             self._config = config
@@ -89,7 +91,10 @@ class TestPerformanceModel(PlantPerformanceModel):
         now = DatetimeUtils.now()
         first_applicable: PlantPerformanceBasic|None = next((config for config in self._config.equipment[equipment] if TestPerformanceModel._applies(config, equipment, order, coil, now)), None)
         performance = first_applicable.performance if first_applicable is not None else 1
-        return PerformanceEstimation(performance=performance, equipment=equipment, order=order.id, material=coil_id)
+        return PerformanceEstimation(performance=performance, equipment=equipment, order=order.id)  #, material=coil_id)
+
+    def bulk_performance(self, plant: int, orders: list[Order]) -> PlantPerformanceResults:
+        return PlantPerformanceResultsSuccess(results=[self.performance(plant, o) for o in orders])
 
     @staticmethod
     def _applies(config: PlantPerformanceBasic, plant: int, order: Order, coil: Material | None, timestamp: datetime) -> bool:

@@ -1,7 +1,7 @@
 import random
 from typing import Annotated
 
-from SamplePerformanceModel.dynreact.perfsample.config import ServiceConfig
+from dynreact.perfsample.config import ServiceConfig
 from dynreact.base.PlantPerformanceModel import PlantPerformanceInput, PerformanceEstimation, PerformanceModelMetadata
 from dynreact.base.model import ServiceHealth, Order
 from fastapi import FastAPI, Header, HTTPException
@@ -40,17 +40,17 @@ meta = PerformanceModelMetadata(
 
 
 def check_secret(token: str|None):
-    if token != config.secret:
+    if config.secret and token != config.secret:
         raise HTTPException(status_code=401, detail="Invalid or missing token")
+
 
 @app.get("/health",
          tags=["dynreact"],
          response_model_exclude_unset=True,
          response_model_exclude_none=True,
          summary="Service health status")
-def health(x_token: Annotated[list[str] | None, Header()] = None) -> ServiceHealth:
-    if config.secret:
-        check_secret(x_token)
+def health(x_token: Annotated[str | None, Header()] = None) -> ServiceHealth:
+    check_secret(x_token)
     return ServiceHealth(status=0)
 
 
@@ -59,9 +59,8 @@ def health(x_token: Annotated[list[str] | None, Header()] = None) -> ServiceHeal
          response_model_exclude_unset=True,
          response_model_exclude_none=True,
          summary="Plant performance model description")
-def model(x_token: Annotated[list[str] | None, Header()] = None) -> PerformanceModelMetadata:
-    if config.secret:
-        check_secret(x_token)
+def model(x_token: Annotated[str | None, Header()] = None) -> PerformanceModelMetadata:
+    check_secret(x_token)
     return meta
 
 
@@ -70,9 +69,8 @@ def model(x_token: Annotated[list[str] | None, Header()] = None) -> PerformanceM
           response_model_exclude_unset=True,
           response_model_exclude_none=True,
           summary="Evaluate the plant performance model on some orders, for a fixed plant/equipment.")
-def performance(data: PlantPerformanceInput, x_token: Annotated[list[str] | None, Header()] = None) -> list[PerformanceEstimation]:
-    if config.secret:
-        check_secret(x_token)
+def performance(data: PlantPerformanceInput, x_token: Annotated[str | None, Header()] = None) -> list[PerformanceEstimation]:
+    check_secret(x_token)
 
     def performance_for_order(o: Order) -> float:
         if config.feasibility_random_threshold <= 0:

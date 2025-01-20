@@ -22,6 +22,7 @@ class PerformanceModelClient(PlantPerformanceModel):
     def __init__(self, config: PerformanceModelClientConfig):
         self._config = config
         self._address = PerformanceModelClient._validate_path(self._config.address)
+        self._token = config.token
         self._meta: PerformanceModelMetadata|None = None
         self._status_update_interval: timedelta = timedelta(minutes=2)
         self._last_status_update: datetime|None = None
@@ -29,7 +30,8 @@ class PerformanceModelClient(PlantPerformanceModel):
 
     def _get_meta(self) -> PerformanceModelMetadata:
         if self._meta is None:
-            result = requests.get(self._address + "model", headers={"Accept": "application/json"})
+            result = requests.get(self._address + "model",
+                                  headers=PerformanceModelClient._attach_token({"Accept": "application/json"}, self._token))
             result.raise_for_status()
             json = result.json()
             self._meta = PerformanceModelMetadata.model_validate(json)
@@ -48,7 +50,8 @@ class PerformanceModelClient(PlantPerformanceModel):
         now = DatetimeUtils.now()
         if self._last_status_update is None or now - self._last_status_update > self._status_update_interval:
             try:
-                result = requests.get(self._address + "health", headers={"Accept": "application/json"})
+                result = requests.get(self._address + "health",
+                                      headers=PerformanceModelClient._attach_token({"Accept": "application/json"}, self._token))
                 if not result.ok:
                     self._last_status = result.status_code
                 else:
@@ -68,7 +71,7 @@ class PerformanceModelClient(PlantPerformanceModel):
         try:
             response = requests.post(self._address + "performance",
                                    data=data.model_dump_json(exclude_none=True, exclude_unset=True),
-                                   headers={"Content-Type": "application/json", "Accept": "application/json"}
+                                   headers=PerformanceModelClient._attach_token({"Content-Type": "application/json", "Accept": "application/json"}, self._token)
                                    )
             if not response.ok:
                 return PlantPerformanceResultsFailed(status=response.status_code, message=response.reason)
@@ -82,3 +85,10 @@ class PerformanceModelClient(PlantPerformanceModel):
         if len(pth) > 0 and not pth.endswith("/"):
             pth = pth + "/"
         return pth
+
+    @staticmethod
+    def _attach_token(headers: dict[str, any], token: str|None) -> dict[str, any]:
+        if token:
+            headers["X-Token"] = token
+        return headers
+

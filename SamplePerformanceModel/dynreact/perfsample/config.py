@@ -55,7 +55,7 @@ class ServiceConfig:
                     applicable_processes = None
         self.applicable_processes = applicable_processes
         if applicable_equipment is None:
-            procs = os.getenv("APPLICABLE_PROCESSES")
+            procs = os.getenv("APPLICABLE_EQUIPMENT")
             if procs is not None:
                 applicable_equipment = [int(p) for p in (p.strip() for p in procs.split(",")) if p != ""]
                 if len(applicable_equipment) == 0:

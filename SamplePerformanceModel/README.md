@@ -16,8 +16,15 @@ or create a corresponding run configuration in the IDE. The service description 
 
 ## Configuration
 
+Create a file `.env` in the present directory with content
 
+```
+MODEL_ID=sample_model_1
+MODEL_LABEL=My sample model
+APPLICABLE_PROCESSES=FIN
+```
 
+This example applies to the finishing line, cf. process list in [site.json](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/data/site.json). For all configuration options, see [config.py](https://github.com/DynReAct/OSS_Platform/blob/main/SamplePerformanceModel/dynreact/perfsample/config.py)
 
 ## Test
 

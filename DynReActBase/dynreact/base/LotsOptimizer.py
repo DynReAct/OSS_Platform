@@ -12,7 +12,7 @@ import numpy as np
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.model import ProductionPlanning, PlanningData, ProductionTargets, Snapshot, OrderAssignment, Site, \
-    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction
+    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction
 
 
 class OptimizationListener:
@@ -101,10 +101,12 @@ class LotsOptimizer(Generic[P]):
         initial_costs = costs.process_objective_function(initial_solution) if initial_solution is not None else None
         best_costs = initial_costs if best_solution is None else costs.process_objective_function(best_solution)
         best_solution = initial_solution if best_solution is None else best_solution
-        history = [initial_costs] if history is None else history
+        initial_costs_value = initial_costs.total_value if initial_costs is not None else None
+        best_costs_value = best_costs.total_value if best_costs is not None else None
+        history = [initial_costs_value] if history is None and initial_costs_value is not None else history
         # state
         self._state: LotsOptimizationState[P] = LotsOptimizationState(current_solution=initial_solution, best_solution=best_solution,
-                                        current_objective_value=initial_costs, best_objective_value=best_costs, history=history, parameters=parameters)
+                                        current_objective_value=initial_costs_value, best_objective_value=best_costs_value, history=history, parameters=parameters)
 
     def parameters(self) -> dict[str, any]|None:
         return self._state.parameters
@@ -120,7 +122,7 @@ class LotsOptimizer(Generic[P]):
         raise Exception("Not implemented")
 
     def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot,
-                                current_material: Material | None = None, next_material: Material | None = None) -> tuple[EquipmentStatus, float]:
+                                current_material: Material | None = None, next_material: Material | None = None) -> tuple[EquipmentStatus, ObjectiveFunction]:
         """
         Note: this is intended to forward to the cost service, the lot optimizer only needs to determine whether this
         leads to a new lot or not

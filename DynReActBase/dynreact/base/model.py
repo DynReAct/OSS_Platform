@@ -127,7 +127,9 @@ class Material(Model):
     weight: float
     "Material weight in t"
     order_position: int|None = None
-    "1-based index of material in order"
+    "@deprecated: 1-based index of material in order; note that this always refers to a lot"
+    order_positions: dict[str, int]|None = None
+    "1-based index of material in order for specific lots (keys: lot id)"
     current_equipment_name: str | None = None
     current_equipment: int | None = None
     current_storage: str | None = None
@@ -241,6 +243,16 @@ class EquipmentStatus(Model, Generic[P]):
     #next: str|None = Field(None, description="Either a coil id or order id")
     planning: P|None = Field(None)  # FIXME should never be None?
     "Internal state of the optimization"
+
+
+class ObjectiveFunction(Model, extra="allow"):
+    """
+    Note that this class may have use-case dependent extra fields
+    """
+
+    total_value: float
+    "The overall objective function value"
+
 
 
 class EquipmentProduction(Model):

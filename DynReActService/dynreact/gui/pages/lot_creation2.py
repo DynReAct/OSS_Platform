@@ -879,7 +879,7 @@ def update_solution_state(snapshot: str|datetime|None, process: str|None, _, sel
         #else:
         # Display the current snapshot solution
         solution, _ = state.get_snapshot_solution(process, snapshot, horizon)
-        obj = state.get_cost_provider().process_objective_function(solution)
+        obj = state.get_cost_provider().process_objective_function(solution).total_value
         history = [obj]
     lots_data = prepare_lots_for_lot_view(snapshot, process, solution)
     return history, lots_data, False

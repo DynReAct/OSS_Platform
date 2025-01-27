@@ -12,7 +12,7 @@ from dynreact.base.CostProvider import CostProvider
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo, LotsOptimizer, LotsOptimizationState
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation
 from dynreact.base.model import Snapshot, ProductionPlanning, ProductionTargets, Site, OrderAssignment, Order, \
-    EquipmentStatus, Lot, Equipment, EquipmentProduction
+    EquipmentStatus, Lot, Equipment, EquipmentProduction, ObjectiveFunction
 
 from dynreact.lotcreation.TabuParams import TabuParams
 import dynreact.lotcreation.LotCreationGoogleOR as lcor
@@ -77,7 +77,7 @@ class TabuSearch(LotsOptimizer):
             best_is_current: bool = self._state.best_solution == self._state.current_solution
             new_assignments = {o: ass for o, ass in self._state.current_solution.order_assignments.items() if o in initial_plant_assignments}
             planning = self._costs.evaluate_order_assignments(self._process, new_assignments, targets=self._targets, snapshot=self._snapshot)
-            objective: float = self._costs.process_objective_function(planning)
+            objective: float = self._costs.process_objective_function(planning).total_value
             self._state.current_solution = planning
             self._state.current_object_value = objective
             if best_is_current:
@@ -103,7 +103,7 @@ class TabuSearch(LotsOptimizer):
         #vbest: ProductionPlanning = self._state.current_solution
         #target_vbest: float = self._state.current_object_value
         vbest: ProductionPlanning = self.optimize_lots(initial_plant_assignments)
-        target_vbest: float = self._costs.process_objective_function(vbest)
+        target_vbest: float = self._costs.process_objective_function(vbest).total_value
         self._state.current_solution = vbest
         self._state.current_object_value = target_vbest
         if target_vbest != self._state.history[-1]:
@@ -196,7 +196,7 @@ class TabuSearch(LotsOptimizer):
                 new_planning: ProductionPlanning = self.optimize_lots(order_plant_assignment)
                 nlots = new_planning.get_num_lots()
                 vbest = new_planning
-                target_vbest = self._costs.process_objective_function(new_planning)  # or target_sval?
+                target_vbest = self._costs.process_objective_function(new_planning).total_value  # or target_sval?
                 self._state.current_solution = vbest
                 self._state.current_object_value = target_vbest
                 self._state.history.append(target_vbest)
@@ -245,7 +245,7 @@ class TabuSearch(LotsOptimizer):
         return copy(self._state)
 
     def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot,
-                                current_material: Any | None = None, next_material: Any | None = None) -> tuple[EquipmentStatus, float]:
+                                current_material: Any | None = None, next_material: Any | None = None) -> tuple[EquipmentStatus, ObjectiveFunction]:
         new_lot: bool = self.create_new_lot(plant, current, next, current_material=current_material, next_material=next_material)
         return self._costs.update_transition_costs(plant, current, next, status, snapshot, new_lot, current_material=current_material, next_material=next_material)
 
@@ -491,7 +491,7 @@ class CTabuWorker:
                     new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(swp.PlantTo, self.planning.process, order_assignments, self.snapshot,
                                                                                             self.targets.period, self.targets.target_weight.get(swp.PlantTo, EquipmentProduction(equipment=swp.PlantTo, total_weight=0.0)).total_weight)
                     plant_status[swp.PlantTo] = new_status
-                objective_fct = sum(self.costs.objective_function(status) for status in plant_status.values())
+                objective_fct = sum(self.costs.objective_function(status).total_value for status in plant_status.values())
                 if objective_fct < objective_value:
                     objective_value = objective_fct
                     best_swap = swp

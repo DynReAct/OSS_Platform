@@ -41,7 +41,7 @@ class TabuSearch(LotsOptimizer):
     def __init__(self, site: Site, process: str, costs: CostProvider, snapshot: Snapshot, targets: ProductionTargets,
                  initial_solution: ProductionPlanning, min_due_date: datetime|None = None,
                  # the next two are for initialization from a previous optimization run
-                 best_solution: ProductionPlanning|None = None, history: list[float] | None = None,
+                 best_solution: ProductionPlanning|None = None, history: list[ObjectiveFunction] | None = None,
                  parameters: dict[str, any] | None = None,
                  performance_models: list[PlantPerformanceModel] | None = None
                  ):
@@ -77,12 +77,12 @@ class TabuSearch(LotsOptimizer):
             best_is_current: bool = self._state.best_solution == self._state.current_solution
             new_assignments = {o: ass for o, ass in self._state.current_solution.order_assignments.items() if o in initial_plant_assignments}
             planning = self._costs.evaluate_order_assignments(self._process, new_assignments, targets=self._targets, snapshot=self._snapshot)
-            objective: float = self._costs.process_objective_function(planning).total_value
+            objective: ObjectiveFunction = self._costs.process_objective_function(planning)
             self._state.current_solution = planning
             self._state.current_object_value = objective
             if best_is_current:
                 self._state.best_solution = planning
-                self._state.best_objective_value = objective
+                self._state.best_objective_value = objective.total_value
         return initial_plant_assignments
 
     def run(self, max_iterations: int|None = None, debug: bool=False) -> LotsOptimizationState:
@@ -103,11 +103,12 @@ class TabuSearch(LotsOptimizer):
         #vbest: ProductionPlanning = self._state.current_solution
         #target_vbest: float = self._state.current_object_value
         vbest: ProductionPlanning = self.optimize_lots(initial_plant_assignments)
-        target_vbest: float = self._costs.process_objective_function(vbest).total_value
+        target_vbest0: ObjectiveFunction = self._costs.process_objective_function(vbest)
+        target_vbest: float = target_vbest0.total_value
         self._state.current_solution = vbest
-        self._state.current_object_value = target_vbest
-        if target_vbest != self._state.history[-1]:
-            self._state.history.append(target_vbest)
+        self._state.current_object_value = target_vbest0
+        if target_vbest != self._state.history[-1].total_value:
+            self._state.history.append(target_vbest0)
         vbest_global: ProductionPlanning = self._state.best_solution
         target_vbest_global: float = self._state.best_objective_value
         if target_vbest < target_vbest_global:
@@ -127,14 +128,14 @@ class TabuSearch(LotsOptimizer):
             if target_vbest == self._costs.optimum_possible_costs(self._process, len(vbest.equipment_status.keys())):
                 self._state.current_solution = vbest
                 self._state.best_solution = vbest
-                self._state.current_object_value = target_vbest
+                self._state.current_object_value = target_vbest0
                 self._state.best_objective_value = target_vbest
-                if target_vbest != self._state.history[-1]:
-                    self._state.history.append(target_vbest)
+                if target_vbest != self._state.history[-1].total_value:
+                    self._state.history.append(target_vbest0)
                 # optimal solution found
                 break
 
-            next_step: tuple[TabuSwap, ProductionPlanning, float] = self.FindNextStep(self._state.current_solution, TabuList, pool)
+            next_step: tuple[TabuSwap, ProductionPlanning, ObjectiveFunction] = self.FindNextStep(self._state.current_solution, TabuList, pool)
             if next_step is None or next_step[0] is None:
                 # continue  # TODO what's the point of continuing... nothing will change in the next iteration?
                 break
@@ -150,14 +151,16 @@ class TabuSearch(LotsOptimizer):
             # Note: this is use case specific, but we do not really need it here
             # delta = sum(map(lambda s: s[1].DeltaW if s[1] is not None else s[0].WTarget, sval.items()))
             #target_sval = FTarget(sval, self.PDict, self._params)
-            target_sval = next_step[2]
+            target_sval0 = next_step[2]
+            target_sval = target_sval0.total_value
             if target_sval < target_vbest:
                 vbest = next_solution
                 mini = niter
+                target_vbest0 = target_sval0
                 target_vbest = target_sval
                 self._state.current_solution = vbest
-                self._state.current_object_value = target_sval
-                self._state.history.append(target_sval)
+                self._state.current_object_value = target_sval0
+                self._state.history.append(target_sval0)
                 if target_sval < target_vbest_global:
                     self._state.best_solution = vbest
                     self._state.best_objective_value = target_sval
@@ -171,8 +174,8 @@ class TabuSearch(LotsOptimizer):
                         #    SnapshotDto(PDict=self.PDict, ODict=self.ODict, PM=self.PM, LM=self.LM, OCt=self.OCt))
             elif MinCount <= self._params.NMinUntilShuffle:  #
                 self._state.current_solution = next_solution
-                self._state.current_object_value = target_sval
-                self._state.history.append(target_sval)
+                self._state.current_object_value = target_sval0
+                self._state.history.append(target_sval0)
                 MinCount += 1
             else:  # we haven't improved over the previous best value in a while, so reshuffle
                 MinCount = 0
@@ -196,10 +199,11 @@ class TabuSearch(LotsOptimizer):
                 new_planning: ProductionPlanning = self.optimize_lots(order_plant_assignment)
                 nlots = new_planning.get_num_lots()
                 vbest = new_planning
-                target_vbest = self._costs.process_objective_function(new_planning).total_value  # or target_sval?
+                target_vbest0 = self._costs.process_objective_function(new_planning)
+                target_vbest = target_vbest0.total_value  # or target_sval?
                 self._state.current_solution = vbest
-                self._state.current_object_value = target_vbest
-                self._state.history.append(target_vbest)
+                self._state.current_object_value = target_vbest0
+                self._state.history.append(target_vbest0)
                 target_sval = target_vbest
             ilots[niter] = nlots
             # idelta[niter] = delta
@@ -232,8 +236,8 @@ class TabuSearch(LotsOptimizer):
         if target_vbest < target_vbest_global:
             self._state.current_solution = vbest
             self._state.best_solution = vbest
-            self._state.current_object_value = target_vbest
-            self._state.history.append(target_vbest)
+            self._state.current_object_value = target_vbest0
+            self._state.history.append(target_vbest0)
             self._state.best_objective_value = target_vbest
 
         for listener in self._listeners:
@@ -360,14 +364,14 @@ class TabuSearch(LotsOptimizer):
 
         return result
 
-    def FindNextStep(self, planning: ProductionPlanning, TabuList: set[Any], pool: multiprocessing.pool.Pool|None) -> tuple[TabuSwap, ProductionPlanning, float]:
+    def FindNextStep(self, planning: ProductionPlanning, TabuList: set[Any], pool: multiprocessing.pool.Pool|None) -> tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]:
         # sl1 = list(sol.values())  # order plant assignments
         sl1: list[OrderAssignment] = [ass for ass in planning.order_assignments.values()]
         # slp = [[sl1[i] for i in range(len(sl1)) if (i % self.params.NParallel) == r] for r in range(self.params.NParallel)]
         slp: list[list[OrderAssignment]] = [[sl1[i] for i in range(len(sl1)) if (i % self._params.NParallel) == r] for r in range(self._params.NParallel)]
         plants = {plant.id: plant for plant in self._plants}
         items = [CTabuWorker(self._costs, sl, TabuList, self._params, self, plants, self._snapshot, self._targets, planning, self._min_due_date) for sl in slp]
-        solutions: list[tuple[TabuSwap, ProductionPlanning, float]] = []
+        solutions: list[tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]] = []
 
         # parallel tabu search loop
         if self._params.NParallel > 1:
@@ -378,10 +382,10 @@ class TabuSearch(LotsOptimizer):
 
         swpbest: TabuSwap = None
         best_solution: ProductionPlanning = None
-        objective_value = float("inf")
+        objective_value = ObjectiveFunction(total_value=float("inf"))
 
         for item in solutions:
-            if item[2] < objective_value:
+            if item[2].total_value < objective_value.total_value:
                 objective_value = item[2]
                 swpbest = item[0]
                 best_solution = item[1]
@@ -407,7 +411,7 @@ class TabuAlgorithm(LotsOptimizationAlgo):
     def _create_instance_internal(self, process: str, snapshot: Snapshot, targets: ProductionTargets,
                                   costs: CostProvider, initial_solution: ProductionPlanning, min_due_date: datetime|None = None,
                                   # the next two are for initialization from a previous optimization run
-                                  best_solution: ProductionPlanning | None = None, history: list[float] | None = None,
+                                  best_solution: ProductionPlanning | None = None, history: list[ObjectiveFunction] | None = None,
                                   performance_models: list[PlantPerformanceModel] | None = None,
                                   parameters: dict[str, any] | None = None
                                   ) -> TabuSearch:
@@ -435,10 +439,11 @@ class CTabuWorker:
         self.snapshot = snapshot
         self._min_due_date: datetime|None = min_due_date
 
-    def BestN(self) -> tuple[TabuSwap, ProductionPlanning, float]:
+    def BestN(self) -> tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]:
         best_swap: TabuSwap = None
         best_solution: ProductionPlanning = None
         objective_value: float = float("inf")
+        best_objective: ObjectiveFunction|None = None
         empty_plants = []
         for assignment in self.slist:
             order: Order = self.orders[assignment.order]
@@ -491,12 +496,16 @@ class CTabuWorker:
                     new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(swp.PlantTo, self.planning.process, order_assignments, self.snapshot,
                                                                                             self.targets.period, self.targets.target_weight.get(swp.PlantTo, EquipmentProduction(equipment=swp.PlantTo, total_weight=0.0)).total_weight)
                     plant_status[swp.PlantTo] = new_status
-                objective_fct = sum(self.costs.objective_function(status).total_value for status in plant_status.values())
+                total_objectives = CostProvider.sum_objectives([self.costs.objective_function(status) for status in plant_status.values()])
+                objective_fct = total_objectives.total_value
                 if objective_fct < objective_value:
                     objective_value = objective_fct
+                    best_objective = total_objectives
                     best_swap = swp
                     best_solution = ProductionPlanning(process=self.planning.process, order_assignments=order_assignments, equipment_status=plant_status)
-        return best_swap, best_solution, objective_value
+        if best_objective is None:
+            best_objective = ObjectiveFunction(total_value=objective_value)
+        return best_swap, best_solution, best_objective
 
 
 # must be defined in global scope for being useable with pool.imap

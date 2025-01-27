@@ -12,7 +12,8 @@ from pydantic.fields import FieldInfo
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationState
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import ProductionPlanning, EquipmentStatus, Lot, Order, Material, Snapshot, Equipment
+from dynreact.base.model import ProductionPlanning, EquipmentStatus, Lot, Order, Material, Snapshot, Equipment, \
+    ObjectiveFunction
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
@@ -211,10 +212,10 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
     solutions: list[str] = persistence.solutions(snapshot, process)
     sol_objects: dict[str, LotsOptimizationState] = {sol: persistence.load(snapshot, process, sol) for sol in solutions}
     snap_planning, snap_targets = state.get_snapshot_solution(process, snapshot)
-    snap_objective = state.get_cost_provider().process_objective_function(snap_planning)
+    snap_objective: ObjectiveFunction = state.get_cost_provider().process_objective_function(snap_planning)
     total_production = sum(t.total_weight for t in snap_targets.target_weight.values())
     sol_objects["_SNAPSHOT_"] = LotsOptimizationState(best_solution=snap_planning, current_solution=snap_planning,
-                        best_objective_value=snap_objective, current_objective_value=snap_objective,
+                        best_objective_value=snap_objective.total_value, current_objective_value=snap_objective,
                         parameters={"targets": "snapshot", "initialization": "planning", "target_production": total_production})
     # dd_planning, dd_targets = state.get_due_date_solution(process, snapshot)
     # dd_objective = state.get_cost_provider().process_objective_function(dd_planning)
@@ -227,6 +228,7 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
     best_planning: dict[str, ProductionPlanning] = {sol: state.best_solution for sol, state in sol_objects.items()}
     plant_statuses: dict[str, list[EquipmentStatus]] = {sol: list(planning.equipment_status.values()) for sol, planning in best_planning.items()}
     site = state.get_site()
+
     return [{
         "id": sol_id,
         "comment": params[sol_id].get("comment"),
@@ -238,6 +240,7 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
         "lots": sum(status.planning.lots_count if status.planning is not None else 0 for status in plant_statuses[sol_id]),
         "plants": [site.get_equipment(status.equipment).name_short for status in plant_statuses[sol_id]],
         "transition_costs": sum(status.planning.transition_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
+        #"weight_costs": sum(status.planning.delta_weight * delta_weight_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
         "performance_models": params[sol_id].get("performance_models")
     } for sol_id, solution in sol_objects.items()]
 

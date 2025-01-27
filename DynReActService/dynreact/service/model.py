@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from dynreact.base.model import EquipmentStatus, ProductionPlanning, ProductionTargets
+from dynreact.base.model import EquipmentStatus, ProductionPlanning, ProductionTargets, ObjectiveFunction
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -24,6 +24,12 @@ class EquipmentTransitionStateful(EquipmentTransition):
 
     equipment_status: EquipmentStatus
     "Optimization status, typically retrieved either from a previous optimization run, or from the ...init function"
+
+
+class TransitionInfo(BaseModel, use_attribute_docstrings=True):
+
+    status: EquipmentStatus
+    costs: ObjectiveFunction
 
 
 class LotsOptimizationInput(BaseModel):
@@ -56,7 +62,7 @@ class LotsOptimizationResults(BaseModel):
 
     results: list[ProductionPlanning]
     "Note: if trace_results in the input data was False, this list will contain a single entry. Otherwise all intermediate results"
-    objective_function: list[float]
+    objective_function: list[ObjectiveFunction]
     "Values of the objective function for all intermediate results, irrespectively of whether trace_results is set or not"
     done: bool
     "Optimization completed?"

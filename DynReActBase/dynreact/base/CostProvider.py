@@ -92,10 +92,7 @@ class CostProvider:
         process_plants: list[EquipmentStatus] \
             = [status for status in planning.equipment_status.values() if status.equipment in all_plants and all_plants[status.equipment].process == process]
         objectives: list[ObjectiveFunction] = [self.objective_function(s) for s in process_plants]
-        all_fields: set[str] = {field for obj in objectives for field in obj.model_fields_set}
-        field_values = {field: sum(getattr(o, field) if hasattr(o, field) else 0 for o in objectives) for field in all_fields}
-        result = ObjectiveFunction(**field_values)
-        return result
+        return CostProvider.sum_objectives(objectives)
 
     def optimum_possible_costs(self, process: str, num_plants: int):
         return 0
@@ -152,4 +149,11 @@ class CostProvider:
         return self.evaluate_equipment_assignments(plant.id, plant.process, assignments, snapshot, planning_period, target_weight,
                                                    current_material=current_material if coil_based else None)
 
-
+    @staticmethod
+    def sum_objectives(objective_functions:list[ObjectiveFunction]) -> ObjectiveFunction:
+        all_fields: set[str] = {field for obj in objective_functions for field in obj.model_fields_set}
+        field_values = {field: sum(getattr(o, field) if hasattr(o, field) else 0 for o in objective_functions) for field in all_fields}
+        if "total_value" not in field_values:
+            field_values["total_value"] = 0
+        result = ObjectiveFunction(**field_values)
+        return result

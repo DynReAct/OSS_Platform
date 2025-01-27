@@ -16,7 +16,7 @@ from pydantic import AliasChoices
 from dynreact.app import config, state
 from dynreact.auth.authentication import fastapi_authentication
 from dynreact.service.model import EquipmentTransition, EquipmentTransitionStateful, LotsOptimizationInput, \
-    LotsOptimizationResults
+    LotsOptimizationResults, TransitionInfo
 from dynreact.service.optim_listener import LotsOptimizationListener
 
 fastapi_app = FastAPI(
@@ -237,7 +237,7 @@ def plant_status(equipment_id: int, snapshot_timestamp: datetime | str = Path(..
                 response_model_exclude_none=True,
                 summary="Invoke cost service for order to order or coil to coil transitions, taking into account " +
                         "global objectives and constraints.")
-def target_function_update(transition: EquipmentTransitionStateful, username = username) -> EquipmentStatus:
+def target_function_update(transition: EquipmentTransitionStateful, username = username) -> TransitionInfo:
     if transition.current_order == "":
         transition.current_order = None
     if transition.equipment_status.current_order == "":
@@ -265,9 +265,9 @@ def target_function_update(transition: EquipmentTransitionStateful, username = u
     targets = ProductionTargets(process=plant.process, target_weight={plant.id: status.target_weight}, period=status.planning_period)
     optimizer: LotsOptimizer = state.get_lots_optimization().create_instance(plant.process, snapshot, state.get_cost_provider(),
                                                                     initial_solution=initial_solution, targets=targets)
-    new_status: EquipmentStatus = optimizer.update_transition_costs(plant, current_order, next_order, status,
-                                                                    snapshot, current_material=current_coil, next_material=next_coil)[0]
-    return new_status
+    new_status, new_objective = optimizer.update_transition_costs(plant, current_order, next_order, status,
+                                                                    snapshot, current_material=current_coil, next_material=next_coil)
+    return TransitionInfo(status=new_status, costs=new_objective)
 
 
 lots_optimization: tuple[int, LotsOptimizationListener]|None = None

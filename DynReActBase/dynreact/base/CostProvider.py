@@ -7,7 +7,7 @@ the custom logic for building an objective function for schedules.
 from datetime import datetime
 
 from dynreact.base.model import Equipment, Order, Material, Snapshot, EquipmentStatus, Site, ProductionPlanning, OrderAssignment, \
-    ProductionTargets, PlanningData, MaterialOrderData, EquipmentProduction
+    ProductionTargets, EquipmentProduction, ObjectiveFunction
 
 
 class CostProvider:
@@ -72,17 +72,17 @@ class CostProvider:
     #    raise Exception("not implemented")
 
     def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot,
-                                new_lot: bool, current_material: Material | None = None, next_material: Material | None = None) -> tuple[EquipmentStatus, float]:
+                                new_lot: bool, current_material: Material | None = None, next_material: Material | None = None) -> tuple[EquipmentStatus, ObjectiveFunction]:
         """
         Intended to be called by the lot creation, which first needs to check whether a new lot has to be created
         """
         raise Exception("not implemented")
 
-    def objective_function(self, status: EquipmentStatus) -> float:
+    def objective_function(self, status: EquipmentStatus) -> ObjectiveFunction:
         "Evaluate the target/objective function for a specific plant status"
-        return status.planning.target_fct  # assuming this has been set previously in the order_assignment_status method above!
+        return ObjectiveFunction(total_value=status.planning.target_fct)  # assuming this has been set previously in the order_assignment_status method above!
 
-    def process_objective_function(self, planning: ProductionPlanning) -> float:
+    def process_objective_function(self, planning: ProductionPlanning) -> ObjectiveFunction:
         """
         Evaluate the objective function for one process. By default, this is the sum of all objective functions
         evaluated on the individual plants, but it is possible to override this behaviour in a derived implementation
@@ -91,7 +91,8 @@ class CostProvider:
         all_plants: dict[int, Equipment] = {p.id: p for p in self._site.equipment}
         process_plants: list[EquipmentStatus] \
             = [status for status in planning.equipment_status.values() if status.equipment in all_plants and all_plants[status.equipment].process == process]
-        return sum(self.objective_function(s) for s in process_plants)
+        objectives: list[ObjectiveFunction] = [self.objective_function(s) for s in process_plants]
+        return CostProvider.sum_objectives(objectives)
 
     def optimum_possible_costs(self, process: str, num_plants: int):
         return 0
@@ -148,4 +149,11 @@ class CostProvider:
         return self.evaluate_equipment_assignments(plant.id, plant.process, assignments, snapshot, planning_period, target_weight,
                                                    current_material=current_material if coil_based else None)
 
-
+    @staticmethod
+    def sum_objectives(objective_functions:list[ObjectiveFunction]) -> ObjectiveFunction:
+        all_fields: set[str] = {field for obj in objective_functions for field in obj.model_fields_set}
+        field_values = {field: sum(getattr(o, field) if hasattr(o, field) else 0 for o in objective_functions) for field in all_fields}
+        if "total_value" not in field_values:
+            field_values["total_value"] = 0
+        result = ObjectiveFunction(**field_values)
+        return result

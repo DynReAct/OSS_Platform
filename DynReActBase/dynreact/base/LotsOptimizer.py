@@ -12,7 +12,7 @@ import numpy as np
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.model import ProductionPlanning, PlanningData, ProductionTargets, Snapshot, OrderAssignment, Site, \
-    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction
+    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction
 
 
 class OptimizationListener:
@@ -20,10 +20,10 @@ class OptimizationListener:
     def __init__(self):
         self._done: bool = False
 
-    def update_solution(self, planning: ProductionPlanning, objective_value: float):
+    def update_solution(self, planning: ProductionPlanning, objective_value: ObjectiveFunction):
         pass
 
-    def update_iteration(self, iteration_cnt: int, lots_cnt: int, objective_value: float) -> bool:
+    def update_iteration(self, iteration_cnt: int, lots_cnt: int, objective_value: ObjectiveFunction) -> bool:
         """
         :return: false to interrupt the iteration
         """
@@ -43,18 +43,18 @@ P = TypeVar("P", bound=PlanningData)
 # update the values in every iteration
 class LotsOptimizationState(Generic[P]):
 
-    def __init__(self, current_solution: ProductionPlanning[P], current_objective_value: float,
+    def __init__(self, current_solution: ProductionPlanning[P], current_objective_value: ObjectiveFunction,
                  best_solution: ProductionPlanning[P], best_objective_value: float,
                  num_iterations: int=0,  # deprecated
-                 history: list[float]|None = None,
+                 history: list[ObjectiveFunction]|None = None,
                  parameters: dict[str, any]|None = None):
         self.current_solution: ProductionPlanning[P] = current_solution
-        self.current_object_value: float = current_objective_value
+        self.current_object_value: ObjectiveFunction = current_objective_value
         self.best_solution: ProductionPlanning[P] = best_solution
         self.best_objective_value: float = best_objective_value
         self.num_iterations: int = num_iterations
         "deprecated"
-        self.history: list[float] = list(history) if history is not None else [best_objective_value, current_objective_value]
+        self.history: list[ObjectiveFunction] = list(history) if history is not None else [current_objective_value]
         self.parameters: dict[str, any]|None = parameters
 
 
@@ -67,7 +67,8 @@ class LotsOptimizer(Generic[P]):
                  # Note: we should accept None for the initial solution, for instances only used to assign lots
                  initial_solution: ProductionPlanning[P], min_due_date: datetime|None = None,
                  # the next two are for initialization from a previous optimization run
-                 best_solution: ProductionPlanning[P]|None = None, history: list[float] | None = None,
+                 best_solution: ProductionPlanning[P]|None = None,
+                 history: list[ObjectiveFunction] | None = None,
                  parameters: dict[str, any]|None = None,
                  performance_models: list[PlantPerformanceModel]|None = None
                  ):
@@ -101,10 +102,12 @@ class LotsOptimizer(Generic[P]):
         initial_costs = costs.process_objective_function(initial_solution) if initial_solution is not None else None
         best_costs = initial_costs if best_solution is None else costs.process_objective_function(best_solution)
         best_solution = initial_solution if best_solution is None else best_solution
-        history = [initial_costs] if history is None else history
+        initial_costs_value = initial_costs.total_value if initial_costs is not None else None
+        best_costs_value = best_costs.total_value if best_costs is not None else None
+        history = [initial_costs] if history is None and initial_costs is not None else history if history is not None else []
         # state
         self._state: LotsOptimizationState[P] = LotsOptimizationState(current_solution=initial_solution, best_solution=best_solution,
-                                        current_objective_value=initial_costs, best_objective_value=best_costs, history=history, parameters=parameters)
+                                        current_objective_value=initial_costs, best_objective_value=best_costs_value, history=history, parameters=parameters)
 
     def parameters(self) -> dict[str, any]|None:
         return self._state.parameters
@@ -120,7 +123,7 @@ class LotsOptimizer(Generic[P]):
         raise Exception("Not implemented")
 
     def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot,
-                                current_material: Material | None = None, next_material: Material | None = None) -> tuple[EquipmentStatus, float]:
+                                current_material: Material | None = None, next_material: Material | None = None) -> tuple[EquipmentStatus, ObjectiveFunction]:
         """
         Note: this is intended to forward to the cost service, the lot optimizer only needs to determine whether this
         leads to a new lot or not
@@ -331,7 +334,8 @@ class LotsOptimizationAlgo:
                         # TODO option to specify the urgency(?)
                         orders: list[str]|None = None,
                         # the next two are for initialization from a previous optimization run
-                        best_solution: ProductionPlanning[P] | None = None, history: list[float] | None = None,
+                        best_solution: ProductionPlanning[P] | None = None,
+                        history: list[ObjectiveFunction] | None = None,
                         performance_models: list[PlantPerformanceModel] | None = None,
                         parameters: dict[str, any] | None = None,
                         include_inactive_lots: bool = False
@@ -350,7 +354,7 @@ class LotsOptimizationAlgo:
     def _create_instance_internal(self, process: str, snapshot: Snapshot, targets: ProductionTargets,
                                   cost_provider: CostProvider, initial_solution: ProductionPlanning, min_due_date: datetime|None = None,
                                   # the next two are for initialization from a previous optimization run
-                                  best_solution: ProductionPlanning[P] | None = None, history: list[float] | None = None,
+                                  best_solution: ProductionPlanning[P] | None = None, history: list[ObjectiveFunction] | None = None,
                                   performance_models: list[PlantPerformanceModel] | None = None,
                                   parameters: dict[str, any] | None = None
                                   ) -> LotsOptimizer:

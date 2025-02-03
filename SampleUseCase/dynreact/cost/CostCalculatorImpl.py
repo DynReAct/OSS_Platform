@@ -4,7 +4,8 @@ import numpy as np
 
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.NotApplicableException import NotApplicableException
-from dynreact.base.model import Equipment, Material, Order, Snapshot, EquipmentStatus, Site, OrderAssignment, PlanningData
+from dynreact.base.model import Equipment, Material, Order, Snapshot, EquipmentStatus, Site, OrderAssignment, \
+    PlanningData, ObjectiveFunction
 from dynreact.cost.CostConfig import CostConfig
 from dynreact.sample.model import SampleMaterial
 
@@ -62,7 +63,7 @@ class SampleCostProvider(CostProvider):
 
     # This cannot be determined by the cost service only, because it requires the re-calculation of lots
     def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot, new_lot: bool,
-                                current_material: Material | None = None, next_material: Material | None = None) -> tuple[EquipmentStatus, float]:
+                                current_material: Material | None = None, next_material: Material | None = None) -> tuple[EquipmentStatus, ObjectiveFunction]:
         """
         Calculate an incremental update to the cost function
         """
@@ -98,23 +99,24 @@ class SampleCostProvider(CostProvider):
                                      current_order=next.id, previous_order=current.id,
                                      current_material=current_coils)
         target_fct = self.objective_function(new_status)
-        new_planning.target_fct = target_fct
+        new_planning.target_fct = target_fct.total_value
         return new_status, target_fct
 
-    def objective_function(self, status: EquipmentStatus[PlanningData]) -> float:
+    def objective_function(self, status: EquipmentStatus[PlanningData]) -> ObjectiveFunction:
         """
         Evaluate the target/objective function for a specific plant status
         """
         if status is None or status.equipment not in self._plant_ids:  # TODO generate a warning?
-            return float("inf")
+            return ObjectiveFunction(total_value=float("inf"))
         params: CostConfig = self._config
         planning: PlanningData = status.planning
         # In our example there are 3 costs components: number of lots, deviation from target weight, and transition costs between individual orders
         # The relative weight of the components can be defined by the parameters
         weight_deviation = (abs(planning.delta_weight) / status.target_weight) ** 2 if status.target_weight > 0 else 0
-        return planning.lots_count + \
+        result = planning.lots_count + \
             params.factor_weight_deviation * weight_deviation + \
             params.factor_transition_costs * planning.transition_costs
+        return ObjectiveFunction(total_value=result)
 
     def evaluate_equipment_assignments(self, plant_id: id, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
                                        planning_period: tuple[datetime, datetime], target_weight: float, min_due_date: datetime|None=None,

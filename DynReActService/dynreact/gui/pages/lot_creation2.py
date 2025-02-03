@@ -19,7 +19,7 @@ from dynreact.base.SnapshotProvider import OrderInitMethod
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Equipment, Order, Lot, ProductionPlanning, ProductionTargets, EquipmentProduction, \
-    MidTermTargets
+    MidTermTargets, ObjectiveFunction
 from pydantic.fields import FieldInfo
 
 from dynreact.app import state, config
@@ -913,7 +913,7 @@ def update_solution_state(snapshot: str|datetime|None, process: str|None, _, sel
     if solution_selected and snapshot is not None and process is not None and selected_solution is not None:
         snapshot = DatetimeUtils.parse_date(snapshot)
         optimization_state: LotsOptimizationState|None = state.get_results_persistence().load(snapshot, process, selected_solution)
-        history = optimization_state.history
+        history = [h.total_value for h in optimization_state.history]
         solution = optimization_state.current_solution
     elif lot_creation_listener is not None:
         history = lot_creation_listener.history()
@@ -929,7 +929,7 @@ def update_solution_state(snapshot: str|datetime|None, process: str|None, _, sel
         #else:
         # Display the current snapshot solution
         solution, _ = state.get_snapshot_solution(process, snapshot, horizon)
-        obj = state.get_cost_provider().process_objective_function(solution)
+        obj = state.get_cost_provider().process_objective_function(solution).total_value
         history = [obj]
     lots_data = prepare_lots_for_lot_view(snapshot, process, solution)
     return history, lots_data, False
@@ -1173,11 +1173,11 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
             optimization_state: LotsOptimizationState | None = None
             initial_solution: ProductionPlanning|None = None
             best_solution: ProductionPlanning|None = None
-            history: list[float]|None = None
+            history: list[ObjectiveFunction]|None = None
             targets: ProductionTargets|None = None
             targets_customized: bool = False
             orders: list[str]|None = None
-            optimization: LotsOptimizationAlgo = state.get_lots_optimization()
+            optimization_algo: LotsOptimizationAlgo = state.get_lots_optimization()
             parameters: dict[str, any]|None = None
             perf_models: list[PlantPerformanceModel] = None
             if existing_solution is not None:
@@ -1200,13 +1200,13 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                 snapshot_serialized: str = DatetimeUtils.format(snapshot)
                 orders: list[str] = [row["id"] if isinstance(row, dict) else row for row in selected_order_rows]
                 if selected_init_method == "duedate":
-                    initial_solution, targets = optimization.due_dates_solution(process, snapshot_obj, horizon, state.get_cost_provider(),
+                    initial_solution, targets = optimization_algo.due_dates_solution(process, snapshot_obj, horizon, state.get_cost_provider(),
                                                     targets=targets, orders=orders)
                 elif selected_init_method == "snapshot":
-                    initial_solution, targets = optimization.snapshot_solution(process, snapshot_obj, horizon, state.get_cost_provider(),
+                    initial_solution, targets = optimization_algo.snapshot_solution(process, snapshot_obj, horizon, state.get_cost_provider(),
                                              targets=targets, orders=orders)
                 else:  # init = heuristic
-                    initial_solution, targets = optimization.heuristic_solution(process, snapshot_obj, horizon, state.get_cost_provider(),
+                    initial_solution, targets = optimization_algo.heuristic_solution(process, snapshot_obj, horizon, state.get_cost_provider(),
                                                      targets, orders, start_orders=None)  # TODO start orders
                 parameters = {
                     "targets": "snapshot" if not targets_customized else "custom",
@@ -1221,7 +1221,7 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                 raise Exception("No orders included")  # TODO
             if create_comment is not None and len(create_comment) > 0 and parameters is not None:
                 parameters["comment"] = create_comment
-            optimization: LotsOptimizer[any] = optimization.create_instance(process,
+            optimization: LotsOptimizer[any] = optimization_algo.create_instance(process,
                     snapshot_obj, state.get_cost_provider(), targets=targets, initial_solution=initial_solution, min_due_date=None,
                     best_solution=best_solution, history=history, parameters=parameters, orders=orders, performance_models=perf_models)  # TODO due date?
             if lot_creation_thread is not None:  # FIXME rather abort operation?

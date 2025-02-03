@@ -10,17 +10,18 @@ from dynreact.base.LotsOptimizer import LotsOptimizationState
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import EquipmentStatus, Site, Process, ProductionPlanning, MidTermTargets, StorageLevel
+from dynreact.base.model import EquipmentStatus, Site, Process, ProductionPlanning, MidTermTargets, StorageLevel, \
+    ObjectiveFunction
 
 
 class LotsOptimizationStateModel(BaseModel):
 
     current_solution: ProductionPlanning
-    current_object_value: float
+    current_object_value: ObjectiveFunction
     best_solution: ProductionPlanning
     best_objective_value: float
     #num_iterations: int
-    history: list[float]
+    history: list[ObjectiveFunction]
     parameters: dict[str, Any] | None = None
 
 

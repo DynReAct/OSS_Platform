@@ -168,6 +168,7 @@ class SampleCostProvider(CostProvider):
                                                             orders_count=len(orders_sorted),
                                                             transition_costs=transition_costs)
         status = EquipmentStatus(equipment=plant_id, snapshot_id=snapshot.timestamp, target_weight=target_weight,
+                                 #lot_weight_range=[22.0, 33.0],    #FIXME
                                  planning=planning,
                                  planning_period=planning_period, current_order=last_order.id,  # current=last_order.id
                                  previous_order=previous_order.id if previous_order is not None else None,

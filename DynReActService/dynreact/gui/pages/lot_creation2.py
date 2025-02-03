@@ -6,6 +6,7 @@ from typing import Literal, Any
 import dash
 import pandas as pd
 from dash import html, callback, Input, Output, dcc, State, no_update, clientside_callback, ClientsideFunction
+#import dash_bootstrap_components as dbc
 import plotly.express as px
 import dash_ag_grid as dash_ag
 from dash.development.base_component import Component
@@ -128,6 +129,9 @@ def layout(*args, **kwargs):
 
 
 def targets_tab(horizon: int):
+    checklist_values = []
+    checklist_dict = [{'label': 'Use lot weight range ?', 'value': 'check1'}]
+
     return [
         html.Div([
             html.Div("Planning horizon"),
@@ -143,7 +147,9 @@ def targets_tab(horizon: int):
                     html.Button("Initialize: LTP", id="lots2-targets-init-ltp", className="dynreact-button dynreact-button-small", title="Derive from long term planning."),
                     html.Button("Initialize: lots", id="lots2-targets-init-lots", className="dynreact-button dynreact-button-small", title="Derive from currently planned lots."),
                 ], className="lots-target-buttons"),
-                html.Div(id="lots2-details-plants", className="lots2-plants-targets"),
+                html.Div(dcc.Checklist(id="lots2-check-use-lot-range",
+                                       options=checklist_dict, value=checklist_values[:], className="dynreact-checkbox")),
+                html.Div(id="lots2-details-plants", className="lots2-plants-targets3"),
             ]), html.Div([
                 html.H4("Plant performance models"),
                 html.Div(id="lots2-details-performance-models", className="lots2-performance-models")
@@ -258,6 +264,11 @@ def orders_tab():
 def settings_tab(init_method: Literal["heuristic", "duedate", "snapshot", "result"]|None, iterations: int):
     return [
         html.H4("Lot creation settings"),
+        dcc.ConfirmDialog(
+            id='lots2-confirm-error',
+            message='User information',
+        ),
+
         # Initialization
         html.Div([
             html.Div("Initialization: ", title="Specify the algorithm for the initialization of the lot creation."),
@@ -454,13 +465,10 @@ def ltp_table_opened(_, snapshot: str, process: str, horizon_hours: int):
         } for idx, t in enumerate(solutions)]
     return columns
 
-
-
-
-
 # TODO clear button?
 @callback(
     Output("lots2-details-plants", "children"),
+    Output("lots2-details-plants", "className"),
     State("selected-snapshot", "data"),
     State("lots2-horizon-hours", "value"),
     State("lots2-details-plants", "children"),
@@ -468,18 +476,30 @@ def ltp_table_opened(_, snapshot: str, process: str, horizon_hours: int):
     Input("lots2-active-tab", "data"),
     Input("lots2-targets-init-lots", "n_clicks"),
     Input("lots2-ltp-table", "selectedRows"),
+    Input("lots2-check-use-lot-range", "value")
 )
-def update_plants(snapshot: str, horizon_hours: int, components: list[Component]|None, process: str,
-                  active_tab: Literal["targets", "orders", "settings"]|None, _,
+def update_plants(snapshot: str,
+                  horizon_hours: int,
+                  components: list[Component]|None,
+                  process: str,
+                  active_tab: Literal["targets", "orders", "settings"]|None,
+                  _,
                   # TODO row in ltp popup selected
-                  selected_rows: list[dict[str, any]]|None) -> list[Component]:
+                  selected_rows: list[dict[str, any]]|None,
+                  use_lot_range0: list[Literal[""]]
+                  ) -> [list[Component], list[any]]:
+    use_lot_range: bool = len(use_lot_range0) > 0
+    if use_lot_range:
+        my_parent_classname = "lots2-plants-targets5"
+    else:
+        my_parent_classname = "lots2-plants-targets3"
     if not dash_authenticated(config) or process is None or snapshot is None:
-        return None
+        return None, my_parent_classname
     if active_tab != "targets":
-        return no_update
+        return no_update, my_parent_classname
     changed = GuiUtils.changed_ids()
     is_ltp_init = "lots2-ltp-table" in changed and len(selected_rows) > 0
-    re_init: bool = "lots2-targets-init-lots" in changed or is_ltp_init
+    re_init: bool = "lots2-targets-init-lots" in changed or "lots2-check-use-lot-range" in changed or is_ltp_init
     snapshot = DatetimeUtils.parse_date(snapshot)
     plants: list[Equipment] = state.get_site().get_process_equipment(process)
     elements = []
@@ -498,7 +518,15 @@ def update_plants(snapshot: str, horizon_hours: int, components: list[Component]
                 elements.append(components[existing_index - 2])
                 elements.append(components[existing_index - 1])
                 elements.append(existing)
+                if use_lot_range:
+                    for c in components:
+                        if c.get("props").get("data-plant") == str(plant.id):
+                            if c.get("props").get("className") == "lot2-size-min":
+                                elements.append(c)
+                            if c.get("props").get("className") == "lot2-size-max":
+                                elements.append(c)
                 continue
+
         target = round(target_weights.get(plant.id, 0))
         checkbox = html.Div(dcc.Checklist(options=[""], value=[""] if target > 0 else []),
                             title="Include plant " + str(plant.name_short if plant.name_short is not None else plant.id) + " in planning?")
@@ -507,10 +535,32 @@ def update_plants(snapshot: str, horizon_hours: int, components: list[Component]
         div = html.Div(dcc.Input(type="number", min="0", value=str(target), placeholder="Target production in t"),
                        title="Target production in t", className="create-plant-input", **{"data-plant": str(plant.id), "data-default": str(target) })
         elements.append(div)
+        if use_lot_range:   #visible
+            div2 = html.Div(dcc.Input(type="number", min="0", value=str(target), placeholder="Lot size minimum in t"),
+                            title="Lot size minimum in t", className="lot2-size-min",
+                            style={'display': 'block'},
+                            **{"data-plant": str(plant.id), "data-default": str(target)})
+
+            div3 = html.Div(dcc.Input(type="number", min="0", value=str(target), placeholder="Lot size maximum in t"),
+                            title="Lot size maximum in t", className="lot2-size-max",
+                            style={'display': 'block'},
+                            **{"data-plant": str(plant.id), "data-default": str(target)})
+        else:  #hidden
+            div2 = html.Div(dcc.Input(type="number", min="0", value=str(target), placeholder="0"),
+                            title="Lot size minimum in t", className="lot2-size-min", # "lots2-lot-range-hidden",
+                            style={'display': 'none'},
+                            **{"data-plant": str(plant.id), "data-default": str(target)})
+
+            div3 = html.Div(dcc.Input(type="number", min="0", value=str(target), placeholder="Lot size maximum in t"),
+                            title="Lot size maximum in t", className="lot2-size-max", # "lots2-lot-range-hidden",
+                            style={'display': 'none'},
+                            **{"data-plant": str(plant.id), "data-default": str(target)})
+        elements.append(div2)
+        elements.append(div3)
         #checkbox = dcc.Input(type="checkbox", checked=target>0, title="Include plant in planning?")
 
     # TODO display total tonnes
-    return elements
+    return elements, my_parent_classname
 
 
 def _targets_from_ltp(selected_row: dict[str, any], process: str, start_time: datetime, horizon_hours: int) -> ProductionTargets:
@@ -937,7 +987,11 @@ def update_figure(history: list[float]|None):
           Output("lots2-interval", "interval"),
           Output("lots2-running-indicator", "hidden"),
 
+          Output('lots2-confirm-error', 'displayed'),
+          Output('lots2-confirm-error', 'message'),
+
           State("selected-snapshot", "data"),
+          State("lots2-check-use-lot-range", "value"),
           State("lots2-details-plants", "children"),
           State("lots2-details-performance-models", "children"),
           #State("lots2-settings-popup-data", "data"),
@@ -960,6 +1014,7 @@ def update_figure(history: list[float]|None):
 
           )
 def process_changed(snapshot: datetime|None,
+                    use_lot_range0: list[Literal[""]],
                     target_elements: list[Component]|None,
                     perf_model_elements: list[Component]|None,
                     selected_order_rows: list[dict[str, any]] | None,
@@ -976,10 +1031,13 @@ def process_changed(snapshot: datetime|None,
                     _, __, ___,
                     ):
     global lot_creation_listener
+    flag_display_error = False
+    error_message = ""
+    use_lot_range: bool = len(use_lot_range0) > 0
     interval = 3_600_000
     if not dash_authenticated(config):
         return (True, True, process, True, iterations, iterations, iterations, True, selected_init_method, [],
-                existing_solution, True, "Not authenticated", interval, True)
+                existing_solution, True, "Not authenticated", interval, True, flag_display_error, error_message)
     store_results: bool = len(store_results0) > 0
     changed_ids: list[str] = GuiUtils.changed_ids()
     # TODO if running, then use configured iterations from run
@@ -1008,11 +1066,11 @@ def process_changed(snapshot: datetime|None,
         #    result["disabled"] = True
         #settings_trigger_hidden = selected_init_method == "result"
         return (True, stop_disabled, process, True, iterations, iterations, iterations, result_selector_hidden, selected_init_method, results,
-                existing_solution, selection_disabled, "Optimization running", interval, False)
+                existing_solution, selection_disabled, "Optimization running", interval, False, flag_display_error, error_message)
     if horizon_hours is None or iterations is None or process is None or snapshot is None:
         title = "Select a process first" if process is None else "Select a snapshot first" if snapshot is None else "Enter valid planning horizon"
         return (True, stop_disabled, process, False, iterations, iterations, iterations, True, selected_init_method, [], None,
-                selection_disabled, title, interval, True)
+                selection_disabled, title, interval, True, flag_display_error, error_message)
     if selected_init_method is None:
         if len(existing_solutions) > 0:
             selected_init_method = "result"
@@ -1025,18 +1083,20 @@ def process_changed(snapshot: datetime|None,
     if orders_unselected or plant_targets_unset:
         title = "Select orders first" if orders_unselected else "Set plant targets first"
         return (True, stop_disabled, process, False, iterations, iterations, iterations, True, selected_init_method, [], None,
-                selection_disabled, title, interval, True)
+                selection_disabled, title, interval, True, flag_display_error, error_message)
     result_selector_hidden = selected_init_method != "result"
-    start_disabled, error_msg = check_start_optimization(changed_ids, process, snapshot, iterations, horizon_hours, selected_init_method,
-                existing_solution if selected_init_method == "result" else None, target_elements, perf_model_elements, selected_order_rows, create_comment, store_results)
+    # here start optimization
+    start_disabled, error_msg, info_msg = check_start_optimization(changed_ids, process, snapshot, iterations, horizon_hours, selected_init_method,
+                existing_solution if selected_init_method == "result" else None, use_lot_range, target_elements, perf_model_elements, selected_order_rows, create_comment, store_results)
     if error_msg is not None:  # TODO display message!
+        print(error_msg)
         pass
     if selected_init_method == "result" and existing_solution is None:
         if start_disabled or len(existing_solutions) == 0 or "create-existing-sols" in changed_ids:  # trying to start the optimization, or explicitly deselected solution id
             title = "Select an existing result" if len(results) > 0 else \
                         "No previous results avaialable, select a different initialization method."
             return (True, stop_disabled, process, False, iterations, iterations, iterations, False, selected_init_method, results, existing_solution,
-                    selection_disabled, title, interval, True)
+                    selection_disabled, title, interval, True, flag_display_error, error_message)
         existing_solution = existing_solutions[-1]  # ?
     existing_solution = existing_solution if selected_init_method == "result" else dash.no_update
     stop_disabled = not start_disabled
@@ -1049,8 +1109,13 @@ def process_changed(snapshot: datetime|None,
     running_indicator_hidden = not start_disabled
     #settings_trigger_hidden = selected_init_method == "result"
     #settings_trigger_disabled = start_disabled
+
+    if info_msg is not None:
+        flag_display_error = True
+
     return (start_disabled, stop_disabled, process, process_selection_disabled, iterations, iterations, iterations, result_selector_hidden,
-            selected_init_method, results, existing_solution, selection_disabled, "Start/stop planning optimization", interval, running_indicator_hidden)
+            selected_init_method, results, existing_solution, selection_disabled, "Start/stop planning optimization", interval, running_indicator_hidden,
+            flag_display_error, info_msg)
 
 
 def check_running_optimization() -> tuple[bool, str|None]:
@@ -1079,22 +1144,26 @@ def check_stop_optimization(changed_ids: list[str]) -> bool:
 #TODO take into account planning horizon / horizon hours?
 def check_start_optimization(changed_ids: list[str], process: str|None, snapshot: datetime|None, iterations: int|None,
                              horizon_hours: int, selected_init_method: Literal["heuristic", "duedate", "snapshot", "result"],
-                             existing_solution: str|None, plant_target_components: list[Component]|None,
+                             existing_solution: str|None,
+                             use_lot_range: bool,
+                             plant_target_components: list[Component]|None,
                              perf_model_components: list[Component]|None,
                              #order_data: dict[str, str] | None,
                              selected_order_rows: list[dict[str, any]]|None,
                              create_comment: str|None,
-                             store_results: bool) -> tuple[bool, str]:
+                             store_results: bool) -> tuple[bool, str, str | None]:
     """
     :return:
         - bool: whether the optimization is running
         - str: an error message
+        - str: user info message GUI
     """
     global lot_creation_thread
     global lot_creation_listener
     if process is None or snapshot is None:
-        return lot_creation_thread is not None, None
+        return lot_creation_thread is not None, None, None
     error_msg: str|None = None
+    info_msg: str | None = None
     if "lots2-start" in changed_ids and lot_creation_thread is None:
         try:
             snapshot_obj = state.get_snapshot(snapshot)
@@ -1123,7 +1192,10 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                     perf_models = [model for model in state.get_plant_performance_models() if model.id() in perf_model_ids]
             else:
                 plants = state.get_site().get_process_equipment(process)
-                targets, targets_customized = target_values_from_settings(process, period, [p.id for p in plants], plant_target_components)
+
+                targets, targets_customized, info_msg = target_values_from_settings(process, period, [p.id for p in plants], use_lot_range, plant_target_components)
+                if info_msg is not None:
+                    return lot_creation_thread is not None, error_msg, info_msg
                 perf_models = performance_models_from_elements(process, perf_model_components)
                 snapshot_serialized: str = DatetimeUtils.format(snapshot)
                 orders: list[str] = [row["id"] if isinstance(row, dict) else row for row in selected_order_rows]
@@ -1146,7 +1218,7 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
             if len(targets.target_weight) == 0 or sum(t.total_weight for t in targets.target_weight.values()) <= 0:
                 raise Exception("Nothing scheduled")  # TODO display it somewhere
             if len(initial_solution.order_assignments) == 0:
-                raise Exception("No orders included")
+                raise Exception("No orders included")  # TODO
             if create_comment is not None and len(create_comment) > 0 and parameters is not None:
                 parameters["comment"] = create_comment
             optimization: LotsOptimizer[any] = optimization.create_instance(process,
@@ -1167,7 +1239,7 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
         except Exception as e:
             traceback.print_exc()
             error_msg = str(e)
-    return lot_creation_thread is not None, error_msg
+    return lot_creation_thread is not None, error_msg, info_msg
 
 
 # Swimlane related callbacks
@@ -1195,16 +1267,18 @@ clientside_callback(
 )
 
 
-def target_values_from_settings(process: str, period: tuple[datetime, datetime], plants: list[int], components: list[Component]|None) -> tuple[ProductionTargets|None, bool]:
+def target_values_from_settings(process: str, period: tuple[datetime, datetime], plants: list[int], use_lot_range: bool, components: list[Component]|None) -> tuple[ProductionTargets|None, bool, str|None]:
     """
-    :return: targets and indicator if default values have been changed
+    :return: targets, indicator if default values have been changed, message
     """
+    message = None
     if components is None:
-        return None, False
+        return None, False, None
     component_by_plant = {plant: next((c for c in components if c.get("props").get("data-plant") == str(plant)), None) for plant in plants}
     if None in component_by_plant.values():  # Need a component for every process plant # why?
-        return None, False
-
+        return None, False, None
+    #all components for this plant
+    components_by_plant = {plant: ((c for c in components if c.get("props").get("data-plant") == str(plant)), None) for plant in plants}
 
     def plant_included(plant0: int) -> bool:
         # the structure per plant is something like this: <checkbox/><div (plant_element)/><div data-plant=plant.id><input tons></div>,
@@ -1212,16 +1286,96 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
         return len(components[components.index(component_by_plant.get(plant0)) - 2].get("props").get("children").get("props").get("value")) > 0
 
     plant_active: dict[int, bool] = {plant: plant_included(plant) for plant in plants}
+
+    def plant_get_lot_min(plant0: int) -> float | None:
+        lot_size_min_dict = {plant0: (c.get("props").get("children").get("props").get("value"))
+                             for c in components
+                             if (plant_active[plant0] and
+                                 c.get("props").get("data-plant") == str(plant0) and
+                                 c.get("props").get("className") == "lot2-size-min")
+                             }
+        try:
+            lot_size_min = float(lot_size_min_dict.get(plant0))
+        except TypeError:
+            lot_size_min = None
+        return lot_size_min
+
+    def plant_get_lot_max(plant0: int) -> float | None:
+        lot_size_max_dict = {plant0: (c.get("props").get("children").get("props").get("value"))
+                        for c in components
+                        if (plant_active[plant0] and
+                            c.get("props").get("data-plant") == str(plant0) and
+                            c.get("props").get("className") == "lot2-size-max")
+                        }
+        try:
+            lot_size_max = float(lot_size_max_dict.get(plant0))
+        except TypeError:
+            lot_size_max = None
+        return lot_size_max
+
+    def get_lot_weight_range(plant0: int) -> tuple | None:  #&&
+        message0 = None
+        my_plant_lot_min = plant_lot_min.get(plant0)
+        my_plant_lot_max = plant_lot_max.get(plant0)
+
+        if (my_plant_lot_min is None) or (my_plant_lot_max is None):
+            message0 = "Lot weight: enter both min and max"
+            return None, message0
+
+        if my_plant_lot_min >= my_plant_lot_max:
+            message0 = "Lot weight: max has to be greater than min"
+            return None, message0  # just gíve one None for range
+
+        my_lot_weight_range = (my_plant_lot_min, my_plant_lot_max)
+        return my_lot_weight_range, message0
+
+    def check_target_in_range(plant0: int, lot_weight_range0: tuple) -> str | None:
+        message0 = None
+        my_target_value = target_values[plant0]
+        if my_target_value < lot_weight_range0[0] or my_target_value > lot_weight_range0[1]:
+            message0 = "Target production has to be in range  [lot size minimum, lot size maximum]"
+        return message0
+
     try:
-        target_values: dict[int, float] = {plant: float(c.get("props").get("children").get("props").get("value")) for plant, c in component_by_plant.items()
-                                     if plant_active[plant]}
-        targets: dict[int, ProductionTargets] = {plant: EquipmentProduction(equipment=plant, total_weight=value) for plant, value in target_values.items()}
-        changed_plants = [plant for plant, c in component_by_plant.items() if c.get("props").get("children").get("props").get("value") != c.get("props").get("data-default")
+        try:
+            target_values: dict[int, float] = {plant: float(c.get("props").get("children").get("props").get("value")) for plant, c in component_by_plant.items()
+                                         if plant_active[plant]}
+        except TypeError:
+            message = "Target production: enter a value"
+            return None, False, message
+        for target_value in target_values.values():
+            if target_value == 0:
+                message = "Target production has to be > 0"
+                return None, False, message
+        if use_lot_range:
+            # first check and return onerror
+            plant_lot_min = {plant: plant_get_lot_min(plant) for plant in plants}
+            plant_lot_max = {plant: plant_get_lot_max(plant) for plant in plants}
+            for plant in plants:
+                if plant_active[plant]:
+                    lot_weight_range, message = get_lot_weight_range(plant)
+                    if message is None:
+                        message = check_target_in_range(plant, lot_weight_range)
+                    if message is not None:
+                        break  # pass first message
+
+            if message is not None:
+                return None, False, message
+            else:
+                targets: dict[int, ProductionTargets] = {plant: EquipmentProduction(equipment=plant, total_weight=value,
+                                                        lot_weight_range=get_lot_weight_range(plant)[0] ) for plant, value in target_values.items()}
+        else:
+            targets: dict[int, ProductionTargets] = {plant: EquipmentProduction(equipment=plant, total_weight=value,
+                                                    lot_weight_range=None) for plant, value in target_values.items()}
+
+        changed_plants = [plant for plant, c in component_by_plant.items() if
+                          c.get("props").get("children").get("props").get("value") != c.get("props").get("data-default")
                           and plant_active[plant]]
-        return ProductionTargets(process=process, target_weight=targets, period=period), len(changed_plants) > 0
+
+        return ProductionTargets(process=process, target_weight=targets, period=period), len(changed_plants) > 0, message
     except ValueError:
         traceback.print_exc()
-        return None, False
+        return None, False, None
 
 
 def performance_models_from_elements(process: str, components: list[Component]|None) -> list[PlantPerformanceModel]:

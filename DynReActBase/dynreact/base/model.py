@@ -247,8 +247,10 @@ class EquipmentProduction(Model):
 
     equipment: int
     total_weight: float
-    material_weights: dict[str, float]|None = None
+    material_weights: dict[str, float] | None = None
     "Produced quantity by material class id, in t."
+    lot_weight_range: tuple[float, float] | None = None
+    "Weight restriction for lot in t"
 
 
 class ProductionTargets(Model):

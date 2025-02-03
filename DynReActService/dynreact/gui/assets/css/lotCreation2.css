@@ -115,12 +115,27 @@
     padding-bottom: 1em;
 }
 
-.lots2-plants-targets {
+.lots2-plants-targets3 {
     display: grid;
     grid-template-columns: auto auto auto;
     column-gap: 1em;
     row-gap: 0.5em;
     justify-content: start;
+}
+
+.lots2-plants-targets5 {
+    display: grid;
+    grid-template-columns: auto auto auto auto auto;
+    column-gap: 1em;
+    row-gap: 0.5em;
+    justify-content: start;
+}
+
+.lots2-lot-range-hidden {
+    visibility: hidden
+}
+
+.lot2-size-min{
 }
 
 .lots2-production-performance-split {

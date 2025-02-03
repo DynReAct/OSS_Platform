@@ -6,7 +6,6 @@ from typing import Literal, Any
 import dash
 import pandas as pd
 from dash import html, callback, Input, Output, dcc, State, no_update, clientside_callback, ClientsideFunction
-#import dash_bootstrap_components as dbc
 import plotly.express as px
 import dash_ag_grid as dash_ag
 from dash.development.base_component import Component
@@ -129,8 +128,7 @@ def layout(*args, **kwargs):
 
 
 def targets_tab(horizon: int):
-    checklist_values = []
-    checklist_dict = [{'label': 'Use lot weight range ?', 'value': 'check1'}]
+    checklist_dict = [{"label": "Use lot weight range ?", "value": ""}]
 
     return [
         html.Div([
@@ -148,7 +146,7 @@ def targets_tab(horizon: int):
                     html.Button("Initialize: lots", id="lots2-targets-init-lots", className="dynreact-button dynreact-button-small", title="Derive from currently planned lots."),
                 ], className="lots-target-buttons"),
                 html.Div(dcc.Checklist(id="lots2-check-use-lot-range",
-                                       options=checklist_dict, value=checklist_values[:], className="dynreact-checkbox")),
+                                       options=checklist_dict, value=[], className="dynreact-checkbox")),
                 html.Div(id="lots2-details-plants", className="lots2-plants-targets3"),
             ]), html.Div([
                 html.H4("Plant performance models"),
@@ -487,7 +485,7 @@ def update_plants(snapshot: str,
                   # TODO row in ltp popup selected
                   selected_rows: list[dict[str, any]]|None,
                   use_lot_range0: list[Literal[""]]
-                  ) -> [list[Component], list[any]]:
+                  ) -> tuple[list[Component], list[any]]:
     use_lot_range: bool = len(use_lot_range0) > 0
     if use_lot_range:
         my_parent_classname = "lots2-plants-targets5"
@@ -1274,11 +1272,12 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
     message = None
     if components is None:
         return None, False, None
-    component_by_plant = {plant: next((c for c in components if c.get("props").get("data-plant") == str(plant)), None) for plant in plants}
+
+    #all components for this plant
+    components_by_plant = {plant: [c for c in components if c.get("props").get("data-plant") == str(plant)] for plant in plants}
+    component_by_plant = {plant: cmps[0] if len(cmps) > 0 else None for plant, cmps in components_by_plant.items()}
     if None in component_by_plant.values():  # Need a component for every process plant # why?
         return None, False, None
-    #all components for this plant
-    components_by_plant = {plant: ((c for c in components if c.get("props").get("data-plant") == str(plant)), None) for plant in plants}
 
     def plant_included(plant0: int) -> bool:
         # the structure per plant is something like this: <checkbox/><div (plant_element)/><div data-plant=plant.id><input tons></div>,
@@ -1287,54 +1286,23 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
 
     plant_active: dict[int, bool] = {plant: plant_included(plant) for plant in plants}
 
-    def plant_get_lot_min(plant0: int) -> float | None:
-        lot_size_min_dict = {plant0: (c.get("props").get("children").get("props").get("value"))
-                             for c in components
-                             if (plant_active[plant0] and
-                                 c.get("props").get("data-plant") == str(plant0) and
-                                 c.get("props").get("className") == "lot2-size-min")
-                             }
+    def plant_get_lot_range(plant0: int) -> tuple[float|None, float|None]:
+        plant_components = components_by_plant[plant0]
+        min_component = next(c for c in plant_components if c.get("props").get("className") == "lot2-size-min")
+        max_component = next(c for c in plant_components if c.get("props").get("className") == "lot2-size-max")
+        min_val = None
+        max_val = None
         try:
-            lot_size_min = float(lot_size_min_dict.get(plant0))
+            min_val = float(min_component.get("props").get("children").get("props").get("value"))
         except TypeError:
-            lot_size_min = None
-        return lot_size_min
-
-    def plant_get_lot_max(plant0: int) -> float | None:
-        lot_size_max_dict = {plant0: (c.get("props").get("children").get("props").get("value"))
-                        for c in components
-                        if (plant_active[plant0] and
-                            c.get("props").get("data-plant") == str(plant0) and
-                            c.get("props").get("className") == "lot2-size-max")
-                        }
+            pass
         try:
-            lot_size_max = float(lot_size_max_dict.get(plant0))
+            max_val = float(max_component.get("props").get("children").get("props").get("value"))
         except TypeError:
-            lot_size_max = None
-        return lot_size_max
-
-    def get_lot_weight_range(plant0: int) -> tuple | None:  #&&
-        message0 = None
-        my_plant_lot_min = plant_lot_min.get(plant0)
-        my_plant_lot_max = plant_lot_max.get(plant0)
-
-        if (my_plant_lot_min is None) or (my_plant_lot_max is None):
-            message0 = "Lot weight: enter both min and max"
-            return None, message0
-
-        if my_plant_lot_min >= my_plant_lot_max:
-            message0 = "Lot weight: max has to be greater than min"
-            return None, message0  # just gíve one None for range
-
-        my_lot_weight_range = (my_plant_lot_min, my_plant_lot_max)
-        return my_lot_weight_range, message0
-
-    def check_target_in_range(plant0: int, lot_weight_range0: tuple) -> str | None:
-        message0 = None
-        my_target_value = target_values[plant0]
-        if my_target_value < lot_weight_range0[0] or my_target_value > lot_weight_range0[1]:
-            message0 = "Target production has to be in range  [lot size minimum, lot size maximum]"
-        return message0
+            pass
+        if max_val == 0:
+            return None, None
+        return min_val, max_val
 
     try:
         try:
@@ -1343,29 +1311,34 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
         except TypeError:
             message = "Target production: enter a value"
             return None, False, message
-        for target_value in target_values.values():
-            if target_value == 0:
-                message = "Target production has to be > 0"
-                return None, False, message
+        #for target_value in target_values.values():
+        #    if target_value == 0:
+        #        message = "Target production has to be > 0"
+        #        return None, False, message
         if use_lot_range:
             # first check and return onerror
-            plant_lot_min = {plant: plant_get_lot_min(plant) for plant in plants}
-            plant_lot_max = {plant: plant_get_lot_max(plant) for plant in plants}
-            for plant in plants:
-                if plant_active[plant]:
-                    lot_weight_range, message = get_lot_weight_range(plant)
-                    if message is None:
-                        message = check_target_in_range(plant, lot_weight_range)
-                    if message is not None:
-                        break  # pass first message
-
+            plant_lot_ranges: dict[int, tuple[float|None, float|None]] = {plant: plant_get_lot_range(plant) for plant in plants if plant_active[plant]}
+            for_removal: list[int] = []
+            for plant, lot_range in plant_lot_ranges.items():
+                has_min = lot_range[0] is not None
+                has_max = lot_range[1] is not None
+                if has_min != has_max:
+                    message = f"Lot range: only min or max has been set for plant {plant}"
+                    break
+                if lot_range[1] >= lot_range[0]:
+                    message = f"Lot range: max has to be greater than min: min={lot_range[0]}, max={lot_range[1]}"
+                    break
+                if not has_min:
+                    for_removal.append(plant)
             if message is not None:
                 return None, False, message
             else:
-                targets: dict[int, ProductionTargets] = {plant: EquipmentProduction(equipment=plant, total_weight=value,
-                                                        lot_weight_range=get_lot_weight_range(plant)[0] ) for plant, value in target_values.items()}
+                for plant in for_removal:
+                    plant_lot_ranges.pop(plant)
+                targets: dict[int, EquipmentProduction] = {plant: EquipmentProduction(equipment=plant, total_weight=value,
+                                                        lot_weight_range=plant_lot_ranges[plant]) for plant, value in target_values.items()}
         else:
-            targets: dict[int, ProductionTargets] = {plant: EquipmentProduction(equipment=plant, total_weight=value,
+            targets: dict[int, EquipmentProduction] = {plant: EquipmentProduction(equipment=plant, total_weight=value,
                                                     lot_weight_range=None) for plant, value in target_values.items()}
 
         changed_plants = [plant for plant, c in component_by_plant.items() if
@@ -1373,9 +1346,9 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
                           and plant_active[plant]]
 
         return ProductionTargets(process=process, target_weight=targets, period=period), len(changed_plants) > 0, message
-    except ValueError:
+    except ValueError as e:
         traceback.print_exc()
-        return None, False, None
+        return None, False, str(e)
 
 
 def performance_models_from_elements(process: str, components: list[Component]|None) -> list[PlantPerformanceModel]:
@@ -1417,4 +1390,5 @@ class KillableOptimizationThread(threading.Thread):
 
     def run(self):
         return self._optimization.run(max_iterations=self._iterations)
+
 

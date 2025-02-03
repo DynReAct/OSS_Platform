@@ -226,9 +226,11 @@ class EquipmentStatus(Model, Generic[P]):
     equipment: int
     target_weight: float
     "Target weight in t for this equipment"
+    target_lot_size: tuple[float, float]|None = None
+    "Target lot sizes (min, max) in t for this equipment"
     snapshot_id: datetime
     planning_period: tuple[datetime, datetime]
-    current_order: str|None  = None
+    current_order: str|None = None
     "Current order id"
     previous_order: str | None = None
     "Previous order id"
@@ -252,7 +254,14 @@ class ObjectiveFunction(Model, extra="allow"):
 
     total_value: float
     "The overall objective function value"
-
+    lots_count: float|None=None
+    "Penalty for number of lots"
+    transition_costs: float|None=None
+    "Penalty for order to order transitions"
+    weight_deviation: float|None=None
+    "Penalty for deviating from the targeted production size"
+    lot_size_deviation: float|None = None
+    "Penalty for deviating from the targeted lot sizes"
 
 
 class EquipmentProduction(Model):
@@ -262,7 +271,7 @@ class EquipmentProduction(Model):
     material_weights: dict[str, float] | None = None
     "Produced quantity by material class id, in t."
     lot_weight_range: tuple[float, float] | None = None
-    "Weight restriction for lot in t"
+    "Weight restriction for lots in t"
 
 
 class ProductionTargets(Model):
@@ -295,6 +304,7 @@ class OrderAssignment(Model):  # base for SolutionElement
     lot_idx: int
 
 
+# TODO add lot weight targets to get_targets() return value
 class ProductionPlanning(Model, Generic[P]):
     """
     The optimization needs to generate an object of this type

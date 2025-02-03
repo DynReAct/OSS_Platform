@@ -41,14 +41,16 @@ class CostProvider:
 
         status: dict[int, EquipmentStatus] = \
             {plant.id: self.evaluate_equipment_assignments(plant.id, process, assignments, snapshot, targets.period,
-                                                           targets.target_weight.get(plant.id, EquipmentProduction(equipment=0, total_weight=0.0)).total_weight) for plant in plants}
+                                                           targets.target_weight.get(plant.id).total_weight,
+                                                           target_lot_size=targets.target_weight.get(plant.id).lot_weight_range) for plant in plants}
         order_assignments = {o: ass for o, ass in assignments.items() if ass.equipment in plant_ids}
         unassigned = {o: ass for o, ass in assignments.items() if ass.equipment < 0}
         order_assignments.update(unassigned)
         return ProductionPlanning(process=process, order_assignments=order_assignments, equipment_status=status)
 
     def evaluate_equipment_assignments(self, equipment: id, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
-                                       planning_period: tuple[datetime, datetime], target_weight: float, min_due_date: datetime|None=None,
+                                       planning_period: tuple[datetime, datetime], target_weight: float,
+                                       target_lot_size: tuple[float, float]|None=None, min_due_date: datetime|None=None,
                                        current_material: list[Material] | None=None) -> EquipmentStatus:
         """
         Main function to be implemented in derived class taking into account global status.

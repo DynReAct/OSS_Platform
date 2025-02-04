@@ -44,14 +44,14 @@ P = TypeVar("P", bound=PlanningData)
 class LotsOptimizationState(Generic[P]):
 
     def __init__(self, current_solution: ProductionPlanning[P], current_objective_value: ObjectiveFunction,
-                 best_solution: ProductionPlanning[P], best_objective_value: float,
+                 best_solution: ProductionPlanning[P], best_objective_value: ObjectiveFunction,
                  num_iterations: int=0,  # deprecated
                  history: list[ObjectiveFunction]|None = None,
                  parameters: dict[str, any]|None = None):
         self.current_solution: ProductionPlanning[P] = current_solution
         self.current_object_value: ObjectiveFunction = current_objective_value
         self.best_solution: ProductionPlanning[P] = best_solution
-        self.best_objective_value: float = best_objective_value
+        self.best_objective_value: ObjectiveFunction = best_objective_value
         self.num_iterations: int = num_iterations
         "deprecated"
         self.history: list[ObjectiveFunction] = list(history) if history is not None else [current_objective_value]
@@ -103,7 +103,7 @@ class LotsOptimizer(Generic[P]):
         best_costs = initial_costs if best_solution is None else costs.process_objective_function(best_solution)
         best_solution = initial_solution if best_solution is None else best_solution
         initial_costs_value = initial_costs.total_value if initial_costs is not None else None
-        best_costs_value = best_costs.total_value if best_costs is not None else None
+        best_costs_value = best_costs
         history = [initial_costs] if history is None and initial_costs is not None else history if history is not None else []
         # state
         self._state: LotsOptimizationState[P] = LotsOptimizationState(current_solution=initial_solution, best_solution=best_solution,

@@ -17,15 +17,15 @@ class FrontendOptimizationListener(OptimizationListener):
 
     def update_solution(self, planning: ProductionPlanning, objective_value: ObjectiveFunction):
         if self._state is None:
-            self._state = LotsOptimizationState(planning, objective_value, planning, objective_value.total_value, history=[objective_value],
+            self._state = LotsOptimizationState(planning, objective_value, planning, objective_value, history=[objective_value],
                                                 parameters=self._parameters)
         else:
             self._state.current_solution = planning
             self._state.current_object_value = objective_value
             self._state.history.append(objective_value)
-            if objective_value.total_value < self._state.best_objective_value:
+            if objective_value.total_value < self._state.best_objective_value.total_value:
                 self._state.best_solution = planning
-                self._state.best_objective_value = objective_value.total_value
+                self._state.best_objective_value = objective_value
         if self._store_results and self._persistence is not None:
             self._persistence.store(self._id, self._state)
 

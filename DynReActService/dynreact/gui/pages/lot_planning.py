@@ -1,7 +1,7 @@
 import threading
 import traceback
 from datetime import datetime, date
-from typing import Iterable
+from typing import Iterable, Any
 import uuid
 
 import dash
@@ -54,20 +54,7 @@ def layout(*args, **kwargs):
         html.Div(
             dash_ag.AgGrid(
                 id="plan-solutions-table",
-                columnDefs=[{"field": "id", "pinned": True},
-                            {"field": "target_production", "filter": "agNumberColumnFilter", "headerName": "Target Production / t"},
-                            {"field": "initialization"},
-                            {"field": "target_fct", "filter": "agNumberColumnFilter", "headerName": "Target function",
-                                "headerTooltip": "Value of the objective function. The lower the better, but results are only comparable for the same target weights and init settings."},
-                            {"field": "iterations", "filter": "agNumberColumnFilter"},
-                            {"field": "orders_considered", "filter": "agNumberColumnFilter", "headerName": "Orders",
-                                "headerTooltip": "Number of orders considered in the lot creation, including those not assigned to a lot."},
-                            {"field": "lots", "filter": "agNumberColumnFilter"},
-                            {"field": "plants" },
-                            {"field": "comment"},
-                            {"field": "transition_costs", "filter": "agNumberColumnFilter", "headerName": "Transition costs"},
-                            {"field": "performance_models", "headerName": "Performance models", "headerTooltip": "Plant performance models considered"},
-                ],
+                columnDefs=[],
                 defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
                 rowData=[],
                 getRowId="params.data.id",
@@ -197,6 +184,7 @@ def update_link(snapshot: str|datetime|None, process: str|None) -> str:
 
 
 @callback(
+    Output("plan-solutions-table", "columnDefs"),
     Output("plan-solutions-table", "rowData"),
     State("selected-snapshot", "data"),
     Input("process-selector-lotplanning", "value"),
@@ -206,8 +194,23 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
     if not dash_authenticated(config):
         return []
     snapshot = DatetimeUtils.parse_date(snapshot)
+    col_defs: list[dict[str, Any]] = [{"field": "id", "pinned": True},
+         {"field": "target_production", "filter": "agNumberColumnFilter", "headerName": "Target Production / t"},
+         {"field": "initialization"},
+         {"field": "target_fct", "filter": "agNumberColumnFilter", "headerName": "Target function",
+          "headerTooltip": "Value of the objective function. The lower the better, but results are only comparable for the same target weights and init settings."},
+         {"field": "iterations", "filter": "agNumberColumnFilter"},
+         {"field": "orders_considered", "filter": "agNumberColumnFilter", "headerName": "Orders",
+          "headerTooltip": "Number of orders considered in the lot creation, including those not assigned to a lot."},
+         {"field": "lots", "filter": "agNumberColumnFilter"},
+         {"field": "plants"},
+         {"field": "comment"},
+         #{"field": "transition_costs", "filter": "agNumberColumnFilter", "headerName": "Transition costs"},
+         {"field": "performance_models", "headerName": "Performance models",
+          "headerTooltip": "Plant performance models considered"},
+    ]
     if snapshot is None or process is None:
-        return []
+        return col_defs, []
     persistence = state.get_results_persistence()
     solutions: list[str] = persistence.solutions(snapshot, process)
     sol_objects: dict[str, LotsOptimizationState] = {sol: persistence.load(snapshot, process, sol) for sol in solutions}
@@ -215,7 +218,7 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
     snap_objective: ObjectiveFunction = state.get_cost_provider().process_objective_function(snap_planning)
     total_production = sum(t.total_weight for t in snap_targets.target_weight.values())
     sol_objects["_SNAPSHOT_"] = LotsOptimizationState(best_solution=snap_planning, current_solution=snap_planning,
-                        best_objective_value=snap_objective.total_value, current_objective_value=snap_objective,
+                        best_objective_value=snap_objective, current_objective_value=snap_objective,
                         parameters={"targets": "snapshot", "initialization": "planning", "target_production": total_production})
     # dd_planning, dd_targets = state.get_due_date_solution(process, snapshot)
     # dd_objective = state.get_cost_provider().process_objective_function(dd_planning)
@@ -229,20 +232,33 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
     plant_statuses: dict[str, list[EquipmentStatus]] = {sol: list(planning.equipment_status.values()) for sol, planning in best_planning.items()}
     site = state.get_site()
 
-    return [{
+    random_sol = next(value for key, value in sol_objects.items() if key != "_SNAPSHOT_" or len(sol_objects) <= 1)
+    objective_keys = [f for f in random_sol.current_object_value.model_fields.keys() if f != "total_value"]
+    col_defs.extend([{"field": f, "filter": "agNumberColumnFilter"} for f in objective_keys])
+
+    def merge_dicts(d1: dict, d2: dict) -> dict:
+        d1.update(d2)
+        return d1
+    row_data = [merge_dicts({
         "id": sol_id,
         "comment": params[sol_id].get("comment"),
         "target_production": params[sol_id].get("target_production"),
         "initialization": params[sol_id].get("initialization"),
-        "target_fct": sol_objects[sol_id].best_objective_value,
-        "iterations": len(sol_objects[sol_id].history),
+        "target_fct": solution.best_objective_value.total_value,
+        "iterations": len(solution.history),
         "orders_considered": len(best_planning[sol_id].order_assignments),
         "lots": sum(status.planning.lots_count if status.planning is not None else 0 for status in plant_statuses[sol_id]),
         "plants": [site.get_equipment(status.equipment).name_short for status in plant_statuses[sol_id]],
-        "transition_costs": sum(status.planning.transition_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
+        #"transition_costs": sum(status.planning.transition_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
         #"weight_costs": sum(status.planning.delta_weight * delta_weight_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
         "performance_models": params[sol_id].get("performance_models")
-    } for sol_id, solution in sol_objects.items()]
+    },
+       {key: (getattr(solution.best_objective_value, key) if hasattr(solution.best_objective_value, key) else 0) or 0 for key in objective_keys })
+                for sol_id, solution in sol_objects.items()]
+
+
+
+    return col_defs, row_data
 
 
 @callback(

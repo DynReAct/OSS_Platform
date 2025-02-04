@@ -19,7 +19,7 @@ class LotsOptimizationStateModel(BaseModel):
     current_solution: ProductionPlanning
     current_object_value: ObjectiveFunction
     best_solution: ProductionPlanning
-    best_objective_value: float
+    best_objective_value: ObjectiveFunction
     #num_iterations: int
     history: list[ObjectiveFunction]
     parameters: dict[str, Any] | None = None

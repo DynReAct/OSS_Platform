@@ -82,7 +82,7 @@ class TabuSearch(LotsOptimizer):
             self._state.current_object_value = objective
             if best_is_current:
                 self._state.best_solution = planning
-                self._state.best_objective_value = objective.total_value
+                self._state.best_objective_value = objective
         return initial_plant_assignments
 
     def run(self, max_iterations: int|None = None, debug: bool=False) -> LotsOptimizationState:
@@ -110,12 +110,12 @@ class TabuSearch(LotsOptimizer):
         if target_vbest != self._state.history[-1].total_value:
             self._state.history.append(target_vbest0)
         vbest_global: ProductionPlanning = self._state.best_solution
-        target_vbest_global: float = self._state.best_objective_value
+        target_vbest_global: float = self._state.best_objective_value.total_value
         if target_vbest < target_vbest_global:
             vbest_global = vbest
             target_vbest_global = target_vbest
             self._state.best_solution = vbest
-            self._state.best_objective_value = target_vbest
+            self._state.best_objective_value = target_vbest0
         interrupted: bool = False
         for listener in self._listeners:
             listener.update_solution(self._state.current_solution, self._state.current_object_value)
@@ -129,7 +129,7 @@ class TabuSearch(LotsOptimizer):
                 self._state.current_solution = vbest
                 self._state.best_solution = vbest
                 self._state.current_object_value = target_vbest0
-                self._state.best_objective_value = target_vbest
+                self._state.best_objective_value = target_vbest0
                 if target_vbest != self._state.history[-1].total_value:
                     self._state.history.append(target_vbest0)
                 # optimal solution found
@@ -163,7 +163,7 @@ class TabuSearch(LotsOptimizer):
                 self._state.history.append(target_sval0)
                 if target_sval < target_vbest_global:
                     self._state.best_solution = vbest
-                    self._state.best_objective_value = target_sval
+                    self._state.best_objective_value = target_sval0
                     target_vbest_global = target_vbest
                     vbest_global = vbest
                     #if self._params.InstantSaveMinimum:
@@ -238,7 +238,7 @@ class TabuSearch(LotsOptimizer):
             self._state.best_solution = vbest
             self._state.current_object_value = target_vbest0
             self._state.history.append(target_vbest0)
-            self._state.best_objective_value = target_vbest
+            self._state.best_objective_value = target_vbest0
 
         for listener in self._listeners:
             listener._completed()

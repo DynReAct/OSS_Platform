@@ -82,7 +82,7 @@ class CostProvider:
 
     def objective_function(self, status: EquipmentStatus) -> ObjectiveFunction:
         "Evaluate the target/objective function for a specific plant status"
-        return ObjectiveFunction(total_value=status.planning.target_fct)  # assuming this has been set previously in the order_assignment_status method above!
+        raise Exception("not implemented")
 
     def process_objective_function(self, planning: ProductionPlanning) -> ObjectiveFunction:
         """
@@ -154,7 +154,7 @@ class CostProvider:
     @staticmethod
     def sum_objectives(objective_functions:list[ObjectiveFunction]) -> ObjectiveFunction:
         all_fields: set[str] = {field for obj in objective_functions for field in obj.model_fields_set}
-        field_values = {field: sum(getattr(o, field) if hasattr(o, field) else 0 for o in objective_functions) for field in all_fields}
+        field_values = {field: sum(getattr(o, field) or 0 if hasattr(o, field) else 0 for o in objective_functions) for field in all_fields}
         if "total_value" not in field_values:
             field_values["total_value"] = 0
         result = ObjectiveFunction(**field_values)

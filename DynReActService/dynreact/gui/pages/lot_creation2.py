@@ -31,26 +31,16 @@ from dynreact.gui.pages.optimization_listener import FrontendOptimizationListene
 dash.register_page(__name__, path="/lots/create2")
 translations_key = "lots2"
 
-# TODO we might move the optimization to a dedicated class OptimizationController,
-# possibly with an endpoint for querying the current state
 lot_creation_thread_name = "lot-creation"
 lot_creation_thread: threading.Thread|None = None
 lot_creation_listener: FrontendOptimizationListener|None = None
 
-# TODO store optimization results and provide option to load existing result
-# TODO on start, display already the initialization setup!
-# TODO proper handling of start lots/orders (possible at all?)
-
+# TODO proper handling of start lots/orders
 # TODO option to record optimizaiton history including lots information and possibility to replay/step to specific optimization steps
-# TODO run and stop optimization
 # TODO option to initialize optimization from existing result
-# TODO visualize loss function
 # TODO swimlane visualization
-# TODO: ensure to reset targets, orders and optimization parameters on change of process (orders also on snapshot changes)
 # TODO backlog lots operations: highlight if lots are active or not, show comment maybe?
-# TODO initialize order => after method selection, display information about number and tons of affected orders prior to submit
 # TODO init method existing solution
-# TODO targets init buttons non-functional
 # TODO: use LongTermPlanning and MidTermPlanning classes for targets
 def layout(*args, **kwargs):
     process: str|None = kwargs.get("process")  # TODO use store from main layout instead?
@@ -1325,7 +1315,7 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
                 if has_min != has_max:
                     message = f"Lot range: only min or max has been set for plant {plant}"
                     break
-                if lot_range[1] >= lot_range[0]:
+                if lot_range[1] <= lot_range[0]:
                     message = f"Lot range: max has to be greater than min: min={lot_range[0]}, max={lot_range[1]}"
                     break
                 if not has_min:

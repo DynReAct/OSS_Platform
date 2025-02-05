@@ -118,7 +118,8 @@ def layout(*args, **kwargs):
 
 
 def targets_tab(horizon: int):
-    checklist_dict = [{"label": "Use lot weight range ?", "value": ""}]
+    #checklist_dict = [{"label": "Use lot weight range ?", "value": ""}]
+    checklist_dict = [{"value": ""}]    # unchecked
 
     return [
         html.Div([
@@ -135,8 +136,11 @@ def targets_tab(horizon: int):
                     html.Button("Initialize: LTP", id="lots2-targets-init-ltp", className="dynreact-button dynreact-button-small", title="Derive from long term planning."),
                     html.Button("Initialize: lots", id="lots2-targets-init-lots", className="dynreact-button dynreact-button-small", title="Derive from currently planned lots."),
                 ], className="lots-target-buttons"),
-                html.Div(dcc.Checklist(id="lots2-check-use-lot-range",
-                                       options=checklist_dict, value=[], className="dynreact-checkbox")),
+                html.Div([
+                    html.Div(dcc.Checklist(id="lots2-check-use-lot-range",
+                                           options=checklist_dict, value=[], className="lots2-checkbox")),
+                    html.Div("Use lot weight range ?"),
+                ], className="lots2-use-range-checkbox"),
                 html.Div(id="lots2-details-plants", className="lots2-plants-targets3"),
             ]), html.Div([
                 html.H4("Plant performance models"),
@@ -481,13 +485,15 @@ def update_plants(snapshot: str,
         my_parent_classname = "lots2-plants-targets5"
     else:
         my_parent_classname = "lots2-plants-targets3"
+
     if not dash_authenticated(config) or process is None or snapshot is None:
         return None, my_parent_classname
     if active_tab != "targets":
         return no_update, my_parent_classname
     changed = GuiUtils.changed_ids()
     is_ltp_init = "lots2-ltp-table" in changed and len(selected_rows) > 0
-    re_init: bool = "lots2-targets-init-lots" in changed or "lots2-check-use-lot-range" in changed or is_ltp_init
+    re_init: bool = "lots2-targets-init-lots" in changed or is_ltp_init
+    toggle_lot_range: bool = "lots2-check-use-lot-range" in changed
     snapshot = DatetimeUtils.parse_date(snapshot)
     plants: list[Equipment] = state.get_site().get_process_equipment(process)
     elements = []
@@ -500,6 +506,7 @@ def update_plants(snapshot: str,
     target_weights: dict[int, float] = {plant: t.total_weight for plant, t in targets.target_weight.items()}
     for plant in plants:
         if components is not None and not re_init:
+            # get vals from components
             existing = next((c for c in components if c.get("props").get("data-plant") == str(plant.id)), None)
             if existing is not None:
                 existing_index = components.index(existing)
@@ -507,14 +514,31 @@ def update_plants(snapshot: str,
                 elements.append(components[existing_index - 1])
                 elements.append(existing)
                 if use_lot_range:
+                    div2 = html.Div(
+                        dcc.Input(type="number", min="0", value=str(0), placeholder="Lot size minimum in t"),
+                        title="Lot size minimum in t", className="lot2-size-min",
+                        style={'display': 'block'},
+                        **{"data-plant": str(plant.id), "data-default": str(0)})
+
+                    div3 = html.Div(
+                        dcc.Input(type="number", min="0", value=str(0), placeholder="Lot size maximum in t"),
+                        title="Lot size maximum in t", className="lot2-size-max",
+                        style={'display': 'block'},
+                        **{"data-plant": str(plant.id), "data-default": str(0)})
+
+                    found_in_components = False
                     for c in components:
                         if c.get("props").get("data-plant") == str(plant.id):
                             if c.get("props").get("className") == "lot2-size-min":
                                 elements.append(c)
+                                found_in_components = True
                             if c.get("props").get("className") == "lot2-size-max":
                                 elements.append(c)
+                    if not found_in_components:  # append empty elements
+                        elements.append(div2)
+                        elements.append(div3)
                 continue
-
+        # set start vals
         target = round(target_weights.get(plant.id, 0))
         checkbox = html.Div(dcc.Checklist(options=[""], value=[""] if target > 0 else []),
                             title="Include plant " + str(plant.name_short if plant.name_short is not None else plant.id) + " in planning?")
@@ -523,31 +547,21 @@ def update_plants(snapshot: str,
         div = html.Div(dcc.Input(type="number", min="0", value=str(target), placeholder="Target production in t"),
                        title="Target production in t", className="create-plant-input", **{"data-plant": str(plant.id), "data-default": str(target) })
         elements.append(div)
-        if use_lot_range:   #visible
-            div2 = html.Div(dcc.Input(type="number", min="0", value=str(target), placeholder="Lot size minimum in t"),
+        if use_lot_range:   # visible
+            div2 = html.Div(dcc.Input(type="number", min="0", value=str(0), placeholder="Lot size minimum in t"),
                             title="Lot size minimum in t", className="lot2-size-min",
                             style={'display': 'block'},
                             **{"data-plant": str(plant.id), "data-default": str(target)})
 
-            div3 = html.Div(dcc.Input(type="number", min="0", value=str(target), placeholder="Lot size maximum in t"),
+            div3 = html.Div(dcc.Input(type="number", min="0", value=str(0), placeholder="Lot size maximum in t"),
                             title="Lot size maximum in t", className="lot2-size-max",
                             style={'display': 'block'},
                             **{"data-plant": str(plant.id), "data-default": str(target)})
-        else:  #hidden
-            div2 = html.Div(dcc.Input(type="number", min="0", value=str(target), placeholder="0"),
-                            title="Lot size minimum in t", className="lot2-size-min", # "lots2-lot-range-hidden",
-                            style={'display': 'none'},
-                            **{"data-plant": str(plant.id), "data-default": str(target)})
-
-            div3 = html.Div(dcc.Input(type="number", min="0", value=str(target), placeholder="Lot size maximum in t"),
-                            title="Lot size maximum in t", className="lot2-size-max", # "lots2-lot-range-hidden",
-                            style={'display': 'none'},
-                            **{"data-plant": str(plant.id), "data-default": str(target)})
-        elements.append(div2)
-        elements.append(div3)
-        #checkbox = dcc.Input(type="checkbox", checked=target>0, title="Include plant in planning?")
+            elements.append(div2)
+            elements.append(div3)
 
     # TODO display total tonnes
+    # my_parent_classname for formatting purpose
     return elements, my_parent_classname
 
 
@@ -827,6 +841,19 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7, order
         plant_idx = plants.index(o.current_equipment[0]) if o.current_equipment is not None and o.current_equipment[0] in plants else len(plants)
         return plant_idx
 
+    # && filter orders matching for selected process
+    # current_process_index                                   # index of curr process 1,2,3
+    current_process_plants = process_plants[current_process_index]  # list plant indices of curr process
+    orders_filtered_idx = []
+    print('loc 845 ', current_process_index, current_process_plants)
+    for idx, order in enumerate(snapshot_obj.orders):
+        print('loc 847 ', order.allowed_equipment)
+        if any(order in current_process_plants for order in order.allowed_equipment):
+            print('show_order ', idx)
+            orders_filtered_idx.append(idx)
+    print('loc 855 ', orders_filtered_idx)
+    orders_filtered = [snapshot_obj.orders[idx] for idx in orders_filtered_idx]
+    #print('loc 854 ', orders_filtered)
     orders_sorted = sorted(snapshot_obj.orders, key=process_index_for_order)
     selected_ids: list[str] = new_selected_rows["ids"]
     weight = sum(o.actual_weight for o in orders_sorted if o.id in selected_ids)

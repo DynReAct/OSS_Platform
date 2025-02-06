@@ -76,7 +76,7 @@ def layout(*args, **kwargs):
         lots_view("planning", *args, **kwargs),
         html.Div([
             html.H2("Lots"),
-            html.Button("Download csv", id="download-csv", className="dynreact-button"),
+            html.Button("Download lots csv", id="download-csv", className="dynreact-button"),
             html.Br(),html.Br(),
             html.Div(
                 dash_ag.AgGrid(
@@ -103,6 +103,8 @@ def layout(*args, **kwargs):
                 )
             ),
             html.H2("Orders"),
+            html.Button("Download orders csv", id="download-orders-csv", className="dynreact-button"),
+            html.Br(), html.Br(),
             html.Div(
                 dash_ag.AgGrid(
                     id="planning-lots-order-table",
@@ -403,6 +405,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
     return False, data, data, False, fields, order_rows
 
 
+# Lots export
 @callback(
     Output("planning-lots-table", "exportDataAsCsv"),
     Output("planning-lots-table", "csvExportParams"),
@@ -415,11 +418,35 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
 def export_data_as_csv(n_clicks, snapshot: str|None, process: str|None, solution: str|None):
     snapshot = DatetimeUtils.parse_date(snapshot)
     if not dash_authenticated(config) or process is None or snapshot is None or solution is None:
-        return True, None, None, True
+        return True, None
     filename = "lots_" + process + "_" + \
                DatetimeUtils.format(snapshot).replace("+0000","").replace(":", "").replace("-", "").replace("T", "") + \
                "_" + solution.replace("\\", "_").replace("/", "_").replace(":", "_") + ".csv"
-    options = {"fileName": filename }
+    options = {"fileName": filename, "columnSeparator": ";" }
+
+
+    return True, options
+
+
+# Orders with lot information export
+@callback(
+    Output("planning-lots-order-table", "exportDataAsCsv"),
+    Output("planning-lots-order-table", "csvExportParams"),
+    Input("download-orders-csv", "n_clicks"),
+    State("selected-snapshot", "data"),
+    State("process-selector-lotplanning", "value"),
+    State("planning-selected-solution", "data"),
+    prevent_initial_call=True,
+)
+def export_order_data_as_csv(n_clicks, snapshot: str|None, process: str|None, solution: str|None):
+    snapshot = DatetimeUtils.parse_date(snapshot)
+    if not dash_authenticated(config) or process is None or snapshot is None or solution is None:
+        return False, None
+    filename = "orders_lots_" + process + "_" + \
+               DatetimeUtils.format(snapshot).replace("+0000","").replace(":", "").replace("-", "").replace("T", "") + \
+               "_" + solution.replace("\\", "_").replace("/", "_").replace(":", "_") + ".csv"
+    options = {"fileName": filename, "columnSeparator": ";"}
+    # TODO columns selector
     return True, options
 
 

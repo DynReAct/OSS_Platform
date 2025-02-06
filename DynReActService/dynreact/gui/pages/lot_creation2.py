@@ -845,13 +845,9 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7, order
     # current_process_index                                   # index of curr process 1,2,3
     current_process_plants = process_plants[current_process_index]  # list plant indices of curr process
     orders_filtered_idx = []
-    print('loc 845 ', current_process_index, current_process_plants)
     for idx, order in enumerate(snapshot_obj.orders):
-        print('loc 847 ', order.allowed_equipment)
         if any(order in current_process_plants for order in order.allowed_equipment):
-            print('show_order ', idx)
             orders_filtered_idx.append(idx)
-    print('loc 855 ', orders_filtered_idx)
     orders_filtered = [snapshot_obj.orders[idx] for idx in orders_filtered_idx]
     #print('loc 854 ', orders_filtered)
     orders_sorted = sorted(snapshot_obj.orders, key=process_index_for_order)

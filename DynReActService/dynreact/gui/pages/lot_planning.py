@@ -7,6 +7,7 @@ import uuid
 import dash
 from dash import html, callback, Input, Output, dcc, State, clientside_callback, ClientsideFunction
 import dash_ag_grid as dash_ag
+from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
 from dynreact.base.LotSink import LotSink
@@ -343,8 +344,12 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
     data = sorted([row_for_lot(lot) for lot in lots], key=lambda lot: lot["id"])
 
     def column_def_for_field(field: str, info: FieldInfo):
-        filter_id = "agNumberColumnFilter" if info.annotation == float or info.annotation == int else \
-            "agDateColumnFilter" if info.annotation == datetime or info.annotation == date else "agTextColumnFilter"
+        if isinstance(info, FieldInfo):
+            filter_id = "agNumberColumnFilter" if info.annotation == float or info.annotation == int else \
+                "agDateColumnFilter" if info.annotation == datetime or info.annotation == date else "agTextColumnFilter"
+        else:
+            filter_id = "agNumberColumnFilter" if isinstance(info, float) else \
+                "agDateColumnFilter" if isinstance(info, datetime) or isinstance(info, date) else "agTextColumnFilter"
         col_def = {"field": field, "filter": filter_id}
         return col_def
 
@@ -357,7 +362,10 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
     if relevant_fields is not None:
         l = len("order.material_properties.")
         relevant_fields = [f[l:] for f in relevant_fields if f.startswith("order.material_properties.")]
-    fields_0 = dict(sorted(props.model_fields.items(), key=lambda item: relevant_fields.index(item[0]) if item[0] in relevant_fields else len(relevant_fields))) \
+    if isinstance(props, dict):
+        fields_0 = props  # TODO sort according to relevant fields info
+    else:
+        fields_0 = dict(sorted(props.model_fields.items(), key=lambda item: relevant_fields.index(item[0]) if item[0] in relevant_fields else len(relevant_fields))) \
                       if relevant_fields is not None else props.model_fields
     fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True},
                 {"field": "costs", "headerTooltip": "Transition costs from previous order."},
@@ -372,7 +380,8 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         nonlocal last_plant
         nonlocal last_order
         nonlocal plant_obj
-        as_dict = o.material_properties.model_dump(exclude_none=True, exclude_unset=True)
+        as_dict = o.material_properties.model_dump(exclude_none=True, exclude_unset=True) if isinstance(o.material_properties, BaseModel) \
+            else o.material_properties
         as_dict["order"] = o.id
         as_dict["lot"] = lot or ""
         as_dict["weight"] = o.actual_weight

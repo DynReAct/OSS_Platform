@@ -151,6 +151,7 @@ def targets_tab(horizon: int):
 
 
 def orders_tab():
+    checklist_dict = [{"value": ""}]    # unchecked
     return [
         html.H4("Order backlog", title="Select orders for scheduling from the order backlog."),
 
@@ -225,7 +226,12 @@ def orders_tab():
                     #html.Div(html.Button("Reset", id="lots2-orders-backlog-reset", className="dynreact-button dynreact-button-small"),
                     #         title="Reset order backlog to default selection"),
                     # TODO html.Div(html.Button("Undo", id="create-orders-backlog-undo", className="dynreact-button"))
-                ], className="lots2-orders-backlog-settings-buttons")
+                ], className="lots2-orders-backlog-settings-buttons"),
+                html.Div([
+                    html.Div(dcc.Checklist(id="lots2-orders-show-all",
+                                           options=checklist_dict, value=[], className="lots2-checkbox")),
+                    html.Div("Show all orders"),
+                ], className="lots2-orders-show-all-checkbox"),
             ]) #, id="lots2-orders-backlog-settings")
         ], className="lots2-orders-grouped-menu"),
         html.Br(),
@@ -698,6 +704,7 @@ def lot_buttons_disabled_check(selected_lots: list[str]|None, selected_rows: lis
             Input("lots2-orders-backlog-add-logs", "n_clicks"),
             Input("lots2-orders-backlog-rm-logs", "n_clicks"),
             Input("lots2-orders-backlog-update", "n_clicks"),  # the only purpose of this guy is to update the displayed number of selected orders and accumulated weight
+            Input("lots2-orders-show-all", "value"),
             State("lots2-orders-data", "data"),
             State("lots2-oders-lots-lots", "value"),
             State("lots2-orders-table", "selectedRows"),
@@ -709,7 +716,8 @@ def lot_buttons_disabled_check(selected_lots: list[str]|None, selected_rows: lis
             State("lots2-init-submenu-alllots-value", "value"),
             State("lots2-init-submenu-activelots-value", "value"),
 )
-def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7, orders_data: dict[str, str]|None, selected_lots: list[str],
+def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7, orders_show_all: list[Literal[""]],
+                  orders_data: dict[str, str]|None, selected_lots: list[str],
                   selected_rows: list[dict[str, any]]|None, filtered_rows: list[dict[str, any]]|None, horizon_hours: int,
                   init_method: Literal["active_process", "active_plant", "inactive_lots", "active_lots", "current_planning"]|None,
                   processed_lots: list[Literal[""]], all_lots_value: list[Literal[""]], active_lots_value: list[Literal[""]]):
@@ -723,6 +731,7 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7, order
     changed_ids: list[str] = GuiUtils.changed_ids()
     is_clear_command: bool = "lots2-orders-backlog-clear" in changed_ids
     is_init_command: bool = "lots2-orders-backlog-init" in changed_ids
+    is_orders_show_all: bool = len(orders_show_all) > 0
     update_selection: bool = orders_data is None or orders_data.get("process") != process \
                              or orders_data.get("snapshot") != snapshot_serialized
     if update_selection:
@@ -841,16 +850,17 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7, order
         plant_idx = plants.index(o.current_equipment[0]) if o.current_equipment is not None and o.current_equipment[0] in plants else len(plants)
         return plant_idx
 
-    # && filter orders matching for selected process
-    # current_process_index                                   # index of curr process 1,2,3
-    current_process_plants = process_plants[current_process_index]  # list plant indices of curr process
-    orders_filtered_idx = []
-    for idx, order in enumerate(snapshot_obj.orders):
-        if any(order in current_process_plants for order in order.allowed_equipment):
-            orders_filtered_idx.append(idx)
-    orders_filtered = [snapshot_obj.orders[idx] for idx in orders_filtered_idx]
-    #print('loc 854 ', orders_filtered)
-    orders_sorted = sorted(snapshot_obj.orders, key=process_index_for_order)
+    if not is_orders_show_all:
+        # filter orders matching for selected process
+        current_process_plants = process_plants[current_process_index]
+        orders_filtered_idx = []
+        for idx, order in enumerate(snapshot_obj.orders):
+            if any(order in current_process_plants for order in order.allowed_equipment):
+                orders_filtered_idx.append(idx)
+        orders_filtered = [snapshot_obj.orders[idx] for idx in orders_filtered_idx]
+        orders_sorted = sorted(orders_filtered, key=process_index_for_order)
+    else:
+        orders_sorted = sorted(snapshot_obj.orders, key=process_index_for_order)
     selected_ids: list[str] = new_selected_rows["ids"]
     weight = sum(o.actual_weight for o in orders_sorted if o.id in selected_ids)
     orders_data["orders_selected_cnt"] = len(selected_ids)

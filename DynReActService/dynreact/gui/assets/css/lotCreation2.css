@@ -135,7 +135,16 @@
     visibility: hidden
 }
 
-.lot2-size-min{
+.lots2-use-range-checkbox {
+    display: grid;
+    grid-template-columns: auto auto;
+    column-gap: 1em;
+    row-gap: 0.5em;
+    justify-content: start;
+    padding-bottom: 1.5em;
+}
+
+.lot2-size-min {
 }
 
 .lots2-production-performance-split {

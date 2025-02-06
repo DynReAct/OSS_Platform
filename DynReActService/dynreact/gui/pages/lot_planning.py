@@ -233,7 +233,7 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
     site = state.get_site()
 
     random_sol = next(value for key, value in sol_objects.items() if key != "_SNAPSHOT_" or len(sol_objects) <= 1)
-    objective_keys = [f for f in random_sol.current_object_value.model_fields.keys() if f != "total_value"]
+    objective_keys = [f for f in random_sol.current_object_value.model_dump().keys() if f != "total_value"]
     col_defs.extend([{"field": f, "filter": "agNumberColumnFilter"} for f in objective_keys])
 
     def merge_dicts(d1: dict, d2: dict) -> dict:
@@ -353,7 +353,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         return False, data, data, False, None, None
 
     costs = state.get_cost_provider()
-    relevant_fields = costs.relevant_fields(plants[lots[0].equipment])
+    relevant_fields = costs.relevant_fields(plants[lots[0].equipment]) if len(lots) > 0 else None
     if relevant_fields is not None:
         l = len("order.material_properties.")
         relevant_fields = [f[l:] for f in relevant_fields if f.startswith("order.material_properties.")]

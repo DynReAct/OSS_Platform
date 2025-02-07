@@ -113,6 +113,8 @@ def layout(*args, **kwargs):
         dcc.Store(id="lots2-lots-data"),    # rowData, list of dicts, one row per lot; input for swim lane
         dcc.Store(id="lots2-objectives-history"),     # optimization results, objective function
         dcc.Interval(id="lots2-interval", n_intervals=3_600_000),  # for polling when optimization is running
+        # ======== Popups  =========
+        structure_portfolio_popup(111777),
     ], id="lots2")
     return layout
 
@@ -135,13 +137,14 @@ def targets_tab(horizon: int):
                 html.Div([
                     html.Button("Initialize: LTP", id="lots2-targets-init-ltp", className="dynreact-button dynreact-button-small", title="Derive from long term planning."),
                     html.Button("Initialize: lots", id="lots2-targets-init-lots", className="dynreact-button dynreact-button-small", title="Derive from currently planned lots."),
-                ], className="lots-target-buttons"),
+                ], className="lots2-target-buttons"),
                 html.Div([
                     html.Div(dcc.Checklist(id="lots2-check-use-lot-range",
                                            options=checklist_dict, value=[], className="lots2-checkbox")),
                     html.Div("Use lot weight range ?"),
                 ], className="lots2-use-range-checkbox"),
                 html.Div(id="lots2-details-plants", className="lots2-plants-targets3"),
+                html.Div(html.Button("Category planning", id="lots2-structure-btn", className="lots2-target-buttons2", )),
             ]), html.Div([
                 html.H4("Plant performance models"),
                 html.Div(id="lots2-details-performance-models", className="lots2-performance-models")
@@ -339,6 +342,25 @@ def ltp_dialog():
             ]) #, className="ltp-materials-buttons")
         ]),
         id="lots2-ltp-dialog", className="dialog-filled lots2-ltp-dialog", open=False)
+
+
+def structure_portfolio_popup(initial_production: float):
+    return html.Dialog(
+        html.Div([
+            html.H3("Structure Portfolio"),
+            html.Div([
+                html.Div("Total production / t:"),
+                dcc.Input(type="number", id="lots2-production-total", min="0", step="1000", value=initial_production)
+            ], className="lots2-production-total"),
+            # materials_table()
+            html.Div(id="lots2-materials-grid"),
+            html.Div([
+                html.Button("Accept", id="lots2-materials-accept", className="dynreact-button"),
+                html.Button("Cancel", id="lots2-materials-cancel", className="dynreact-button")
+            ], className="lots2-materials-buttons")
+        ]),
+        id="lots2-structure-dialog", className="dialog-filled", open=False)
+
 
 
 @callback(Output("lots2-current_snapshot", "children"),
@@ -1286,6 +1308,76 @@ clientside_callback(
     Output("lots2-lotsview-header", "title"),
     Input("lots2-swimlane-mode", "value")
 )
+
+#&&& start modal dialog
+clientside_callback(
+    ClientsideFunction(
+        namespace="lots2",
+        function_name="getMaterialSetpoints"
+    ),
+    Output("lots2-material-setpoints", "data"),
+    Input("lots2-materials-accept", "n_clicks"),
+    State("lots2-materials-grid", "id"),
+    #config_prevent_initial_callbacks=True
+)
+
+# On cancel reset material grid
+clientside_callback(
+    ClientsideFunction(
+        namespace="lots2",
+        function_name="resetMaterialGrid"
+    ),
+    # in theory it should be ok to have no ouput, but it does not work # https://dash.plotly.com/advanced-callbacks#callbacks-with-no-outputs
+    Output("lots2-materials-grid", "dir"),
+    Input("lots2-materials-cancel", "n_clicks"),
+    State("lots2-material-setpoints", "data"),
+    State("lots2-materials-grid", "id"),
+)
+
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="lots2",
+        function_name="initMaterialGrid"
+    ),
+    Output("lots2-materials-grid", "title"),
+    Input("lots2-production-total", "value"),
+    State("lots2-materials-grid", "id"),
+)
+
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="dialog",
+        function_name="showModal"
+    ),
+    Output("lots2-structure-dialog", "title"),
+    Input("lots2-structure-btn", "n_clicks"),
+    State("lots2-structure-dialog", "id"),
+)
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="dialog",
+        function_name="closeModal"
+    ),
+    Output("lots2-materials-cancel", "title"),
+    Input("lots2-materials-cancel", "n_clicks"),
+    State("lots2-structure-dialog", "id"),
+    State("lots2-materials-cancel", "title"),
+)
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="dialog",
+        function_name="closeModal"
+    ),
+    Output("lots2-materials-accept", "title"),
+    Input("lots2-materials-accept", "n_clicks"),
+    State("lots2-structure-dialog", "id"),
+    State("lots2-materials-accept", "title"),
+)
+### end modal dialog
 
 
 def target_values_from_settings(process: str, period: tuple[datetime, datetime], plants: list[int], use_lot_range: bool, components: list[Component]|None) -> tuple[ProductionTargets|None, bool, str|None]:

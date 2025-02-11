@@ -109,10 +109,18 @@
 
 /* Targets tab */
 
-.lots-target-buttons {
+.lots2-target-buttons {
     display: flex;
     column-gap: 1em;
     padding-bottom: 1em;
+}
+
+.lots2-target-buttons2 {
+    display: flex;
+    column-gap: 1em;
+    padding-bottom: 0.5em;
+    padding-top: 0.5em;
+    margin-top: 2em;
 }
 
 .lots2-plants-targets3 {
@@ -147,6 +155,7 @@
 .lot2-size-min {
 }
 
+
 .lots2-production-performance-split {
     display: flex;
     flex-wrap: wrap;
@@ -174,6 +183,26 @@
 
 .lots2-horizon>div>input {
     max-width: 5em;
+}
+
+/* In structure portfolio popup */
+
+.lots2-production-total {
+    display: flex;
+    column-gap: 1em;
+    align-items: center;
+    padding-bottom: 1em;
+}
+
+.lots2-production-total {
+    max-width: 8em;
+}
+
+.lots2-materials-buttons {
+    display: flex;
+    justify-content: flex-end;
+    column-gap: 0.5em;
+    padding-top: 1em;
 }
 
 /* Orders tab */

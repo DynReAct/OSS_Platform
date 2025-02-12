@@ -7,7 +7,9 @@
     const materialsTag = "dynreact-material-grid";
 
     // TODO handle case that only totalProduction changed... no need to reinitialize the grid from scratch then
-    globalThis.dash_clientside.lots2.initMaterialGrid = function(totalProduction, gridId) {
+    globalThis.dash_clientside.lots2.initMaterialGrid = function(totalProduction, setpoints, gridId) {
+        console.log ('loc 11 here lots2.initMaterialGrid ')
+        console.log(setpoints)  //&&&
         if (!globalThis.customElements.get(materialsTag))
             globalThis.customElements.define(materialsTag, MaterialsGrid);     //use MaterialGrid from ltp
         const grid = document.querySelector("#" + gridId);
@@ -30,7 +32,13 @@
     }
 
     globalThis.dash_clientside.lots2.getMaterialSetpoints = function(_, gridId) {
+        console.log('here lots2.getMaterialSetpoints')
         const materialGrid = document.querySelector("div#" + gridId + " " + materialsTag);
+        //console.log( gridId)
+        //console.log (materialGrid)
+        mySetpoints = materialGrid?.getSetpoints()
+        console.log('lots2 loc 39 ')
+        console.log(mySetpoints)
         return materialGrid?.getSetpoints() || {};
     }
 

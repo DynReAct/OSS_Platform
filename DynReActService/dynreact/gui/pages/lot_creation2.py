@@ -114,7 +114,8 @@ def layout(*args, **kwargs):
         dcc.Store(id="lots2-objectives-history"),     # optimization results, objective function
         dcc.Interval(id="lots2-interval", n_intervals=3_600_000),  # for polling when optimization is running
         # ======== Popups  =========
-        structure_portfolio_popup(111777),
+        structure_portfolio_popup(111222),
+        dcc.Store(id="lots2-material-setpoints"),
     ], id="lots2")
     return layout
 
@@ -144,7 +145,14 @@ def targets_tab(horizon: int):
                     html.Div("Use lot weight range ?"),
                 ], className="lots2-use-range-checkbox"),
                 html.Div(id="lots2-details-plants", className="lots2-plants-targets3"),
-                html.Div(html.Button("Category planning", id="lots2-structure-btn", className="lots2-target-buttons2", )),
+                html.Div([
+                    html.Div(dcc.Checklist(id="lots2-use-structure",
+                                           options=checklist_dict, value=[], className="lots2-checkbox")),
+                    html.Div("Use structure planning ?"),
+                ], className="lots2-use-structure-checkbox"),
+                html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
+                html.Div(html.Button("Show user input", id="lots2-show-result-btn", className="lots2-target-buttons2")),
+                html.Div(dcc.Textarea(id='lots2-textarea-logging', value='', className="lots2-textarea"))
             ]), html.Div([
                 html.H4("Plant performance models"),
                 html.Div(id="lots2-details-performance-models", className="lots2-performance-models")
@@ -344,14 +352,15 @@ def ltp_dialog():
         id="lots2-ltp-dialog", className="dialog-filled lots2-ltp-dialog", open=False)
 
 
-def structure_portfolio_popup(initial_production: float):
+def structure_portfolio_popup(initial_weight: float):
     return html.Dialog(
         html.Div([
-            html.H3("Structure Portfolio"),
+            html.H3("Structure Planning"),
             html.Div([
-                html.Div("Total production / t:"),
-                dcc.Input(type="number", id="lots2-production-total", min="0", step="1000", value=initial_production)
-            ], className="lots2-production-total"),
+                html.Div("Sum lot weight / t:"),
+                #dcc.Input(type="number", id="lots2-weight-total", readOnly=True, min="0", value=initial_weight)
+                dcc.Input(type="number", id="lots2-weight-total",  min="0", value=initial_weight)
+            ], className="lots2-weight-total"),
             # materials_table()
             html.Div(id="lots2-materials-grid"),
             html.Div([
@@ -891,6 +900,29 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7, order
 
 
 @callback(
+    Output("lots2-structure-btn", "disabled"),
+    Input("lots2-use-structure", "value")
+)
+def toggle_structure_planning(use_lot_structure0: list[Literal[""]]):
+    use_lot_structure: bool = len(use_lot_structure0) > 0
+    if use_lot_structure:
+        btn_disabled = False
+    else:
+        btn_disabled = True
+    return btn_disabled
+
+@callback(
+    Output("lots2-textarea-logging", "value"),
+    Input("lots2-show-result-btn", "n_clicks"),
+    Input("lots2-material-setpoints", "data")
+)
+def show_userinput_structure_planning(_, json_data):
+    print('loc 920 ', json_data)
+    result_structure_planning = str(json_data)
+    return result_structure_planning
+
+
+@callback(
     Output("lots2-orders-backlog-count", "children"),
     Output("lots2-num-orders", "children"),
     Output("lots2-orders-backlog-weight-acc", "children"),
@@ -1309,7 +1341,7 @@ clientside_callback(
     Input("lots2-swimlane-mode", "value")
 )
 
-#&&& start modal dialog
+# modal dialog
 clientside_callback(
     ClientsideFunction(
         namespace="lots2",
@@ -1341,7 +1373,8 @@ clientside_callback(
         function_name="initMaterialGrid"
     ),
     Output("lots2-materials-grid", "title"),
-    Input("lots2-production-total", "value"),
+    Input("lots2-weight-total", "value"),
+    State("lots2-material-setpoints", "data"),
     State("lots2-materials-grid", "id"),
 )
 
@@ -1353,7 +1386,7 @@ clientside_callback(
     ),
     Output("lots2-structure-dialog", "title"),
     Input("lots2-structure-btn", "n_clicks"),
-    State("lots2-structure-dialog", "id"),
+    State("lots2-structure-dialog", "id")
 )
 
 clientside_callback(
@@ -1378,6 +1411,25 @@ clientside_callback(
     State("lots2-materials-accept", "title"),
 )
 ### end modal dialog
+#&&& test commu  with modal dialog
+@callback(
+    Output("lots2-weight-total", "value"),
+    Input("lots2-structure-btn", "n_clicks"),
+    State("lots2-details-plants", "children"),
+    State("lots2-process-selector", "value"),
+    State("lots2-material-setpoints", "data")
+)
+def structure_update(_, components: list[Component]|None, process: str|None, setpoints):
+    print('loc 1422 ', str(setpoints))
+    plants = state.get_site().get_process_equipment(process)
+    target_list, flag, message = target_values_from_settings_short(process=process, plants=[p.id for p in plants], components=components )
+    print ('loc 1413 target_list ', target_list)
+    try:
+        total_weight = sum(target_list)
+    except:
+        total_weight = 0
+    return f"{total_weight:.2f}"
+
 
 
 def target_values_from_settings(process: str, period: tuple[datetime, datetime], plants: list[int], use_lot_range: bool, components: list[Component]|None) -> tuple[ProductionTargets|None, bool, str|None]:
@@ -1461,6 +1513,57 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
                           and plant_active[plant]]
 
         return ProductionTargets(process=process, target_weight=targets, period=period), len(changed_plants) > 0, message
+    except ValueError as e:
+        traceback.print_exc()
+        return None, False, str(e)
+
+
+def target_values_from_settings_short(process: str, plants: list[int], components: list[Component]|None) -> tuple[list[float]|None, bool, str|None]:
+    """
+    :return: targets, indicator if default values have been changed, message
+    """
+    # keep process to see if process has changed
+    print ('loc 1507 process ', process)
+    print ('loc 1511 plants ', plants)
+
+    message = None
+    if components is None:
+        return None, False, None
+
+    #target_values: dict[int, float] = {plant: 0 for plant in plants}
+
+    #all components for this plant
+    components_by_plant = {plant: [c for c in components if c.get("props").get("data-plant") == str(plant)] for plant in plants}
+    component_by_plant = {plant: cmps[0] if len(cmps) > 0 else None for plant, cmps in components_by_plant.items()}
+    if None in component_by_plant.values():  # Need a component for every process plant # why?
+        return None, False, None
+
+    def plant_included(plant0: int) -> bool:
+        # the structure per plant is something like this: <checkbox/><div (plant_element)/><div data-plant=plant.id><input tons></div>,
+        # therefore components[components.index(component_by_plant.get(plant0)) - 2] is the checkbox indicating if the plant is active
+        return len(components[components.index(component_by_plant.get(plant0)) - 2].get("props").get("children").get("props").get("value")) > 0
+
+    plant_active: dict[int, bool] = {plant: plant_included(plant) for plant in plants}
+
+    try:
+        try:
+            target_values: dict[int, float] = {plant: float(c.get("props").get("children").get("props").get("value")) for plant, c in component_by_plant.items()
+                                         if plant_active[plant]}
+            target_list = list(target_values.values())
+            print('loc 1537  target_values', target_values)
+            print ('loc 1538 ', target_list)
+        except TypeError:
+            message = "Target production: enter a value"
+            return None, False, message
+
+        # targets: dict[int, EquipmentProduction] = {plant: EquipmentProduction(equipment=plant, total_weight=value,
+        #                                             lot_weight_range=None) for plant, value in target_values.items()}
+
+        changed_plants = [plant for plant, c in component_by_plant.items() if
+                          c.get("props").get("children").get("props").get("value") != c.get("props").get("data-default")
+                          and plant_active[plant]]
+
+        return target_list, len(changed_plants) > 0, message
     except ValueError as e:
         traceback.print_exc()
         return None, False, str(e)

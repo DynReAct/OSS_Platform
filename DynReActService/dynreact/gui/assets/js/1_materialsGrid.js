@@ -80,6 +80,7 @@ class MaterialsGrid extends HTMLElement {
     }
 
     initTargets(totalValue) {
+        console.log(this.#materials)
         if (!totalValue || !this.#materials)
             return;
         for (const category of this.#materials) {
@@ -107,12 +108,15 @@ class MaterialsGrid extends HTMLElement {
                     console.log("Material cell not found:", clzz, "category: ", category?.id);
                     continue;
                 }
-                materialParent.querySelector("input[type=number]").value = amount;
+                //materialParent.querySelector("input[type=number]").value = amount;
+                console.log('here materialsGrid.initTargets')
+                materialParent.querySelector("input[type=number]").value = 4712;
             }
         }
     }
 
     getSetpoints() {
+        console.log(' here getSetpoints ')
         if (!this.#materials)
             return undefined;
         const results = Object.create(null);

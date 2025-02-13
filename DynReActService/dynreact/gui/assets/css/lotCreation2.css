@@ -120,7 +120,7 @@
     column-gap: 1em;
     padding-bottom: 0.5em;
     padding-top: 0.5em;
-    margin-top: 2em;
+    margin-top: 0.5em;
 }
 
 .lots2-plants-targets3 {
@@ -150,6 +150,16 @@
     row-gap: 0.5em;
     justify-content: start;
     padding-bottom: 1.5em;
+}
+
+.lots2-use-structure-checkbox {
+    display: grid;
+    grid-template-columns: auto auto;
+    column-gap: 1em;
+    row-gap: 0.5em;
+    justify-content: start;
+    padding-top: 1.5em;
+    padding-bottom: 0.5em;
 }
 
 .lot2-size-min {
@@ -187,15 +197,23 @@
 
 /* In structure portfolio popup */
 
-.lots2-production-total {
+.lots2-weight-total2 {
     display: flex;
     column-gap: 1em;
     align-items: center;
     padding-bottom: 1em;
+    max-width: 8em;
 }
 
-.lots2-production-total {
-    max-width: 8em;
+.lots2-weight-total {
+    display: grid;
+    grid-template-columns: auto auto;
+    column-gap: 1em;
+    row-gap: 0.5em;
+    justify-content: start;
+    padding-top: 0.5em;
+    padding-bottom: 0.5em;
+    margin-bottom: 2.0em;
 }
 
 .lots2-materials-buttons {
@@ -203,6 +221,12 @@
     justify-content: flex-end;
     column-gap: 0.5em;
     padding-top: 1em;
+}
+
+.lots2-textarea{
+    width: 30em;
+    height: 5em;
+    margin-top: 1.0em;
 }
 
 /* Orders tab */

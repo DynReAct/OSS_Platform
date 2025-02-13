@@ -22,6 +22,8 @@ class CostConfig:
     factor_transition_costs: float = 1
     "A weight factor for the cost contribution of transition costs between orders relative to the number of lots"
 
+    factor_logistic_costs: float = 0.3
+
     factor_out_of_lot_range: float = 1
     "A weight factor for the cost contribution of lot size violations"
 
@@ -29,7 +31,8 @@ class CostConfig:
                  threshold_new_lot: float|None = None,
                  factor_weight_deviation: float | None = None,
                  factor_transition_costs: float | None = None,
-                 factor_out_of_lot_range: float | None = None
+                 factor_out_of_lot_range: float | None = None,
+                 factor_logistic_costs: float | None = None
                  ):
         dotenv.load_dotenv()
         if threshold_new_lot is None:
@@ -44,6 +47,9 @@ class CostConfig:
         if factor_out_of_lot_range is None:
             factor_out_of_lot_range = float(os.getenv("OBJECTIVE_LOT_SIZE",  CostConfig.factor_out_of_lot_range))
         self.factor_out_of_lot_range = factor_out_of_lot_range
+        if factor_logistic_costs is None:
+            factor_logistic_costs = float(os.getenv("OBJECTIVE_LOGISTIC_COSTS", CostConfig.factor_logistic_costs))
+        self.factor_logistic_costs = factor_logistic_costs
 
 
 class SampleCostProvider(CostProvider):
@@ -127,10 +133,12 @@ class SampleCostProvider(CostProvider):
             lot_weights = list(old_planning.lot_weights)
             lot_weights[-1] += new_weight
         transition_costs = old_planning.transition_costs + self.transition_costs(plant, current, next, current_material=current_material, next_material=next_material)
+        logistic_costs = old_planning.logistic_costs + self._logistic_costs_for_order(next, plant.id)  # TODO differentiate between order and material based updates(?)
         # Note: if there were other cost components, we could use a custom sub-class of PlanningData
         new_planning: PlanningData = PlanningData(delta_weight=delta_weight, min_due_date=min_due_date,
                                                                 lots_count=lots_cnt, lot_weights=lot_weights,
-                                                                orders_count=orders_cnt, transition_costs=transition_costs)
+                                                                orders_count=orders_cnt, transition_costs=transition_costs,
+                                                                logistic_costs=logistic_costs)
         current_coils = [next_material.id] if next_material is not None else []  # here we have a new order, so no need to track previous coils
         new_status = EquipmentStatus(equipment=plant.id, snapshot_id=status.snapshot_id,
                                      target_weight=status.target_weight, target_lot_size=status.target_lot_size,
@@ -165,13 +173,16 @@ class SampleCostProvider(CostProvider):
 
             out_of_lot_range = sum(out_of_lot_range(w, status.target_lot_size) for w in planning.lot_weights)
             penalty_out_of_lot_range = params.factor_out_of_lot_range * out_of_lot_range
+        log_costs = params.factor_logistic_costs * planning.logistic_costs
         result = planning.lots_count + \
             params.factor_weight_deviation * weight_deviation + \
-            params.factor_transition_costs * planning.transition_costs
+            params.factor_transition_costs * planning.transition_costs + \
+            log_costs
         if penalty_out_of_lot_range is not None:
             result += penalty_out_of_lot_range
         return ObjectiveFunction(total_value=result, lots_count=planning.lots_count, weight_deviation=params.factor_weight_deviation * weight_deviation,
-                                lot_size_deviation=penalty_out_of_lot_range, transition_costs=params.factor_transition_costs * planning.transition_costs)
+                                lot_size_deviation=penalty_out_of_lot_range, transition_costs=params.factor_transition_costs * planning.transition_costs,
+                                logistic_costs=log_costs)
 
     def evaluate_equipment_assignments(self, plant_id: id, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
                                        planning_period: tuple[datetime, datetime], target_weight: float, target_lot_size: tuple[float, float]|None=None,
@@ -220,11 +231,16 @@ class SampleCostProvider(CostProvider):
         delta_weight = abs(target_weight - total_weight)
         last_order = orders_sorted[-1]
         previous_order = orders_sorted[-2] if len(orders_sorted) > 1 else None
+        logistic_costs: float = 0
+        if self._site.logistic_costs is not None:
+            orders_with_plants = (o for o in orders_sorted if o.current_equipment is not None and len(o.current_equipment) > 0)
+            logistic_costs = sum(self._logistic_costs_for_order(o, plant_id) for o in orders_with_plants)
         # TODO in function
         planning: PlanningData = PlanningData(delta_weight=delta_weight, min_due_date=min_due_date,
                                                             lots_count=len(lots), lot_weights=list(lot_weights.values()),
                                                             orders_count=len(orders_sorted),
-                                                            transition_costs=transition_costs)
+                                                            transition_costs=transition_costs,
+                                                            logistic_costs=logistic_costs)
         status = EquipmentStatus(equipment=plant_id, snapshot_id=snapshot.timestamp, target_weight=target_weight,
                                  target_lot_size=target_lot_size, planning=planning,
                                  planning_period=planning_period, current_order=last_order.id,  # current=last_order.id
@@ -234,6 +250,19 @@ class SampleCostProvider(CostProvider):
         target_fct = self.objective_function(status).total_value
         planning.target_fct = target_fct
         return status
+
+    def _logistic_costs_for_order(self, o: Order, plant: int) -> float:
+        log_costs: dict[int, dict[int, float]] = self._site.logistic_costs
+        min_costs: float|None = None
+        for p in o.current_equipment:
+            if p == plant:
+                return 0
+            if p not in log_costs:
+                continue
+            costs = log_costs.get(p).get(plant)
+            if costs is not None and (min_costs is None or costs < min_costs):
+                min_costs = costs
+        return min_costs if min_costs is not None else 0
 
     @staticmethod
     def _sort_dict(dictionary: dict[any, any]) -> dict[any, any]:

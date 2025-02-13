@@ -208,6 +208,7 @@ class PlanningData(Model):
     "Current value of the target function"
     # lots: list[list[str]] TODO?
     transition_costs: float = 0.0
+    logistic_costs: float = 0.0
     lots_count: int = 0
     lot_weights: list[float] = []
     "Lot weights in tons."
@@ -258,6 +259,8 @@ class ObjectiveFunction(Model, extra="allow"):
     "Penalty for number of lots"
     transition_costs: float|None=None
     "Penalty for order to order transitions"
+    logistic_costs: float|None=None
+    "Penalty for necessary logistics"
     weight_deviation: float|None=None
     "Penalty for deviating from the targeted production size"
     lot_size_deviation: float|None = None

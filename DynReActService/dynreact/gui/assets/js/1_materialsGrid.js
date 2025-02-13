@@ -108,9 +108,55 @@ class MaterialsGrid extends HTMLElement {
                     console.log("Material cell not found:", clzz, "category: ", category?.id);
                     continue;
                 }
+                materialParent.querySelector("input[type=number]").value = amount;
+                console.log('here materialsGrid.initTargets')
+                //materialParent.querySelector("input[type=number]").value = 4712;
+            }
+        }
+    }
+
+    initTargetsFromPrev(totalValue, setpoints) {
+        console.log('loc 119 ')
+        console.log(this.#materials)
+        console.log(setpoints)      //dict { rtype1: 1, rtype2: 2, rtype3: 3, rtype4: 4712, ftype1: 4712, ftype2: 4712 }
+        if (!totalValue || !this.#materials)
+            return;
+        for (const category of this.#materials) {
+            console.log( category)
+            for (const types in category){
+                console.log('loc127 ')
+                console.log(types)
+            //const XXX = category.classes.filter(m=> m.default_share === undefined)
+
+            }
+
+            const sharesMissing = category.classes.filter(m => m.default_share === undefined);
+            const sharesDefined = sharesMissing.length <= 1;
+            const shares = Object.fromEntries(category.classes.filter(cl => cl.default_share !== undefined).map(cl => [cl.id, cl.default_share]));
+            if (sharesMissing.length === 1) {
+                const aggregated = Object.values(shares).reduce((a,b) => a+b, 0);
+                const final = aggregated >= 1 ? 0 : 1 - aggregated;
+                shares[sharesMissing[0].id] = final;
+            }
+            else {
+                const defaultClass = category.classes.find(m => m.is_default);
+                if (defaultClass) {
+                    const aggregated = Object.values(shares).reduce((a,b) => a+b, 0);
+                    const final = aggregated >= 1 ? 0 : 1 - aggregated;
+                    sharesMissing.forEach(sh => shares[sh.id] = 0);
+                    shares[defaultClass.id] = final;
+                }
+            }
+            for (const [clzz, share] of Object.entries(shares)) {
+                const amount = totalValue * share;
+                const materialParent = this.#grid.querySelector("div[data-category=\"" + category.id + "\"][data-material=\"" + clzz + "\"]");
+                if (!materialParent) {
+                    console.log("Material cell not found:", clzz, "category: ", category?.id);
+                    continue;
+                }
                 //materialParent.querySelector("input[type=number]").value = amount;
                 console.log('here materialsGrid.initTargets')
-                materialParent.querySelector("input[type=number]").value = 4712;
+                //materialParent.querySelector("input[type=number]").value = 4712;
             }
         }
     }

@@ -22,6 +22,7 @@
                 el.setMaterials(site.material_categories);
                 if (totalProduction)
                     el.initTargets(totalProduction);
+                    el.initTargetsFromPrev(totalProduction, setpoints)
             } else if (attempt < 20) {
                 setTimeout(() => trySetMaterials(attempt + 1), 50)
             } else {

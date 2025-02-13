@@ -1492,9 +1492,10 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
                 if has_min != has_max:
                     message = f"Lot range: only min or max has been set for plant {plant}"
                     break
-                if lot_range[1] <= lot_range[0]:
-                    message = f"Lot range: max has to be greater than min: min={lot_range[0]}, max={lot_range[1]}"
-                    break
+                if has_min and has_max:
+                    if lot_range[1] <= lot_range[0]:
+                        message = f"Lot range: max has to be greater than min: min={lot_range[0]}, max={lot_range[1]}"
+                        break
                 if not has_min:
                     for_removal.append(plant)
             if message is not None:
@@ -1503,7 +1504,7 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
                 for plant in for_removal:
                     plant_lot_ranges.pop(plant)
                 targets: dict[int, EquipmentProduction] = {plant: EquipmentProduction(equipment=plant, total_weight=value,
-                                                        lot_weight_range=plant_lot_ranges[plant]) for plant, value in target_values.items()}
+                                                        lot_weight_range=plant_lot_ranges.get(plant)) for plant, value in target_values.items()}
         else:
             targets: dict[int, EquipmentProduction] = {plant: EquipmentProduction(equipment=plant, total_weight=value,
                                                     lot_weight_range=None) for plant, value in target_values.items()}

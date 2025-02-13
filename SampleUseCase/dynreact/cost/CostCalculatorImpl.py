@@ -116,7 +116,10 @@ class SampleCostProvider(CostProvider):
         delta_weight = old_planning.delta_weight - new_weight
         min_due_date = old_planning.min_due_date  # ?
         lots_cnt = old_planning.lots_count + 1 if new_lot else old_planning.lots_count
-        orders_cnt = old_planning.orders_count + 1
+        old_order_cnt = old_planning.orders_count
+        if old_order_cnt == 0 and status.current_order is not None:
+            old_order_cnt = 1
+        orders_cnt = old_order_cnt + 1
         lot_weights = None
         if new_lot:
             lot_weights = old_planning.lot_weights + [new_weight]

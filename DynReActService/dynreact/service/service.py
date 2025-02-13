@@ -6,8 +6,8 @@ from typing import Iterator, Literal, Annotated
 
 from dynreact.base.LotsOptimizer import LotsOptimizer
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, MaterialOrderData, \
-    ProductionPlanning, ProductionTargets
+from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, \
+    MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction
 from fastapi import FastAPI, HTTPException
 from fastapi.params import Path, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -262,7 +262,8 @@ def target_function_update(transition: EquipmentTransitionStateful, username = u
     #    raise HTTPException(status_code=404, detail="Current coil or order " + str(transition.current) + " not found")
     status = transition.equipment_status
     initial_solution = ProductionPlanning(process=plant.process, equipment_status={plant.id: status}, order_assignments={})
-    targets = ProductionTargets(process=plant.process, target_weight={plant.id: status.target_weight}, period=status.planning_period)
+    targets = ProductionTargets(process=plant.process, target_weight={plant.id: EquipmentProduction(equipment=plant.id, total_weight=status.target_weight)},
+                                period=status.planning_period)
     optimizer: LotsOptimizer = state.get_lots_optimization().create_instance(plant.process, snapshot, state.get_cost_provider(),
                                                                     initial_solution=initial_solution, targets=targets)
     new_status, new_objective = optimizer.update_transition_costs(plant, current_order, next_order, status,

@@ -47,7 +47,11 @@ See also the `ìf __name__ == "__main__"` run section of the file [PerformanceMo
 In order to activate the plant performance model for the sample use case, add the following line to the *.env* file in the folder *DynReActService*:
 
 ```commandline
-PLANT_PERFORMANCE_MODEL_0="dynreact.base.impl.PerformanceModelClient:http://localhost:8081"
+PLANT_PERFORMANCE_MODEL_0="dynreact.base.impl.PerformanceModelClient::http://localhost:8081"
 ```
 
- 
+In order to provide an access token, append `::` followed by the token. Example:
+
+```commandline
+PLANT_PERFORMANCE_MODEL_0="dynreact.base.impl.PerformanceModelClient::http://localhost:8081::kdnfAe3U§NFI$?'S#fes23A$KFVe24"
+``` 

@@ -38,6 +38,12 @@ class PerformanceModelClient(PlantPerformanceModel):
             self._meta = PerformanceModelMetadata.model_validate(json)
         return self._meta
 
+    def __str__(self):
+        try:
+            return f"PerformanceModelClient[id={self.id()}, label={self.label()}, address={self._address}]"
+        except:
+            return f"PerformanceModelClient[address={self._address}] (disconnected)"
+
     def id(self) -> str:
         return self._get_meta().id
 

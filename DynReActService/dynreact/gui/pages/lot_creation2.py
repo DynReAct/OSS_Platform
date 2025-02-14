@@ -776,7 +776,7 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7, order
         col_def = {"field": field, "filter": filter_id, "filterParams": {"buttons": ["reset"]}}
         return col_def
 
-    fields = [column_def_for_field(key, info) for key, info in snapshot_obj.orders[0].model_fields.items() if (key not in ["material", "lot", "lot_position" ])] + \
+    fields = [column_def_for_field(key, info) for key, info in snapshot_obj.orders[0].model_fields.items() if (key not in ["material_properties", "lot", "lot_position" ])] + \
              ([column_def_for_field(key, info) for key, info in snapshot_obj.orders[0].material_properties.model_fields.items()] if isinstance(snapshot_obj.orders[0].material_properties, BaseModel) else [])
 
     value_formatter_object = {"function": "formatCell(params.value)"}
@@ -804,6 +804,8 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7, order
                 o.current_equipment]
         if isinstance(o.material_properties, BaseModel):
             as_dict.update(o.material_properties.model_dump(exclude_none=True, exclude_unset=True))
+        elif isinstance(o.material_properties, dict):
+            as_dict.update(o.material_properties)
         return as_dict
 
     new_selected_rows = {"ids": []}

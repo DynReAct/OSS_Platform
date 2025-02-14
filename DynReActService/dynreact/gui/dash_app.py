@@ -84,6 +84,8 @@ def layout(*args, **kwargs):
                 ], className="menu-link login-required", title="Open lot creation tab"),
             dcc.Link("Agents", id="menu-agents_header", className="menu-link login-required", href="/dash/agents", title="Open agents tab"),
             dcc.Link("Snapshot", id="menu-snaps_header", className="menu-link login-required", href="/dash/", title="Open snapshots tab"),
+            dcc.Link("Performance models", id="menu-perf_header", className="menu-link login-required", href="/dash/perfmodels",
+                     title="Open plant performance models tab"),
             html.Div(id="menu-user_header"),
             html.Div([
                 html.Img(src="/dash/assets/icons/globe.svg", role="img"),

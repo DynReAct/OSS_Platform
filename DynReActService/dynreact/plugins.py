@@ -21,6 +21,7 @@ from dynreact.base.impl.FileDowntimeProvider import FileDowntimeProvider
 from dynreact.base.impl.FileLotSink import FileLotSink
 from dynreact.base.impl.FileResultsPersistence import FileResultsPersistence
 from dynreact.base.impl.FileSnapshotProvider import FileSnapshotProvider
+from dynreact.base.impl.PerformanceModelClient import PerformanceModelClientConfig
 from dynreact.base.impl.SimpleLongTermPlanning import SimpleLongTermPlanning
 from dynreact.base.model import Site
 
@@ -156,12 +157,16 @@ class Plugins:
 
     @staticmethod
     def _load_plant_performance_model(config: str, site: Site) -> PlantPerformanceModel|None:
-        if ":" not in config:
+        if "::" not in config:
             return None
-        idx = config.index(":")
+        idx = config.index("::")
         class_name = config[0:idx]
-        uri = config[idx+1:]
-        return Plugins._load_module(class_name, PlantPerformanceModel, uri, site, do_raise=True)
+        last_idx = config.rindex("::")
+        has_token = last_idx > idx
+        uri = config[idx+2:] if not has_token else config[idx+2:last_idx]
+        token = config[last_idx+2:] if has_token else None
+        config = PerformanceModelClientConfig(address=uri, token=token)
+        return Plugins._load_module(class_name, PlantPerformanceModel, config, do_raise=True)
 
     @staticmethod
     def _load_snapshot_provider(provider_url: str, site: Site) -> SnapshotProvider|None:
@@ -194,6 +199,8 @@ class Plugins:
         if len(errors) > 0:
             print(f"Failed to load module {module} of type {clzz}: {errors[0]}")
             raise errors[0]
+        if do_raise:
+            raise Exception(f"Module {module} not found")
         return None
 
 

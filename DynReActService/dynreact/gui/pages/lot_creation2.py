@@ -364,6 +364,7 @@ def structure_portfolio_popup(initial_weight: float):
             # materials_table()
             html.Div(id="lots2-materials-grid"),
             html.Div([
+                html.Button("Spread", id="lots2-materials-spread", className="dynreact-button"),
                 html.Button("Accept", id="lots2-materials-accept", className="dynreact-button"),
                 html.Button("Cancel", id="lots2-materials-cancel", className="dynreact-button")
             ], className="lots2-materials-buttons")
@@ -1383,6 +1384,19 @@ clientside_callback(
 
 clientside_callback(
     ClientsideFunction(
+        namespace="lots2",
+        function_name="spreadMaterialGrid"
+    ),
+    #Output("lots2-material-setpoints", "data"),
+    Input("lots2-materials-spread", "n_clicks"),
+    State("lots2-weight-total", "value"),
+    State("lots2-materials-grid", "id"),
+    #config_prevent_initial_callbacks=True
+)
+
+
+clientside_callback(
+    ClientsideFunction(
         namespace="dialog",
         function_name="showModal"
     ),
@@ -1414,6 +1428,7 @@ clientside_callback(
 )
 ### end modal dialog
 #&&& test commu  with modal dialog
+# in work: this callback output causes missing all values after next click "StructurePlanning"
 @callback(
     Output("lots2-weight-total", "value"),
     Input("lots2-structure-btn", "n_clicks"),
@@ -1430,8 +1445,8 @@ def structure_update(_, components: list[Component]|None, process: str|None, set
         total_weight = sum(target_list)
     except:
         total_weight = 0
+    print ('loc 1432 ', total_weight)
     return f"{total_weight:.2f}"
-
 
 
 def target_values_from_settings(process: str, period: tuple[datetime, datetime], plants: list[int], use_lot_range: bool, components: list[Component]|None) -> tuple[ProductionTargets|None, bool, str|None]:

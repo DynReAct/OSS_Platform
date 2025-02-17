@@ -71,6 +71,11 @@ class MaterialsGrid extends HTMLElement {
                     parent: JsUtils.createElement("div", {parent: material_parent}),
                     attributes: {min: "0", step: "1000", type: "number"}   // TODO test
                 });
+                // TODO &&& action diff amount in default field, check if <
+                inp.addEventListener("change", (event) => {
+                    console.log('loc 76 ', ' field has changed' )
+                });
+
             }
         }
         this.#grid.style["grid-template-columns"] = "repeat(" + columns + ", 1fr)";
@@ -116,19 +121,18 @@ class MaterialsGrid extends HTMLElement {
     }
 
     initTargetsFromPrev(totalValue, setpoints) {
-        console.log('loc 119 ')
-        console.log(this.#materials)
-        console.log(setpoints)      //dict { rtype1: 1, rtype2: 2, rtype3: 3, rtype4: 4712, ftype1: 4712, ftype2: 4712 }
+        console.log('loc 119 materialsGrid.initTargetsFromPrev');
+        console.log(this.#materials);
+        console.log(setpoints);    //dict { rtype1: 1, rtype2: 2, rtype3: 3, rtype4: 4712, ftype1: 4712, ftype2: 4712 }
         if (!totalValue || !this.#materials)
             return;
         for (const category of this.#materials) {
-            console.log( category)
-            for (const types in category){
-                console.log('loc127 ')
-                console.log(types)
-            //const XXX = category.classes.filter(m=> m.default_share === undefined)
-
-            }
+            console.log( category);
+//            for (const types in category){
+//                console.log('loc127 ')
+//                console.log(types)
+//            //const XXX = category.classes.filter(m=> m.default_share === undefined)
+//            }
 
             const sharesMissing = category.classes.filter(m => m.default_share === undefined);
             const sharesDefined = sharesMissing.length <= 1;
@@ -155,7 +159,7 @@ class MaterialsGrid extends HTMLElement {
                     continue;
                 }
                 //materialParent.querySelector("input[type=number]").value = amount;
-                console.log('here materialsGrid.initTargets')
+                console.log('loc 158 set amount');
                 //materialParent.querySelector("input[type=number]").value = 4712;
             }
         }
@@ -171,6 +175,49 @@ class MaterialsGrid extends HTMLElement {
             results[container.dataset.material] = parseFloat(inp.value) || 0;
         }
         return results;
+    }
+
+    //&&
+    setOneField(cellid, newValue){
+        console.log ('loc 182 ', 'setOneField ');
+        for (const category of this.#materials) {
+            for (const item in category.classes) {
+                const materialParent = this.#grid.querySelector("div[data-category=\"" + category.id + "\"][data-material=\"" + cellid + "\"]");
+                if (!materialParent) {
+                    console.log("Material cell not found:", item, "category: ", category?.id);
+                    continue;
+                }
+                materialParent.querySelector("input[type=number]").value = newValue;
+            }
+        }
+    }
+
+
+    setSetpoints(totalProduction) {
+        // just method to set specified value to specified field
+        console.log('loc 177 setSetpoints ', totalProduction);
+        for (const category of this.#materials) {
+            console.log ('loc 178 ', category);
+            //const amount = 777; //totalValue * share;
+            let idx = 0;
+            for (const item in category.classes) {
+                idx = idx + 1;
+                console.log ('loc 181 ', item, category.classes[item].id);
+                const cellid = category.classes[item].id;
+
+                const materialParent = this.#grid.querySelector("div[data-category=\"" + category.id + "\"][data-material=\"" + cellid + "\"]");
+                if (!materialParent) {
+                    console.log("Material cell not found:", item, "category: ", category?.id);
+                    continue;
+                }
+                materialParent.querySelector("input[type=number]").value = totalProduction / 4; //amount +idx;
+                //console.log('here materialsGrid.setSetpoints');
+                //materialParent.querySelector("input[type=number]").value = 4712;
+            }
+        }
+        // just test one grid element
+        console.log('loc 219 before OneField');
+        setOneField("surface_tin", 777777);     // not working
     }
 
     reset(setpoints) {

@@ -362,16 +362,18 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
     costs = state.get_cost_provider()
     relevant_fields = costs.relevant_fields(plants[lots[0].equipment]) if len(lots) > 0 else None
     if relevant_fields is not None:
-        l = len("order.material_properties.")
-        relevant_fields = [f[l:] for f in relevant_fields if f.startswith("order.material_properties.")]
+        l = len("material_properties.")
+        relevant_fields = [f[l:] if f.startswith("material_properties.") else f for f in relevant_fields]
     if isinstance(props, dict):
         fields_0 = props  # TODO sort according to relevant fields info
     else:
         fields_0 = dict(sorted(props.model_fields.items(), key=lambda item: relevant_fields.index(item[0]) if item[0] in relevant_fields else len(relevant_fields))) \
                       if relevant_fields is not None else props.model_fields
+
     fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True},
                 {"field": "costs", "headerTooltip": "Transition costs from previous order."},
-                {"field": "weight", "headerTooltip": "Order weight in tons." }] + \
+                {"field": "weight", "headerTooltip": "Order weight in tons." },
+                {"field": "due_date", "headerTooltip": "Order due date." }] + \
              [column_def_for_field(key, info) for key, info in fields_0.items()]
 
     last_plant: int|None = None
@@ -387,6 +389,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         as_dict["order"] = o.id
         as_dict["lot"] = lot or ""
         as_dict["weight"] = o.actual_weight
+        as_dict["due_date"] = o.due_date
         if lot is None:
             return as_dict
         lot_obj = next(l for l in lots if l.id == lot)
@@ -402,6 +405,8 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
 
     order_rows = [order_to_json(o, lot) for lot, orders in orders_by_lot.items() for o in orders] + \
         [order_to_json(o, None) for o in unassigned_orders.values()]
+
+    fields = [f for f in fields if any(order.get(f["field"]) is not None for order in order_rows)]
     return False, data, data, False, fields, order_rows
 
 

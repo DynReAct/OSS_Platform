@@ -275,16 +275,6 @@
     column-gap: 0.5em;
 }
 
-.lots2-orders-show-all-checkbox {
-    display: grid;
-    grid-template-columns: auto auto;
-    column-gap: 1em;
-    row-gap: 0.5em;
-    justify-content: start;
-    padding-top: 1.0em;
-    padding-bottom: 0.5em;
-}
-
 /* ugly way to add spacing */
 .lots2-orders-lots-editor #lots2-orders-lots-order-total {
     padding-right: 0.5em;

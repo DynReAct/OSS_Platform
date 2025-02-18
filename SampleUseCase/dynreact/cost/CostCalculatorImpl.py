@@ -76,17 +76,31 @@ class SampleCostProvider(CostProvider):
         old_planning: PlanningData = status.planning
         if current.id == next.id:
             return status, self.objective_function(status)
+        is_incomplete_first_submission: bool = old_planning.lots_count == 0 and status.current_order is not None
         new_weight = next.actual_weight if next_material is None else next_material.weight
         delta_weight = old_planning.delta_weight - new_weight
         min_due_date = old_planning.min_due_date  # ?
         lots_cnt = old_planning.lots_count + 1 if new_lot else old_planning.lots_count
-        orders_cnt = old_planning.orders_count + 1
+        old_order_cnt = old_planning.orders_count
+        if old_order_cnt == 0 and status.current_order is not None:
+            old_order_cnt = 1
+        orders_cnt = old_order_cnt + 1
+        crt_weight = current.actual_weight if current_material is None else current_material.weight
         lot_weights = None
         if new_lot:
+            if is_incomplete_first_submission:  # catch initial submission with incomplete data
+                delta_weight = status.target_weight - crt_weight - new_weight
+                lots_cnt = 2
             lot_weights = old_planning.lot_weights + [new_weight]
         else:
             lot_weights = list(old_planning.lot_weights)
-            lot_weights[-1] += new_weight
+            if not is_incomplete_first_submission:
+                lot_weights[-1] += new_weight
+            else:   # catch initial submission with incomplete data
+                lot_weight = crt_weight + new_weight
+                lots_cnt = 1
+                delta_weight = status.target_weight - lot_weight
+                lot_weights = [lot_weight]
         transition_costs = old_planning.transition_costs + self.transition_costs(plant, current, next, current_material=current_material, next_material=next_material)
         # Note: if there were other cost components, we could use a custom sub-class of PlanningData
         new_planning: PlanningData = PlanningData(delta_weight=delta_weight, min_due_date=min_due_date,

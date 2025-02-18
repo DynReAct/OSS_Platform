@@ -809,8 +809,39 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7, order
             as_dict.update(o.material_properties)
         return as_dict
 
-    new_selected_rows = {"ids": []}
+    current_process_index = next((idx for idx, proc in enumerate(site.processes) if proc.name_short == process), None)
 
+    processes: list[list[int]] = [p.process_ids for p in site.processes]
+    num_processes = len(processes)
+    #current_process_index = processes.index(site.get_process(process, do_raise=True).process_ids)
+    process_plants: list[list[int]] = [sorted([plant.id for plant in site.get_process_equipment(proc.name_short)]) for proc in site.processes]
+
+    def process_index_for_proc_id(proc_id: int) -> int:
+        return next((idx for idx, proc in enumerate(processes) if proc_id in proc), num_processes)
+
+    def process_index_for_order(o: Order) -> int:
+        process_indices: list[int] = [process_index_for_proc_id(p) for p in o.current_processes]
+        if len(process_indices) == 0:  # Should not happen
+            return 10_000
+        min_idx = min(process_indices)
+        max_idx = max(process_indices)
+        if min_idx > current_process_index:
+            return 5000 + min_idx
+        if max_idx < current_process_index:
+            return 1000 - max_idx
+        if max_idx > current_process_index:
+            return 500 + max_idx
+        if min_idx < current_process_index:
+            return 100 - min_idx
+        plants: list[int] = process_plants[min_idx]
+        plant_idx = plants.index(o.current_equipment[0]) if o.current_equipment is not None and o.current_equipment[0] in plants else len(plants)
+        return plant_idx
+
+    current_process_plants: list[int] = process_plants[current_process_index]
+    orders_filtered = [order for order in snapshot_obj.orders if any(plant in current_process_plants for plant in order.allowed_equipment)]
+    orders_sorted = sorted(orders_filtered, key=process_index_for_order)
+    order_ids = [o.id for o in orders_sorted]
+    new_selected_rows = {"ids": []}
     if is_init_command:  # TODO set appropriate method flags in eligibile_orders method
         if init_method is None:
             return no_update, no_update, no_update, no_update, no_update, no_update
@@ -836,6 +867,9 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7, order
         # maintain old selection, if appropriate
         if not update_selection and selected_rows is not None:
             eligible_orders = eligible_orders + [row for row in  (row0["id"] if isinstance(row0, dict) else row0 for row0 in selected_rows) if row not in eligible_orders]
+        # filter orders matching for selected process
+        eligible_orders = [o for o in eligible_orders if o in order_ids]
+
         new_selected_rows = {"ids": eligible_orders}
     elif not update_selection and not is_clear_command:
         new_selected_rows = {"ids": [row["id"] if isinstance(row, dict) else row for row in selected_rows] if selected_rows is not None else []}
@@ -858,47 +892,11 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7, order
                 new_selected_rows["ids"] = new_selected_rows["ids"] + [order for order in orders_affected if order not in new_selected_rows["ids"]]
     #if is_init_command:
     #    # TODO1
-    processes: list[list[int]] = [p.process_ids for p in site.processes]
-    num_processes = len(processes)
-    current_process_index = processes.index(site.get_process(process, do_raise=True).process_ids)
-    process_plants: list[list[int]] = [sorted([plant.id for plant in site.get_process_equipment(proc.name_short)]) for proc in site.processes]
-
-    def process_index_for_proc_id(proc_id: int) -> int:
-        return next((idx for idx, proc in enumerate(processes) if proc_id in proc), num_processes)
-
-    def process_index_for_order(o: Order) -> int:
-        process_indices: list[int] = [process_index_for_proc_id(p) for p in o.current_processes]
-        if len(process_indices) == 0:  # Should not happen
-            return 10_000
-        min_idx = min(process_indices)
-        max_idx = max(process_indices)
-        if min_idx > current_process_index:
-            return 5000 + min_idx
-        if max_idx < current_process_index:
-            return 1000 - max_idx
-        if max_idx > current_process_index:
-            return 500 + max_idx
-        if min_idx < current_process_index:
-            return 100 - min_idx
-        plants: list[int] = process_plants[min_idx]
-        plant_idx = plants.index(o.current_equipment[0]) if o.current_equipment is not None and o.current_equipment[0] in plants else len(plants)
-        return plant_idx
-
-    if not is_orders_show_all:
-        # filter orders matching for selected process
-        current_process_plants = process_plants[current_process_index]
-        orders_filtered_idx = []
-        for idx, order in enumerate(snapshot_obj.orders):
-            if any(order in current_process_plants for order in order.allowed_equipment):
-                orders_filtered_idx.append(idx)
-        orders_filtered = [snapshot_obj.orders[idx] for idx in orders_filtered_idx]
-        orders_sorted = sorted(orders_filtered, key=process_index_for_order)
-    else:
-        orders_sorted = sorted(snapshot_obj.orders, key=process_index_for_order)
     selected_ids: list[str] = new_selected_rows["ids"]
     weight = sum(o.actual_weight for o in orders_sorted if o.id in selected_ids)
     orders_data["orders_selected_cnt"] = len(selected_ids)
     orders_data["orders_selected_weight"] = weight
+    #orders_data["orders"] = selected_ids
     return fields, [order_to_json(order) for order in orders_sorted], new_selected_rows, orders_data
 
 
@@ -920,7 +918,6 @@ def toggle_structure_planning(use_lot_structure0: list[Literal[""]]):
     Input("lots2-material-setpoints", "data")
 )
 def show_userinput_structure_planning(_, json_data):
-    print('loc 920 ', json_data)
     result_structure_planning = str(json_data)
     return result_structure_planning
 
@@ -1437,15 +1434,12 @@ clientside_callback(
     State("lots2-material-setpoints", "data")
 )
 def structure_update(_, components: list[Component]|None, process: str|None, setpoints):
-    print('loc 1422 ', str(setpoints))
     plants = state.get_site().get_process_equipment(process)
     target_list, flag, message = target_values_from_settings_short(process=process, plants=[p.id for p in plants], components=components )
-    print ('loc 1413 target_list ', target_list)
     try:
         total_weight = sum(target_list)
     except:
         total_weight = 0
-    print ('loc 1432 ', total_weight)
     return f"{total_weight:.2f}"
 
 
@@ -1541,8 +1535,6 @@ def target_values_from_settings_short(process: str, plants: list[int], component
     :return: targets, indicator if default values have been changed, message
     """
     # keep process to see if process has changed
-    print ('loc 1507 process ', process)
-    print ('loc 1511 plants ', plants)
 
     message = None
     if components is None:
@@ -1568,8 +1560,6 @@ def target_values_from_settings_short(process: str, plants: list[int], component
             target_values: dict[int, float] = {plant: float(c.get("props").get("children").get("props").get("value")) for plant, c in component_by_plant.items()
                                          if plant_active[plant]}
             target_list = list(target_values.values())
-            print('loc 1537  target_values', target_values)
-            print ('loc 1538 ', target_list)
         except TypeError:
             message = "Target production: enter a value"
             return None, False, message

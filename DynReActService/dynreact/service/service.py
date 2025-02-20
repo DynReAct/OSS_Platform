@@ -8,7 +8,7 @@ from dynreact.base.LotsOptimizer import LotsOptimizer
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, \
     MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.params import Path, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import AliasChoices
@@ -47,8 +47,9 @@ username = fastapi_authentication(config)
                 response_model_exclude_unset=True,
                 response_model_exclude_none=True,
                 summary="Get a list of process steps and plants configured for the site")
-def site(username = username) -> Site:
+def site(response: Response, username = username) -> Site:
     try:
+        response.headers["Cache-Control"] = "max-age=600"  # 10 minutes
         return state.get_site()
     except:
         raise HTTPException(status_code=502, detail="Information not available")
@@ -72,7 +73,7 @@ def _get_snapshot_plant(snapshot_id: str|datetime, plant_id: int) -> tuple[Snaps
                  response_model_exclude_unset=True,
                  response_model_exclude_none=True,
                  summary="Get a list of available snapshots identified by their timestamps")
-def snapshots(start: str|datetime|None=Query(None, description="Optional start time.",
+def snapshots(response: Response, start: str|datetime|None=Query(None, description="Optional start time.",
                                              examples=["now-2d", "2023-04-25T00:00Z"], openapi_examples={
                 "now-2d": {"description": "Two days ago", "value": "now-2d"},
                 "2023-04-25T00:00Z": {"description": "A specific timestamp", "value": "2023-04-25T00:00Z"},
@@ -99,6 +100,7 @@ def snapshots(start: str|datetime|None=Query(None, description="Optional start t
             result.append(next(it))
         except StopIteration:
             break
+    response.headers["Cache-Control"] = "max-age=60"  # 1 minute...
     return result
 
 
@@ -107,15 +109,20 @@ def snapshots(start: str|datetime|None=Query(None, description="Optional start t
                  response_model_exclude_unset=True,
                  response_model_exclude_none=True,
                  summary="Get a specific snapshot; the one with largest timestamp <= the provided timestamp")
-def snapshot(timestamp: str | datetime = Path(..., examples=["now", "now-1d", "2023-12-04T23:59Z"],
+def snapshot(response: Response, timestamp: str | datetime = Path(..., examples=["now", "now-1d", "2023-12-04T23:59Z"],
                                                openapi_examples={
                 "now": {"description": "Get the most recent snapshot", "value": "now"},
                 "now-1d": {"description": "Get yesterday's snapshot", "value": "now-1d"},
                 "2023-04-25T23:59Z": {"description": "A specific timestamp", "value": "2023-04-25T23:59Z"},
             }), username = username) -> Snapshot:
+    is_relative_timestamp: bool = isinstance(timestamp, str) and timestamp.startswith("now")
     if isinstance(timestamp, str):
         timestamp = parse_datetime_str(timestamp)
     snapshot0: Snapshot = state.get_snapshot(timestamp)
+    if not is_relative_timestamp:
+        response.headers["Cache-Control"] = "max-age=604800"  # 1 week
+    else:
+        response.headers["Cache-Control"] = "max-age=60"  # 1 minute
     return snapshot0
 
 

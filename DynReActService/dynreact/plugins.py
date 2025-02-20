@@ -155,6 +155,34 @@ class Plugins:
                                 config in self._config.plant_performance_models] if self._config.plant_performance_models is not None else []
         return self._plant_performance_models
 
+    def load_stp_page(self):
+        stp = self._config.stp_frontend
+        if not stp:
+            return None
+        if stp == "default":
+            try:
+                import dynreact.gui.plugins.agentsPage
+                return dynreact.gui.plugins.agentsPage.layout
+            except:
+                print("Failed to load standard Agents page")
+                traceback.print_exc()
+                return None
+        importers = iter(sys.meta_path)
+        for importer in importers:
+            try:
+                spec_res = importer.find_spec(stp, path=None)
+                if spec_res is not None:
+                    modl = importlib.util.module_from_spec(spec_res)
+                    spec_res.loader.exec_module(modl)
+                    for name, element in inspect.getmembers(modl):
+                        if name == "layout":
+                            sys.modules[stp] = modl
+                            return element  # return the layout function
+            except:
+                print(f"An error occurred loading the STP frontend {stp}")
+                traceback.print_exc()
+        return None
+
     @staticmethod
     def _load_plant_performance_model(config: str, site: Site) -> PlantPerformanceModel|None:
         if "::" not in config:

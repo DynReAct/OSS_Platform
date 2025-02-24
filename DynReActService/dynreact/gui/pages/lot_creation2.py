@@ -5,7 +5,7 @@ from typing import Literal, Any
 
 import dash
 import pandas as pd
-from dash import html, callback, Input, Output, dcc, State, no_update, clientside_callback, ClientsideFunction
+from dash import html, callback, Input, Output, dcc, State, ctx, no_update, clientside_callback, ClientsideFunction
 import plotly.express as px
 import dash_ag_grid as dash_ag
 from dash.development.base_component import Component
@@ -115,7 +115,7 @@ def layout(*args, **kwargs):
         dcc.Interval(id="lots2-interval", n_intervals=3_600_000),  # for polling when optimization is running
         # ======== Popups  =========
         structure_portfolio_popup(111222),
-        dcc.Store(id="lots2-material-setpoints"),
+        dcc.Store(id="lots2-material-setpoints", data={}),
     ], id="lots2")
     return layout
 
@@ -151,7 +151,7 @@ def targets_tab(horizon: int):
                     html.Div("Use structure planning ?"),
                 ], className="lots2-use-structure-checkbox"),
                 html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
-                html.Div(html.Button("Show user input", id="lots2-show-result-btn", className="lots2-target-buttons2")),
+                #html.Div(html.Button("Show user input", id="lots2-show-result-btn", className="lots2-target-buttons2")),
                 html.Div(dcc.Textarea(id='lots2-textarea-logging', value='', className="lots2-textarea"))
             ]), html.Div([
                 html.H4("Plant performance models"),
@@ -359,7 +359,8 @@ def structure_portfolio_popup(initial_weight: float):
             # materials_table()
             html.Div(id="lots2-materials-grid"),
             html.Div([
-                html.Button("Spread", id="lots2-materials-spread", className="dynreact-button"),
+                #html.Button("Spread", id="lots2-materials-spread", className="dynreact-button"),
+                html.Button("Clear", id="lots2-materials-clear", className="dynreact-button"),
                 html.Button("Accept", id="lots2-materials-accept", className="dynreact-button"),
                 html.Button("Cancel", id="lots2-materials-cancel", className="dynreact-button")
             ], className="lots2-materials-buttons")
@@ -492,8 +493,18 @@ def ltp_table_opened(_, snapshot: str, process: str, horizon_hours: int):
 
 # TODO clear button?
 @callback(
+    Output("lots2-material-setpoints", "clear_data"),  #&&&
+    Input("lots2-materials-clear", "n_clicks"),
+)
+def clear_setpoints(n_click_clear) -> bool:
+    if n_click_clear is not None and n_click_clear > 0:
+        return True
+    return False
+
+@callback(
     Output("lots2-details-plants", "children"),
     Output("lots2-details-plants", "className"),
+    #Output("lots2-material-setpoints", "clear_data"),  #&&&
     State("selected-snapshot", "data"),
     State("lots2-horizon-hours", "value"),
     State("lots2-details-plants", "children"),
@@ -595,7 +606,10 @@ def update_plants(snapshot: str,
 
     # TODO display total tonnes
     # my_parent_classname for formatting purpose
-    return elements, my_parent_classname
+    # todo if input-selector HAS CHANGED ??
+
+    #my_clear_lots2_material_setpoints = True       #&&&
+    return elements, my_parent_classname #, my_clear_lots2_material_setpoints
 
 
 def _targets_from_ltp(selected_row: dict[str, any], process: str, start_time: datetime, horizon_hours: int) -> ProductionTargets:
@@ -907,10 +921,10 @@ def toggle_structure_planning(use_lot_structure0: list[Literal[""]]):
 
 @callback(
     Output("lots2-textarea-logging", "value"),
-    Input("lots2-show-result-btn", "n_clicks"),
+    #Input("lots2-show-result-btn", "n_clicks"),
     Input("lots2-material-setpoints", "data")
 )
-def show_userinput_structure_planning(_, json_data):
+def show_userinput_structure_planning( json_data):
     result_structure_planning = str(json_data)
     return result_structure_planning
 
@@ -1338,7 +1352,7 @@ clientside_callback(
 clientside_callback(
     ClientsideFunction(
         namespace="lots2",
-        function_name="getMaterialSetpoints"
+        function_name="setMaterialSetpoints"
     ),
     Output("lots2-material-setpoints", "data"),
     Input("lots2-materials-accept", "n_clicks"),
@@ -1371,20 +1385,6 @@ clientside_callback(
     State("lots2-materials-grid", "id"),
 )
 
-
-clientside_callback(
-    ClientsideFunction(
-        namespace="lots2",
-        function_name="spreadMaterialGrid"
-    ),
-    #Output("lots2-material-setpoints", "data"),
-    Input("lots2-materials-spread", "n_clicks"),
-    State("lots2-weight-total", "value"),
-    State("lots2-materials-grid", "id"),
-    #config_prevent_initial_callbacks=True
-)
-
-
 clientside_callback(
     ClientsideFunction(
         namespace="dialog",
@@ -1416,9 +1416,7 @@ clientside_callback(
     State("lots2-structure-dialog", "id"),
     State("lots2-materials-accept", "title"),
 )
-### end modal dialog
-#&&& test commu  with modal dialog
-# in work: this callback output causes missing all values after next click "StructurePlanning"
+
 @callback(
     Output("lots2-weight-total", "value"),
     Input("lots2-structure-btn", "n_clicks"),

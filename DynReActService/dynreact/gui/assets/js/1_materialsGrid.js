@@ -71,9 +71,12 @@ class MaterialsGrid extends HTMLElement {
                     parent: JsUtils.createElement("div", {parent: material_parent}),
                     attributes: {min: "0", step: "1000", type: "number"}   // TODO test
                 });
-                // TODO &&& action diff amount in default field, check if <
+                if (material_class.is_default){
+                    inp.readOnly = true;
+                }
                 inp.addEventListener("change", (event) => {
-                    console.log('loc 76 ', ' field has changed' )
+                     //this.changeFilling(material_category,  material_class, inp.value);
+                     this.changeFilling(material_category, inp.value);
                 });
 
             }
@@ -85,7 +88,6 @@ class MaterialsGrid extends HTMLElement {
     }
 
     initTargets(totalValue) {
-        console.log(this.#materials)
         if (!totalValue || !this.#materials)
             return;
         for (const category of this.#materials) {
@@ -114,59 +116,12 @@ class MaterialsGrid extends HTMLElement {
                     continue;
                 }
                 materialParent.querySelector("input[type=number]").value = amount;
-                console.log('here materialsGrid.initTargets')
-                //materialParent.querySelector("input[type=number]").value = 4712;
-            }
-        }
-    }
-
-    initTargetsFromPrev(totalValue, setpoints) {
-        console.log('loc 119 materialsGrid.initTargetsFromPrev');
-        console.log(this.#materials);
-        console.log(setpoints);    //dict { rtype1: 1, rtype2: 2, rtype3: 3, rtype4: 4712, ftype1: 4712, ftype2: 4712 }
-        if (!totalValue || !this.#materials)
-            return;
-        for (const category of this.#materials) {
-            console.log( category);
-//            for (const types in category){
-//                console.log('loc127 ')
-//                console.log(types)
-//            //const XXX = category.classes.filter(m=> m.default_share === undefined)
-//            }
-
-            const sharesMissing = category.classes.filter(m => m.default_share === undefined);
-            const sharesDefined = sharesMissing.length <= 1;
-            const shares = Object.fromEntries(category.classes.filter(cl => cl.default_share !== undefined).map(cl => [cl.id, cl.default_share]));
-            if (sharesMissing.length === 1) {
-                const aggregated = Object.values(shares).reduce((a,b) => a+b, 0);
-                const final = aggregated >= 1 ? 0 : 1 - aggregated;
-                shares[sharesMissing[0].id] = final;
-            }
-            else {
-                const defaultClass = category.classes.find(m => m.is_default);
-                if (defaultClass) {
-                    const aggregated = Object.values(shares).reduce((a,b) => a+b, 0);
-                    const final = aggregated >= 1 ? 0 : 1 - aggregated;
-                    sharesMissing.forEach(sh => shares[sh.id] = 0);
-                    shares[defaultClass.id] = final;
-                }
-            }
-            for (const [clzz, share] of Object.entries(shares)) {
-                const amount = totalValue * share;
-                const materialParent = this.#grid.querySelector("div[data-category=\"" + category.id + "\"][data-material=\"" + clzz + "\"]");
-                if (!materialParent) {
-                    console.log("Material cell not found:", clzz, "category: ", category?.id);
-                    continue;
-                }
-                //materialParent.querySelector("input[type=number]").value = amount;
-                console.log('loc 158 set amount');
-                //materialParent.querySelector("input[type=number]").value = 4712;
             }
         }
     }
 
     getSetpoints() {
-        console.log(' here getSetpoints ')
+        // get all values from grid
         if (!this.#materials)
             return undefined;
         const results = Object.create(null);
@@ -177,47 +132,47 @@ class MaterialsGrid extends HTMLElement {
         return results;
     }
 
-    //&&
-    setOneField(cellid, newValue){
-        console.log ('loc 182 ', 'setOneField ');
+    getOneField(cellid){
+        //get value from spec grid cell
+        let result;
         for (const category of this.#materials) {
             for (const item in category.classes) {
                 const materialParent = this.#grid.querySelector("div[data-category=\"" + category.id + "\"][data-material=\"" + cellid + "\"]");
-                if (!materialParent) {
-                    console.log("Material cell not found:", item, "category: ", category?.id);
+                if (!materialParent)
                     continue;
-                }
+                result = Number(materialParent.querySelector("input[type=number]").value);
+            }
+        }
+        return result;
+    }
+
+    setOneField(cellid, newValue){
+        //set value to spec grid cell
+        for (const category of this.#materials) {
+            for (const item in category.classes) {
+                const materialParent = this.#grid.querySelector("div[data-category=\"" + category.id + "\"][data-material=\"" + cellid + "\"]");
+                if (!materialParent)
+                    continue;
                 materialParent.querySelector("input[type=number]").value = newValue;
             }
         }
     }
 
-
     setSetpoints(totalProduction) {
-        // just method to set specified value to specified field
-        console.log('loc 177 setSetpoints ', totalProduction);
+        // just test method loop grid and to set specified value to specified field
         for (const category of this.#materials) {
-            console.log ('loc 178 ', category);
-            //const amount = 777; //totalValue * share;
             let idx = 0;
             for (const item in category.classes) {
                 idx = idx + 1;
-                console.log ('loc 181 ', item, category.classes[item].id);
                 const cellid = category.classes[item].id;
-
                 const materialParent = this.#grid.querySelector("div[data-category=\"" + category.id + "\"][data-material=\"" + cellid + "\"]");
                 if (!materialParent) {
                     console.log("Material cell not found:", item, "category: ", category?.id);
                     continue;
                 }
-                materialParent.querySelector("input[type=number]").value = totalProduction / 4; //amount +idx;
-                //console.log('here materialsGrid.setSetpoints');
-                //materialParent.querySelector("input[type=number]").value = 4712;
+                materialParent.querySelector("input[type=number]").value = 4712;  //just test
             }
         }
-        // just test one grid element
-        console.log('loc 219 before OneField');
-        setOneField("surface_tin", 777777);     // not working
     }
 
     reset(setpoints) {
@@ -230,4 +185,26 @@ class MaterialsGrid extends HTMLElement {
         });
     }
 
+    changeFilling(material_category,  new_value){
+        // triggerd by input change, recalc one col of grid
+        let new_value_default_field;
+        //find field in cur col with default entry
+        let default_field_id;
+        let sum_other_fields = 0;
+        // get value from field with id lots2-weight-total
+        let lots_weight_total = Number(document.getElementById("lots2-weight-total").value);
+        for (const material_class of material_category.classes) {
+            if (material_class.is_default){
+                //get id of default field
+                default_field_id = material_class.id; }
+            else
+                sum_other_fields = sum_other_fields + this.getOneField(material_class.id);
+        }
+        sum_other_fields = sum_other_fields - new_value;
+        // calc diff to total
+        new_value_default_field = lots_weight_total - sum_other_fields - new_value;
+        //set new value to default field
+        this.setOneField(default_field_id, new_value_default_field);
+        //check new entry < value default entry, else ?? todo
+    }
 }

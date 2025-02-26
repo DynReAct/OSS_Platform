@@ -29,6 +29,13 @@ class CostProvider:
         """
         raise Exception("not implemented")
 
+    def logistic_costs(self, new_equipment: Equipment, order: Order, material: Material | None = None) -> float:
+        """
+        Calculates the transition costs for an order or individual material from an order to be transported to a new
+        equipment.
+        """
+        return 0
+
     def evaluate_order_assignments(self, process: str, assignments: dict[str, OrderAssignment], targets: ProductionTargets, snapshot: Snapshot) -> ProductionPlanning:
         """
         :param process:

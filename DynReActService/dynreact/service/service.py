@@ -16,7 +16,7 @@ from pydantic import AliasChoices
 from dynreact.app import config, state
 from dynreact.auth.authentication import fastapi_authentication
 from dynreact.service.model import EquipmentTransition, EquipmentTransitionStateful, LotsOptimizationInput, \
-    LotsOptimizationResults, TransitionInfo
+    LotsOptimizationResults, TransitionInfo, MaterialTransfer
 from dynreact.service.optim_listener import LotsOptimizationListener
 
 fastapi_app = FastAPI(
@@ -166,7 +166,7 @@ def plant_downtimes(
     return result
 
 
-@fastapi_app.post("/costs/transitions",  # TODO
+@fastapi_app.post("/costs/transitions",
                 tags=["dynreact"],
                 response_model_exclude_unset=True,
                 response_model_exclude_none=True,
@@ -191,6 +191,24 @@ def transition_cost(transition: EquipmentTransition, username = username) -> flo
     costs: float = state.get_cost_provider().transition_costs(plant, current_order, next_order, current_material=current_coil, next_material=next_coil)
     return costs
 
+
+@fastapi_app.post("/costs/logistics",
+                tags=["dynreact"],
+                response_model_exclude_unset=True,
+                response_model_exclude_none=True,
+                summary="Query logistics costs for transfer of material from one equipment to the other.")
+def transition_cost(transfer_data: MaterialTransfer, username = username) -> float:
+    snapshot, plant = _get_snapshot_plant(transfer_data.snapshot_id, transfer_data.new_equipment)
+    order: Order|None = snapshot.get_order(transfer_data.order)
+    if order is None:
+        raise HTTPException(status_code=404, detail=f"Current order {transfer_data.order} not found")
+    coil = None
+    if transfer_data.material is not None:
+        coil = snapshot.get_material(transfer_data.material)
+        if coil is None:
+            raise HTTPException(status_code=404, detail=f"Current coil {transfer_data.material} not found or not provided")
+    costs: float = state.get_cost_provider().logistic_costs(new_equipment=plant, order=order, material=coil)
+    return costs
 
 @fastapi_app.get("/costs/status/{equipment_id}/{snapshot_timestamp}",
                 tags=["dynreact"],

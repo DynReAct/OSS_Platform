@@ -20,6 +20,17 @@ class EquipmentTransition(BaseModel):
     "Next coil id"
 
 
+class MaterialTransfer(BaseModel, use_attribute_docstrings=True):
+
+    snapshot_id: datetime
+    new_equipment: int
+    "New equipment the order or material is transferred to"
+    order: str
+    "Order to be transferred to new equipment"
+    material: str|None = None
+    "Optional: individual material from the order to be transferred."
+
+
 class EquipmentTransitionStateful(EquipmentTransition):
 
     equipment_status: EquipmentStatus

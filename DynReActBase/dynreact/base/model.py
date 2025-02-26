@@ -388,7 +388,7 @@ class MaterialCategory(Model):
     classes: list[MaterialClass]
     """
     Mutually exclusive material classes. It is assumed
-    that every product and order can be assigned to exactly one class within the category.
+    that every material and order can be assigned to exactly one class within the category.
     """
 
 

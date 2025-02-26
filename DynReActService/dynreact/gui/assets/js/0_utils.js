@@ -1,6 +1,7 @@
 class JsUtils {
 
     static formatNumber(n, numDigits = 3) {
+        numDigits = numDigits || 3;
         const abs = Math.abs(n);
         if (abs >= Math.exp(Math.log(10) * numDigits) || (abs < 0.01 && abs !== 0))
             return n.toExponential(numDigits-1);
@@ -14,14 +15,14 @@ class JsUtils {
                 + JsUtils._asTwoDigits(date.getHours()) + ":" + JsUtils._asTwoDigits(date.getMinutes());
     }
 
-    static format(value) {
+    static format(value, numDigits) {
         if (value === undefined || value === null)
             return "";
         if (value instanceof Date)
             return JsUtils.formatDate(value);
         const tp = typeof value;
         if (tp === "number")
-            return JsUtils.formatNumber(value);
+            return JsUtils.formatNumber(value, numDigits);
         if (tp === "object")
             return JSON.stringify(value);
         return value.toString();

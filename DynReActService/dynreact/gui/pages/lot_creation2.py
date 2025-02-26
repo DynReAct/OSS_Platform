@@ -151,6 +151,7 @@ def targets_tab(horizon: int):
                     html.Div("Use structure planning ?"),
                 ], className="lots2-use-structure-checkbox"),
                 html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
+                #html.Div(html.Button("Show user input", id="lots2-show-result-btn", className="lots2-target-buttons2")),
                 html.Div(dcc.Textarea(id='lots2-textarea-logging', value='', className="lots2-textarea"))
             ]), html.Div([
                 html.H4("Plant performance models"),
@@ -352,13 +353,12 @@ def structure_portfolio_popup(initial_weight: float):
             html.H3("Structure Planning"),
             html.Div([
                 html.Div("Sum lot weight / t:"),
-                #dcc.Input(type="number", id="lots2-weight-total", readOnly=True, min="0", value=initial_weight)
-                dcc.Input(type="number", id="lots2-weight-total",  min="0", value=initial_weight)
+                dcc.Input(type="number", id="lots2-weight-total", readOnly=True, min="0", value=initial_weight)
+                #dcc.Input(type="number", id="lots2-weight-total",  min="0", value=initial_weight)
             ], className="lots2-weight-total"),
             # materials_table()
             html.Div(id="lots2-materials-grid"),
             html.Div([
-                #html.Button("Spread", id="lots2-materials-spread", className="dynreact-button"),
                 html.Button("Set default", id="lots2-materials-setdefault", className="dynreact-button"),
                 html.Button("Accept", id="lots2-materials-accept", className="dynreact-button"),
                 html.Button("Cancel", id="lots2-materials-cancel", className="dynreact-button")
@@ -531,9 +531,9 @@ def update_plants(snapshot: str,
         my_parent_classname = "lots2-plants-targets3"
 
     if not dash_authenticated(config) or process is None or snapshot is None:
-        return None, my_parent_classname
+        return None, my_parent_classname, False
     if active_tab != "targets":
-        return no_update, my_parent_classname
+        return no_update, my_parent_classname, False
     changed = GuiUtils.changed_ids()
     is_ltp_init = "lots2-ltp-table" in changed and len(selected_rows) > 0
     re_init: bool = "lots2-targets-init-lots" in changed or is_ltp_init
@@ -608,7 +608,7 @@ def update_plants(snapshot: str,
     # my_parent_classname for formatting purpose
     # todo if input-selector HAS CHANGED ??
 
-    clear_lots2_material_setpoints = True       #&&&
+    clear_lots2_material_setpoints = True;       #&&&
     return elements, my_parent_classname, clear_lots2_material_setpoints
 
 
@@ -1355,6 +1355,7 @@ clientside_callback(
     ),
     Output("lots2-material-setpoints", "data"),
     Input("lots2-materials-accept", "n_clicks"),
+    Input("lots2-weight-total", "value"),
     State("lots2-materials-grid", "id"),
     #config_prevent_initial_callbacks=True
 )
@@ -1554,6 +1555,9 @@ def target_values_from_settings_short(process: str, plants: list[int], component
         except TypeError:
             message = "Target production: enter a value"
             return None, False, message
+
+        # targets: dict[int, EquipmentProduction] = {plant: EquipmentProduction(equipment=plant, total_weight=value,
+        #                                             lot_weight_range=None) for plant, value in target_values.items()}
 
         changed_plants = [plant for plant, c in component_by_plant.items() if
                           c.get("props").get("children").get("props").get("value") != c.get("props").get("data-default")

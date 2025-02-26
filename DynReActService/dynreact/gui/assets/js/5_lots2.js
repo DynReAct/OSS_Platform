@@ -44,12 +44,13 @@
 
 
         // lots2-details-plants changed -> add diff to default field
-        grid.checkSums();
+        const sumsChanged = grid.checkSums();
 
         grid.setProcessName(process);
     }
 
-    globalThis.dash_clientside.lots2.setMaterialSetpoints = function(_, gridId) {
+    globalThis.dash_clientside.lots2.setMaterialSetpoints = function(_, __, gridId) {
+        //triggered by button Accept or by lots2-weight-total changed
         //returns all values from grid, callback fills Store lots2-material-setpoints
         const materialGrid = document.querySelector("div#" + gridId + " " + materialsTag);
         mySetpoints = materialGrid?.getSetpoints();

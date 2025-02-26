@@ -74,6 +74,7 @@ class MaterialsGrid2 extends HTMLElement {
                 });
                 if (material_class.is_default){
                     inp.readOnly = true;
+                    inp.style.backgroundColor = "LightSteelBlue";
                 }
                 inp.addEventListener("change", (event) => {
                      this.changeFilling(material_category, inp.value);

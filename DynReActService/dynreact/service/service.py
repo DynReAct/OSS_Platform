@@ -58,7 +58,7 @@ def site(response: Response, username = username) -> Site:
 def _get_snapshot_plant(snapshot_id: str|datetime, plant_id: int) -> tuple[Snapshot, Equipment]:
     if isinstance(snapshot_id, str):
         snapshot_id = parse_datetime_str(snapshot_id)
-    site0 = site()
+    site0 = state.get_site()
     snapshot: Snapshot = state.get_snapshot(snapshot_id)
     if snapshot is None:
         raise HTTPException(status_code=404, detail="No such snapshot: " + DatetimeUtils.format(snapshot_id))
@@ -197,7 +197,7 @@ def transition_cost(transition: EquipmentTransition, username = username) -> flo
                 response_model_exclude_unset=True,
                 response_model_exclude_none=True,
                 summary="Query logistics costs for transfer of material from one equipment to the other.")
-def transition_cost(transfer_data: MaterialTransfer, username = username) -> float:
+def logistics_cost(transfer_data: MaterialTransfer, username = username) -> float:
     snapshot, plant = _get_snapshot_plant(transfer_data.snapshot_id, transfer_data.new_equipment)
     order: Order|None = snapshot.get_order(transfer_data.order)
     if order is None:

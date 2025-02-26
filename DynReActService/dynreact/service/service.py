@@ -8,7 +8,7 @@ from dynreact.base.LotsOptimizer import LotsOptimizer
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, \
     MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.params import Path, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import AliasChoices
@@ -16,7 +16,7 @@ from pydantic import AliasChoices
 from dynreact.app import config, state
 from dynreact.auth.authentication import fastapi_authentication
 from dynreact.service.model import EquipmentTransition, EquipmentTransitionStateful, LotsOptimizationInput, \
-    LotsOptimizationResults, TransitionInfo
+    LotsOptimizationResults, TransitionInfo, MaterialTransfer
 from dynreact.service.optim_listener import LotsOptimizationListener
 
 fastapi_app = FastAPI(
@@ -47,8 +47,9 @@ username = fastapi_authentication(config)
                 response_model_exclude_unset=True,
                 response_model_exclude_none=True,
                 summary="Get a list of process steps and plants configured for the site")
-def site(username = username) -> Site:
+def site(response: Response, username = username) -> Site:
     try:
+        response.headers["Cache-Control"] = "max-age=600"  # 10 minutes
         return state.get_site()
     except:
         raise HTTPException(status_code=502, detail="Information not available")
@@ -57,7 +58,7 @@ def site(username = username) -> Site:
 def _get_snapshot_plant(snapshot_id: str|datetime, plant_id: int) -> tuple[Snapshot, Equipment]:
     if isinstance(snapshot_id, str):
         snapshot_id = parse_datetime_str(snapshot_id)
-    site0 = site()
+    site0 = state.get_site()
     snapshot: Snapshot = state.get_snapshot(snapshot_id)
     if snapshot is None:
         raise HTTPException(status_code=404, detail="No such snapshot: " + DatetimeUtils.format(snapshot_id))
@@ -72,7 +73,7 @@ def _get_snapshot_plant(snapshot_id: str|datetime, plant_id: int) -> tuple[Snaps
                  response_model_exclude_unset=True,
                  response_model_exclude_none=True,
                  summary="Get a list of available snapshots identified by their timestamps")
-def snapshots(start: str|datetime|None=Query(None, description="Optional start time.",
+def snapshots(response: Response, start: str|datetime|None=Query(None, description="Optional start time.",
                                              examples=["now-2d", "2023-04-25T00:00Z"], openapi_examples={
                 "now-2d": {"description": "Two days ago", "value": "now-2d"},
                 "2023-04-25T00:00Z": {"description": "A specific timestamp", "value": "2023-04-25T00:00Z"},
@@ -99,6 +100,7 @@ def snapshots(start: str|datetime|None=Query(None, description="Optional start t
             result.append(next(it))
         except StopIteration:
             break
+    response.headers["Cache-Control"] = "max-age=60"  # 1 minute...
     return result
 
 
@@ -107,15 +109,20 @@ def snapshots(start: str|datetime|None=Query(None, description="Optional start t
                  response_model_exclude_unset=True,
                  response_model_exclude_none=True,
                  summary="Get a specific snapshot; the one with largest timestamp <= the provided timestamp")
-def snapshot(timestamp: str | datetime = Path(..., examples=["now", "now-1d", "2023-12-04T23:59Z"],
+def snapshot(response: Response, timestamp: str | datetime = Path(..., examples=["now", "now-1d", "2023-12-04T23:59Z"],
                                                openapi_examples={
                 "now": {"description": "Get the most recent snapshot", "value": "now"},
                 "now-1d": {"description": "Get yesterday's snapshot", "value": "now-1d"},
                 "2023-04-25T23:59Z": {"description": "A specific timestamp", "value": "2023-04-25T23:59Z"},
             }), username = username) -> Snapshot:
+    is_relative_timestamp: bool = isinstance(timestamp, str) and timestamp.startswith("now")
     if isinstance(timestamp, str):
         timestamp = parse_datetime_str(timestamp)
     snapshot0: Snapshot = state.get_snapshot(timestamp)
+    if not is_relative_timestamp:
+        response.headers["Cache-Control"] = "max-age=604800"  # 1 week
+    else:
+        response.headers["Cache-Control"] = "max-age=60"  # 1 minute
     return snapshot0
 
 
@@ -159,7 +166,7 @@ def plant_downtimes(
     return result
 
 
-@fastapi_app.post("/costs/transitions",  # TODO
+@fastapi_app.post("/costs/transitions",
                 tags=["dynreact"],
                 response_model_exclude_unset=True,
                 response_model_exclude_none=True,
@@ -184,6 +191,24 @@ def transition_cost(transition: EquipmentTransition, username = username) -> flo
     costs: float = state.get_cost_provider().transition_costs(plant, current_order, next_order, current_material=current_coil, next_material=next_coil)
     return costs
 
+
+@fastapi_app.post("/costs/logistics",
+                tags=["dynreact"],
+                response_model_exclude_unset=True,
+                response_model_exclude_none=True,
+                summary="Query logistics costs for transfer of material from one equipment to the other.")
+def logistics_cost(transfer_data: MaterialTransfer, username = username) -> float:
+    snapshot, plant = _get_snapshot_plant(transfer_data.snapshot_id, transfer_data.new_equipment)
+    order: Order|None = snapshot.get_order(transfer_data.order)
+    if order is None:
+        raise HTTPException(status_code=404, detail=f"Current order {transfer_data.order} not found")
+    coil = None
+    if transfer_data.material is not None:
+        coil = snapshot.get_material(transfer_data.material)
+        if coil is None:
+            raise HTTPException(status_code=404, detail=f"Current coil {transfer_data.material} not found or not provided")
+    costs: float = state.get_cost_provider().logistic_costs(new_equipment=plant, order=order, material=coil)
+    return costs
 
 @fastapi_app.get("/costs/status/{equipment_id}/{snapshot_timestamp}",
                 tags=["dynreact"],

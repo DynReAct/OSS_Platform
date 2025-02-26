@@ -262,6 +262,10 @@ class SampleCostProvider(CostProvider):
         planning.target_fct = target_fct
         return status
 
+    # TODO: differentiate between individual material and complete orders
+    def logistic_costs(self, new_equipment: Equipment, order: Order, material: Material | None = None) -> float:
+        return self._logistic_costs_for_order(order, new_equipment.id)
+
     def _logistic_costs_for_order(self, o: Order, plant: int) -> float:
         log_costs: dict[int, dict[int, float]] = self._site.logistic_costs
         min_costs: float|None = None

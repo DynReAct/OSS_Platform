@@ -1,8 +1,9 @@
-class MaterialsGrid extends HTMLElement {
+class MaterialsGrid2 extends HTMLElement {
 
     #grid;
     #materials;
     #tooltipContainer;
+    #processName;
 
     constructor() {
         super();
@@ -75,7 +76,6 @@ class MaterialsGrid extends HTMLElement {
                     inp.readOnly = true;
                 }
                 inp.addEventListener("change", (event) => {
-                     //this.changeFilling(material_category,  material_class, inp.value);
                      this.changeFilling(material_category, inp.value);
                 });
 
@@ -85,6 +85,10 @@ class MaterialsGrid extends HTMLElement {
         this.#grid.appendChild(frag);
         // FIXME
         window.materials = this;
+    }
+
+    materialsSet() {
+        return !!this.#materials;
     }
 
     initTargets(totalValue) {
@@ -158,7 +162,7 @@ class MaterialsGrid extends HTMLElement {
         }
     }
 
-    setSetpoints(totalProduction) {
+    setSetpointsTest(totalProduction) {
         // just test method loop grid and to set specified value to specified field
         for (const category of this.#materials) {
             let idx = 0;
@@ -207,4 +211,49 @@ class MaterialsGrid extends HTMLElement {
         this.setOneField(default_field_id, new_value_default_field);
         //check new entry < value default entry, else ?? todo
     }
+
+    resetGrid(lots_weight_total){
+       // reset to default filling
+       for (const category of this.#materials) {
+            for (const material_class of category.classes) {
+                if (material_class.is_default)
+                    this.setOneField(material_class.id, lots_weight_total);
+                else
+                    this.setOneField(material_class.id, 0);
+            }
+        }
+    }
+
+    checkSums(){
+        //called from initMaterialGrid
+        //compare lots2-weight-total with sum of cols
+        // ->add diff to default-field
+        let lots_weight_total = Number(document.getElementById("lots2-weight-total").value);
+        let lots_weight_sum;
+        let weight_diff = 0;
+        //calc sum per category
+        for (const category of this.#materials) {
+            lots_weight_sum = 0;
+            for (const material_class of category.classes) {
+                lots_weight_sum = lots_weight_sum + this.getOneField(material_class.id);
+                }
+            if (lots_weight_sum != lots_weight_total){
+                weight_diff = lots_weight_total - lots_weight_sum;
+                for (const material_class of category.classes) {
+                    if (material_class.is_default){
+                        this.setOneField(material_class.id, this.getOneField(material_class.id) + weight_diff);
+                    }
+                 }
+            }
+        }
+    }
+
+    setProcessName(process){
+        this.processName = process;
+    }
+
+    getProcessName(){
+        return this.processName;
+    }
+
 }

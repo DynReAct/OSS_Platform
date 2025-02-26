@@ -151,7 +151,6 @@ def targets_tab(horizon: int):
                     html.Div("Use structure planning ?"),
                 ], className="lots2-use-structure-checkbox"),
                 html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
-                #html.Div(html.Button("Show user input", id="lots2-show-result-btn", className="lots2-target-buttons2")),
                 html.Div(dcc.Textarea(id='lots2-textarea-logging', value='', className="lots2-textarea"))
             ]), html.Div([
                 html.H4("Plant performance models"),
@@ -360,7 +359,7 @@ def structure_portfolio_popup(initial_weight: float):
             html.Div(id="lots2-materials-grid"),
             html.Div([
                 #html.Button("Spread", id="lots2-materials-spread", className="dynreact-button"),
-                html.Button("Clear", id="lots2-materials-clear", className="dynreact-button"),
+                html.Button("Set default", id="lots2-materials-setdefault", className="dynreact-button"),
                 html.Button("Accept", id="lots2-materials-accept", className="dynreact-button"),
                 html.Button("Cancel", id="lots2-materials-cancel", className="dynreact-button")
             ], className="lots2-materials-buttons")
@@ -491,20 +490,21 @@ def ltp_table_opened(_, snapshot: str, process: str, horizon_hours: int):
         } for idx, t in enumerate(solutions)]
     return columns
 
-# TODO clear button?
-@callback(
-    Output("lots2-material-setpoints", "clear_data"),  #&&&
-    Input("lots2-materials-clear", "n_clicks"),
-)
-def clear_setpoints(n_click_clear) -> bool:
-    if n_click_clear is not None and n_click_clear > 0:
-        return True
-    return False
+# # TODO clear button?
+# @callback(
+#     Output("lots2-material-setpoints", "clear_data"),  #&&&
+#     Input("lots2-materials-clear", "n_clicks"),
+# )
+# def clear_setpoints(n_click_clear) -> bool:
+#     if n_click_clear is not None and n_click_clear > 0:
+#         #&&&
+#         return True
+#     return False
 
 @callback(
     Output("lots2-details-plants", "children"),
     Output("lots2-details-plants", "className"),
-    #Output("lots2-material-setpoints", "clear_data"),  #&&&
+    Output("lots2-material-setpoints", "clear_data"),  #&&&
     State("selected-snapshot", "data"),
     State("lots2-horizon-hours", "value"),
     State("lots2-details-plants", "children"),
@@ -608,8 +608,8 @@ def update_plants(snapshot: str,
     # my_parent_classname for formatting purpose
     # todo if input-selector HAS CHANGED ??
 
-    #my_clear_lots2_material_setpoints = True       #&&&
-    return elements, my_parent_classname #, my_clear_lots2_material_setpoints
+    clear_lots2_material_setpoints = True       #&&&
+    return elements, my_parent_classname, clear_lots2_material_setpoints
 
 
 def _targets_from_ltp(selected_row: dict[str, any], process: str, start_time: datetime, horizon_hours: int) -> ProductionTargets:
@@ -921,7 +921,6 @@ def toggle_structure_planning(use_lot_structure0: list[Literal[""]]):
 
 @callback(
     Output("lots2-textarea-logging", "value"),
-    #Input("lots2-show-result-btn", "n_clicks"),
     Input("lots2-material-setpoints", "data")
 )
 def show_userinput_structure_planning( json_data):
@@ -1360,7 +1359,7 @@ clientside_callback(
     #config_prevent_initial_callbacks=True
 )
 
-# On cancel reset material grid
+# reset material grid set default
 clientside_callback(
     ClientsideFunction(
         namespace="lots2",
@@ -1368,8 +1367,8 @@ clientside_callback(
     ),
     # in theory it should be ok to have no ouput, but it does not work # https://dash.plotly.com/advanced-callbacks#callbacks-with-no-outputs
     Output("lots2-materials-grid", "dir"),
-    Input("lots2-materials-cancel", "n_clicks"),
-    State("lots2-material-setpoints", "data"),
+    Input("lots2-materials-setdefault", "n_clicks"),
+    #State("lots2-material-setpoints", "data"),
     State("lots2-materials-grid", "id"),
 )
 
@@ -1381,6 +1380,7 @@ clientside_callback(
     ),
     Output("lots2-materials-grid", "title"),
     Input("lots2-weight-total", "value"),
+    State("lots2-process-selector", "value"),
     State("lots2-material-setpoints", "data"),
     State("lots2-materials-grid", "id"),
 )
@@ -1431,7 +1431,7 @@ def structure_update(_, components: list[Component]|None, process: str|None, set
         total_weight = sum(target_list)
     except:
         total_weight = 0
-    return f"{total_weight:.2f}"
+    return total_weight  #f"{total_weight:.2f}"
 
 
 def target_values_from_settings(process: str, period: tuple[datetime, datetime], plants: list[int], use_lot_range: bool, components: list[Component]|None) -> tuple[ProductionTargets|None, bool, str|None]:
@@ -1554,9 +1554,6 @@ def target_values_from_settings_short(process: str, plants: list[int], component
         except TypeError:
             message = "Target production: enter a value"
             return None, False, message
-
-        # targets: dict[int, EquipmentProduction] = {plant: EquipmentProduction(equipment=plant, total_weight=value,
-        #                                             lot_weight_range=None) for plant, value in target_values.items()}
 
         changed_plants = [plant for plant, c in component_by_plant.items() if
                           c.get("props").get("children").get("props").get("value") != c.get("props").get("data-default")

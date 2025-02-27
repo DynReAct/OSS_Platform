@@ -41,7 +41,7 @@ else:
 
 PYTHON_PATH = sys.executable
 SCRIPT_LOG = "log.py"
-SCRIPT_RESOURCE = "equipment.py"
+SCRIPT_EQUIPMENT = "equipment.py"
 SCRIPT_MATERIAL = "material.py"
 
 SMALL_WAIT = 5

@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import time
 import sys
@@ -29,6 +30,7 @@ class Agent:
         :param str kafka_ip: IP address and TCP port of the broker.
         :param int verbose: Level of details being saved.
         """
+
         self.topic = topic
         self.agent = agent
         self.kafka_ip = kafka_ip
@@ -124,12 +126,11 @@ class Agent:
         """
         return 'CONTINUE'
 
-    def callback_on_topic_not_available(self):
+    def callback_on_topic_not_available(self, topic: str = None):
         """
         Function executed when 'Subscribed topic not available'
         
         """
-        pass
 
     def callback_on_not_match(self, dctmsg: dict):
         """
@@ -156,8 +157,8 @@ class Agent:
 
         # If there is no message, go to the next iteration
         if message_obj.__str__() == 'None':
-            if (self.verbose > self.min_verbose) and ((self.iter_no_msg - 1) % 5 == 0):
-                self.write_log(f"Iteration {self.iter_no_msg - 1}. No message found.")
+            #if (self.verbose > self.min_verbose) and ((self.iter_no_msg - 1) % 5 == 0):
+                #self.write_log(f"Iteration {self.iter_no_msg - 1}. No message found.")
             time.sleep(1)
             return 'CONTINUE'
 
@@ -174,18 +175,18 @@ class Agent:
         key = message_obj.key()
         offst = message_obj.offset()
 
-        # Commit the message to indicate Kafka that it has already been processed,
-        # so the same message is not received again
-        self.consumer.commit(message_obj)
+        # If the subscribed topic does not exist, go to the next iteration
+        # This must be done before checking message_obj.error()
+        if message_obj.error() is not None:
+            self.callback_on_topic_not_available()
+            return 'CONTINUE'
+        else:
+            # Commit the message to indicate Kafka that it has already been processed,
+            # so the same message is not received again
+            self.consumer.commit(message_obj)
 
         # If the topic of the message doesn't match this topic, go to the next iteration
         if messtpc != self.topic:
-            return 'CONTINUE'
-
-        # If the subscribed topic does not exist, go to the next iteration
-        # This must be done before checking message_obj.error()
-        if 'Subscribed topic not available' in str(vals):
-            self.callback_on_topic_not_available()
             return 'CONTINUE'
 
         # If the message contains an error, raise it

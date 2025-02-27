@@ -53,35 +53,35 @@ def get_all_materials_params():
     :rtype: dict
     """
     orders = LAST_SNAPSHOT_DATA['orders']
-    materials = LAST_SNAPSHOT_DATA['coils']
+    materials = LAST_SNAPSHOT_DATA['material']
     orders = {order['id']: order for order in orders}
     materials = {material['id']: {**material, 'order': orders[material['order']]} for material in materials}
     return materials
 
 
-def get_all_resources_materials() -> dict:
+def get_all_equipments_materials() -> dict:
     """
-    Get the current materials assigned to each resource.
+    Get the current materials assigned to each equipment.
     
-    :return: Materials assigned to a resource.
+    :return: Materials assigned to equipment.
     :rtype: dict
     """
-    materials = LAST_SNAPSHOT_DATA['coils']
-    resource_materials = dict()
+    materials = LAST_SNAPSHOT_DATA['material']
+    equipment_materials = dict()
     for material in materials:
-        if 'current_plant' in material:
-            resource_id = material['current_plant']
+        if 'current_equipment' in material:
+            equipment_id = material['current_equipment']
             material_id = material['id']
-            if resource_id not in resource_materials:
-                resource_materials[resource_id] = [material_id]
+            if equipment_id not in equipment_materials:
+                equipment_materials[equipment_id] = [material_id]
             else:
-                resource_materials[resource_id].append(material_id)
-    return resource_materials
+                equipment_materials[equipment_id].append(material_id)
+    return equipment_materials
 
 
 LAST_SNAPSHOT = get_last_snapshot_timestamp()  # Can also be 'now'
 LAST_SNAPSHOT_DATA = get_snapshot_data(LAST_SNAPSHOT)
 
 ALL_MATERIALS_PARAMS = get_all_materials_params()
-ALL_RESOURCES_MATERIALS = get_all_resources_materials()
+ALL_EQUIPMENTS_MATERIALS = get_all_equipments_materials()
 

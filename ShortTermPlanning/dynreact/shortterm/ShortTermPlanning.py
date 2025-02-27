@@ -2,7 +2,7 @@
 Module: ShortTermPlanning.py
 
 This program runs the scripts required to start the general agents,
-clones them for an auction with the resources indicated by the user,
+clones them for an auction with the equipments indicated by the user,
 and starts the auction, waiting for its completion.
 
 First Prototype of Kubernetes oriented solution for the UX service
@@ -10,26 +10,28 @@ First Prototype of Kubernetes oriented solution for the UX service
 Version History:
 - 1.0 (2024-03-09): Initial version developed by Rodrigo Castro Freibott.
 - 1.1 (2024-10-30): Updated version (JOM).
+- 1.2 (2025-01-30): Rename references from machine/plant to equipment and coil to material. Handle subprocess errors
 
 Note:
 
-    To run scenario 05, use: python3 ShortTermPlanning.py -v 3  -b . -rw 10 -cw 30 -aw 50 -bw 15 -ew 10 -r 14 -n 1
-    To run scenario 06, use: python3 ShortTermPlanning.py -v 3  -b . -rw 10 -cw 30 -aw 50 -bw 15 -ew 10 -r 14 -n 2
-    To run scenario 07, use: python3 ShortTermPlanning.py -v 3 -b . -rw 10 -cw 30 -aw 200 -bw 15 -ew 10 -r 14 15 -n 1
+    To run scenario 05, use: python3 ShortTermPlanning.py -v 3  -b . -rw 10 -cw 30 -aw 50 -bw 15 -ew 10 -e 14 -n 1 -g 111
+    To run scenario 06, use: python3 ShortTermPlanning.py -v 3  -b . -rw 10 -cw 30 -aw 50 -bw 15 -ew 10 -e 14 -n 2 -g 111
+    To run scenario 07, use: python3 ShortTermPlanning.py -v 3 -b . -rw 10 -cw 30 -aw 200 -bw 15 -ew 10 -e 14 15 -n 1 -g 111
 
-    To run a reduced version, use: python3 ShortTermPlanning.py -v 3 -b . -rw 10 -cw 30 -aw 200 -bw 15 -ew 10 -r 14 15 -n 4
-    To run a full version, use: python3 ShortTermPlanning.py -v 3 -b . -rw 100 -cw 300 -aw 1200 -bw 45 -ew 100 -r 14 15
+    To run a reduced version, use: python3 ShortTermPlanning.py -v 3 -b . -rw 10 -cw 30 -aw 200 -bw 15 -ew 10 -e 14 15 -n 4 -g 111
+    To run a full version, use: python3 ShortTermPlanning.py -v 3 -b . -rw 100 -cw 300 -aw 1200 -bw 45 -ew 100 -e 14 15 -g 111
 
 """
-
 import time
 import random
 import string
 import argparse
-from confluent_kafka import Producer, Consumer
+from typing import Generator, Optional
+
+from confluent_kafka import Producer, Consumer, Message
 from confluent_kafka.admin import AdminClient
 import configparser
-from common import VAction, sendmsgtopic, TOPIC_GEN
+from common import VAction, sendmsgtopic, TOPIC_GEN, TOPIC_CALLBACK
 from data.data_functions import get_equipment_materials
 import subprocess, sys, os, re, json
 
@@ -44,7 +46,7 @@ else:
 
 PYTHON_PATH = sys.executable
 SCRIPT_LOG = "log.py"
-SCRIPT_RESOURCE = "resource.py"
+SCRIPT_EQUIPMENT = "equipment.py"
 SCRIPT_MATERIAL = "material.py"
 
 SMALL_WAIT = 5
@@ -84,7 +86,6 @@ def genauction() -> str:
     res = ''.join(random.choices(string.ascii_uppercase + string.digits, k=N))
     return 'DynReact-' + res
 
-
 def run_script(script: str, producer: Producer, base: str, verbose: int):
     """
     Run the given script and notify the LOG about it.
@@ -94,9 +95,13 @@ def run_script(script: str, producer: Producer, base: str, verbose: int):
     :param str base: Path to the configuration file (with the IP address)
     :param int verbose: Verbosity level
     """
+
     command = [PYTHON_PATH, script, "-b", base, "-v", str(verbose)]
+
+    env = os.environ.copy()
+
     # We use subprocess.Popen() instead of subprocess.run() because we don't want to wait for the program to finish
-    subprocess.Popen(command)
+    subprocess.Popen(command, env=env)
     if verbose > 1:
         msg = f"Executed program {script} to create the general {script.split('.')[0].upper()} agent."
         sendmsgtopic(
@@ -105,7 +110,7 @@ def run_script(script: str, producer: Producer, base: str, verbose: int):
         )
 
 
-def run_general_agents(producer: Producer, base: str, verbose: int):
+def run_general_agents(producer: Producer, base: str, gagents: str, verbose: int):
     """
     Creates the general agents by running the corresponding scripts.
 
@@ -114,23 +119,26 @@ def run_general_agents(producer: Producer, base: str, verbose: int):
     :param int verbose: Verbosity level
     """
     # The general LOG must be created first in case the general topic was deleted
-    run_script(SCRIPT_LOG, producer=producer, base=base, verbose=verbose)
-    sleep(SMALL_WAIT, producer=producer, verbose=verbose)
-    run_script(SCRIPT_RESOURCE, producer=producer, base=base, verbose=verbose)
-    run_script(SCRIPT_MATERIAL, producer=producer, base=base, verbose=verbose)
+    if str(gagents)[2] == '1':
+        run_script(base+'/'+SCRIPT_LOG, producer=producer, base=base, verbose=verbose)
+        sleep(SMALL_WAIT, producer=producer, verbose=verbose)
+    if str(gagents)[1] == '1':
+        run_script(base+'/'+SCRIPT_EQUIPMENT, producer=producer, base=base, verbose=verbose)
+    if str(gagents)[0] == '1':
+        run_script(base+'/'+SCRIPT_MATERIAL, producer=producer, base=base, verbose=verbose)
 
 
 def create_auction(
-        resources: list[str], producer: Producer, verbose: int, counterbid_wait: float, nmaterials: int = None
+        equipments: list[str], producer: Producer, verbose: int, counterbid_wait: float, nmaterials: int = None
 ) -> tuple[str, int]:
     """
-    Creates an auction by instructing the master LOG, RESOURCE and MATERIAL to clone themselves to follow a new topic
+    Creates an auction by instructing the master LOG, EQUIPMENTS and MATERIAL to clone themselves to follow a new topic
 
-    :param list resources: List of resource IDs that will participate in the auction
+    :param list equipments: List of equipments IDs that will participate in the auction
     :param object producer: A Kafka Producer instance
     :param int verbose: Verbosity level
     :param float counterbid_wait: Number of seconds to wait for the materials to counterbid
-    :param int nmaterials: Maximum number of materials cloned for each resource (default is to clone all)
+    :param int nmaterials: Maximum number of materials cloned for each equipment (default is to clone all)
 
     :return: Topic name of the auction and number of agents
     :rtype: tuple(str,int)
@@ -165,39 +173,39 @@ def create_auction(
         vb=verbose
     )
 
-    # Instruct the general RESOURCE to clone itself for the auction,
+    # Instruct the general EQUIPMENT to clone itself for the auction,
     # for as many times as specified by the user
-    for resource in resources:
+    for equipment in equipments:
         sendmsgtopic(
             producer=producer,
             tsend=TOPIC_GEN,
             topic=act,
             source="UX",
-            dest="RESOURCE:" + TOPIC_GEN,
+            dest="EQUIPMENT:" + TOPIC_GEN,
             action="CREATE",
-            payload=dict(id=resource, counterbid_wait=counterbid_wait),
+            payload=dict(id=equipment, counterbid_wait=counterbid_wait),
             vb=verbose
         )
         num_agents += 1
 
     # Instruct the general MATERIAL to clone itself for the auction,
-    # for as many materials associated to each resource
-    for resource in resources:
-        # Get the list of materials of the resource
-        resource_materials = get_equipment_materials(int(resource))
+    # for as many materials associated to each equipment
+    for equipment in equipments:
+        # Get the list of materials of the equipment
+        equipment_materials = get_equipment_materials(int(equipment))
         if verbose > 1:
-            msg = f"Obtained list of materials from equipment {resource}: {resource_materials}"
+            msg = f"Obtained list of materials from equipment {equipment}: {equipment_materials}"
             sendmsgtopic(
                 producer=producer, tsend=TOPIC_GEN, topic=act, source="UX", dest="LOG:" + TOPIC_GEN, action="WRITE",
                 payload=dict(msg=msg), vb=verbose
             )
 
-        # If a maximum number of materials is given, keep only the first `nmaterials` materials of the resource
+        # If a maximum number of materials is given, keep only the first `nmaterials` materials of the equipment
         if nmaterials is not None:
-            resource_materials = resource_materials[:nmaterials]
+            equipment_materials = equipment_materials[:nmaterials]
 
         # Clone the master MATERIAL for each material ID
-        for material in resource_materials:
+        for material in equipment_materials:
             sendmsgtopic(
                 producer=producer,
                 tsend=TOPIC_GEN,
@@ -213,15 +221,22 @@ def create_auction(
     return act, num_agents
 
 
-def start_auction(topic: str, producer: Producer, num_agents: int, verbose: int) -> None:
+def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents: int, verbose: int) -> None:
     """
     Starts an auction by instructing the LOG to check the presence of all agents
 
     :param str topic: Topic name of the auction we want to start
     :param object producer: A Kafka Producer instance
+    :param object consumer: A Kafka Consumer instance
     :param int num_agents:
     :param int verbose: Verbosity level
     """
+
+    sendmsgtopic(
+        producer=producer, tsend=TOPIC_GEN, topic=topic, source="UX", dest="LOG:" + TOPIC_GEN,
+        action="WRITE", payload=dict(msg="Starting auction"), vb=verbose
+    )
+
     sendmsgtopic(
         producer=producer,
         tsend=topic,
@@ -233,6 +248,89 @@ def start_auction(topic: str, producer: Producer, num_agents: int, verbose: int)
         vb=verbose
     )
 
+    time.sleep(SMALL_WAIT)
+
+    sendmsgtopic(
+        producer=producer, tsend=TOPIC_GEN, topic=topic, source="UX", dest="LOG:" + TOPIC_GEN,
+        action="WRITE", payload=dict(msg="Waiting for auction confirmation"), vb=verbose
+    )
+
+    for i in range(5):
+
+        sendmsgtopic(
+            producer=producer,
+            tsend=topic,
+            topic=topic,
+            source="UX",
+            dest="LOG:" + topic,
+            action="ISAUCTIONACTIVE",
+            vb=verbose
+        )
+
+        message_objs = wait_for_callback(TOPIC_CALLBACK, "AUCTIONSTARTED", consumer, verbose, sleep_timeout=2, max_iters=10)
+
+        for message in message_objs:
+
+            if message is None:
+                print("Exiting start auction loop")
+                break
+
+            payload = json.loads(message['payload']) if (type(message["payload"]) is str) else message['payload']
+            if payload["is_auction_started"]:
+                return
+
+    raise Exception("Failed to start auction, timeout exceeded")
+
+
+def wait_for_callback(topic: str, expected_action: str, consumer: Consumer, verbose: int, sleep_timeout: int = 1, max_iters: int = 10) -> Generator[Optional[Message], None, None]:
+    """
+    Starts an auction by instructing the LOG to check the presence of all agents
+
+    :param str topic: Topic name of the auction we want to start
+    :param str expected_action: The message action your expecting
+    :param object consumer: A Kafka Consumer instance
+    :param int verbose: Verbosity level
+    :param int sleep_timeout: Sleep timeout to wait for message
+    :param int max_iters:
+        Maximum iterations with no message (if this parameter is 1, the loop will stop once there are no more messages)
+    """
+
+    # Consume all messages until reaching a message destined for UX or exhausting the maximum number of iterations
+    iter_no_msg = 0
+    while iter_no_msg < max_iters:
+        message_obj = consumer.poll(timeout=1)
+        if message_obj.__str__() == 'None':
+            iter_no_msg += 1
+            # if verbose > 0 and (iter_no_msg - 1) % 5 == 0:
+                # msg = f"Iteration {iter_no_msg - 1}. No message found."
+                # sendmsgtopic(
+                #     producer=producer, tsend=TOPIC_GEN, topic=topic, source="UX", dest="LOG:" + TOPIC_GEN,
+                #     action="WRITE", payload=dict(msg=msg), vb=verbose
+                # )
+            time.sleep(sleep_timeout)
+        else:
+            iter_no_msg = 0
+
+            messtpc = message_obj.topic()
+            vals = message_obj.value()
+
+            message_is_ok = all([
+                messtpc == topic, 'Subscribed topic not available' not in str(vals), not message_obj.error()
+            ])
+
+            if message_is_ok:
+
+                consumer.commit(message_obj)
+
+                dctmsg = json.loads(vals)
+                match = re.search(dctmsg['dest'], "UX")
+                action = dctmsg['action'].upper()
+
+                if match and action == expected_action:
+                    yield dctmsg
+
+    print("No message found")
+    return None
 
 def ask_results(
         topic: str, producer: Producer, consumer: Consumer, verbose: int, wait_answer: float = 5., max_iters: int = 10
@@ -266,39 +364,23 @@ def ask_results(
 
     sleep(wait_answer, producer=producer, verbose=verbose)
 
-    # Consume all messages until reaching a message destined for UX or exhausting the maximum number of iterations
-    iter_no_msg = 0
-    while iter_no_msg < max_iters:
-        message_obj = consumer.poll(timeout=1)
-        if message_obj.__str__() == 'None':
-            iter_no_msg += 1
-            if verbose > 0 and (iter_no_msg - 1) % 5 == 0:
-                msg = f"Iteration {iter_no_msg - 1}. No message found."
-                sendmsgtopic(
-                    producer=producer, tsend=TOPIC_GEN, topic=topic, source="UX", dest="LOG:" + TOPIC_GEN,
-                    action="WRITE", payload=dict(msg=msg), vb=verbose
-                )
-            time.sleep(1)
-        else:
-            messtpc = message_obj.topic()
-            vals = message_obj.value()
-            consumer.commit(message_obj)
-            message_is_ok = all([
-                messtpc == topic, 'Subscribed topic not available' not in str(vals), not message_obj.error()
-            ])
-            if message_is_ok:
-                dctmsg = json.loads(vals)
-                match = re.search(dctmsg['dest'], "UX")
-                action = dctmsg['action'].upper()
-                if match and action == "RESULTS":
-                    results = dctmsg['payload']
-                    if verbose > 0:
-                        msg = f"Obtained results: {results}"
-                        sendmsgtopic(
-                            producer=producer, tsend=TOPIC_GEN, topic=topic, source="UX", dest="LOG:" + TOPIC_GEN,
-                            action="WRITE", payload=dict(msg=msg), vb=verbose
-                        )
-                    return results
+    message_objs = wait_for_callback(TOPIC_CALLBACK, "RESULTS", consumer, verbose)
+
+    for message in message_objs:
+
+        if message is None:
+            print("Exiting ask results loop")
+            break
+
+        payload = json.loads(message['payload']) if (type(message["payload"]) is str) else message['payload']
+        if verbose > 0:
+            msg = f"Obtained results: {payload}"
+            sendmsgtopic(
+                producer=producer, tsend=TOPIC_GEN, topic=topic, source="UX", dest="LOG:" + TOPIC_GEN,
+                action="WRITE", payload=dict(msg=msg), vb=verbose
+            )
+        return payload
+
 
     if verbose > 0:
         msg = f"Did not obtain results after waiting for {wait_answer}s and having {max_iters} iters with no message"
@@ -311,21 +393,35 @@ def ask_results(
 
 def end_auction(topic: str, producer: Producer, verbose: int) -> None:
     """
-    Ends an auction by instructing all RESOURCE, MATERIAL and LOG children of the auction to exit
+    Ends an auction by instructing all EQUIPMENT, MATERIAL and LOG children of the auction to exit
 
     :param str topic: Topic name of the auction we want to end
     :param object producer: A Kafka Producer instance
     :param int verbose: Verbosity level
     """
-    # Instruct all RESOURCE children to exit
-    # We can define the destinations of the message using a regex instead of looping through all resource IDs
-    # In this case, the regex ".*" matches any sequence of characters; that is, any resource ID
+
+    if verbose > 0:
+        msg = "Auction has ended!"
+        sendmsgtopic(
+            producer=producer,
+            tsend=topic,
+            topic=topic,
+            source="UX",
+            dest="LOG:" + topic,
+            action="WRITE",
+            payload=dict(msg=msg),
+            vb=verbose
+        )
+
+    # Instruct all EQUIPMENT children to exit
+    # We can define the destinations of the message using a regex instead of looping through all equipment IDs
+    # In this case, the regex ".*" matches any sequence of characters; that is, any equipment ID
     sendmsgtopic(
         producer=producer,
         tsend=topic,
         topic=topic,
         source="UX",
-        dest="RESOURCE:" + topic + ":.*",
+        dest="EQUIPMENT:" + topic + ":.*",
         action="EXIT",
         vb=verbose
     )
@@ -359,6 +455,7 @@ def sleep(seconds: float, producer: Producer, verbose: int):
 
 
 def main():
+    global IP
     """
     Main module running tests for validation
     params are provided as external arguments in command line.
@@ -368,10 +465,10 @@ def main():
     :param str runningWait: Number of seconds to wait for the general agents to start running.
     :param str cloningWait: Number of seconds to wait for the agents to clone themselves.
     :param str auctionWait: Number of seconds to wait for the auction to start and finish.
-    :param str counterbidWait: Number of seconds that each resource waits for all materials to counterbid.
+    :param str counterbidWait: Number of seconds that each equipment waits for all materials to counterbid.
     :param str exitWait: Number of seconds to wait for the agents to exit.
-    :param str resources: One or more resource IDs (e.g., '08')
-    :param int nmaterials: Maximum number of materials cloned for each resource (default is to clone all materials)
+    :param str equipments: One or more equipment IDs (e.g., '08')
+    :param int nmaterials: Maximum number of materials cloned for each equipment (default is to clone all materials)
     """
     # Extract the command line arguments
     ap = argparse.ArgumentParser()
@@ -397,105 +494,126 @@ def main():
     )
     ap.add_argument(
         "-bw", "--counterbidWait", type=str, required=True,
-        help="Number of seconds that each resource waits for all materials to counterbid"
+        help="Number of seconds that each equipment waits for all materials to counterbid"
     )
     ap.add_argument(
         "-ew", "--exitWait", type=str, required=True,
         help="Number of seconds to wait for the agents to exit"
     )
     ap.add_argument(
-        "-r", "--resources", metavar='RESOURCE_ID', type=str, nargs='+',
-        help="One or more resource IDs (e.g., '08')"
+        "-e", "--equipments", metavar='EQUIPMENT_ID', type=str, nargs='+',
+        help="One or more equipments IDs (e.g., '08')"
     )
     ap.add_argument(
         "-n", "--nmaterials", default=None, type=int,
-        help="Maximum number of materials cloned for each resource (default is to clone all materials)"
+        help="Maximum number of materials cloned for each equipment (default is to clone all materials)"
+    )
+    ap.add_argument(
+        "-g", "--rungagents", default='000', type=int,
+        help="0 => General agents are not launched; 100 => Material ; 010 => Equipment; 001 => Log; "
     )
     args = vars(ap.parse_args())
 
     verbose = args["verbose"]
+    if verbose is None:
+        verbose = 0
     base = args["base"]
     running_wait = int(args["runningWait"])
     cloning_wait = int(args["cloningWait"])
     auction_wait = int(args["auctionWait"])
+    rungagnts    = str(args['rungagents'])
     counterbid_wait = float(args["counterbidWait"])
     exit_wait = int(args["exitWait"])
-    resources = args["resources"]
+    equipments = args["equipments"]
     nmaterials = args["nmaterials"]
+    config.read(base+'/config.cnf')
+    IP = config['DEFAULT']['IP']
     if verbose > 0:
         print(
             f"Running program with {verbose=}, {base=}, {running_wait=}, {cloning_wait=}, {auction_wait=}, "
-            f"{counterbid_wait=} {exit_wait=}, {resources=}, {nmaterials=}."
+            f"{counterbid_wait=} {exit_wait=}, {equipments=}, {nmaterials=}."
         )
 
     # Uncomment this if there are any uncompleted previous executions that left harmful messages in the general topic
-    # admin_client = AdminClient({"bootstrap.servers": IP})
-    # delete_all_topics(admin_client, verbose=verbose)
+    admin_client = AdminClient({"bootstrap.servers": IP})
+    delete_all_topics(admin_client, verbose=verbose)
 
-    producer_config = {"bootstrap.servers": IP}
+    producer_config = {
+        "bootstrap.servers": IP,
+        'linger.ms': 100,  # Reduce latency
+        'acks': 'all'  # Ensure message durability
+    }
     producer = Producer(producer_config)
-    consumer_config = {"bootstrap.servers": IP, "group.id": "UX", "auto.offset.reset": "earliest"}
+    consumer_config = {
+        "bootstrap.servers": IP,
+        "group.id": "UX",
+        "auto.offset.reset": "earliest",
+        'enable.auto.commit': False
+    }
     consumer = Consumer(consumer_config)
 
-    run_general_agents(producer=producer, base=base, verbose=verbose)
-    sleep(running_wait, producer=producer, verbose=verbose)
+    if int(rungagnts) > 0:
+        run_general_agents(producer=producer, base=base, gagents=rungagnts, verbose=verbose)
+        sleep(running_wait, producer=producer, verbose=verbose)
 
     act, n_agents = create_auction(
-        resources=resources, producer=producer, verbose=verbose, counterbid_wait=counterbid_wait, nmaterials=nmaterials
+        equipments=equipments, producer=producer, verbose=verbose, counterbid_wait=counterbid_wait, nmaterials=nmaterials
     )
-    consumer.subscribe([act])
+
+    consumer.subscribe([act, TOPIC_CALLBACK])
     sleep(cloning_wait, producer=producer, verbose=verbose)
 
-    start_auction(topic=act, producer=producer, verbose=verbose, num_agents=n_agents)
-    sleep(auction_wait, producer=producer, verbose=verbose)
+    try:
+        start_auction(topic=act, consumer=consumer, producer=producer, verbose=verbose, num_agents=n_agents)
+        sleep(auction_wait, producer=producer, verbose=verbose)
+        results = ask_results(topic=act, producer=producer, consumer=consumer, verbose=verbose)
+        if verbose > 0:
+            print("---- RESULTS ----")
+            print(results)
+            print("----  ----")
+        sleep(SMALL_WAIT, producer=producer, verbose=verbose)
 
-    results = ask_results(topic=act, producer=producer, consumer=consumer, verbose=verbose)
-    if verbose > 0:
-        print("---- RESULTS ----")
-        print(results)
-        print("----  ----")
-    sleep(SMALL_WAIT, producer=producer, verbose=verbose)
+    finally:
+        end_auction(topic=act, producer=producer, verbose=verbose)
+        sleep(exit_wait, producer=producer, verbose=verbose)
 
-    end_auction(topic=act, producer=producer, verbose=verbose)
-    sleep(exit_wait, producer=producer, verbose=verbose)
+        # Instruct the LOG of the auction to exit
+        sendmsgtopic(
+            producer=producer,
+            tsend=act,
+            topic=act,
+            source="UX",
+            dest="LOG:" + act,
+            action="EXIT",
+            vb=verbose
+        )
 
-    # Instruct the LOG of the auction to exit
-    sendmsgtopic(
-        producer=producer,
-        tsend=act,
-        topic=act,
-        source="UX",
-        dest="LOG:" + act,
-        action="EXIT",
-        vb=verbose
-    )
+        # Instruct all general agents (except the LOG) to exit
+        sendmsgtopic(
+            producer=producer,
+            tsend=TOPIC_GEN,
+            topic=TOPIC_GEN,
+            source="UX",
+            dest=f"^(?!.*LOG:{TOPIC_GEN}).*$",
+            action="EXIT",
+            vb=verbose
+        )
+        sleep(SMALL_WAIT, producer=producer, verbose=verbose)
 
-    # Instruct all general agents (except the LOG) to exit
-    sendmsgtopic(
-        producer=producer,
-        tsend=TOPIC_GEN,
-        topic=TOPIC_GEN,
-        source="UX",
-        dest=f"^(?!.*LOG:{TOPIC_GEN}).*$",
-        action="EXIT",
-        vb=verbose
-    )
-    sleep(SMALL_WAIT, producer=producer, verbose=verbose)
+        # Instruct the general LOG to exit
+        sendmsgtopic(
+            producer=producer,
+            tsend=TOPIC_GEN,
+            topic=TOPIC_GEN,
+            source="UX",
+            dest=f"LOG:{TOPIC_GEN}",
+            action="EXIT",
+            vb=verbose
+        )
 
-    # Instruct the general LOG to exit
-    sendmsgtopic(
-        producer=producer,
-        tsend=TOPIC_GEN,
-        topic=TOPIC_GEN,
-        source="UX",
-        dest=f"LOG:{TOPIC_GEN}",
-        action="EXIT",
-        vb=verbose
-    )
     sleep(SMALL_WAIT, producer=producer, verbose=verbose)
 
     return None
-
 
 if __name__ == '__main__':
     main()

@@ -18,9 +18,9 @@ from functions import calculate_production_cost, get_new_equipment_status
 from agent import Agent
 
 
-class Resource(Agent):
+class Equipment(Agent):
     """
-    Class Resource supporting the equipment agents.
+    Class Equipment supporting the equipment agents.
 
     Arguments:
         topic     (str): Topic driving the relevant converstaion.
@@ -35,7 +35,7 @@ class Resource(Agent):
 
         super().__init__(topic=topic, agent=agent, kafka_ip=kafka_ip, verbose=verbose)
         """
-           Constructor function for the Resource Class
+           Constructor function for the Equipment Class
 
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
@@ -53,7 +53,7 @@ class Resource(Agent):
         self.round_number = 0
         self.status = status
         self.counterbid_wait = counterbid_wait
-
+        self.equipment = 0
         self.iter_post_bid = 0
         self.bids = []
         self.last_bid_time = None
@@ -70,7 +70,7 @@ class Resource(Agent):
 
         :param dict material_params:
         """
-        self.status = get_new_equipment_status(material_params=material_params, resource_status=self.status)
+        self.status = get_new_equipment_status(material_params=material_params, equipment_status=self.status)
         roundless_name = self.agent[:self.agent.rfind(":")]
         self.round_number += 1
         self.agent = roundless_name + f":{self.round_number}"
@@ -90,8 +90,8 @@ class Resource(Agent):
 
     def handle_create_action(self, dctmsg: dict) -> str:
         """
-        Handles the CREATE action. It clones the master RESOURCE for one auction.
-        This instruction should only be given to the general RESOURCE.
+        Handles the CREATE action. It clones the master EQUIPMENT for one auction.
+        This instruction should only be given to the general EQUIPMENT.
 
         :param dict dctmsg: Message dictionary
         :return: Status of the handling
@@ -100,10 +100,12 @@ class Resource(Agent):
 
         topic = dctmsg['topic']
         payload = dctmsg['payload']
-        resource = payload['id']
+        equipment = payload['id']
         counterbid_wait = payload['counterbid_wait']
-        agent = f"RESOURCE:{topic}:{resource}:0"
-        status = get_equipment_status(resource)
+        agent = f"EQUIPMENT:{topic}:{equipment}:0"
+        status = get_equipment_status(equipment)
+        self.equipment = equipment
+
 
         init_kwargs = dict(
             topic=topic, agent=agent, status=status, kafka_ip=self.kafka_ip,
@@ -113,15 +115,15 @@ class Resource(Agent):
             self.write_log(f"Creating equipment with configuration {init_kwargs}...")
 
         pool = Pool(processes=2)
-        pool.apply_async(create_resource, (init_kwargs,))
+        pool.apply_async(create_equipment, (init_kwargs,))
         pool.close()
 
         return 'CONTINUE'
 
     def handle_start_action(self, dctmsg: dict) -> str:
         """
-        Handles the START action. It starts the RESOURCE's auction by instructing the MATERIALs to start bidding.
-        This instruction should only be given to the RESOURCE children of the auction.
+        Handles the START action. It starts the EQUIPMENT's auction by instructing the MATERIALs to start bidding.
+        This instruction should only be given to the EQUIPMENT children of the auction.
 
         :param dict dctmsg: Message dictionary
         :return: Status of the handling
@@ -166,7 +168,7 @@ class Resource(Agent):
         material_params = payload['material_params']
         bidding_price = payload['price']
 
-        prod_cost = calculate_production_cost(material_params=material_params, resource_status=self.status)
+        prod_cost = calculate_production_cost(material_params=material_params, equipment_status=self.status)
         if prod_cost is None:
             if self.verbose > 1:
                 self.write_log(
@@ -214,7 +216,7 @@ class Resource(Agent):
     def handle_confirm_action(self, dctmsg: dict) -> str:
         """
         Handles the CONFIRM action. It receives the confirmation from the material and moves to the next round.
-        This instruction should only be given to the RESOURCE children of the auction,
+        This instruction should only be given to the EQUIPMENT children of the auction,
         and only from the MATERIAL that the equipment previously asked for confirmation.
 
         :param dict dctmsg: Message dictionary
@@ -247,7 +249,7 @@ class Resource(Agent):
         """
         Handles the ASSIGNED action. It removes the material from the list of bids or,
         if the material matches the pending material, it no longer waits for its confirmation.
-        This instruction should only be given to the RESOURCE children of the auction.
+        This instruction should only be given to the EQUIPMENT children of the auction.
 
         :param dict dctmsg: Message dictionary
         :return: Status of the handling
@@ -311,27 +313,27 @@ class Resource(Agent):
 
         self.bid_to_confirm = best_bid
         if self.verbose > 1:
-            self.write_log(f"Asked material {best_bid['material']} for confirmation.")
+            self.write_log(f"Equipment: Asked material {best_bid['material']} for confirmation.")
 
         return 'CONTINUE'
 
 
-def create_resource(init_kwargs: dict)-> None:
+def create_equipment(init_kwargs: dict)-> None:
     """
-    Helper function to create Resource instances asynchronously with Python's multiprocessing.
+    Helper function to create Equipment instances asynchronously with Python's multiprocessing.
     The reason for this function is that multiprocessing can handle functions but not methods.
     Source: https://stackoverflow.com/questions/41000818/can-i-pass-a-method-to-apply-async-or-map-in-python-multiprocessing
 
     :param dict init_kwargs:
     """
 
-    resource = Resource(**init_kwargs)
-    resource.follow_topic()
+    equipment = Equipment(**init_kwargs)
+    equipment.follow_topic()
 
 
 def main():
     """
-    Create the general RESOURCE and make it follow the general topic
+    Create the general EQUIPMENT and make it follow the general topic
 
     :param str base: Path for the configuration file. Passed in the command line
     :param int verbose: Option to print information. Passed in the command line
@@ -361,11 +363,11 @@ def main():
     kafka_ip = config['DEFAULT']['IP']
 
     # The parameter 'counterbid_wait' is irrelevant in the main equipment
-    main_resource = Resource(
-        topic=TOPIC_GEN, agent=f"RESOURCE:{TOPIC_GEN}", status=dict(), kafka_ip=kafka_ip,
+    main_equipment = Equipment(
+        topic=TOPIC_GEN, agent=f"EQUIPMENT:{TOPIC_GEN}", status=dict(), kafka_ip=kafka_ip,
         counterbid_wait=15, verbose=verbose
     )
-    main_resource.follow_topic()
+    main_equipment.follow_topic()
 
 
 if __name__ == '__main__':

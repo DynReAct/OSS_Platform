@@ -24,7 +24,7 @@ from confluent_kafka.admin import AdminClient, NewTopic
 from datetime import datetime
 from multiprocessing import Pool
 from pathlib import Path
-from common import VAction, TOPIC_GEN, sendmsgtopic
+from common import VAction, TOPIC_GEN, sendmsgtopic, TOPIC_CALLBACK
 from agent import Agent
 
 
@@ -60,7 +60,8 @@ class Log(Agent):
         """
         self.action_methods.update({
             'CREATE': self.handle_create_action, 'CHECK': self.handle_check_action, 'WRITE': self.handle_write_action,
-            'PINGANSWER': self.handle_pinganswer_action, "ASKRESULTS": self.handle_askresults_action
+            'PINGANSWER': self.handle_pinganswer_action, "ASKRESULTS": self.handle_askresults_action,
+            "ISAUCTIONACTIVE": self.handle_is_auction_started_action
         })
 
         # To handle the start of the auction
@@ -92,7 +93,7 @@ class Log(Agent):
             self.write_log(f"ERROR: {self.log_file} does not exist", action='CREATE')
         self.write_log(f"New log file created for topic {self.topic}.", action='CREATE')
 
-    def write_log(self, msg: str, action: str = 'WRITE'):
+    def write_log(self, msg: str, action: str = 'WRITE', verbose: float = float("inf")):
         """
         Function writing a message to the log itself
 
@@ -102,16 +103,19 @@ class Log(Agent):
         full_msg = dict(
             source=self.agent, dest=self.agent, action=action, payload=dict(msg=msg)
         )
-        self.handle_write_action(full_msg)
+        self.handle_write_action(full_msg, verbose)
 
-    def callback_on_topic_not_available(self):
+    def callback_on_topic_not_available(self, topic: str = None):
         """
-        Function to create the topic when it is not available
+        Function executed when 'Subscribed topic not available'
 
+        :param str topic: Name of the topic you want to create
         """
+
+        topic = topic if topic else self.topic
         if self.verbose > 1:
-            self.write_log(f"The subscribed topic {self.topic} is not available. Creating the topic...")
-        self.topic_list.append(NewTopic(self.topic, 1, 1))
+            self.write_log(f"The subscribed topic {topic} is not available. Creating the topic...")
+        self.topic_list.append(NewTopic(topic, 1, 1))
         self.admin_client.create_topics(self.topic_list)
         if self.verbose > 1:
             self.write_log(f"Created topic {self.topic}.")
@@ -134,25 +138,25 @@ class Log(Agent):
         # Record the results
         if dctmsg['action'] == "CONFIRM":
             material_name = dctmsg['source'].split(':')[-1]  # MATERIAL:DynReact-UE9L5LJASTQ1:1003937408 -> 1003937408
-            resource_name = dctmsg['dest'].split(':')[-2]  # RESOURCE:DynReact-UE9L5LJASTQ1:14:0 -> 14
-            round_number  = dctmsg['dest'].split(':')[-1]  # RESOURCE:DynReact-UE9L5LJASTQ1:14:0 -> 0
-            stdat         = dctmsg['payload']['material_params']['order']
-            stdat.pop('material',None)
-            stdat['round']= round_number
-            stdat['mat']  = resource_name
+            equipment_name = dctmsg['dest'].split(':')[-2]  # EQUIPMENT:DynReact-UE9L5LJASTQ1:14:0 -> 14
+            round_number = dctmsg['dest'].split(':')[-1]  # EQUIPMENT:DynReact-UE9L5LJASTQ1:14:0 -> 0
+            stdat = dctmsg['payload']['material_params']['order']
+            stdat.pop('material', None)
+            stdat['round'] = round_number
+            stdat['mat'] = equipment_name
 
             if self.verbose > 1:
                 self.write_log(
-                    f"Recorded the assignment of material {material_name} to equipment {resource_name}. "
+                    f"Recorded the assignment of material {material_name} to equipment {equipment_name}. "
                     f"Results so far: {self.results}"
                 )
 
-            if resource_name not in self.results:
-                # self.results[resource_name] = [material_name]
-                self.results[resource_name] = [stdat]
+            if equipment_name not in self.results:
+                # self.results[equipment_name] = [material_name]
+                self.results[equipment_name] = [stdat]
             else:
-                # self.results[resource_name].append(material_name)
-                self.results[resource_name].append(stdat)
+                # self.results[equipment_name].append(material_name)
+                self.results[equipment_name].append(stdat)
 
     def setup_logger(self) -> logging.Logger:
         """
@@ -162,7 +166,7 @@ class Log(Agent):
         :rtype:  Logger object
         """
 
-        handler = logging.FileHandler(self.log_file)
+        handler = logging.FileHandler(self.log_file, mode="a")
         handler.setFormatter(self.formatter)
 
         logger = logging.getLogger(self.topic)
@@ -171,11 +175,12 @@ class Log(Agent):
 
         return logger
 
-    def handle_write_action(self, full_msg: dict) -> str:
+    def handle_write_action(self, full_msg: dict, verbose: float = float("inf")) -> str:
         """
         Handles the WRITE action.
 
         :param dict full_msg: Message dictionary
+        :param dict verbose: Show print console output
         """
         if 'payload' not in full_msg.keys():
             self.logger.info("HANDLE_WRITE_ERROR: payload is not a key for message")
@@ -186,7 +191,7 @@ class Log(Agent):
             self.logger.info(
                 f"|MSG|{full_msg['source']}|{full_msg['dest']}|{full_msg['action']}|{full_msg['payload']['msg']}"
             )
-            if self.verbose > 1:
+            if min(verbose, self.verbose) > float(1):
                 ctme = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
                 print(ctme + " => " + json.dumps(full_msg))
 
@@ -221,7 +226,7 @@ class Log(Agent):
         agent = f"LOG:{topic}"
         log_file = f"{self.left_path}{topic}.log"
         init_kwargs = dict(
-            topic=topic,agent=agent,kafka_ip=self.kafka_ip,verbose=self.verbose,
+            topic=topic, agent=agent, kafka_ip=self.kafka_ip, verbose=self.verbose,
             left_path=self.left_path, log_file=log_file
         )
         if self.verbose > 1:
@@ -258,8 +263,9 @@ class Log(Agent):
             action="PING",
             vb=self.verbose
         )
+
         if self.verbose > 1:
-            self.write_log(f"Instructed all agents to PING")
+            self.write_log("Instructed all agents to PING")
         return 'CONTINUE'
 
     def handle_pinganswer_action(self, dctmsg: dict) -> str:
@@ -281,9 +287,64 @@ class Log(Agent):
                 )
         return 'CONTINUE'
 
+    def handle_is_auction_started_action(self, dctmsg: dict) -> str:
+        """
+        Check if the auction has started
+
+        :param dict dctmsg: Dictionary for the message
+
+        :returns: Status of the handling
+        :rtype:  str
+        """
+
+        topic = dctmsg['topic']
+        sender = dctmsg['source']
+
+        self.write_log(f"Checking if auction has already started...")
+
+        start_conditions = [self.total_num_agents is not None, self.auction_start]
+
+        if all(start_conditions) and len(self.present_agents) == self.total_num_agents:
+
+            sendmsgtopic(
+                producer=self.producer,
+                tsend=TOPIC_CALLBACK,
+                topic=TOPIC_CALLBACK,
+                source=self.agent,
+                dest=sender,
+                action="AUCTIONSTARTED",
+                payload={
+                    "present_agents": len(self.present_agents),
+                    "total_num_agents": self.total_num_agents or 0,
+                    "is_auction_started": True
+                },
+                vb=self.verbose
+            )
+
+            if self.verbose > 1:
+                self.write_log(f"Answered {sender} with the current status of the auction.")
+
+        else:
+            sendmsgtopic(
+                producer=self.producer,
+                tsend=topic,
+                topic=topic,
+                source=self.agent,
+                dest=sender,
+                action="AUCTIONSTARTED",
+                payload={
+                    "present_agents": len(self.present_agents),
+                    "total_num_agents": self.total_num_agents or 0,
+                    "is_auction_started": False
+                },
+                vb=self.verbose
+            )
+
+        return 'CONTINUE'
+
     def handle_start_action(self, dctmsg: dict) -> str:
         """
-        Starts an auction by instructing all RESOURCE children to start communicating with the MATERIALs
+        Starts an auction by instructing all EQUIPMENT children to start communicating with the MATERIALs
 
         :param dict dctmsg: Dictionary for the message
 
@@ -296,7 +357,7 @@ class Log(Agent):
             tsend=topic,
             topic=topic,
             source=self.agent,
-            dest="RESOURCE:" + topic + ":.*",
+            dest="EQUIPMENT:" + topic + ":.*",
             action="START",
             vb=self.verbose
         )
@@ -318,8 +379,8 @@ class Log(Agent):
         sender = dctmsg['source']
         sendmsgtopic(
             producer=self.producer,
-            tsend=topic,
-            topic=topic,
+            tsend=TOPIC_CALLBACK,
+            topic=TOPIC_CALLBACK,
             source=self.agent,
             dest=sender,
             action="RESULTS",
@@ -351,7 +412,9 @@ class Log(Agent):
         # Updated by JOM 20240805 (else to inform unconformities).
         else:
             foundag = len(self.present_agents)
-            self.write_log(f"Declared number of agents:{self.total_num_agents}. Responding number:{foundag}")
+            verbosity = 1 if foundag == 0 else self.verbose
+            # self.write_log(msg=f"Declared number of agents:{self.total_num_agents}. Responding number:{foundag}",
+            #                verbose=verbosity)
         return 'CONTINUE'
 
 
@@ -388,7 +451,7 @@ def main():
         verbose = args["verbose"]
     base = "."
     if args["base"]:
-        base = args["base"]
+        base = args["base"].strip()
     if verbose > 0:
         print(f"Running program with {verbose=} and {base=}.")
 
@@ -409,6 +472,10 @@ def main():
     main_log = Log(
         topic=TOPIC_GEN, agent=agent_gen, kafka_ip=kafka_ip, left_path=left_path, log_file=log_file, verbose=verbose
     )
+
+    # Creates Callback topic!
+    main_log.callback_on_topic_not_available(TOPIC_CALLBACK)
+
     main_log.follow_topic()
 
 

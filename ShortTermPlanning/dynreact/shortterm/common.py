@@ -4,7 +4,7 @@ from confluent_kafka import Producer
 
 
 TOPIC_GEN = "DynReact-Gen"
-
+TOPIC_CALLBACK = "DynReact-Callback"
 
 class VAction(argparse.Action):
     """
@@ -102,5 +102,8 @@ def sendmsgtopic(producer: Producer, tsend: str, topic: str, source: str, dest: 
         payload=payload
     )
     mtxt = json.dumps(msg)
-    producer.produce(value=mtxt, topic=tsend, on_delivery=confirm)
-    producer.flush()
+    try:
+        producer.produce(value=mtxt, topic=tsend, on_delivery=confirm)
+        producer.flush()
+    except Exception as e:
+        print(f'Failed to deliver message: {str(e)}')

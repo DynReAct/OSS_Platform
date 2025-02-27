@@ -44,11 +44,12 @@ class Material(Agent):
         """
 
         self.action_methods.update({
-            'CREATE': self.handle_create_action, 'BID': self.handle_bid_action,
+            'CREATE': self.handle_create_action,
+            'BID': self.handle_bid_action,
             'ASKCONFIRM': self.handle_askconfirm_action
         })
 
-        self.assigned_resource = ""
+        self.assigned_equipment = ""
         self.params = params
         if self.verbose > 1:
             self.write_log(f"Finished creating the agent {self.agent} with parameters {self.params}.")
@@ -80,8 +81,8 @@ class Material(Agent):
 
     def handle_bid_action(self, dctmsg: dict) -> str:
         """
-        Handles the BID action. If the MATERIAL finds the RESOURCE's offer interesting,
-        it gives the RESOURCE a message with its bidding price.
+        Handles the BID action. If the MATERIAL finds the EQUIPMENT's offer interesting,
+        it gives the EQUIPMENT a message with its bidding price.
 
         :param dict dctmsg: Message dictionary
         :return: Status of the processing
@@ -89,13 +90,13 @@ class Material(Agent):
         """
         topic = dctmsg['topic']
         payload = dctmsg['payload']
-        resource_id = payload['id']
-        resource_status = payload['status']
+        equipment_id = payload['id']
+        equipment_status = payload['status']
         previous_price = payload['previous_price']
 
-        # Calculate the bidding price based on RESOURCE status and MATERIAL parameters
+        # Calculate the bidding price based on EQUIPMENT status and MATERIAL parameters
         bidding_price = calculate_bidding_price(
-            material_params=self.params, resource_status=resource_status, previous_price=previous_price
+            material_params=self.params, equipment_status=equipment_status, previous_price=previous_price
         )
         if bidding_price is not None:
             sendmsgtopic(
@@ -103,18 +104,18 @@ class Material(Agent):
                 tsend=topic,
                 topic=topic,
                 source=self.agent,
-                dest=resource_id,
+                dest=equipment_id,
                 action="COUNTERBID",
                 payload=dict(id=self.agent, material_params=self.params, price=bidding_price),
                 vb=self.verbose
             )
             if self.verbose > 2:
-                self.write_log(f"Instructed {resource_id} to counterbid")
+                self.write_log(f"Instructed {equipment_id} to counterbid")
         else:
             if self.verbose > 1:
                 self.write_log(
-                    f"Rejected offer from {resource_id}. "
-                    f"This resource is not among the allowed resources for the material"
+                    f"Rejected offer from {equipment_id}. "
+                    f"This equipment is not among the allowed equipments for the material"
                 )
 
         return 'CONTINUE'
@@ -122,30 +123,30 @@ class Material(Agent):
     def handle_askconfirm_action(self, dctmsg: dict) -> str:
         """
         Handles the ASKCONFIRM action.
-        It answers the resource to indicate that the material can be assigned to the resource
-        and has not already been assigned to another resource.
+        It answers, the equipment to indicate that the material can be assigned to the equipment
+        and has not already been assigned to another equipment.
 
         :param dict dctmsg: Message dictionary
         :return: Status of the handling
         :rtype: str
         """
         topic = dctmsg['topic']
-        resource = dctmsg['payload']['id']
+        equipment = dctmsg['payload']['id']
         sendmsgtopic(
             producer=self.producer,
             tsend=topic,
             topic=topic,
             source=self.agent,
-            dest=resource,
+            dest=equipment,
             action="CONFIRM",
             payload=dict(id=self.agent, material_params=self.params),
             vb=self.verbose
         )
 
-        self.assigned_resource = resource
+        self.assigned_equipment = equipment
         if self.verbose > 1:
             self.write_log(
-                f"Assigned material to resource {self.assigned_resource}. Sending ASSIGNED message..."
+                f"Assigned material to equipment {self.assigned_equipment}. Sending ASSIGNED message..."
             )
         full_msg = dict(
             source=self.agent, dest=self.agent, topic=self.topic, action='SENDASSIGNED', payload=dict()
@@ -154,7 +155,7 @@ class Material(Agent):
 
         if self.verbose > 1:
             self.write_log(
-                f"Assigned material to resource {self.assigned_resource} and sent ASSIGNED message. "
+                f"Assigned material to equipment {self.assigned_equipment} and sent ASSIGNED message. "
                 f"Killing the agent..."
             )
         return 'END'
@@ -162,8 +163,8 @@ class Material(Agent):
     def handle_sendassigned_action(self, dctmsg: dict) -> str:
         """
         Handles the SENDASSIGNED action.
-        It informs all resources (except the assigned resource)
-        that this material has already been ASSIGNED to another resource.
+        It informs all equipments (except the assigned equipment)
+        that this material has already been ASSIGNED to another equipment.
 
         :param dict dctmsg: Message dictionary
         :return: Status of the handling
@@ -175,13 +176,13 @@ class Material(Agent):
             tsend=topic,
             topic=topic,
             source=self.agent,
-            dest=f"^(?!{self.assigned_resource})(RESOURCE:{topic}:.*)$",
+            dest=f"^(?!{self.assigned_equipment})(EQUIPMENT:{topic}:.*)$",
             action="ASSIGNED",
             payload=dict(id=self.agent),
             vb=self.verbose
         )
         if self.verbose > 1:
-            self.write_log(f"Informed all resources (except {self.assigned_resource}) that {self.agent} is ASSIGNED.")
+            self.write_log(f"Informed all equipments (except {self.assigned_equipment}) that {self.agent} is ASSIGNED.")
         return 'CONTINUE'
 
 

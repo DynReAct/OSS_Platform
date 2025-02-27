@@ -13,7 +13,7 @@ REST_URL = config['DEFAULT']['REST_URL']
 
 URL_SNAPSHOTS = REST_URL + '/snapshots'
 URL_SNAPSHOT_DATA = REST_URL + '/snapshots/{snapshot_timestamp}'
-URL_INITIAL_STATE = REST_URL + '/costs/status/{plant_id}/{snapshot_timestamp}?unit=coil'
+URL_INITIAL_STATE = REST_URL + '/costs/status/{equipment_id}/{snapshot_timestamp}?unit=material'
 URL_UPDATE_STATUS = REST_URL + '/costs/transitions-stateful'
 
 

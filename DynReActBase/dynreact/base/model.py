@@ -271,8 +271,8 @@ class EquipmentProduction(Model):
 
     equipment: int
     total_weight: float
-    material_weights: dict[str, float] | None = None
-    "Produced quantity by material class id, in t."
+    material_weights: dict[str, float|dict[str, float]] | None = None
+    "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed"
     lot_weight_range: tuple[float, float] | None = None
     "Weight restriction for lots in t"
 
@@ -390,6 +390,18 @@ class MaterialCategory(Model):
     Mutually exclusive material classes. It is assumed
     that every material and order can be assigned to exactly one class within the category.
     """
+    process_steps: list[str]|None = None
+    "Optional list of process steps for which the category is potentially relevant in the mid-term planning."
+
+
+class StructurePlanningSettings(Model):
+    """
+    Defines a hierarchy for structure categories in the mid term planning;
+    """
+    primary_category: str
+    "Reference to a MaterialCategory"
+    primary_classes: list[str]
+    "References to the MaterialClasses in primary_category.classes. For the time being only a single entry is supported."
 
 
 class Site(LabeledItem):
@@ -402,6 +414,7 @@ class Site(LabeledItem):
     Logistic costs for transfer of a complete order(?) from one plant to another (only within a single process stage, not considering
     transfer costs between processes)
     """
+    structure_planning: dict[str, StructurePlanningSettings]|None = None
 
     def get_process(self, process: str, do_raise: bool=False) -> Process|None:
         if process is None:
@@ -568,6 +581,7 @@ class MidTermTargets(LongTermTargets):
     """
     production_sub_targets: dict[str, list[ProductionTargets]]
     "Production targets for the planning sub periods. Keys: process ids, values: list of production targets, covering all planning sub periods chronologically."
+
 
 
 class ServiceHealth(Model):

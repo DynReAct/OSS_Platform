@@ -49,7 +49,7 @@ username = fastapi_authentication(config)
                 summary="Get a list of process steps and plants configured for the site")
 def site(response: Response, username = username) -> Site:
     try:
-        response.headers["Cache-Control"] = "max-age=600"  # 10 minutes
+        response.headers["Cache-Control"] = "max-age=6000"  # 100 minutes
         return state.get_site()
     except:
         raise HTTPException(status_code=502, detail="Information not available")
@@ -83,7 +83,8 @@ def snapshots(response: Response, start: str|datetime|None=Query(None, descripti
                 "now": {"description": "Current timestamp", "value": "now"},
                 "2023-04-26T00:00Z": {"description": "A specific timestamp", "value": "2023-04-26T00:00Z"}
             }),
-            sort: Literal["asc", "desc"] = "asc", limit: int=100,
+            sort: Literal["asc", "desc"] = "asc",
+            limit: int=100,
             username = username) -> list[datetime]:
     if isinstance(start, str):
         start = parse_datetime_str(start)

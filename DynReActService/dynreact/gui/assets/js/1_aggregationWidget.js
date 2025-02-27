@@ -51,10 +51,14 @@ class AggregationWidget extends HTMLElement {
         const materials = this.#aggregations;
         if (!materials)
             return;
-        const targets = this.#targetWeights || {};
+        const targets = this.#targetWeights;  // may be none/empty
+        const targetsSpecified = !!targets && Object.keys(targets).length > 0;
         const columns = Object.keys(materials).length;
         const frag = document.createDocumentFragment();
         let column = 0;
+        let title = "Selected tons in backlog";
+        if (targetsSpecified)
+            title += " / target tons";
         for (const [cat, material_category] of Object.entries(materials)) {
             column++;
             const categoryHeader = JsUtils.createElement("div", {
@@ -79,13 +83,17 @@ class AggregationWidget extends HTMLElement {
                     style: {"grid-column-start": column, "grid-row-start": row},
                     classes: "material-class",
                     attributes: data_dict,
-                    title: "Selected tons in backlog / target tons"
+                    title: title
                 });
                 JsUtils.createElement("div", {text: material_class.name, parent: material_parent});
-                const targetWeight = targets[clz] || 0;
+                let text = JsUtils.formatNumber(material_class.weight, 5);
+                if (targetsSpecified) {
+                    const targetWeight = targets[clz] || 0;
+                    text +=  " / " + JsUtils.formatNumber(targetWeight, 5)
+                }
                 const value = JsUtils.createElement("div", {
                     parent: material_parent,
-                    text: JsUtils.formatNumber(material_class.weight, 5) + " / " + JsUtils.formatNumber(targetWeight, 5),
+                    text: text,
                 });
                 /*
                 if (material_class.is_default){

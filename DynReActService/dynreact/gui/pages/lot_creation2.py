@@ -488,7 +488,7 @@ def show_structure_overview(active_tab: Literal["targets", "orders", "settings"]
     if snapshot_obj is None:
         return True, None
     use_lot_structure: bool = len(use_lot_structure0) > 0
-    show_structure: bool = active_tab == "orders" and use_lot_structure
+    show_structure: bool = True # active_tab == "orders" and use_lot_structure  # also useful when structure selection is not active
     selected_order_ids: list[str] = [row["id"] if isinstance(row, dict) else row for row in selected_rows] if selected_rows is not None else []
     selected_orders: list[Order] = [snapshot_obj.get_order(o, do_raise=True) for o in selected_order_ids if o != "ids"]
     mat_agg = MaterialAggregation(state.get_site(), state.get_snapshot_provider())

@@ -238,6 +238,18 @@
     align-items: center;
 }
 
+.lots2-orders-structure-flex {
+    display: flex;
+    column-gap: 4em;
+    align-items: center;
+}
+
+.lots2-orders-structure-subflex {
+    display: flex;
+    column-gap: 1em;
+    align-items: center;
+}
+
 .lots2-orders-init-menu {
     display: flex;
     column-gap: 1em;

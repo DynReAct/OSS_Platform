@@ -5,6 +5,7 @@
     });
 
     const materialsTag = "dynreact-material-grid2";
+    const catAggregationWidgetTag = "dynreact-backlog-aggregation";
 
     // TODO handle case that only totalProduction changed... no need to reinitialize the grid from scratch then
     globalThis.dash_clientside.lots2.initMaterialGrid = function(totalProduction, process, setpoints, gridId) {
@@ -66,6 +67,17 @@
             grid.resetGrid(lotsWeightTotal);
         //document.querySelector("div#" + gridId + " " + materialsTag)?.reset(setpoints);
         return "lots2";
+    }
+
+    globalThis.dash_clientside.lots2.setBacklogStructureOverview = function(parentId, weightAggregation, targetWeights) {
+        const container = document.querySelector("#" + parentId);
+         if (!globalThis.customElements.get(catAggregationWidgetTag))
+            globalThis.customElements.define(catAggregationWidgetTag, AggregationWidget);  // TODO
+        let widget = container.querySelector(catAggregationWidgetTag);
+        if (!widget) {
+            widget = JsUtils.createElement(catAggregationWidgetTag, {parent: container});
+        }
+        widget.setAggregation(weightAggregation, targetWeights);
     }
 
 })();

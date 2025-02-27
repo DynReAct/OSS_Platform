@@ -41,7 +41,7 @@ class MaterialsGrid2 extends HTMLElement {
         JsUtils.clear(this.#grid);
         this.#materials = materials;
         const columns = materials.length;
-        const rows = Math.max(materials.map(cat => cat.classes.length));
+        //const rows = Math.max(...materials.map(cat => cat.classes.length));
         const frag = document.createDocumentFragment();
         let column = 0;
         for (const material_category of materials) {

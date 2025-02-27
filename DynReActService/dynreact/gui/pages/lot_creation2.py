@@ -16,6 +16,7 @@ from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.SnapshotProvider import OrderInitMethod
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
+from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Equipment, Order, Lot, ProductionPlanning, ProductionTargets, EquipmentProduction, \
     MidTermTargets, ObjectiveFunction
@@ -110,6 +111,7 @@ def layout(*args, **kwargs):
         dcc.Store(id="lots2-active-tab", data=tab),  # Literal["targets", "orders", "settings"]
         dcc.Store(id="lots2-iterations", data=str(iterations)),  # Literal["targets", "orders", "settings"]
         dcc.Store(id="lots2-orders-data"),  # a dict with keys "snapshot", "process", "orders_selected_cnt", "orders_selected_weight"
+        dcc.Store(id="lots2-orders-backlog-structure-data"),  # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
         dcc.Store(id="lots2-lots-data"),    # rowData, list of dicts, one row per lot; input for swim lane
         dcc.Store(id="lots2-objectives-history"),     # optimization results, objective function
         dcc.Interval(id="lots2-interval", n_intervals=3_600_000),  # for polling when optimization is running
@@ -164,17 +166,29 @@ def targets_tab(horizon: int):
 def orders_tab():
     checklist_dict = [{"value": ""}]    # unchecked
     return [
-        html.H4("Order backlog", title="Select orders for scheduling from the order backlog."),
-
         html.Div([
-            html.Div("Selected orders:"),
-            html.Div(id="lots2-orders-backlog-count"),
-            html.Div(", total weight:"),
-            html.Div(id="lots2-orders-backlog-weight-acc"),
-            html.Div("t. "),
-            html.Div(html.Button("Update", id="lots2-orders-backlog-update",
-                                 className="dynreact-button dynreact-button-small"), title="Update values")
-        ], className="lots2-orders-selection-overview"),
+            html.Div([
+                html.H4("Order backlog", title="Select orders for scheduling from the order backlog."),
+
+                html.Div([
+                    html.Div("Selected orders:"),
+                    html.Div(id="lots2-orders-backlog-count"),
+                    html.Div(", total weight:"),
+                    html.Div(id="lots2-orders-backlog-weight-acc"),
+                    html.Div("t. "),
+                    html.Div(html.Button("Update", id="lots2-orders-backlog-update",
+                                         className="dynreact-button dynreact-button-small"), title="Update values")
+                ], className="lots2-orders-selection-overview"),
+            ]),
+            html.Div([
+                html.Div([
+                    html.Div("Backlog structure:"),
+                    html.Div([
+                        html.Div(id="lots2-backlog-structure-widget")
+                    ]),
+                ], className="lots2-orders-structure-subflex")
+            ], id="lots2-orders-structure-overview", hidden=True)  # only shown when structure targets are active
+        ], className="lots2-orders-structure-flex"),
 
         html.Fieldset([
             html.Legend("Initialize orders"),
@@ -451,6 +465,62 @@ def select_settings_tab(active_tab: Literal["targets", "orders", "settings"]|Non
     return not targets_selected, not orders_selected, not settings_selected, \
         _tab_button_class(targets_selected), _tab_button_class(orders_selected), _tab_button_class(settings_selected), \
         previous_hidden, next_hidden
+
+
+@callback(
+    # show or hide the selected structure targets overview
+    Output("lots2-orders-structure-overview", "hidden"),
+    Output("lots2-orders-backlog-structure-data", "data"),
+    Input("lots2-active-tab", "data"),
+    Input("lots2-use-structure", "value"),
+    Input("lots2-orders-table", "selectedRows"),
+    State("selected-snapshot", "data"),
+    State("lots2-process-selector", "value"),
+)
+def show_structure_overview(active_tab: Literal["targets", "orders", "settings"]|None,
+                            use_lot_structure0: list[Literal[""]],
+                            selected_rows: list[dict[str, any]] | None,
+                            snapshot_id: str, process: str):
+    if not dash_authenticated(config) or not process or not snapshot_id:
+        return True, None
+    snapshot = DatetimeUtils.parse_date(snapshot_id)
+    snapshot_obj = state.get_snapshot(snapshot)
+    if snapshot_obj is None:
+        return True, None
+    use_lot_structure: bool = len(use_lot_structure0) > 0
+    show_structure: bool = active_tab == "orders" and use_lot_structure
+    selected_order_ids: list[str] = [row["id"] if isinstance(row, dict) else row for row in selected_rows] if selected_rows is not None else []
+    selected_orders: list[Order] = [snapshot_obj.get_order(o, do_raise=True) for o in selected_order_ids if o != "ids"]
+    mat_agg = MaterialAggregation(state.get_site(), state.get_snapshot_provider())
+    agg_by_plant = mat_agg.aggregate_categories_by_plant(snapshot_obj, selected_orders)
+    agg: dict[str, dict[str, float]] = mat_agg.aggregate(agg_by_plant)  # outer key: category, inner key: mat class
+    categories = state.get_site().material_categories
+    applicable_cats: list[str] = [c.id for c in categories if c.process_steps is None or process in c.process_steps]
+    agg2 = {}
+    for cat, results in agg.items():
+        if cat not in applicable_cats:
+            continue
+        cat_obj = next(c for c in categories if c.id == cat)
+        cat_res = { "name": cat_obj.name or cat_obj.id, "classes": {}}
+        agg2[cat] = cat_res
+        classes = cat_res["classes"]
+        for clz, weight in results.items():
+            clz_obj = next(c for c in cat_obj.classes if c.id == clz)
+            classes[clz] = {"weight": weight, "name": clz_obj.name or clz_obj.id }
+    return not show_structure, agg2
+
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="lots2",
+        function_name="setBacklogStructureOverview"
+    ),
+    Output("lots2-orders-structure-overview", "title"),
+    Input("lots2-backlog-structure-widget", "id"),
+    Input("lots2-orders-backlog-structure-data", "data"),   # dict[str, dict[str, float]]
+    Input("lots2-material-setpoints", "data")
+)
+
 
 
 @callback(

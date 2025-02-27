@@ -9,24 +9,27 @@ class MaterialAggregation:
         self._snaps = snaps
         self._categories: list[MaterialCategory] = site.material_categories
 
-    def aggregate_categories_by_plant(self, snapshot: Snapshot) -> dict[int, dict[str, dict[str, float]]] :
+    def aggregate_categories_by_plant(self, snapshot: Snapshot, orders: list[Order]|None=None) -> dict[int, dict[str, dict[str, float]]] :
         """
         :param snapshot:
+        :param orders:
         :return: aggregated material weight per plant, category and class
         """
         snaps = self._snaps
         plants: dict[int, Equipment] = {p.id: p for p in self._site.equipment}
-        orders: dict[str, Order] = {o.id: o for o in snapshot.orders}
+        if orders is None:
+            orders = snapshot.orders
+        orders_by_id = {o.id: o for o in orders}
         # sort of cache; outer key: category, inner key: order id
         mat_class_for_order: dict[str, dict[str, MaterialClass]] = {cat.id: {} for cat in self._categories}
         # result; outer key: category, middle key: material class, inner key: plant id
         aggregate_weight: dict[int, dict[str, dict[str, float]]] = {p: {cat.id: {clz.id: 0 for clz in cat.classes} for cat in self._categories} for p in plants.keys()}
         for material in snapshot.material:
+            order = orders_by_id.get(material.order)
+            if order is None:
+                continue
             plant = material.current_equipment
             if plant is None or plant not in plants:  # TODO?
-                continue
-            order = orders.get(material.order)
-            if order is None:
                 continue
             for category in self._categories:
                 clz = mat_class_for_order[category.id].get(order.id)
@@ -91,3 +94,21 @@ class MaterialAggregation:
                             sub_results[clz] += value
             storage_results[stg] = new_agg
         return storage_results
+
+    def aggregate(self, aggregation_by_plant: dict[int, dict[str, dict[str, float]]]) -> dict[str, dict[str, float]]:
+        """
+        Aggregate over all plants
+        :param aggregation_by_plant:
+        :return:
+        """
+        result: dict[str, dict[str, float]] = {}
+        for plant_result in aggregation_by_plant.values():
+            for cat, cat_result in plant_result.items():
+                if cat not in result:
+                    result[cat] = {}
+                sub_result = result[cat]
+                for clz, value in cat_result.items():
+                    if clz not in sub_result:
+                        sub_result[clz] = 0
+                    sub_result[clz] += value
+        return result

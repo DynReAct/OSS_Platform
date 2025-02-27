@@ -232,6 +232,7 @@ class MaterialsGrid2 extends HTMLElement {
         let lots_weight_total = Number(document.getElementById("lots2-weight-total").value);
         let lots_weight_sum;
         let weight_diff = 0;
+        let changed = false;
         //calc sum per category
         for (const category of this.#materials) {
             lots_weight_sum = 0;
@@ -240,13 +241,14 @@ class MaterialsGrid2 extends HTMLElement {
                 }
             if (lots_weight_sum != lots_weight_total){
                 weight_diff = lots_weight_total - lots_weight_sum;
+                changed = true;
                 for (const material_class of category.classes) {
                     if (material_class.is_default){
                         this.setOneField(material_class.id, this.getOneField(material_class.id) + weight_diff);
                     }
                  }
             }
-        }
+        } return changed;
     }
 
     setProcessName(process){

@@ -7,7 +7,8 @@ import dash_ag_grid as dash_ag
 from pydantic import BaseModel
 
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import Order
+from dynreact.base.impl.MaterialAggregation import MaterialAggregation
+from dynreact.base.model import Order, MaterialCategory
 from pydantic.fields import FieldInfo
 
 from dynreact.app import state, config
@@ -20,6 +21,7 @@ translations_key = "snapshot"
 
 def layout(*args, **kwargs):
     start_date, end_date, snap_options, selected_snap = get_date_range(selected_snapshot.data)  # : tuple[date, date, list[datetime], str]
+    categories = state.get_site().material_categories
     return html.Div([
         #selected_snapshot,  # in dash_app layout
         html.H1("Snapshots"),
@@ -40,11 +42,65 @@ def layout(*args, **kwargs):
             columnDefs=[{"field": "id", "pinned": True}],
             rowData=[],
             className="ag-theme-alpine",  # ag-theme-alpine-dark
-            style={"height": "90vh", "width": "100%", "margin-bottom": "25em"},
+            style={"height": "90vh", "width": "100%"},
             columnSizeOptions={"defaultMinWidth": 125},
             columnSize="responsiveSizeToFit"  # "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
         ),
+        html.H2("Material aggregation", id="snapshot-materials_header"),
+        html.Div([
+            html.Div("Material category: ", id="snapshot-matcat_label"), dcc.Dropdown(id="snapshot_matcat-selector", className="snap-select",
+                    options=[{"label": cat.name or cat.id, "value": cat.id} for cat in categories], value=next((c.id for c in categories), None)),
+            html.Div("Aggregation level: ", id="snapshot-matlevel_label"),
+            dcc.Dropdown(id="snapshot_mat_level-selector", className="snap-select",
+                         options=[
+                             {"label": "Storage", "value": "storage"},
+                             {"label": "Equipment", "value": "equipment"},
+                             {"label": "Process", "value": "process"}
+                         ], value="process")
+        ], className="snap-matselect-grid"),
+        html.Br(),
+        dash_ag.AgGrid(
+            id="snapshot-mat-table",
+            # columns depend on selected category
+            columnDefs=[{"field": "id", "pinned": True}],
+            rowData=[],
+            className="ag-theme-alpine",  # ag-theme-alpine-dark
+            style={"height": "90vh", "width": "100%", "margin-bottom": "25em"},
+            columnSizeOptions={"defaultMinWidth": 125},
+            columnSize="responsiveSizeToFit"
+            # "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
+        ),
     ], id="snapshot")
+
+def _material_overview(categories: list[MaterialCategory]):
+    if categories is None or len(categories) == 0:
+        return html.Div()
+    return html.Div([html.H2("Material aggregation", id="snapshot-materials_header"),
+    html.Div([
+        html.Div("Material category: ", id="snapshot-matcat_label"),
+        dcc.Dropdown(id="snapshot_matcat-selector", className="snap-select",
+                     options=[{"label": cat.name or cat.id, "value": cat.id} for cat in categories],
+                     value=next((c.id for c in categories), None)),
+        html.Div("Aggregation level: ", id="snapshot-matlevel_label"),
+        dcc.Dropdown(id="snapshot_mat_level-selector", className="snap-select",
+                     options=[
+                         {"label": "Storage", "value": "storage"},
+                         {"label": "Equipment", "value": "equipment"},
+                         {"label": "Process", "value": "process"}
+                     ], value="process")
+    ], className="snap-matselect-grid"),
+    html.Br(),
+    dash_ag.AgGrid(
+        id="snapshot--mat-table",
+        # columns depend on selected category
+        columnDefs=[{"field": "id", "pinned": True}],
+        rowData=[],
+        className="ag-theme-alpine",  # ag-theme-alpine-dark
+        style={"height": "92vh", "width": "100%", "margin-bottom": "25em"},
+        columnSizeOptions={"defaultMinWidth": 125},
+        columnSize="responsiveSizeToFit"
+        # "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
+    )])
 
 
 # FIXME here the selection value modifies the selection range
@@ -139,7 +195,7 @@ def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["order
     for field in fields:
         if field["field"] == "id":
             field["pinned"] = True
-        if field["field"] in ["lots", "lot_positions", "active_processes", "coil_status", "follow_up_processes"]:
+        if field["field"] in ["lots", "lot_positions", "active_processes", "coil_status", "follow_up_processes", "target_weight", "actual_weight"]:
             field["valueFormatter"] = value_formatter_object
 
     def order_to_json(o: Order):
@@ -155,3 +211,49 @@ def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["order
             as_dict.update(o.material_properties.model_dump(exclude_none=True, exclude_unset=True))
         return as_dict
     return fields, [order_to_json(order) for order in snapshot.orders]
+
+
+@callback(
+    Output("snapshot-mat-table", "columnDefs"),
+    Output("snapshot-mat-table", "rowData"),
+    Input("selected-snapshot", "data"),
+    Input("snapshot_matcat-selector", "value"),  #
+    Input("snapshot_mat_level-selector", "value"),  # storage, equipment or process
+)
+def fill_material_table(snapshot_id: str, category: str|None, aggregation_level: Literal["storage", "equipment", "process"]|None):
+    if not dash_authenticated(config) or not snapshot_id or not category or not aggregation_level:
+        return [{"field": "id", "pinned": True}], []
+    timestamp = DatetimeUtils.parse_date(snapshot_id)
+    snap = state.get_snapshot(timestamp)
+    cat = next((cat for cat in state.get_site().material_categories if cat.id == category), None)
+    if not snap or not cat:
+        return [{"field": "id", "pinned": True}], []
+    value_formatter_object = {"function": "formatCell(params.value, 5)"}
+    column_defs = [{"field": "id", "pinned": True, "headerName": aggregation_level.capitalize()}] + \
+            [{"field": clz.id, "headerName": clz.name or clz.id, "valueFormatter": value_formatter_object} for clz in cat.classes]
+    aggr = MaterialAggregation(state.get_site(), state.get_snapshot_provider())
+    result_by_plant = aggr.aggregate_categories_by_plant(snap)
+    result = result_by_plant
+    if aggregation_level == "storage":
+        result = aggr.aggregate_by_storage(result_by_plant)
+    elif aggregation_level == "process":
+        result = aggr.aggregate_by_process(result_by_plant)
+    keys = result.keys()
+    clz_results: dict[str|int, dict[str, float]] = {key: result[key].get(category) for key in keys if category in result[key]}
+    if aggregation_level == "equipment":
+        plants = {plant.id: plant.name_short or str(plant.id) for plant in state.get_site().equipment}
+        clz_results = {plants.get(key) + " (" + str(key) + ")" if key in plants else str(key): value for key, value in clz_results.items()}
+
+    def total_value(clz_id: str) -> float:
+        return sum(plant_results.get(clz_id, 0) for plant_results in clz_results.values())
+
+    total_values = {clz.id: total_value(clz.id) for clz in cat.classes}
+    total_values["id"] = "Total"
+
+    def merge_dicts(d1: dict, d2: dict):
+        d1.update(d2)
+        return d1
+
+    row_data = [total_values] + [merge_dicts(weight_per_class, {"id": key}) for key, weight_per_class in clz_results.items()]
+    return column_defs, row_data
+

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Iterator, Literal, Iterable
 
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import Snapshot, Site, Lot, Process, Material, Order
+from dynreact.base.model import Snapshot, Site, Lot, Process, Material, Order, MaterialCategory, MaterialClass
 
 
 # Note: requires Python >= 3.11
@@ -149,6 +149,10 @@ class SnapshotProvider:
     # tbd
     def current_snapshot_id(self) -> datetime:
         return self.previous()
+
+    # TODO how to handle this for the sample use case?
+    def material_class_for_order(self, order: Order, category: MaterialCategory) -> MaterialClass:
+        raise Exception("not implemented")
 
     def order_plant_assignment_from_snapshot(self, snapshot: Snapshot, process: str, include_inactive_lots: bool=False) -> dict[str, int]:
         """

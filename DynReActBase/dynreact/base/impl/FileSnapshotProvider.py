@@ -91,9 +91,11 @@ class FileSnapshotProvider(SnapshotProvider):
         return snapshot
 
     def _read_csv(self, file: str, timestamp: datetime) -> Snapshot:
-        frame: pd.DataFrame = pd.read_csv(file, sep=";", dtype={"id": str, "order": str, "process": "Int64", "order_position": "Int64"})
+        frame: pd.DataFrame = pd.read_csv(file, sep=";", dtype={"id": str, "order": str,
+                                                "process": "Int64", "order_position": "Int64"})
         col_names = frame.columns
-        material_cols: dict[str, int] = {c[len("material_"):]: idx for idx, c in enumerate(col_names) if c.startswith("material_")}
+        material_cols: dict[str, int] = {c[len("material_"):]: idx for idx, c in enumerate(col_names) \
+                                         if c.startswith("material_")}
         plants: dict[str, Equipment] = {p.name_short: p for p in self._site.equipment}
         processes: list[Process] = self._site.processes
         coils: list[Material] = []

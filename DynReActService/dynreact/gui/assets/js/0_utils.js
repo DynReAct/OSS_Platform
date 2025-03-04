@@ -21,6 +21,8 @@ class JsUtils {
         if (value instanceof Date)
             return JsUtils.formatDate(value);
         const tp = typeof value;
+        if (tp === "string")
+            return value;
         if (tp === "number")
             return JsUtils.formatNumber(value, numDigits);
         if (tp === "object")

@@ -857,6 +857,7 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7,
     fields = [column_def_for_field(key, info) for key, info in snapshot_obj.orders[0].model_fields.items() if (key not in ["material_properties", "lot", "lot_position" ])] + \
              ([column_def_for_field(key, info) for key, info in snapshot_obj.orders[0].material_properties.model_fields.items()] if isinstance(snapshot_obj.orders[0].material_properties, BaseModel) else [])
 
+    plants = {p.id: p for p in site.equipment}
     value_formatter_object = {"function": "formatCell(params.value)"}
     for field in fields:
         if field["field"] == "id":
@@ -864,7 +865,8 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7,
             field["headerName"] = "Id"
             field["checkboxSelection"] = True
             field["headerCheckboxSelection"] = True
-        if field["field"] in ["lots", "lot_positions", "active_processes", "coil_status", "follow_up_processes"]:
+        if field["field"] in ["lots", "lot_positions", "active_processes", "coil_status", "follow_up_processes", "material_status",
+                             "actual_weight", ]:
             field["valueFormatter"] = value_formatter_object
 
     def order_to_json(o: Order):
@@ -873,13 +875,9 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7,
         #    if key in as_dict:
         #        as_dict[key] = json.dumps(as_dict[key])
         if o.allowed_equipment is not None:
-            as_dict["allowed_plants"] = [
-                next((plant.name_short for plant in site.equipment if plant.id == p), str(p)) for p in
-                o.allowed_equipment]
+            as_dict["allowed_equipment"] = [plants[p].name_short if p in plants else str(p) for p in o.allowed_equipment]
         if o.current_equipment is not None:
-            as_dict["current_plants"] = [
-                next((plant.name_short for plant in site.equipment if plant.id == p), str(p)) for p in
-                o.current_equipment]
+            as_dict["current_equipment"] = [plants[p].name_short if p in plants else str(p) for p in o.current_equipment]
         if isinstance(o.material_properties, BaseModel):
             as_dict.update(o.material_properties.model_dump(exclude_none=True, exclude_unset=True))
         elif isinstance(o.material_properties, dict):
@@ -974,7 +972,27 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7,
     orders_data["orders_selected_cnt"] = len(selected_ids)
     orders_data["orders_selected_weight"] = weight
     #orders_data["orders"] = selected_ids
-    return fields, [order_to_json(order) for order in orders_sorted], new_selected_rows, orders_data
+    sorted_orders = [order_to_json(order) for order in orders_sorted]
+    first_orders = sorted_orders[0:min(5, len(sorted_orders))]
+    try:
+        relevant_fields: list[str]|None = state.get_cost_provider().relevant_fields(site.get_equipment(current_process_plants[0]))
+        if relevant_fields is not None:
+            def field_sort_id(f: dict[str, any]) -> int:
+                _id = f.get("field")
+                if not _id:
+                    return 1000
+                is_material_prop = False
+                if _id not in relevant_fields:
+                    mat_id = "material_properties." + _id
+                    is_material_prop = mat_id in relevant_fields
+                field_id = mat_id if is_material_prop else _id
+                if field_id in relevant_fields and next((o for o in first_orders if o.get(_id) is not None), None) is not None:
+                    return relevant_fields.index(field_id)
+                return 1000
+            fields.sort(key=field_sort_id)
+    except:
+        pass
+    return fields, sorted_orders, new_selected_rows, orders_data
 
 
 @callback(

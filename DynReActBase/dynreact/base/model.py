@@ -376,6 +376,7 @@ class MaterialClass(Model):
     is_default: bool = False
     "A class can be assigned the default role within a material category."
     default_share: float|None = None
+    mapping: str|None = None
 
 
 class MaterialCategory(Model):

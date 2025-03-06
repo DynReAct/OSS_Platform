@@ -6,7 +6,7 @@ for more complex use cases.
 
 import enum
 from datetime import datetime, timezone
-from typing import Iterator, Literal, Iterable
+from typing import Iterator, Literal, Iterable, Any
 
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Snapshot, Site, Lot, Process, Material, Order, MaterialCategory, MaterialClass
@@ -77,6 +77,7 @@ class SnapshotProvider:
     def __init__(self, url: str, site: Site):
         self._url = url
         self._site = site
+        self._has_class_mapping: bool = any(cl.mapping is not None for cat in site.material_categories for cl in cat.classes)
 
     def store(self, snapshot: Snapshot, *args, **kwargs):
         """
@@ -150,9 +151,64 @@ class SnapshotProvider:
     def current_snapshot_id(self) -> datetime:
         return self.previous()
 
-    # TODO how to handle this for the sample use case?
-    def material_class_for_order(self, order: Order, category: MaterialCategory) -> MaterialClass:
-        raise Exception("not implemented")
+    def material_class_for_order(self, order: Order, category: MaterialCategory) -> MaterialClass|None:
+        """
+        Overwrite this method in derived class to provide a custom material class mapping
+        :param order:
+        :param category:
+        :return:
+        """
+        if not self._has_class_mapping:
+            raise Exception("Material class for order not implemented")
+        for cl in category.classes:
+            if not cl.mapping:
+                continue
+            field, operator, cond_value = SnapshotProvider._parse_expression(cl.mapping)
+            if field is None:
+                continue
+            value = SnapshotProvider._get_field_value(order, field)
+            if value is None:
+                continue
+            if isinstance(value, float):
+                cond_value = float(cond_value)
+            elif isinstance(value, bool):
+                cond_value = bool(cond_value)
+            if SnapshotProvider._check_expression(value, operator, cond_value):
+                return cl
+        return None
+
+    @staticmethod
+    def _get_field_value(order: Any, field: str):
+        if order is None:
+            return None
+        if "." in field:
+            first_dot = field.index(".")
+            first_field = field[0:first_dot]
+            last_fields = field[first_dot+1:]
+            return SnapshotProvider._get_field_value(order.get(field) if isinstance(order, dict) else getattr(order, first_field, None), last_fields)
+        return order.get(field) if isinstance(order, dict) else getattr(order, field, None)
+
+    @staticmethod
+    def _check_expression(actual_value: str|float|bool, operator: Literal["=", ">=", ">", "<", "<="], cond_value: str|float|bool):
+        if operator == "=":
+            return actual_value == cond_value
+        if operator == ">":
+            return actual_value > cond_value
+        if operator == ">=":
+            return actual_value >= cond_value
+        if operator == "<":
+            return actual_value < cond_value
+        if operator == "<=":
+            return actual_value <= cond_value
+        raise Exception(f"Invalid operator {operator}")
+
+    @staticmethod
+    def _parse_expression(exp: str) -> tuple[str | None, Literal["=", ">=", ">", "<", "<="] | None, str | None]:
+        operator = next((op for op in [">=", "<=", "=", ">", "<"] if op in exp), None)
+        if operator is None:
+            return None, None, None
+        idx = exp.index(operator)
+        return exp[0: idx].strip(), operator, exp[idx+len(operator):].strip()
 
     def order_plant_assignment_from_snapshot(self, snapshot: Snapshot, process: str, include_inactive_lots: bool=False) -> dict[str, int]:
         """

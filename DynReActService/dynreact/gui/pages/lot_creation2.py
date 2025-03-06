@@ -488,11 +488,15 @@ def show_structure_overview(active_tab: Literal["targets", "orders", "settings"]
     if snapshot_obj is None:
         return True, None
     use_lot_structure: bool = len(use_lot_structure0) > 0
-    show_structure: bool = True # active_tab == "orders" and use_lot_structure  # also useful when structure selection is not active
+    show_structure: bool = True  # active_tab == "orders" and use_lot_structure  # also useful when structure selection is not active
     selected_order_ids: list[str] = [row["id"] if isinstance(row, dict) else row for row in selected_rows] if selected_rows is not None else []
     selected_orders: list[Order] = [snapshot_obj.get_order(o, do_raise=True) for o in selected_order_ids if o != "ids"]
-    mat_agg = MaterialAggregation(state.get_site(), state.get_snapshot_provider())
-    agg_by_plant = mat_agg.aggregate_categories_by_plant(snapshot_obj, selected_orders)
+    agg_by_plant = None
+    try:
+        mat_agg = MaterialAggregation(state.get_site(), state.get_snapshot_provider())
+        agg_by_plant = mat_agg.aggregate_categories_by_plant(snapshot_obj, selected_orders)
+    except:
+        return True, None
     agg: dict[str, dict[str, float]] = mat_agg.aggregate(agg_by_plant)  # outer key: category, inner key: mat class
     categories = state.get_site().material_categories
     applicable_cats: list[str] = [c.id for c in categories if c.process_steps is None or process in c.process_steps]

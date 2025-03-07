@@ -149,7 +149,7 @@ def targets_tab(horizon: int):
                 html.Div(id="lots2-details-plants", className="lots2-plants-targets3"),
                 html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
                 html.Div(dcc.Textarea(id='lots2-structure-logging', value='', className="lots2-textarea")),
-                html.Div(dcc.Input(type="number", id="lots2-structure-sum", style='hidden'))
+                html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "hidden"}))
             ]), html.Div([
                 html.H4("Plant performance models"),
                 html.Div(id="lots2-details-performance-models", className="lots2-performance-models")

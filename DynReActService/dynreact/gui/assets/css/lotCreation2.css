@@ -120,7 +120,7 @@
     column-gap: 1em;
     padding-bottom: 0.5em;
     padding-top: 0.5em;
-    margin-top: 0.5em;
+    margin-top: 1.5em;
 }
 
 .lots2-plants-targets3 {
@@ -333,7 +333,12 @@
     display: flex;
     column-gap: 0.2em;
 }
-
+.lots2-message-field {
+    display: flex;
+    margin-top: 1.5em;
+    column-gap: 0.2em;
+    color: red
+}
 
 /* Control row (tabs + graph) */
 

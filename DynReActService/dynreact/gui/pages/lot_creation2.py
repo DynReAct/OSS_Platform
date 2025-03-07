@@ -147,14 +147,9 @@ def targets_tab(horizon: int):
                     html.Div("Use lot weight range ?"),
                 ], className="lots2-use-range-checkbox"),
                 html.Div(id="lots2-details-plants", className="lots2-plants-targets3"),
-                html.Div([
-                    html.Div(dcc.Checklist(id="lots2-use-structure",
-                                           options=checklist_dict, value=[], className="lots2-checkbox")),
-                    html.Div("Use structure planning ?"),
-                ], className="lots2-use-structure-checkbox"),
                 html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
-                #html.Div(html.Button("Show user input", id="lots2-show-result-btn", className="lots2-target-buttons2")),
-                html.Div(dcc.Textarea(id='lots2-textarea-logging', value='', className="lots2-textarea"))
+                html.Div(dcc.Textarea(id='lots2-structure-logging', value='', className="lots2-textarea")),
+                html.Div(dcc.Input(type="number", id="lots2-structure-sum", style='hidden'))
             ]), html.Div([
                 html.H4("Plant performance models"),
                 html.Div(id="lots2-details-performance-models", className="lots2-performance-models")
@@ -282,10 +277,6 @@ def orders_tab():
 def settings_tab(init_method: Literal["heuristic", "duedate", "snapshot", "result"]|None, iterations: int):
     return [
         html.H4("Lot creation settings"),
-        dcc.ConfirmDialog(
-            id='lots2-confirm-error',
-            message='User information',
-        ),
 
         # Initialization
         html.Div([
@@ -319,6 +310,7 @@ def settings_tab(init_method: Literal["heuristic", "duedate", "snapshot", "resul
             html.Div("Store:", title="Store results?"),
             html.Div(dcc.Checklist(options=[""], value=[""], id="lots2-store-results"), title="Store results?"),
         ], className="lots2-settings-tab-grid"),
+        html.Div(id='lots2-warning-message', className="lots2-message-field"),
         html.Div([
             html.Button("Start", id="lots2-start", className="dynreact-button", disabled=True),
             html.Button("Stop", id="lots2-stop", className="dynreact-button", disabled=True)
@@ -373,8 +365,9 @@ def structure_portfolio_popup(initial_weight: float):
             # materials_table()
             html.Div(id="lots2-materials-grid"),
             html.Div([
-                html.Button("Set default", id="lots2-materials-setdefault", className="dynreact-button"),
                 html.Button("Accept", id="lots2-materials-accept", className="dynreact-button"),
+                html.Button("Clear", id="lots2-materials-clear", className="dynreact-button"),
+                html.Button("Set default", id="lots2-materials-setdefault", className="dynreact-button"),
                 html.Button("Cancel", id="lots2-materials-cancel", className="dynreact-button")
             ], className="lots2-materials-buttons")
         ]),
@@ -472,13 +465,11 @@ def select_settings_tab(active_tab: Literal["targets", "orders", "settings"]|Non
     Output("lots2-orders-structure-overview", "hidden"),
     Output("lots2-orders-backlog-structure-data", "data"),
     Input("lots2-active-tab", "data"),
-    Input("lots2-use-structure", "value"),
     Input("lots2-orders-table", "selectedRows"),
     State("selected-snapshot", "data"),
     State("lots2-process-selector", "value"),
 )
 def show_structure_overview(active_tab: Literal["targets", "orders", "settings"]|None,
-                            use_lot_structure0: list[Literal[""]],
                             selected_rows: list[dict[str, any]] | None,
                             snapshot_id: str, process: str):
     if not dash_authenticated(config) or not process or not snapshot_id:
@@ -487,8 +478,7 @@ def show_structure_overview(active_tab: Literal["targets", "orders", "settings"]
     snapshot_obj = state.get_snapshot(snapshot)
     if snapshot_obj is None:
         return True, None
-    use_lot_structure: bool = len(use_lot_structure0) > 0
-    show_structure: bool = True  # active_tab == "orders" and use_lot_structure  # also useful when structure selection is not active
+    show_structure: bool = True # active_tab == "orders" and use_lot_structure  # also useful when structure selection is not active
     selected_order_ids: list[str] = [row["id"] if isinstance(row, dict) else row for row in selected_rows] if selected_rows is not None else []
     selected_orders: list[Order] = [snapshot_obj.get_order(o, do_raise=True) for o in selected_order_ids if o != "ids"]
     agg_by_plant = None
@@ -564,21 +554,21 @@ def ltp_table_opened(_, snapshot: str, process: str, horizon_hours: int):
         } for idx, t in enumerate(solutions)]
     return columns
 
-# # TODO clear button?
-# @callback(
-#     Output("lots2-material-setpoints", "clear_data"),  #&&&
-#     Input("lots2-materials-clear", "n_clicks"),
-# )
-# def clear_setpoints(n_click_clear) -> bool:
-#     if n_click_clear is not None and n_click_clear > 0:
-#         #&&&
-#         return True
-#     return False
+@callback(
+    Output("lots2-material-setpoints", "clear_data"),
+    Input("lots2-materials-clear", "n_clicks"),
+    Input("lots2-process-selector", "value"),
+)
+def clear_setpoints(n_click_clear, process: str|None) -> bool:
+    if n_click_clear is not None and n_click_clear > 0:
+        return True
+    if process is not None:
+        return True
+    return False
 
 @callback(
     Output("lots2-details-plants", "children"),
     Output("lots2-details-plants", "className"),
-    Output("lots2-material-setpoints", "clear_data"),  #&&&
     State("selected-snapshot", "data"),
     State("lots2-horizon-hours", "value"),
     State("lots2-details-plants", "children"),
@@ -605,9 +595,9 @@ def update_plants(snapshot: str,
         my_parent_classname = "lots2-plants-targets3"
 
     if not dash_authenticated(config) or process is None or snapshot is None:
-        return None, my_parent_classname, False
+        return None, my_parent_classname
     if active_tab != "targets":
-        return no_update, my_parent_classname, False
+        return no_update, my_parent_classname
     changed = GuiUtils.changed_ids()
     is_ltp_init = "lots2-ltp-table" in changed and len(selected_rows) > 0
     re_init: bool = "lots2-targets-init-lots" in changed or is_ltp_init
@@ -682,8 +672,7 @@ def update_plants(snapshot: str,
     # my_parent_classname for formatting purpose
     # todo if input-selector HAS CHANGED ??
 
-    clear_lots2_material_setpoints = True;       #&&&
-    return elements, my_parent_classname, clear_lots2_material_setpoints
+    return elements, my_parent_classname
 
 
 def _targets_from_ltp(selected_row: dict[str, any], process: str, start_time: datetime, horizon_hours: int) -> ProductionTargets:
@@ -1000,24 +989,26 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7,
 
 
 @callback(
-    Output("lots2-structure-btn", "disabled"),
-    Input("lots2-use-structure", "value")
-)
-def toggle_structure_planning(use_lot_structure0: list[Literal[""]]):
-    use_lot_structure: bool = len(use_lot_structure0) > 0
-    if use_lot_structure:
-        btn_disabled = False
-    else:
-        btn_disabled = True
-    return btn_disabled
-
-@callback(
-    Output("lots2-textarea-logging", "value"),
+    Output("lots2-structure-logging", "value"),
+    Output("lots2-structure-sum", "value"),
     Input("lots2-material-setpoints", "data")
 )
 def show_userinput_structure_planning( json_data):
     result_structure_planning = str(json_data)
-    return result_structure_planning
+    def get_sum_from_setpoints():
+        # calc sum for one column
+        colsum = 0
+        if json_data is not None:
+            site = state.get_site()
+            material_categories = site.material_categories
+            cat0 = material_categories[0]
+            for myclass in cat0.classes:
+                if myclass.id in json_data.keys():
+                    colsum = colsum + json_data.get(myclass.id)
+        return colsum
+
+    sum_setpoints = get_sum_from_setpoints()
+    return result_structure_planning, sum_setpoints
 
 
 @callback(
@@ -1159,9 +1150,7 @@ def update_figure(history: list[float]|None):
           Output("lots2-control-btns", "title"),
           Output("lots2-interval", "interval"),
           Output("lots2-running-indicator", "hidden"),
-
-          Output('lots2-confirm-error', 'displayed'),
-          Output('lots2-confirm-error', 'message'),
+          Output("lots2-warning-message", "children"),
 
           State("selected-snapshot", "data"),
           State("lots2-check-use-lot-range", "value"),
@@ -1173,6 +1162,9 @@ def update_figure(history: list[float]|None):
 
           State("lots2-orders-data", "data"),  # we'd like to make this an Input, but it leads to circular dependencies with process_selector
           State("lots2-store-results", "value"),
+          State("lots2-structure-sum", "value"),
+          State("lots2-details-plants", "children"),
+
           Input("lots2-active-tab", "data"),                               # as a workaround for the above problem we trigger on tab changes
           # Input instead of State because we validate the values and disable the start button if it is invalid
           Input("lots2-horizon-hours", "value"),
@@ -1194,6 +1186,8 @@ def process_changed(snapshot: datetime|None,
                     create_comment: str|None,
                     order_data: dict[str, Any] | None, # keys "snapshot", "process", "orders_selected_cnt", "orders_selected_weight"
                     store_results0: list[Literal[""]],
+                    structure_sum: int|None,
+                    components: list[Component]|None,
                     _tab,
                     horizon_hours: int,
                     iterations: float|str,
@@ -1204,13 +1198,54 @@ def process_changed(snapshot: datetime|None,
                     _, __, ___,
                     ):
     global lot_creation_listener
-    flag_display_error = False
-    error_message = ""
+    warning_message = ""
+
+    process_out = dash.no_update  #default, process_out = process only if changed inside
+
+    # check structure_sum vs details_sum
+    def _structure_calc_sum( components: list[Component] | None, process: str | None):
+        plants = state.get_site().get_process_equipment(process)
+        target_list, flag, message = target_values_from_settings_short(process=process, plants=[p.id for p in plants],
+                                                                      components=components)
+        try:
+            total_weight = sum(target_list)
+        except:
+            total_weight = 0
+        return total_weight
+    details_sum = _structure_calc_sum(components, process)
+    if structure_sum is not None and structure_sum > 0 and details_sum > 0:
+        if structure_sum != details_sum:
+            warning_message = 'Warning : Weight sum has changed, please push StructurePlanning again'
+
+    # prepare using primary_category
+    site = state.get_site()
+    def _get_primary_category(process_name) -> str | None:  # &&&NEW TODO
+        structure_planning = site.structure_planning
+        res1 = structure_planning.get(process_name)
+        if res1 is not None:
+            primary_category = res1.primary_category
+        else:
+            primary_category = None
+        return primary_category
+
+    def _get_primary_classes(process_name) -> list[str] | None:
+        structure_planning = site.structure_planning
+        res1 = structure_planning.get(process_name)
+        if res1 is not None:
+            primary_classes = res1.primary_classes
+        else:
+            primary_classes = None
+        return primary_classes
+
+    primary_category = _get_primary_category(process)
+    primary_classes = _get_primary_classes(process)
+    #print ('loc 1188 ', 'primary_category, primary_classes ', process, primary_category, primary_classes)
+
     use_lot_range: bool = len(use_lot_range0) > 0
     interval = 3_600_000
     if not dash_authenticated(config):
-        return (True, True, process, True, iterations, iterations, iterations, True, selected_init_method, [],
-                existing_solution, True, "Not authenticated", interval, True, flag_display_error, error_message)
+        return (True, True, process_out, True, iterations, iterations, iterations, True, selected_init_method, [],
+                existing_solution, True, "Not authenticated", interval, True, warning_message)
     store_results: bool = len(store_results0) > 0
     changed_ids: list[str] = GuiUtils.changed_ids()
     # TODO if running, then use configured iterations from run
@@ -1219,8 +1254,11 @@ def process_changed(snapshot: datetime|None,
 
     snapshot = DatetimeUtils.parse_date(snapshot)
     is_running, proc_running = check_running_optimization()
+    process_in = process
     if is_running:
         process = proc_running
+        if process != process_in:
+            process_out = process
     elif "process-selector" in changed_ids:  # ensure graph output is removed
         lot_creation_listener = None
         existing_solution = None
@@ -1238,12 +1276,12 @@ def process_changed(snapshot: datetime|None,
         #for result in results:  # TODO not working
         #    result["disabled"] = True
         #settings_trigger_hidden = selected_init_method == "result"
-        return (True, stop_disabled, process, True, iterations, iterations, iterations, result_selector_hidden, selected_init_method, results,
-                existing_solution, selection_disabled, "Optimization running", interval, False, flag_display_error, error_message)
+        return (True, stop_disabled, process_out, True, iterations, iterations, iterations, result_selector_hidden, selected_init_method, results,
+                existing_solution, selection_disabled, "Optimization running", interval, False, warning_message)
     if horizon_hours is None or iterations is None or process is None or snapshot is None:
         title = "Select a process first" if process is None else "Select a snapshot first" if snapshot is None else "Enter valid planning horizon"
-        return (True, stop_disabled, process, False, iterations, iterations, iterations, True, selected_init_method, [], None,
-                selection_disabled, title, interval, True, flag_display_error, error_message)
+        return (True, stop_disabled, process_out, False, iterations, iterations, iterations, True, selected_init_method, [], None,
+                selection_disabled, title, interval, True, warning_message)
     if selected_init_method is None:
         if len(existing_solutions) > 0:
             selected_init_method = "result"
@@ -1255,12 +1293,14 @@ def process_changed(snapshot: datetime|None,
     plant_targets_unset: bool = target_elements is None and selected_init_method != "result"
     if orders_unselected or plant_targets_unset:
         title = "Select orders first" if orders_unselected else "Set plant targets first"
-        return (True, stop_disabled, process, False, iterations, iterations, iterations, True, selected_init_method, [], None,
-                selection_disabled, title, interval, True, flag_display_error, error_message)
+        return (True, stop_disabled, process_out, False, iterations, iterations, iterations, True, selected_init_method, [], None,
+                selection_disabled, title, interval, True, warning_message)
     result_selector_hidden = selected_init_method != "result"
     # here start optimization
     start_disabled, error_msg, info_msg = check_start_optimization(changed_ids, process, snapshot, iterations, horizon_hours, selected_init_method,
                 existing_solution if selected_init_method == "result" else None, use_lot_range, target_elements, perf_model_elements, selected_order_rows, create_comment, store_results)
+    if len(warning_message) == 0 and info_msg is not None:
+        warning_message = info_msg
     if error_msg is not None:  # TODO display message!
         print(error_msg)
         pass
@@ -1268,8 +1308,8 @@ def process_changed(snapshot: datetime|None,
         if start_disabled or len(existing_solutions) == 0 or "create-existing-sols" in changed_ids:  # trying to start the optimization, or explicitly deselected solution id
             title = "Select an existing result" if len(results) > 0 else \
                         "No previous results avaialable, select a different initialization method."
-            return (True, stop_disabled, process, False, iterations, iterations, iterations, False, selected_init_method, results, existing_solution,
-                    selection_disabled, title, interval, True, flag_display_error, error_message)
+            return (True, stop_disabled, process_out, False, iterations, iterations, iterations, False, selected_init_method, results, existing_solution,
+                    selection_disabled, title, interval, True, warning_message)
         existing_solution = existing_solutions[-1]  # ?
     existing_solution = existing_solution if selected_init_method == "result" else dash.no_update
     stop_disabled = not start_disabled
@@ -1283,12 +1323,12 @@ def process_changed(snapshot: datetime|None,
     #settings_trigger_hidden = selected_init_method == "result"
     #settings_trigger_disabled = start_disabled
 
-    if info_msg is not None:
-        flag_display_error = True
-
-    return (start_disabled, stop_disabled, process, process_selection_disabled, iterations, iterations, iterations, result_selector_hidden,
+    if warning_message is not None:
+        if len(warning_message) > 0:
+            start_disabled = True
+    return (start_disabled, stop_disabled, process_out, process_selection_disabled, iterations, iterations, iterations, result_selector_hidden,
             selected_init_method, results, existing_solution, selection_disabled, "Start/stop planning optimization", interval, running_indicator_hidden,
-            flag_display_error, info_msg)
+            warning_message)
 
 
 def check_running_optimization() -> tuple[bool, str|None]:
@@ -1447,7 +1487,6 @@ clientside_callback(
     ),
     Output("lots2-material-setpoints", "data"),
     Input("lots2-materials-accept", "n_clicks"),
-    Input("lots2-weight-total", "value"),
     State("lots2-materials-grid", "id"),
     #config_prevent_initial_callbacks=True
 )
@@ -1518,6 +1557,8 @@ clientside_callback(
     State("lots2-material-setpoints", "data")
 )
 def structure_update(_, components: list[Component]|None, process: str|None, setpoints):
+    #first OUT is sum in grid, lots2-weight-total used as IN for other fcts
+    #second OUT is sum hidden
     plants = state.get_site().get_process_equipment(process)
     target_list, flag, message = target_values_from_settings_short(process=process, plants=[p.id for p in plants], components=components )
     try:

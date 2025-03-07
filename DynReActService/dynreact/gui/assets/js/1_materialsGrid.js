@@ -238,7 +238,7 @@ class MaterialsGrid2 extends HTMLElement {
             lots_weight_sum = 0;
             for (const material_class of category.classes) {
                 lots_weight_sum = lots_weight_sum + this.getOneField(material_class.id);
-                }
+            }
             if (lots_weight_sum != lots_weight_total){
                 weight_diff = lots_weight_total - lots_weight_sum;
                 changed = true;
@@ -246,10 +246,20 @@ class MaterialsGrid2 extends HTMLElement {
                     if (material_class.is_default){
                         this.setOneField(material_class.id, this.getOneField(material_class.id) + weight_diff);
                     }
-                 }
+                }
             }
         } return changed;
     }
+
+//    setPrimaryCategory(prim_category, prim_classes){
+//       for (const category of this.#materials) {
+//            for (const material_class of category.classes) {
+//                if ( category == prim_category and material_class in prim_classes):
+//                    //style.backgroundColor = "Red"; // not working
+//                    continue
+//            }
+//       }
+//    }
 
     setProcessName(process){
         this.processName = process;

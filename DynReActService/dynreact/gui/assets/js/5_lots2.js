@@ -23,6 +23,7 @@
             grid = JsUtils.createElement(materialsTag, {parent: gridContainer});
             const site = dynreact?.getSite();
             if (site) {
+                //todo 20250306 hier hat man schon site, auch die primaries holen , site.structure_planning
                 grid.setMaterials(site.material_categories);
                 if (totalProduction)
                     grid.initTargets(totalProduction);
@@ -43,20 +44,20 @@
         if (is_process_changed)
             grid.resetGrid(totalProduction);
 
-
         // lots2-details-plants changed -> add diff to default field
         const sumsChanged = grid.checkSums();
 
         grid.setProcessName(process);
     }
 
-    globalThis.dash_clientside.lots2.setMaterialSetpoints = function(_, __, gridId) {
-        //triggered by button Accept or by lots2-weight-total changed
+    globalThis.dash_clientside.lots2.setMaterialSetpoints = function(_, gridId) {
+        //triggered by 1. button Accept
         //returns all values from grid, callback fills Store lots2-material-setpoints
+
         const materialGrid = document.querySelector("div#" + gridId + " " + materialsTag);
         mySetpoints = materialGrid?.getSetpoints();
         return materialGrid?.getSetpoints() || {};
-    }
+        }
 
     globalThis.dash_clientside.lots2.resetMaterialGrid = function(_, gridId) {
         // set grid to default

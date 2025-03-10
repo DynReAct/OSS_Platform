@@ -6,6 +6,7 @@ from typing import Iterator, Literal, Annotated
 
 from dynreact.base.LotsOptimizer import LotsOptimizer
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
+from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, \
     MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction
 from fastapi import FastAPI, HTTPException, Response
@@ -103,6 +104,32 @@ def snapshots(response: Response, start: str|datetime|None=Query(None, descripti
             break
     response.headers["Cache-Control"] = "max-age=60"  # 1 minute...
     return result
+
+
+@fastapi_app.get("/snapshots/{timestamp}/aggregation",
+                 tags=["dynreact"],
+                 summary="Get a specific snapshot; the one with largest timestamp <= the provided timestamp")
+def aggregate_material(response: Response, timestamp: str | datetime = Path(..., examples=["now", "now-1d", "2023-12-04T23:59Z"],
+                                               openapi_examples={
+                "now": {"description": "Get the most recent snapshot", "value": "now"},
+                "now-1d": {"description": "Get yesterday's snapshot", "value": "now-1d"},
+                "2023-04-25T23:59Z": {"description": "A specific timestamp", "value": "2023-04-25T23:59Z"},
+            }),
+            level: Literal["plant","storage","process"] = Query("plant", description="The aggregation level."),
+            username = username) -> dict:
+    is_relative_timestamp: bool = isinstance(timestamp, str) and timestamp.startswith("now")
+    if isinstance(timestamp, str):
+        timestamp = parse_datetime_str(timestamp)
+    snapshot0: Snapshot = state.get_snapshot(timestamp)
+    agg = MaterialAggregation(state.get_site(), state.get_snapshot_provider())
+    agg_by_plants = agg.aggregate_categories_by_plant(snapshot0)
+    if not is_relative_timestamp:
+        response.headers["Cache-Control"] = "max-age=604800"  # 1 week
+    if level == "storage":
+        return agg.aggregate_by_storage(agg_by_plants)
+    elif level == "process":
+        return agg.aggregate_by_process(agg_by_plants)
+    return agg_by_plants
 
 
 @fastapi_app.get("/snapshots/{timestamp}",

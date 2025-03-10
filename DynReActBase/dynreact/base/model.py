@@ -80,7 +80,7 @@ class Storage(LabeledItem):
     equipment: list[int]
     "Equipment served by this storage primarily."
     #secondary_plants: list[int]|None = Field(None, description="Plants served by this storage.")
-    capacity_tonnage: float|None = None
+    capacity_weight: float|None = None
     "Capacity in t."
     capacity_items: int|None = None
     "Capacity in items / material."

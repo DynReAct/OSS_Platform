@@ -3,6 +3,9 @@ class MaterialsGrid2 extends HTMLElement {
     #grid;
     #materials;
     #tooltipContainer;
+    #blabla
+
+
     #processName;
 
     constructor() {

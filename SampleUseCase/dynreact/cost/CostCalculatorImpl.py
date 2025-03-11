@@ -109,8 +109,8 @@ class SampleCostProvider(CostProvider):
         """
         Calculate an incremental update to the cost function
         """
-        if plant.id != status.equipment:
-            raise Exception("Plant status for plant id " + str(status.equipment) + " instead of expected " + str(plant.id))
+        if plant.id != status.targets.equipment:
+            raise Exception("Plant status for plant id " + str(status.targets.equipment) + " instead of expected " + str(plant.id))
         if status.current_order != current.id:
             raise Exception("Current order id in status object does not match provided order (" + str(status.current) + " - " + str(current.id) + ")")
         if status.snapshot_id != snapshot.timestamp:
@@ -131,7 +131,7 @@ class SampleCostProvider(CostProvider):
         lot_weights = None
         if new_lot:
             if is_incomplete_first_submission:  # catch initial submission with incomplete data
-                delta_weight = status.target_weight - crt_weight - new_weight
+                delta_weight = status.targets.total_weight - crt_weight - new_weight
                 lots_cnt = 2
             lot_weights = old_planning.lot_weights + [new_weight]
         else:
@@ -141,7 +141,7 @@ class SampleCostProvider(CostProvider):
             else:   # catch initial submission with incomplete data
                 lot_weight = crt_weight + new_weight
                 lots_cnt = 1
-                delta_weight = status.target_weight - lot_weight
+                delta_weight = status.targets.total_weight - lot_weight
                 lot_weights = [lot_weight]
         transition_costs = old_planning.transition_costs + self.transition_costs(plant, current, next, current_material=current_material, next_material=next_material)
         logistic_costs = old_planning.logistic_costs + self._logistic_costs_for_order(next, plant.id)  # TODO differentiate between order and material based updates(?)
@@ -151,11 +151,8 @@ class SampleCostProvider(CostProvider):
                                                                 orders_count=orders_cnt, transition_costs=transition_costs,
                                                                 logistic_costs=logistic_costs)
         current_coils = [next_material.id] if next_material is not None else []  # here we have a new order, so no need to track previous coils
-        new_status = EquipmentStatus(equipment=plant.id, snapshot_id=status.snapshot_id,
-                                     target_weight=status.target_weight, target_lot_size=status.target_lot_size,
-                                     planning=new_planning,
-                                     planning_period=status.planning_period,
-                                     current_order=next.id, previous_order=current.id,
+        new_status = EquipmentStatus(targets=status.targets, snapshot_id=status.snapshot_id, planning=new_planning,
+                                     planning_period=status.planning_period, current_order=next.id, previous_order=current.id,
                                      current_material=current_coils)
         target_fct = self.objective_function(new_status)
         new_planning.target_fct = target_fct.total_value
@@ -165,15 +162,15 @@ class SampleCostProvider(CostProvider):
         """
         Evaluate the target/objective function for a specific plant status
         """
-        if status is None or status.equipment not in self._plant_ids:  # TODO generate a warning?
+        if status is None or status.targets.equipment not in self._plant_ids:  # TODO generate a warning?
             return ObjectiveFunction(total_value=float("inf"))
         params: CostConfig = self._config
         planning: PlanningData = status.planning
         # In our example there are 3 costs components: number of lots, deviation from target weight, and transition costs between individual orders
         # The relative weight of the components can be defined by the parameters
-        weight_deviation = (abs(planning.delta_weight) / status.target_weight) ** 2 if status.target_weight > 0 else 0
+        weight_deviation = (abs(planning.delta_weight) / status.targets.total_weight) ** 2 if status.targets.total_weight > 0 else 0
         penalty_out_of_lot_range: float|None = None
-        if status.target_lot_size is not None:
+        if status.targets.lot_weight_range is not None:
 
             def out_of_lot_range(lot_weight: float, target: tuple[float, float]):
                 """Returns 1 if lot size is exactly equal to one of the boundaries"""
@@ -182,7 +179,7 @@ class SampleCostProvider(CostProvider):
                 relative_deviation = abs((lot_weight - center) / diff * 2)
                 return relative_deviation ** 2
 
-            out_of_lot_range = sum(out_of_lot_range(w, status.target_lot_size) for w in planning.lot_weights)
+            out_of_lot_range = sum(out_of_lot_range(w, status.targets.lot_weight_range) for w in planning.lot_weights)
             penalty_out_of_lot_range = params.factor_out_of_lot_range * out_of_lot_range
         log_costs = params.factor_logistic_costs * planning.logistic_costs
         result = planning.lots_count + \
@@ -208,9 +205,7 @@ class SampleCostProvider(CostProvider):
         if len(assignments) == 0:
             if current_material is not None and len(current_material) > 0:
                 raise Exception("Current coils specified " + str([c.id for c in current_material]) + ", but no order assignments")
-            status = EquipmentStatus(equipment=plant_id, snapshot_id=snapshot.timestamp, target_weight=target_weight,
-                                     target_lot_size=target_lot_size,
-                                     planning_period=planning_period,
+            status = EquipmentStatus(targets=equipment_targets, snapshot_id=snapshot.timestamp, planning_period=planning_period,
                                      planning=PlanningData(delta_weight=target_weight),
                                      current_material=[] if current_material is not None else None)
             target_fct = self.objective_function(status)
@@ -255,8 +250,7 @@ class SampleCostProvider(CostProvider):
                                                             orders_count=len(orders_sorted),
                                                             transition_costs=transition_costs,
                                                             logistic_costs=logistic_costs)
-        status = EquipmentStatus(equipment=plant_id, snapshot_id=snapshot.timestamp, target_weight=target_weight,
-                                 target_lot_size=target_lot_size, planning=planning,
+        status = EquipmentStatus(targets=equipment_targets, snapshot_id=snapshot.timestamp, planning=planning,
                                  planning_period=planning_period, current_order=last_order.id,  # current=last_order.id
                                  previous_order=previous_order.id if previous_order is not None else None,
                                  current_material=[c.id for c in current_material] if current_material is not None else None)

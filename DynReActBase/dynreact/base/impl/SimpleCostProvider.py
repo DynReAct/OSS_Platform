@@ -3,7 +3,8 @@ from datetime import datetime
 
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.NotApplicableException import NotApplicableException
-from dynreact.base.model import Site, Equipment, Order, Material, EquipmentStatus, Snapshot, OrderAssignment, PlanningData
+from dynreact.base.model import Site, Equipment, Order, Material, EquipmentStatus, Snapshot, OrderAssignment, \
+    PlanningData, EquipmentProduction
 
 
 class SimpleCostProvider(CostProvider):
@@ -75,9 +76,10 @@ class SimpleCostProvider(CostProvider):
                 + self._weight_deviation_costs(new_delta_weight)
         return new_status, new_status.planning.target_fct
 
-    def evaluate_equipment_assignments(self, equipment: id, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
-                                       planning_period: tuple[datetime, datetime], target_weight: float,
-                                       min_due_date: datetime|None=None, current_material: list[Material] | None=None) -> EquipmentStatus:
+    def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
+                                       planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None, current_material: list[Material] | None=None) -> EquipmentStatus:
+        target_weight = equipment_targets.total_weight
+        equipment = equipment_targets.equipment
         num_assignments = len(assignments)
         if num_assignments <= 1:
             delta_weight = target_weight
@@ -88,7 +90,7 @@ class SimpleCostProvider(CostProvider):
                 delta_weight = delta_weight - order.actual_weight
                 min_due_date = order.due_date
             target_fct = self._weight_deviation_costs(target_weight)
-            return EquipmentStatus(equipment=equipment, target_weight=target_weight, snapshot_id=snapshot.timestamp, planning_period=planning_period, current_order=order_id,
+            return EquipmentStatus(targets=equipment_targets, snapshot_id=snapshot.timestamp, planning_period=planning_period, current_order=order_id,
                                    planning=PlanningData(target_fct=target_fct, transition_costs=0, lots_count=num_assignments, orders_count=num_assignments,
                                               delta_weight=delta_weight, min_due_date=min_due_date))
         plant_obj: Equipment = next(p for p in self._site.equipment if p.id == equipment and p.process == process)
@@ -117,7 +119,7 @@ class SimpleCostProvider(CostProvider):
         weight_diff = target_weight - total_weight
         weight_diff_costs = self._weight_deviation_costs(weight_diff)
         total_costs = transition_costs + (num_lots-1) * self._new_lot_costs + weight_diff_costs
-        return EquipmentStatus(equipment=equipment, target_weight=target_weight, snapshot_id=snapshot.timestamp, planning_period=planning_period,
+        return EquipmentStatus(targets=equipment_targets, snapshot_id=snapshot.timestamp, planning_period=planning_period,
                                current_order=previous_order.id if previous_order is not None else None, previous_order=prev_prev_oder.id if prev_prev_oder is not None else None,
                                planning=PlanningData(target_fct=total_costs, transition_costs=transition_costs, lots_count=num_lots, orders_count=num_assignments,
                                                      current_material=[c.id for c in current_material] if current_material is not None else None,

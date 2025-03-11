@@ -97,7 +97,7 @@ class CostProvider:
         process = planning.process
         all_plants: dict[int, Equipment] = {p.id: p for p in self._site.equipment}
         process_plants: list[EquipmentStatus] \
-            = [status for status in planning.equipment_status.values() if status.equipment in all_plants and all_plants[status.equipment].process == process]
+            = [status for status in planning.equipment_status.values() if status.targets.equipment in all_plants and all_plants[status.targets.equipment].process == process]
         objectives: list[ObjectiveFunction] = [self.objective_function(s) for s in process_plants]
         return CostProvider.sum_objectives(objectives)
 

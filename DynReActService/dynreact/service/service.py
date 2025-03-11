@@ -315,7 +315,7 @@ def target_function_update(transition: EquipmentTransitionStateful, username = u
     #    raise HTTPException(status_code=404, detail="Current coil or order " + str(transition.current) + " not found")
     status = transition.equipment_status
     initial_solution = ProductionPlanning(process=plant.process, equipment_status={plant.id: status}, order_assignments={})
-    targets = ProductionTargets(process=plant.process, target_weight={plant.id: EquipmentProduction(equipment=plant.id, total_weight=status.target_weight)},
+    targets = ProductionTargets(process=plant.process, target_weight={plant.id: status.targets},
                                 period=status.planning_period)
     optimizer: LotsOptimizer = state.get_lots_optimization().create_instance(plant.process, snapshot, state.get_cost_provider(),
                                                                     initial_solution=initial_solution, targets=targets)

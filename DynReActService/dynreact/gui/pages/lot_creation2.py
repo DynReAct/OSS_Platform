@@ -1323,9 +1323,10 @@ def process_changed(snapshot: datetime|None,
     #settings_trigger_hidden = selected_init_method == "result"
     #settings_trigger_disabled = start_disabled
 
-    if warning_message is not None:
-        if len(warning_message) > 0:
-            start_disabled = True
+    if warning_message is not None and len(warning_message) > 0:
+        start_disabled = True
+    elif error_msg is not None:
+        warning_message = error_msg
     return (start_disabled, stop_disabled, process_out, process_selection_disabled, iterations, iterations, iterations, result_selector_hidden,
             selected_init_method, results, existing_solution, selection_disabled, "Start/stop planning optimization", interval, running_indicator_hidden,
             warning_message)

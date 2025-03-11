@@ -251,7 +251,7 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
         "iterations": len(solution.history),
         "orders_considered": len(best_planning[sol_id].order_assignments),
         "lots": sum(status.planning.lots_count if status.planning is not None else 0 for status in plant_statuses[sol_id]),
-        "plants": [site.get_equipment(status.equipment).name_short for status in plant_statuses[sol_id]],
+        "plants": [site.get_equipment(status.targets.equipment).name_short for status in plant_statuses[sol_id]],
         #"transition_costs": sum(status.planning.transition_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
         #"weight_costs": sum(status.planning.delta_weight * delta_weight_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
         "performance_models": params[sol_id].get("performance_models")

@@ -6,7 +6,7 @@ properties.
 
 The classes defined in this module are serializable and can be made accessible via a REST interface.
 """
-
+from __future__ import annotations
 from datetime import datetime, timedelta, timezone, date
 from typing import Any, TypeVar, Generic, Literal
 
@@ -213,7 +213,6 @@ class PlanningData(Model):
     lot_weights: list[float] = []
     "Lot weights in tons."
     orders_count: int = 0
-    # TODO this is difficult to translate into costs
     delta_weight: float = 0.0
     "Deviation from target weight in t. Positive for missing tonnage."
     min_due_date: datetime|None = None
@@ -224,11 +223,7 @@ P = TypeVar("P", bound=PlanningData)
 
 class EquipmentStatus(Model, Generic[P]):
 
-    equipment: int
-    target_weight: float
-    "Target weight in t for this equipment"
-    target_lot_size: tuple[float, float]|None = None
-    "Target lot sizes (min, max) in t for this equipment"
+    targets: EquipmentProduction
     snapshot_id: datetime
     planning_period: tuple[datetime, datetime]
     current_order: str|None = None
@@ -356,7 +351,7 @@ class ProductionPlanning(Model, Generic[P]):
         if len(self.equipment_status) == 0:
             return None  # ?
         period: tuple[datetime, datetime] = next(iter(self.equipment_status.values())).planning_period
-        targets: dict[int, EquipmentProduction] = {plant: EquipmentProduction(equipment=plant, total_weight=status.target_weight) for plant, status in self.equipment_status.items()}
+        targets: dict[int, EquipmentProduction] = {plant: status.targets for plant, status in self.equipment_status.items()}
         return ProductionTargets(process=self.process, target_weight=targets, period=period)
 
 

@@ -46,13 +46,14 @@ class CostProvider:
         plant_ids = list(targets.target_weight.keys())
         plants = [p for p in self._site.equipment if p.process == process and p.id in plant_ids]
         track_structure: bool = targets.material_weights is not None and len(targets.material_weights) > 0
+        target_structure = targets.material_weights if track_structure else None
         status: dict[int, EquipmentStatus] = \
             {plant.id: self.evaluate_equipment_assignments(targets.target_weight.get(plant.id, EquipmentProduction(equipment=plant.id, total_weight=0.0)),
                                                 process, assignments, snapshot, targets.period, track_structure=track_structure) for plant in plants}
         order_assignments = {o: ass for o, ass in assignments.items() if ass.equipment in plant_ids}
         unassigned = {o: ass for o, ass in assignments.items() if ass.equipment < 0}
         order_assignments.update(unassigned)
-        return ProductionPlanning(process=process, order_assignments=order_assignments, equipment_status=status)
+        return ProductionPlanning(process=process, order_assignments=order_assignments, equipment_status=status, target_structure=target_structure)
 
     def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
                                        planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None,

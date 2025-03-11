@@ -498,13 +498,16 @@ class CTabuWorker:
                     new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(equipment_targets, self.planning.process,
                                                                             order_assignments, self.snapshot, self.targets.period)
                     plant_status[swp.PlantTo] = new_status
-                total_objectives = CostProvider.sum_objectives([self.costs.objective_function(status) for status in plant_status.values()])
+                planning_candidate = ProductionPlanning(process=self.planning.process, order_assignments=order_assignments,
+                                   equipment_status=plant_status, target_structure=self.targets.material_weights)
+                total_objectives = self.costs.process_objective_function(planning_candidate)
+                #total_objectives = CostProvider.sum_objectives([self.costs.objective_function(status) for status in plant_status.values()])
                 objective_fct = total_objectives.total_value
                 if objective_fct < objective_value:
                     objective_value = objective_fct
                     best_objective = total_objectives
                     best_swap = swp
-                    best_solution = ProductionPlanning(process=self.planning.process, order_assignments=order_assignments, equipment_status=plant_status)
+                    best_solution = planning_candidate
         if best_objective is None:
             best_objective = ObjectiveFunction(total_value=objective_value)
         return best_swap, best_solution, best_objective

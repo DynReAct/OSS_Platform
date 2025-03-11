@@ -12,24 +12,24 @@ class ModelUtils:
         if len(overlapping_fractions) == 0 or sub_targets is None:
             return ProductionTargets(process=process, target_weight={}, period=(start_time, end_time))
         total_target_weights: dict[int, EquipmentProduction] = {}
-        mat_target: dict[str, dict[str, float]] = {}
+        mat_target: dict[str, float] = {}
         for period_idx, overlap in overlapping_fractions.items():
             target: ProductionTargets = sub_targets[period_idx]
             if target.material_weights is not None:
-                for material, strct in target.material_weights.items():
+                for material, weight in target.material_weights.items():
+                    if isinstance(weight, dict):
+                        print("Hierarchical structure not supported yet in mid_term_targets_from_ltp_results")
+                        continue
                     if material not in mat_target:
-                        mat_target[material] = {}
-                    for cl, weight in strct.items():
-                        if cl not in mat_target[material]:
-                            mat_target[material][cl] = 0
-                        mat_target[material][cl] = mat_target[material][cl] + weight * overlap
+                        mat_target[material] = 0
+                    mat_target[material] += weight * overlap
             for plant_id, plant_targets in target.target_weight.items():
                 if plant_id not in total_target_weights:
                     total_target_weights[plant_id] = EquipmentProduction(equipment=plant_id, total_weight=0) # material_weights=)
                 aggregated_target: EquipmentProduction = total_target_weights[plant_id]
                 added_total = plant_targets.total_weight * overlap
                 aggregated_target.total_weight += added_total
-        return ProductionTargets(process=process, period=(start_time, end_time), target_weight=total_target_weights)
+        return ProductionTargets(process=process, period=(start_time, end_time), target_weight=total_target_weights, material_weights=mat_target)
 
     @staticmethod
     def aggregated_structure(site: Site, planning: ProductionPlanning) -> dict[str, dict[str, float]]:

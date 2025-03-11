@@ -354,12 +354,11 @@ class ProductionPlanning(Model, Generic[P]):
         return sum(status.planning.lots_count for status in self.equipment_status.values() if status.planning is not None)
 
     def get_targets(self) -> ProductionTargets:
-        """FIXME material structure targets are not known here"""
         if len(self.equipment_status) == 0:
             return None  # ?
         period: tuple[datetime, datetime] = next(iter(self.equipment_status.values())).planning_period
         targets: dict[int, EquipmentProduction] = {plant: status.targets for plant, status in self.equipment_status.items()}
-        return ProductionTargets(process=self.process, target_weight=targets, period=period)
+        return ProductionTargets(process=self.process, target_weight=targets, period=period, material_weights=self.target_structure)
 
 
 # LTP WIP

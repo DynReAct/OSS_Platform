@@ -56,8 +56,8 @@
 
         const materialGrid = document.querySelector("div#" + gridId + " " + materialsTag);
         mySetpoints = materialGrid?.getSetpoints();
-        return materialGrid?.getSetpoints() || {};
-        }
+        return materialGrid?.getSetpoints();
+    }
 
     globalThis.dash_clientside.lots2.resetMaterialGrid = function(_, gridId) {
         // set grid to default

@@ -182,7 +182,7 @@ def orders_tab():
                         html.Div(id="lots2-backlog-structure-widget")
                     ]),
                 ], className="lots2-orders-structure-subflex")
-            ], id="lots2-orders-structure-overview", hidden=True)  # only shown when structure targets are active
+            ], id="lots2-orders-structure-overview")  # , hidden=True)  # only shown when structure targets are active
         ], className="lots2-orders-structure-flex"),
 
         html.Fieldset([
@@ -486,6 +486,7 @@ def show_structure_overview(active_tab: Literal["targets", "orders", "settings"]
         mat_agg = MaterialAggregation(state.get_site(), state.get_snapshot_provider())
         agg_by_plant = mat_agg.aggregate_categories_by_plant(snapshot_obj, selected_orders)
     except:
+        traceback.print_exc()
         return True, None
     agg: dict[str, dict[str, float]] = mat_agg.aggregate(agg_by_plant)  # outer key: category, inner key: mat class
     categories = state.get_site().material_categories
@@ -1188,7 +1189,7 @@ def process_changed(snapshot: datetime|None,
                     order_data: dict[str, Any] | None, # keys "snapshot", "process", "orders_selected_cnt", "orders_selected_weight"
                     store_results0: list[Literal[""]],
                     structure_sum: int|None,
-                    material_structure: dict[str, any]|None,  # TODO
+                    material_structure: dict[str, any]|None,
                     components: list[Component]|None,
                     _tab,
                     horizon_hours: int,
@@ -1300,7 +1301,8 @@ def process_changed(snapshot: datetime|None,
     result_selector_hidden = selected_init_method != "result"
     # here start optimization
     start_disabled, error_msg, info_msg = check_start_optimization(changed_ids, process, snapshot, iterations, horizon_hours, selected_init_method,
-                existing_solution if selected_init_method == "result" else None, use_lot_range, target_elements, perf_model_elements, selected_order_rows, create_comment, store_results)
+                existing_solution if selected_init_method == "result" else None, use_lot_range, target_elements, perf_model_elements, material_structure,
+                selected_order_rows, create_comment, store_results)
     if len(warning_message) == 0 and info_msg is not None:
         warning_message = info_msg
     if error_msg is not None:  # TODO display message!
@@ -1364,6 +1366,7 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                              use_lot_range: bool,
                              plant_target_components: list[Component]|None,
                              perf_model_components: list[Component]|None,
+                             material_structure: dict[str, any]|None,  # TODO
                              #order_data: dict[str, str] | None,
                              selected_order_rows: list[dict[str, any]]|None,
                              create_comment: str|None,
@@ -1412,6 +1415,9 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                 targets, targets_customized, info_msg = target_values_from_settings(process, period, [p.id for p in plants], use_lot_range, plant_target_components)
                 if info_msg is not None:
                     return lot_creation_thread is not None, error_msg, info_msg
+                if material_structure is not None and len(material_structure) > 0:
+                    targets.material_weights = material_structure
+
                 perf_models = performance_models_from_elements(process, perf_model_components)
                 snapshot_serialized: str = DatetimeUtils.format(snapshot)
                 orders: list[str] = [row["id"] if isinstance(row, dict) else row for row in selected_order_rows]

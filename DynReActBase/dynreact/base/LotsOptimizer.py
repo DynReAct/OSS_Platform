@@ -11,8 +11,9 @@ import numpy as np
 
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
+from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.model import ProductionPlanning, PlanningData, ProductionTargets, Snapshot, OrderAssignment, Site, \
-    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction
+    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction, MaterialClass
 
 
 class OptimizationListener:
@@ -179,7 +180,49 @@ class LotsOptimizationAlgo:
         planning = costs.evaluate_order_assignments(process, assignments, targets=targets, snapshot=snapshot) if costs is not None else None
         return planning, targets
 
-    def heuristic_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider,
+    def _random_start_orders(self, plants: dict[int, Equipment], targets: ProductionTargets, orders: dict[str, Order],
+                             snapshot_provider: SnapshotProvider, start_orders: dict[int, str]|None) -> dict[int, str]:
+        start_orders = start_orders or {}
+        if targets.material_weights is not None:
+            # try to assign start orders corresponding to different targeted material classes
+            cats = self._site.material_categories
+            total_targets_by_cat = {cat.id: sum(targets.material_weights[cl.id] for cl in cat.classes if cl.id in targets.material_weights
+                                                and isinstance(targets.material_weights[cl.id], (int, float))) for cat in cats}
+            class_by_order: dict[str, dict[str, MaterialClass]] = {oid: {cat.id: snapshot_provider.material_class_for_order(o, cat) for cat in cats} for oid, o in orders.items()}
+            start_orders_by_class: dict[str, Order] = {}  # key: class id, target order id
+            for cat in cats:
+                if total_targets_by_cat[cat.id] == 0:
+                    continue
+                relevant_classes = [cl for cl in cat.classes if cl.id in targets.material_weights and isinstance(targets.material_weights[cl.id], (int, float)) and
+                                                targets.material_weights[cl.id] >= total_targets_by_cat[cat.id]/4]
+                if len(relevant_classes) == 0:
+                    continue
+                for clazz in relevant_classes:
+                    if clazz.id in start_orders_by_class:
+                        continue
+                    some_order = next((o for o, cat_dict in class_by_order.items() if cat_dict.get(cat.id) == clazz and orders.get(o) not in start_orders_by_class.values()), None)
+                    if some_order is not None:
+                        start_orders_by_class[clazz.id] = orders.get(some_order)
+                        for cat2 in cats:
+                            if cat == cat2:
+                                continue
+                            other_class = class_by_order[some_order].get(cat2.id)
+                            if other_class is not None and other_class.id not in start_orders_by_class:
+                                start_orders_by_class[other_class.id] = orders.get(some_order)
+            # sort start orders by available equipment
+            start_orders_by_class = dict(sorted(start_orders_by_class.items(), key=lambda t: len([p for p in t[1].allowed_equipment if p in plants and p not in start_orders])))
+            for o in start_orders_by_class.values():
+                plants1 = sorted([p for p in o.allowed_equipment if p in plants and p not in start_orders], key=lambda p: targets.target_weight.get(p).total_weight, reverse=True)
+                if len(plants1) > 0:
+                    start_orders[plants1[0]] = o.id
+        plants2 = [p for p in plants.keys() if p not in start_orders]
+        for p in plants2:
+            random_order: Order | None = next((o for o in orders.values() if p in o.allowed_equipment), None)
+            if random_order is not None:
+                start_orders[p] = random_order.id
+        return start_orders
+
+    def heuristic_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider, snapshot_provider: SnapshotProvider,
                            targets: ProductionTargets, orders: list[str], start_orders: dict[int, str]|None=None) -> tuple[ProductionPlanning, ProductionTargets]:
         """
         If orders is not specified, this method will only consider as many orders for scheduling as are required to
@@ -223,13 +266,12 @@ class LotsOptimizationAlgo:
                 if other_plant in available_tons_by_plant:
                     available_tons_by_plant[other_plant] = available_tons_by_plant[other_plant] - o.actual_weight
 
-        for plant in [p for p in plants.keys() if p not in start_orders]:
-            random_order: Order | None = next((o for o in order_objects.values() if plant in o.allowed_equipment), None)
-            if random_order is not None:
-                start_orders[plant] = random_order.id
-                assign_to_plant(random_order, plant)
-            else:
-                plants.pop(plant)
+        start_orders = self._random_start_orders(plants, targets, order_objects, snapshot_provider, start_orders)
+        for plant in [plant for plant in plants.keys() if plant not in start_orders]:
+            plants.pop(plant)
+        for plant, order_id in start_orders.items():
+            assign_to_plant(order_objects[order_id], plant)
+
         # The main loop
         while len(plants) > 0 and len(order_objects) > 0:
             diff_by_plant: dict[int, float] = {p: available_tons_by_plant[p] - missing_tons_by_plant[p] for p in plants.keys()}

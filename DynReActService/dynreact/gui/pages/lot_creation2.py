@@ -1429,7 +1429,7 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                                              targets=targets, orders=orders)
                 else:  # init = heuristic
                     initial_solution, targets = optimization_algo.heuristic_solution(process, snapshot_obj, horizon, state.get_cost_provider(),
-                                                     targets, orders, start_orders=None)  # TODO start orders
+                                state.get_snapshot_provider(), targets, orders, start_orders=None)  # TODO start orders
                 parameters = {
                     "targets": "snapshot" if not targets_customized else "custom",
                     "horizon_hours": horizon_hours,

@@ -9,7 +9,7 @@ class MaterialAggregation:
         self._snaps = snaps
         self._categories: list[MaterialCategory] = site.material_categories
 
-    def aggregate_categories_by_plant(self, snapshot: Snapshot, orders: list[Order]|None=None) -> dict[int, dict[str, dict[str, float]]] :
+    def aggregate_categories_by_plant(self, snapshot: Snapshot, orders: list[Order]|None=None, return_order_data: bool=False) -> dict[int, dict[str, dict[str, float]]] :
         """
         :param snapshot:
         :param orders:
@@ -39,9 +39,11 @@ class MaterialAggregation:
                     if clz is None:
                         continue
                 aggregate_weight[plant][category.id][clz.id] += material.weight
+        if return_order_data:
+            return aggregate_weight, mat_class_for_order
         return aggregate_weight
 
-    def aggregate_by_process(self, aggregation_by_plant: dict[int, dict[str, dict[str, float]]]):
+    def aggregate_by_process(self, aggregation_by_plant: dict[int, dict[str, dict[str, float]]]) -> dict[str, dict[str, dict[str, float]]]:
         """
         :param snapshot:
         :return: aggregated material weight per process, category and class

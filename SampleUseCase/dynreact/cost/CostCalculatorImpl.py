@@ -194,7 +194,8 @@ class SampleCostProvider(CostProvider):
 
     def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment],
                                        snapshot: Snapshot, planning_period: tuple[datetime, datetime],
-                                       min_due_date: datetime|None=None, current_material: list[Material] | None=None) -> EquipmentStatus:
+                                       min_due_date: datetime|None=None, current_material: list[Material] | None=None,
+                                       track_structure: bool=False) -> EquipmentStatus:
         plant_id = equipment_targets.equipment
         target_weight=equipment_targets.total_weight
         target_lot_size = equipment_targets.lot_weight_range

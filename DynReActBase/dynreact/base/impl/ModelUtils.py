@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from dynreact.base.model import MidTermTargets, ProductionTargets, EquipmentProduction
+from dynreact.base.model import MidTermTargets, ProductionTargets, EquipmentProduction, ProductionPlanning, Site
 
 
 class ModelUtils:
@@ -12,23 +12,36 @@ class ModelUtils:
         if len(overlapping_fractions) == 0 or sub_targets is None:
             return ProductionTargets(process=process, target_weight={}, period=(start_time, end_time))
         total_target_weights: dict[int, EquipmentProduction] = {}
+        mat_target: dict[str, dict[str, float]] = {}
         for period_idx, overlap in overlapping_fractions.items():
             target: ProductionTargets = sub_targets[period_idx]
+            if target.material_weights is not None:
+                for material, strct in target.material_weights.items():
+                    if material not in mat_target:
+                        mat_target[material] = {}
+                    for cl, weight in strct.items():
+                        if cl not in mat_target[material]:
+                            mat_target[material][cl] = 0
+                        mat_target[material][cl] = mat_target[material][cl] + weight * overlap
             for plant_id, plant_targets in target.target_weight.items():
                 if plant_id not in total_target_weights:
                     total_target_weights[plant_id] = EquipmentProduction(equipment=plant_id, total_weight=0) # material_weights=)
                 aggregated_target: EquipmentProduction = total_target_weights[plant_id]
                 added_total = plant_targets.total_weight * overlap
                 aggregated_target.total_weight += added_total
-                if plant_targets.material_weights is not None:
-                    if aggregated_target.material_weights is None:
-                        aggregated_target.material_weights = {}
-                    mat_targets: dict[str, float] = aggregated_target.material_weights
-                    for material, weight in plant_targets.material_weights.items():
-                        if material not in mat_targets:
-                            mat_targets[material] = 0
-                        mat_targets[material] = mat_targets[material] + weight * overlap
         return ProductionTargets(process=process, period=(start_time, end_time), target_weight=total_target_weights)
+
+    @staticmethod
+    def aggregated_structure(site: Site, planning: ProductionPlanning) -> dict[str, dict[str, float]]:
+        total: dict[str, dict[str, float]] = {cat.id: {cl.id: 0 for cl in cat.classes} for cat in site.material_categories}
+        for status in (stat for stat in planning.equipment_status.values() if
+                        stat.planning is not None and stat.planning.material_structure is not None):
+            structure = status.planning.material_structure
+            for cat, cat_dict in structure.items():
+                target: dict[str, float] = total[cat]
+                for cl, value in cat_dict.items():
+                    target[cl] += value
+        return total
 
     @staticmethod
     def applicable_periods(sub_periods: list[tuple[datetime, datetime]], start_time: datetime, end_time: datetime) -> dict[int, float]:

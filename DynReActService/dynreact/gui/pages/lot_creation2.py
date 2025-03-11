@@ -117,7 +117,7 @@ def layout(*args, **kwargs):
         dcc.Interval(id="lots2-interval", n_intervals=3_600_000),  # for polling when optimization is running
         # ======== Popups  =========
         structure_portfolio_popup(111222),
-        dcc.Store(id="lots2-material-setpoints", data={}),
+        dcc.Store(id="lots2-material-setpoints", data=None),  # dictionary, values?
     ], id="lots2")
     return layout
 
@@ -1163,6 +1163,7 @@ def update_figure(history: list[float]|None):
           State("lots2-orders-data", "data"),  # we'd like to make this an Input, but it leads to circular dependencies with process_selector
           State("lots2-store-results", "value"),
           State("lots2-structure-sum", "value"),
+          State("lots2-material-setpoints", "data"),
           State("lots2-details-plants", "children"),
 
           Input("lots2-active-tab", "data"),                               # as a workaround for the above problem we trigger on tab changes
@@ -1187,6 +1188,7 @@ def process_changed(snapshot: datetime|None,
                     order_data: dict[str, Any] | None, # keys "snapshot", "process", "orders_selected_cnt", "orders_selected_weight"
                     store_results0: list[Literal[""]],
                     structure_sum: int|None,
+                    material_structure: dict[str, any]|None,  # TODO
                     components: list[Component]|None,
                     _tab,
                     horizon_hours: int,
@@ -1215,7 +1217,7 @@ def process_changed(snapshot: datetime|None,
     details_sum = _structure_calc_sum(components, process)
     if structure_sum is not None and structure_sum > 0 and details_sum > 0:
         if structure_sum != details_sum:
-            warning_message = 'Warning : Weight sum has changed, please push StructurePlanning again'
+            warning_message = "Warning : Weight sum has changed, please open StructurePlanning again and select \"Accept\""
 
     # prepare using primary_category
     site = state.get_site()
@@ -1715,6 +1717,10 @@ def performance_models_from_elements(process: str, components: list[Component]|N
 
     active_model_ids: list[str] = [model for model, element in model_components.items() if is_active(element)]
     return [model for model in models if model.id() in active_model_ids]
+
+
+def structure_from_popup(components: list[Component]|None):
+    pass
 
 
 class KillableOptimizationThread(threading.Thread):

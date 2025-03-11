@@ -215,6 +215,8 @@ class PlanningData(Model):
     orders_count: int = 0
     delta_weight: float = 0.0
     "Deviation from target weight in t. Positive for missing tonnage."
+    material_structure: dict[str, dict[str, float]]|None = None
+    "Keep track of material classes"
     min_due_date: datetime|None = None
 
 
@@ -260,14 +262,14 @@ class ObjectiveFunction(Model, extra="allow"):
     "Penalty for deviating from the targeted production size"
     lot_size_deviation: float|None = None
     "Penalty for deviating from the targeted lot sizes"
+    structure_deviation: float|None = None
+    "Penalty for deviating from the targeted material structure"
 
 
 class EquipmentProduction(Model):
 
     equipment: int
     total_weight: float
-    material_weights: dict[str, float|dict[str, float]] | None = None
-    "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed"
     lot_weight_range: tuple[float, float] | None = None
     "Weight restriction for lots in t"
 
@@ -278,6 +280,8 @@ class ProductionTargets(Model):
     target_weight: dict[int, EquipmentProduction]
     "Target production by equipment id"
     period: tuple[datetime, datetime]
+    material_weights: dict[str, float|dict[str, float]] | None = None
+    "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed"
 
 
 class StorageLevel(Model):
@@ -313,6 +317,8 @@ class ProductionPlanning(Model, Generic[P]):
     "keys: order ids"
     equipment_status: dict[int, EquipmentStatus[P]]                  # "vbest"
     "keys: equipment ids"
+    target_structure: dict[str, float|dict[str, float]] | None = None
+    "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed"
 
     # TODO cache results?
     def get_lots(self) -> dict[int, list[Lot]]:
@@ -348,6 +354,7 @@ class ProductionPlanning(Model, Generic[P]):
         return sum(status.planning.lots_count for status in self.equipment_status.values() if status.planning is not None)
 
     def get_targets(self) -> ProductionTargets:
+        """FIXME material structure targets are not known here"""
         if len(self.equipment_status) == 0:
             return None  # ?
         period: tuple[datetime, datetime] = next(iter(self.equipment_status.values())).planning_period

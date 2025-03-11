@@ -9,45 +9,26 @@
 
     // TODO handle case that only totalProduction changed... no need to reinitialize the grid from scratch then
     globalThis.dash_clientside.lots2.initMaterialGrid = function(totalProduction, process, setpoints, gridId) {
-        let is_process_changed;
-        let prevProcess;
-
         if (!globalThis.customElements.get(materialsTag))
             globalThis.customElements.define(materialsTag, MaterialsGrid2);     //use class MaterialGrid
         const gridContainer = document.querySelector("#" + gridId);             //object MaterialGrid
         let grid = gridContainer.querySelector(materialsTag);
-        const fullinit = !grid?.materialsSet();
+        const is_process_changed = grid?.getProcessName() !== process;
+        const fullinit = !grid?.materialsSet() || is_process_changed;
 
         if (fullinit){
-            JsUtils.clear(gridContainer);
-            grid = JsUtils.createElement(materialsTag, {parent: gridContainer});
+            // JsUtils.clear(gridContainer);
+            grid = grid || JsUtils.createElement(materialsTag, {parent: gridContainer});
             const site = dynreact?.getSite();
             if (site) {
                 //todo 20250306 hier hat man schon site, auch die primaries holen , site.structure_planning
-                grid.setMaterials(site.material_categories);
+                grid.setMaterials(process, site.material_categories);
                 if (totalProduction)
                     grid.initTargets(totalProduction);
             }
         }
-
-        //check if process changed
-        prevProcess = grid.getProcessName();
-        if (prevProcess){
-            if (process == prevProcess)
-                is_process_changed = false;
-            else
-                is_process_changed = true;
-        } else
-            is_process_changed = true;
-
-        // process changed -> grid default vals
-        if (is_process_changed)
-            grid.resetGrid(totalProduction);
-
         // lots2-details-plants changed -> add diff to default field
         const sumsChanged = grid.checkSums();
-
-        grid.setProcessName(process);
     }
 
     globalThis.dash_clientside.lots2.setMaterialSetpoints = function(_, gridId) {

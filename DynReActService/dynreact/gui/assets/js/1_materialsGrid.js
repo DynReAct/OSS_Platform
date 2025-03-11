@@ -3,9 +3,6 @@ class MaterialsGrid2 extends HTMLElement {
     #grid;
     #materials;
     #tooltipContainer;
-    #blabla
-
-
     #processName;
 
     constructor() {
@@ -40,14 +37,17 @@ class MaterialsGrid2 extends HTMLElement {
         this.#tooltipContainer = tooltipContainer;
     }
 
-    setMaterials(materials) {
+    setMaterials(process, materials) {
         JsUtils.clear(this.#grid);
         this.#materials = materials;
+        this.#processName = process;
         const columns = materials.length;
         //const rows = Math.max(...materials.map(cat => cat.classes.length));
         const frag = document.createDocumentFragment();
         let column = 0;
         for (const material_category of materials) {
+            if (material_category.process_steps && material_category.process_steps.indexOf(process) < 0)
+                continue;
             column++;
             const categoryHeader = JsUtils.createElement("div", {
                 parent: frag,
@@ -263,10 +263,6 @@ class MaterialsGrid2 extends HTMLElement {
 //            }
 //       }
 //    }
-
-    setProcessName(process){
-        this.processName = process;
-    }
 
     getProcessName(){
         return this.processName;

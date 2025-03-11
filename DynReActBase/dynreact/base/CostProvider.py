@@ -47,17 +47,15 @@ class CostProvider:
         plants = [p for p in self._site.equipment if p.process == process and p.id in plant_ids]
 
         status: dict[int, EquipmentStatus] = \
-            {plant.id: self.evaluate_equipment_assignments(plant.id, process, assignments, snapshot, targets.period,
-                                                           targets.target_weight.get(plant.id).total_weight,
-                                                           target_lot_size=targets.target_weight.get(plant.id).lot_weight_range) for plant in plants}
+            {plant.id: self.evaluate_equipment_assignments(targets.target_weight.get(plant.id, EquipmentProduction(equipment=plant.id, total_weight=0.0)),
+                                                process, assignments, snapshot, targets.period) for plant in plants}
         order_assignments = {o: ass for o, ass in assignments.items() if ass.equipment in plant_ids}
         unassigned = {o: ass for o, ass in assignments.items() if ass.equipment < 0}
         order_assignments.update(unassigned)
         return ProductionPlanning(process=process, order_assignments=order_assignments, equipment_status=status)
 
-    def evaluate_equipment_assignments(self, equipment: id, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
-                                       planning_period: tuple[datetime, datetime], target_weight: float,
-                                       target_lot_size: tuple[float, float]|None=None, min_due_date: datetime|None=None,
+    def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
+                                       planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None,
                                        current_material: list[Material] | None=None) -> EquipmentStatus:
         """
         Main function to be implemented in derived class taking into account global status.
@@ -155,8 +153,8 @@ class CostProvider:
             curr_lot_idx = current.lot_positions.get(process) if curr_lot is not None else None
             assignments[current.id] = OrderAssignment(equipment=plant.id, order=current.id, lot=curr_lot if curr_lot is not None else plant.name_short + "_X",
                                                       lot_idx=curr_lot_idx if curr_lot_idx is not None else 1)
-        return self.evaluate_equipment_assignments(plant.id, plant.process, assignments, snapshot, planning_period, target_weight,
-                                                   current_material=current_material if coil_based else None)
+        return self.evaluate_equipment_assignments(EquipmentProduction(equipment=plant.id, total_weight=target_weight),
+                                        plant.process, assignments, snapshot, planning_period, current_material=current_material if coil_based else None)
 
     @staticmethod
     def sum_objectives(objective_functions:list[ObjectiveFunction]) -> ObjectiveFunction:

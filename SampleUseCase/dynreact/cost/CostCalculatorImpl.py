@@ -7,7 +7,7 @@ import numpy as np
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.model import Equipment, Material, Order, Snapshot, EquipmentStatus, Site, OrderAssignment, \
-    PlanningData, ObjectiveFunction
+    PlanningData, ObjectiveFunction, EquipmentProduction
 from dynreact.sample.model import SampleMaterial
 
 
@@ -195,9 +195,12 @@ class SampleCostProvider(CostProvider):
                                 lot_size_deviation=penalty_out_of_lot_range, transition_costs=params.factor_transition_costs * planning.transition_costs,
                                 logistic_costs=log_costs)
 
-    def evaluate_equipment_assignments(self, plant_id: id, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
-                                       planning_period: tuple[datetime, datetime], target_weight: float, target_lot_size: tuple[float, float]|None=None,
+    def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment],
+                                       snapshot: Snapshot, planning_period: tuple[datetime, datetime],
                                        min_due_date: datetime|None=None, current_material: list[Material] | None=None) -> EquipmentStatus:
+        plant_id = equipment_targets.equipment
+        target_weight=equipment_targets.total_weight
+        target_lot_size = equipment_targets.lot_weight_range
         plant = next((p for p in self._site.equipment if p.id == plant_id), None)
         if plant is None:
             raise Exception(f"Plant not found: {plant_id}")

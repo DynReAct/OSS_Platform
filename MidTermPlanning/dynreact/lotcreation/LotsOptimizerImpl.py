@@ -480,8 +480,9 @@ class CTabuWorker:
                             orders_affected.remove(order)
                     for order in orders_affected:
                         del order_assignments[order]
-                    new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(swp.PlantFrom, self.planning.process,
-                                                                                            order_assignments, self.snapshot, self.targets.period, self.targets.target_weight.get(swp.PlantFrom, EquipmentProduction(equipment=swp.PlantFrom, total_weight=0.0)).total_weight)
+                    equipment_targets = self.targets.target_weight.get(swp.PlantFrom, EquipmentProduction(equipment=swp.PlantFrom, total_weight=0.0))
+                    new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(equipment_targets, self.planning.process,
+                                                                                            order_assignments, self.snapshot, self.targets.period)
                     plant_status[swp.PlantFrom] = new_status
                 if swp.PlantTo >= 0:
                     plant_status[swp.PlantTo] = None
@@ -493,8 +494,9 @@ class CTabuWorker:
                             orders_affected.remove(order)
                     for order in orders_affected:
                         del order_assignments[order]
-                    new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(swp.PlantTo, self.planning.process, order_assignments, self.snapshot,
-                                                                                            self.targets.period, self.targets.target_weight.get(swp.PlantTo, EquipmentProduction(equipment=swp.PlantTo, total_weight=0.0)).total_weight)
+                    equipment_targets = self.targets.target_weight.get(swp.PlantTo, EquipmentProduction(equipment=swp.PlantTo, total_weight=0.0))
+                    new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(equipment_targets, self.planning.process,
+                                                                            order_assignments, self.snapshot, self.targets.period)
                     plant_status[swp.PlantTo] = new_status
                 total_objectives = CostProvider.sum_objectives([self.costs.objective_function(status) for status in plant_status.values()])
                 objective_fct = total_objectives.total_value

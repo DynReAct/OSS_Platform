@@ -1,3 +1,6 @@
+/**
+ * Displays material categories for a selection of orders
+ */
 class AggregationWidget extends HTMLElement {
 
     #grid;
@@ -104,7 +107,7 @@ class AggregationWidget extends HTMLElement {
 
             }
         }
-        this.#grid.style["grid-template-columns"] = "repeat(" + columns + ", 1fr)";
+        this.#grid.style["grid-template-columns"] = "repeat(" + columns + ", auto)";
         this.#grid.appendChild(frag);
     }
 

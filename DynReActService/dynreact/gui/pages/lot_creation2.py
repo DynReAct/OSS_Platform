@@ -511,9 +511,9 @@ clientside_callback(
         function_name="setBacklogStructureOverview"
     ),
     Output("lots2-orders-structure-overview", "title"),
-    Input("lots2-backlog-structure-widget", "id"),
     Input("lots2-orders-backlog-structure-data", "data"),   # dict[str, dict[str, float]]
-    Input("lots2-material-setpoints", "data")
+    Input("lots2-material-setpoints", "data"),
+    State("lots2-backlog-structure-widget", "id"),
 )
 
 
@@ -1723,10 +1723,6 @@ def performance_models_from_elements(process: str, components: list[Component]|N
 
     active_model_ids: list[str] = [model for model, element in model_components.items() if is_active(element)]
     return [model for model in models if model.id() in active_model_ids]
-
-
-def structure_from_popup(components: list[Component]|None):
-    pass
 
 
 class KillableOptimizationThread(threading.Thread):

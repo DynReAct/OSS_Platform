@@ -70,7 +70,8 @@
         return "lots2";
     }
 
-    globalThis.dash_clientside.lots2.setBacklogStructureOverview = function(parentId, weightAggregation, targetWeights) {
+    // used by lot creation page and lots planning page
+    globalThis.dash_clientside.lots2.setBacklogStructureOverview = function(weightAggregation, targetWeights, parentId) {
         const container = document.querySelector("#" + parentId);
          if (!globalThis.customElements.get(catAggregationWidgetTag))
             globalThis.customElements.define(catAggregationWidgetTag, AggregationWidget);  // TODO

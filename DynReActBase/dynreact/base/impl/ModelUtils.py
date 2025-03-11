@@ -40,7 +40,7 @@ class ModelUtils:
             for cat, cat_dict in structure.items():
                 target: dict[str, float] = total[cat]
                 for cl, value in cat_dict.items():
-                    target[cl] += value
+                    target[cl] = target[cl] + value
         return total
 
     @staticmethod

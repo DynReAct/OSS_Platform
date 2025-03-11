@@ -204,10 +204,11 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
     if not dash_authenticated(config):
         return []
     snapshot = DatetimeUtils.parse_date(snapshot)
+    value_formatter_object = {"function": "formatCell(params.value, 4)"}
     col_defs: list[dict[str, Any]] = [{"field": "id", "pinned": True},
-         {"field": "target_production", "filter": "agNumberColumnFilter", "headerName": "Target Production / t"},
+         {"field": "target_production", "filter": "agNumberColumnFilter", "headerName": "Target Production / t", "valueFormatter": value_formatter_object},
          {"field": "initialization"},
-         {"field": "target_fct", "filter": "agNumberColumnFilter", "headerName": "Target function",
+         {"field": "target_fct", "filter": "agNumberColumnFilter", "headerName": "Target function", "valueFormatter": value_formatter_object,
           "headerTooltip": "Value of the objective function. The lower the better, but results are only comparable for the same target weights and init settings."},
          {"field": "iterations", "filter": "agNumberColumnFilter"},
          {"field": "orders_considered", "filter": "agNumberColumnFilter", "headerName": "Orders",
@@ -244,7 +245,7 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
 
     random_sol = next(value for key, value in sol_objects.items() if key != "_SNAPSHOT_" or len(sol_objects) <= 1)
     objective_keys = [f for f in random_sol.current_object_value.model_dump().keys() if f != "total_value"]
-    col_defs.extend([{"field": f, "filter": "agNumberColumnFilter"} for f in objective_keys])
+    col_defs.extend([{"field": f, "filter": "agNumberColumnFilter", "valueFormatter": value_formatter_object} for f in objective_keys])
 
     def merge_dicts(d1: dict, d2: dict) -> dict:
         d1.update(d2)

@@ -90,8 +90,8 @@ class AggregationWidget extends HTMLElement {
                 });
                 JsUtils.createElement("div", {text: material_class.name, parent: material_parent});
                 let text = JsUtils.formatNumber(material_class.weight, 5);
-                if (targetsSpecified) {
-                    const targetWeight = targets[clz] || 0;
+                if (targetsSpecified && clz in targets && typeof targets[clz] === "number") {
+                    const targetWeight = targets[clz];
                     text +=  " / " + JsUtils.formatNumber(targetWeight, 5)
                 }
                 const value = JsUtils.createElement("div", {

@@ -445,6 +445,7 @@ class CTabuWorker:
         objective_value: float = float("inf")
         best_objective: ObjectiveFunction|None = None
         empty_plants = []
+        track_structure: bool = self.targets.material_weights is not None
         for assignment in self.slist:
             order: Order = self.orders[assignment.order]
             forbidden_plants: list[int] = self.tabu_search._forbidden_assignments.get(order.id, empty_plants)
@@ -482,7 +483,7 @@ class CTabuWorker:
                         del order_assignments[order]
                     equipment_targets = self.targets.target_weight.get(swp.PlantFrom, EquipmentProduction(equipment=swp.PlantFrom, total_weight=0.0))
                     new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(equipment_targets, self.planning.process,
-                                                                                            order_assignments, self.snapshot, self.targets.period)
+                                                                        order_assignments, self.snapshot, self.targets.period, track_structure=track_structure)
                     plant_status[swp.PlantFrom] = new_status
                 if swp.PlantTo >= 0:
                     plant_status[swp.PlantTo] = None
@@ -496,7 +497,7 @@ class CTabuWorker:
                         del order_assignments[order]
                     equipment_targets = self.targets.target_weight.get(swp.PlantTo, EquipmentProduction(equipment=swp.PlantTo, total_weight=0.0))
                     new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(equipment_targets, self.planning.process,
-                                                                            order_assignments, self.snapshot, self.targets.period)
+                                                                            order_assignments, self.snapshot, self.targets.period, track_structure=track_structure)
                     plant_status[swp.PlantTo] = new_status
                 planning_candidate = ProductionPlanning(process=self.planning.process, order_assignments=order_assignments,
                                    equipment_status=plant_status, target_structure=self.targets.material_weights)

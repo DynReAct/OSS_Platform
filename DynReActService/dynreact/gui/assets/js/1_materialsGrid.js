@@ -5,6 +5,10 @@ class MaterialsGrid2 extends HTMLElement {
     #tooltipContainer;
     #processName;
 
+    static get observedAttributes() {
+        return ["columns-selectable"];
+    }
+
     constructor() {
         super();
         const shadow = this.attachShadow({mode: "open"});
@@ -16,13 +20,16 @@ class MaterialsGrid2 extends HTMLElement {
                                             "--ltp-portfolio-dark: color-mix(in srgb, var(--ltp-portfolio-base), black); }}\n" +
                             ".ltp-materials-grid { display: grid; column-gap: 0.1em; row-gap: 0.1em; justify-items: stretch; " +
                                         "align-items: stretch; justify-content: start; text-align: center; word-wrap: wrap; }\n" +
-                           ".ltp-materials-grid>div { min-width: 8em; max-width: 10em; min-height: 2em; }\n" +
-                           ".ltp-material-category { background: var(--ltp-portfolio-base); color: white; padding: 0 1em; padding-top: 0.5em; }\n" +
-                           ".ltp-material-class { display: flex; flex-direction: column; justify-content: space-between; align-items: stretch; }\n" +
+                           ".ltp-materials-grid>div {  min-height: 2em; }\n" +
+                           ".ltp-material-category { width: 10em; background: var(--ltp-portfolio-base); color: white; padding: 0 1em; padding-top: 0.5em; display: flex; column-gap: 1em; }\n" +
+                           ".ltp-material-class { display: flex; flex-direction: column; justify-content: space-between; align-items: stretch; width: 12em; }\n" +
                            ".ltp-material-class>div:first-child { background: var(--ltp-portfolio-light);color: var(--ltp-portfolio-dark); " +
                                                 "flex-grow: 1; padding: 0.25em 1em; min-height: 2em; vertical-align: middle;}\n" +
                            ".ltp-material-class>div:nth-child(2) { background: var(--ltp-portfolio-light); flex-grow: 1; padding: 0.5em 0;}\n" +
-                           ".ltp-material-class>div>input { max-width: 10em; background: var(--ltp-portfolio-lighter);}";
+                           ".ltp-material-class>div>input { max-width: 8em; background: var(--ltp-portfolio-lighter);}\n" +
+                           ".active-toggle {}\n " +
+                           ".active-toggle:hover { cursor: pointer; }\n " +
+                           ".ltp-material-disabled { background: darkgrey; } ";
 
 
         shadow.append(style);
@@ -42,6 +49,7 @@ class MaterialsGrid2 extends HTMLElement {
         this.#materials = materials;
         this.#processName = process;
         const columns = materials.length;
+        const columnsSelectable = this.columnsSelectable;
         //const rows = Math.max(...materials.map(cat => cat.classes.length));
         const frag = document.createDocumentFragment();
         let column = 0;
@@ -51,11 +59,12 @@ class MaterialsGrid2 extends HTMLElement {
             column++;
             const categoryHeader = JsUtils.createElement("div", {
                 parent: frag,
-                text: material_category.name || material_category.id,
                 classes: "ltp-material-category",
                 style: {"grid-column-start": column, "grid-row-start": 1}
             });
+            const headerText = JsUtils.createElement("div", {text: material_category.name || material_category.id, parent: categoryHeader});
             let row = 1;
+            const classes = [];
             for (const material_class of material_category.classes) {
                 row = row + 1;
                 const data_dict = {"data-category": material_category.id, "data-material": material_class.id};
@@ -75,6 +84,7 @@ class MaterialsGrid2 extends HTMLElement {
                     parent: JsUtils.createElement("div", {parent: material_parent}),
                     attributes: {min: "0", step: "1000", type: "number"}   // TODO test
                 });
+                inp.value = 0;
                 if (material_class.is_default){
                     inp.readOnly = true;
                     inp.style.backgroundColor = "LightSteelBlue";
@@ -82,7 +92,33 @@ class MaterialsGrid2 extends HTMLElement {
                 inp.addEventListener("change", (event) => {
                      this.changeFilling(material_category, inp.value);
                 });
-
+                classes.push(material_parent);
+            }
+            if (columnsSelectable) {
+                const toggle = JsUtils.createElement("div", {parent: categoryHeader, attributes: {"data-active": "true"}, text: "✔",
+                                            classes: "active-toggle", title: "Disable structure category"});
+                toggle.addEventListener("click", () => {
+                    const wasActive = toggle.dataset["active"] === "true";
+                    if (wasActive) {
+                        delete toggle.dataset["active"];
+                        toggle.textContent = "X";
+                        toggle.title = "Activate structure category";
+                        classes.forEach(cl => {
+                            cl.classList.add("ltp-material-disabled");
+                            cl.querySelector("input").disabled = true;
+                        });
+                        categoryHeader.classList.add("ltp-material-disabled");
+                    } else {
+                        toggle.dataset["active"] = "true";
+                        toggle.textContent = "✔";
+                        toggle.title = "Disable structure category";
+                        classes.forEach(cl => {
+                            cl.classList.remove("ltp-material-disabled");
+                            cl.querySelector("input").disabled = false;
+                        });
+                        categoryHeader.classList.remove("ltp-material-disabled");
+                    }
+                });
             }
         }
         this.#grid.style["grid-template-columns"] = "repeat(" + columns + ", 1fr)";
@@ -133,7 +169,7 @@ class MaterialsGrid2 extends HTMLElement {
         if (!this.#materials)
             return undefined;
         const results = Object.create(null);
-        for (const container of this.#grid.querySelectorAll("div[data-category][data-material]")) {
+        for (const container of this.#grid.querySelectorAll("div[data-category][data-material]:not(.ltp-material-disabled)")) {
             const inp = container.querySelector("input");
             results[container.dataset.material] = parseFloat(inp.value) || 0;
         }
@@ -232,7 +268,7 @@ class MaterialsGrid2 extends HTMLElement {
         //called from initMaterialGrid
         //compare lots2-weight-total with sum of cols
         // ->add diff to default-field
-        let lots_weight_total = Number(document.getElementById("lots2-weight-total").value);
+        let lots_weight_total = parseFloat(document.getElementById("lots2-weight-total").value);
         let lots_weight_sum;
         let weight_diff = 0;
         let changed = false;
@@ -265,7 +301,18 @@ class MaterialsGrid2 extends HTMLElement {
 //    }
 
     getProcessName(){
-        return this.processName;
+        return this.#processName;
+    }
+
+    get columnsSelectable() {
+        return this.getAttribute("columns-selectable") !== null;
+    }
+
+    set columnsSelectable(selectable) {
+        if (selectable)
+            this.setAttribute("columns-selectable", "");
+        else
+            this.removeAttribute("columns-selectable");
     }
 
 }

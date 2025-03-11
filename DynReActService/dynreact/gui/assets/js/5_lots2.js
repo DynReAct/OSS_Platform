@@ -15,10 +15,9 @@
         let grid = gridContainer.querySelector(materialsTag);
         const is_process_changed = grid?.getProcessName() !== process;
         const fullinit = !grid?.materialsSet() || is_process_changed;
-
         if (fullinit){
             // JsUtils.clear(gridContainer);
-            grid = grid || JsUtils.createElement(materialsTag, {parent: gridContainer});
+            grid = grid || JsUtils.createElement(materialsTag, {parent: gridContainer, attributes: {"columns-selectable": ""}});
             const site = dynreact?.getSite();
             if (site) {
                 //todo 20250306 hier hat man schon site, auch die primaries holen , site.structure_planning

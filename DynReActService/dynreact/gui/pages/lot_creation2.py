@@ -370,7 +370,7 @@ def structure_portfolio_popup(initial_weight: float):
                 html.Button("Set default", id="lots2-materials-setdefault", className="dynreact-button"),
                 html.Button("Cancel", id="lots2-materials-cancel", className="dynreact-button")
             ], className="lots2-materials-buttons")
-        ]),
+        ], title=""),
         id="lots2-structure-dialog", className="dialog-filled", open=False)
 
 

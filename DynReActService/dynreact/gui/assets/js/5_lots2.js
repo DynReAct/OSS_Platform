@@ -26,8 +26,11 @@
                     grid.initTargets(totalProduction);
             }
         }
+
         // lots2-details-plants changed -> add diff to default field
         const sumsChanged = grid.checkSums();
+
+
     }
 
     globalThis.dash_clientside.lots2.setMaterialSetpoints = function(_, gridId) {

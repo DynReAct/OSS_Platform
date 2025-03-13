@@ -20,8 +20,7 @@
             grid = grid || JsUtils.createElement(materialsTag, {parent: gridContainer, attributes: {"columns-selectable": ""}});
             const site = dynreact?.getSite();
             if (site) {
-                //todo 20250306 hier hat man schon site, auch die primaries holen , site.structure_planning
-                grid.setMaterials(process, site.material_categories);
+                grid.setMaterials(process, site.material_categories, site.lot_creation);
                 if (totalProduction)
                     grid.initTargets(totalProduction);
             }

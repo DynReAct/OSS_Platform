@@ -2,7 +2,7 @@ class MaterialsGrid2 extends HTMLElement {
 
     #grid;
     #materials;
-    #structure_planning;
+    #lot_creation;
     #tooltipContainer;
     #processName;
 
@@ -45,14 +45,36 @@ class MaterialsGrid2 extends HTMLElement {
         this.#tooltipContainer = tooltipContainer;
     }
 
-    setMaterials(process, materials) {
+    goFirst(dd, daFirst) {
+        var ordered = [];
+        dd.forEach((elem) => {
+            if (elem['id'] === daFirst)
+                ordered.unshift(elem);
+            else
+                ordered.push(elem);
+        })
+        return ordered;
+    }
+
+    setMaterials(process, materials, lot_creation) {
         JsUtils.clear(this.#grid);
         this.#materials = materials;
         this.#processName = process;
+        this.#lot_creation = lot_creation;
         const columns = materials.length;
         const columnsSelectable = this.columnsSelectable;
         //const rows = Math.max(...materials.map(cat => cat.classes.length));
         const frag = document.createDocumentFragment();
+        // -- ordered prim as first column
+        let is_primary = false;
+        if (lot_creation){
+            if (Object.keys(lot_creation.processes).includes(process) && lot_creation.processes[process].structure?.primary_category){
+                is_primary = true;
+                let primary_category = lot_creation.processes[process].structure.primary_category;
+                let ordered_materials = this.goFirst(materials, primary_category);
+                materials = ordered_materials;
+            }
+        }
         let column = 0;
         for (const material_category of materials) {
             if (material_category.process_steps && material_category.process_steps.indexOf(process) < 0)
@@ -96,8 +118,21 @@ class MaterialsGrid2 extends HTMLElement {
                 classes.push(material_parent);
             }
             if (columnsSelectable) {
-                const toggle = JsUtils.createElement("div", {parent: categoryHeader, attributes: {"data-active": "true"}, text: "✔",
+                const toggle = JsUtils.createElement("div", {parent: categoryHeader, attributes: {"data-active": "true"}, text: "âœ”",
                                             classes: "active-toggle", title: "Disable structure category"});
+                if (is_primary){
+                    if (column > 1){
+                        delete toggle.dataset["active"];
+                        toggle.textContent = "X";
+                        toggle.title = "Activate structure category";
+                        classes.forEach(cl => {
+                            cl.classList.add("ltp-material-disabled");
+                            cl.querySelector("input").disabled = true;
+                        });
+                        categoryHeader.classList.add("ltp-material-disabled");
+                    }
+                }
+
                 toggle.addEventListener("click", () => {
                     const wasActive = toggle.dataset["active"] === "true";
                     if (wasActive) {
@@ -111,7 +146,7 @@ class MaterialsGrid2 extends HTMLElement {
                         categoryHeader.classList.add("ltp-material-disabled");
                     } else {
                         toggle.dataset["active"] = "true";
-                        toggle.textContent = "✔";
+                        toggle.textContent = "âœ”";
                         toggle.title = "Disable structure category";
                         classes.forEach(cl => {
                             cl.classList.remove("ltp-material-disabled");
@@ -125,106 +160,6 @@ class MaterialsGrid2 extends HTMLElement {
         this.#grid.style["grid-template-columns"] = "repeat(" + columns + ", 1fr)";
         this.#grid.appendChild(frag);
         // FIXME
-        window.materials = this;
-    }
-
-//    function goFirst(dd, daFirst) {
-//        var ordered = [];
-//        dd.forEach((elem) => {
-//            if (elem['id'] === daFirst)
-//                ordered.unshift(elem);
-//            else
-//                ordered.push(elem);
-//        })
-//        return ordered;
-//    }
-
-    setMaterialsPrimary(materials, structure_planning, process) {
-        //JsUtils.clear(this.#grid);
-        this.#materials = materials;
-        this.#structure_planning = structure_planning;
-        let is_primary = false;
-        const columns = materials.length;
-        //const rows = Math.max(...materials.map(cat => cat.classes.length));
-        const frag = document.createDocumentFragment();
-        console.log('grid loc 99 ',  structure_planning);
-        for (const [key, value] of Object.entries(structure_planning)) {
-            console.log(' loc 101 key,value ',key, value);
-        }
-
-        if (Object.keys(structure_planning).includes(process) ){
-            console.log('loc 106 found',  process);
-            is_primary = true;
-            if (process == "TDS"){
-                let primary_category = structure_planning.TDS.primary_category;
-                let primary_classes = structure_planning.TDS.primary_classes;
-                console.log('loc 108 ',  primary_category, primary_classes);
-                // todo cols umsortieren
-                console.log('loc 113 ', typeof(materials));
-                console.log('loc 114 ', materials);
-                for (const material_category of materials) {
-                    console.log('loc 115 ', material_category);
-                }
-                // https://stackoverflow.com/questions/6959817/changing-the-order-of-the-object-keys
-                // https://stackoverflow.com/questions/40667125/how-can-i-change-the-order-of-an-array-of-objects/40667454#40667454
-                //let ordered_materials =goFirst(materials, 'heatTreatment');
-                //console.log('loc 131 ', ordered_materials);
-                //const ordered_materials = Object.assign(objectOrder, materials);
-                //console.log('loc 122 ', ordered_materials)
-                //for (const material_category in ordered_materials) {
-                //    console.log('loc 123 ', material_category)
-                //}
-           }
-        }
-        else{
-            console.log('loc 109 ', 'no structure planning for ', process);
-        }
-
- /*
-        let column = 0;
-        for (const material_category of materials) {
-            if (material_category == primary_category)
-                continue;
-            column++;
-            const categoryHeader = JsUtils.createElement("div", {
-                parent: frag,
-                text: material_category.name || material_category.id,
-                classes: "ltp-material-category",
-                style: {"grid-column-start": column, "grid-row-start": 1}
-            });
-            let row = 1;
-            for (const material_class of material_category.classes) {
-                row = row + 1;
-                const data_dict = {"data-category": material_category.id, "data-material": material_class.id};
-                if (material_class.is_default)
-                    data_dict["data-default"] = true;
-                if (material_class.default_share !== undefined)
-                    data_dict["data-defaultshare"] = material_class.default_share;
-                const material_parent = JsUtils.createElement("div", {
-                    parent: frag,
-                    style: {"grid-column-start": column, "grid-row-start": row},
-                    classes: "ltp-material-class",
-                    attributes: data_dict
-                });
-                JsUtils.createElement("div", {text: material_class.name||material_class.id, parent: material_parent});
-                // TODO handle stepMismatch (should be ignored) https://developer.mozilla.org/en-US/docs/Web/API/ValidityState/stepMismatch
-                const inp = JsUtils.createElement("input", {
-                    parent: JsUtils.createElement("div", {parent: material_parent}),
-                    attributes: {min: "0", step: "1000", type: "number"}   // TODO test
-                });
-                if (material_class.is_default){
-                    inp.readOnly = true;
-                    inp.style.backgroundColor = "LightSteelBlue";
-                }
-                inp.addEventListener("change", (event) => {
-                     this.changeFilling(material_category, inp.value);
-                });
-
-            }
-        }
-        this.#grid.style["grid-template-columns"] = "repeat(" + columns + ", 1fr)";
-        this.#grid.appendChild(frag);
- */       // FIXME
         window.materials = this;
     }
 
@@ -400,9 +335,6 @@ class MaterialsGrid2 extends HTMLElement {
 //            }
 //       }
 //    }
-    markPrimary(process){
-
-    }
 
     getProcessName(){
         return this.#processName;

@@ -118,7 +118,7 @@ class MaterialsGrid2 extends HTMLElement {
                 classes.push(material_parent);
             }
             if (columnsSelectable) {
-                const toggle = JsUtils.createElement("div", {parent: categoryHeader, attributes: {"data-active": "true"}, text: "âœ”",
+                const toggle = JsUtils.createElement("div", {parent: categoryHeader, attributes: {"data-active": "true"}, text: "✔",
                                             classes: "active-toggle", title: "Disable structure category"});
                 if (is_primary){
                     if (column > 1){
@@ -146,7 +146,7 @@ class MaterialsGrid2 extends HTMLElement {
                         categoryHeader.classList.add("ltp-material-disabled");
                     } else {
                         toggle.dataset["active"] = "true";
-                        toggle.textContent = "âœ”";
+                        toggle.textContent = "✔";
                         toggle.title = "Disable structure category";
                         classes.forEach(cl => {
                             cl.classList.remove("ltp-material-disabled");

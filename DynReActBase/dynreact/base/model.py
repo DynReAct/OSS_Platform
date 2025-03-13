@@ -396,7 +396,7 @@ class MaterialCategory(Model):
     "Optional list of process steps for which the category is potentially relevant in the mid-term planning."
 
 
-class StructurePlanningSettings(Model):
+class LotCreationStructureSettings(Model):
     """
     Defines a hierarchy for structure categories in the mid term planning;
     """
@@ -404,6 +404,22 @@ class StructurePlanningSettings(Model):
     "Reference to a MaterialCategory"
     primary_classes: list[str]
     "References to the MaterialClasses in primary_category.classes. For the time being only a single entry is supported."
+
+
+class LotCreationOrderBacklogSettings(Model):
+    default_select_predecessors_planned: list[str]|None=None
+    "A list of process steps at which scheduled orders are usually included in the order backlog for lot creation"
+    default_select_predecessors_all: list[str]|None=None
+    "A list of process steps at which all orders (scheduled or not) are usually included in the order backlog for lot creation"
+
+class ProcessLotCreationSettings(Model):
+    structure: LotCreationStructureSettings|None=None
+    order_backlog: LotCreationOrderBacklogSettings|None=None
+
+
+class LotCreationSettings(Model):
+    processes: dict[str, ProcessLotCreationSettings]
+    "Settings per process step"
 
 
 class Site(LabeledItem):
@@ -416,7 +432,9 @@ class Site(LabeledItem):
     Logistic costs for transfer of a complete order(?) from one plant to another (only within a single process stage, not considering
     transfer costs between processes)
     """
-    structure_planning: dict[str, StructurePlanningSettings]|None = None
+    #structure_planning: dict[str, StructurePlanningSettings]|None = None
+    lot_creation: LotCreationSettings|None=None
+
 
     def get_process(self, process: str, do_raise: bool=False) -> Process|None:
         if process is None:

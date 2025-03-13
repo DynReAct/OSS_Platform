@@ -1223,22 +1223,18 @@ def process_changed(snapshot: datetime|None,
     # prepare using primary_category
     site = state.get_site()
     def _get_primary_category(process_name) -> str | None:  # &&&NEW TODO
-        structure_planning = site.structure_planning
-        res1 = structure_planning.get(process_name)
-        if res1 is not None:
-            primary_category = res1.primary_category
-        else:
-            primary_category = None
-        return primary_category
+        #structure_planning = site.structure_planning
+        if not site.lot_creation or not site.lot_creation.processes or process_name not in site.lot_creation.processes:
+            return None
+        structure_planning = site.lot_creation.processes[process_name].structure
+        return structure_planning.primary_category if structure_planning is not None else None
 
     def _get_primary_classes(process_name) -> list[str] | None:
-        structure_planning = site.structure_planning
-        res1 = structure_planning.get(process_name)
-        if res1 is not None:
-            primary_classes = res1.primary_classes
-        else:
-            primary_classes = None
-        return primary_classes
+        #structure_planning = site.structure_planning
+        if not site.lot_creation or not site.lot_creation.processes or process_name not in site.lot_creation.processes:
+            return None
+        structure_planning = site.lot_creation.processes[process_name].structure
+        return structure_planning.primary_classes if structure_planning is not None else None
 
     primary_category = _get_primary_category(process)
     primary_classes = _get_primary_classes(process)

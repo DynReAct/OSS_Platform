@@ -26,7 +26,8 @@ ltp_thread: threading.Thread|None = None
 allowed_shift_durations: list[int] = [1, 2, 4, 8, 12, 24, 48, 72, 168]
 
 
-# TODO in plant calendar popup allow for selection of multiple plants and set availabilities simultaneously
+# TODO for structure introduce Accept, Reset, Clear, Cancel buttons and a store like for lots
+# TODO storage initialization
 def layout(*args, **kwargs):
     horizon_weeks: int = int(kwargs.get("weeks", 4))    # planning horizon in weeks
     total_production: float = kwargs.get("total", 100_000)

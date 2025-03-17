@@ -1555,7 +1555,7 @@ clientside_callback(
     # in theory it should be ok to have no ouput, but it does not work # https://dash.plotly.com/advanced-callbacks#callbacks-with-no-outputs
     Output("lots2-materials-grid", "dir"),
     Input("lots2-materials-setdefault", "n_clicks"),
-    #State("lots2-material-setpoints", "data"),
+    State("lots2-weight-total", "value"),
     State("lots2-materials-grid", "id"),
 )
 

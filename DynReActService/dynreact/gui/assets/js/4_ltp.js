@@ -35,6 +35,7 @@
         return materialGrid?.getSetpoints() || {};
     }
 
+    // FIXME
     globalThis.dash_clientside.ltp.resetMaterialGrid = function(_, setpoints, gridId) {
         document.querySelector("div#" + gridId + " " + materialsTag)?.reset(setpoints);
         return "ltr";

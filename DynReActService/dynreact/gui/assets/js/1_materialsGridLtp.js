@@ -3,12 +3,13 @@ class MaterialsGridLtp extends HTMLElement {
     #grid;
     #materials;
     #tooltipContainer;
+    #totalValue = 0;
 
     constructor() {
         super();
         const shadow = this.attachShadow({mode: "open"});
         const style = document.createElement("style");
-        style.textContent = ":root {--ltp-portfolio-base: blue; --ltp-portfolio-light: lightblue; --ltp-portfolio-lighter: lightblue; --ltp-portfolio-dark: darkblue;}\n" +
+        style.textContent = ":root {--ltp-portfolio-base: blue; --ltp-portfolio-light: lightblue; --ltp-portfolio-lighter: lightblue; --ltp-portfolio-dark: darkblue; --ltp-portfolio-readonly: lightsteelblue;}\n" +
                             "@supports (background-color: color-mix(in srgb, red 50%, blue 50%)) {\n" +
                                     ":root { --ltp-portfolio-base: #4169E1;  --ltp-portfolio-light: color-mix(in srgb, var(--ltp-portfolio-base), white); " +
                                             "--ltp-portfolio-lighter: color-mix(in srgb, var(--ltp-portfolio-base), white 75%);" +
@@ -21,7 +22,8 @@ class MaterialsGridLtp extends HTMLElement {
                            ".ltp-material-class>div:first-child { background: var(--ltp-portfolio-light);color: var(--ltp-portfolio-dark); " +
                                                 "flex-grow: 1; padding: 0.25em 1em; min-height: 2em; vertical-align: middle;}\n" +
                            ".ltp-material-class>div:nth-child(2) { background: var(--ltp-portfolio-light); flex-grow: 1; padding: 0.5em 0;}\n" +
-                           ".ltp-material-class>div>input { max-width: 10em; background: var(--ltp-portfolio-lighter);}";
+                           ".ltp-material-class>div>input { max-width: 10em; background: var(--ltp-portfolio-lighter);}\n" +
+                           ".ltp-material-class>div>input:read-only { background-color: var(--ltp-portfolio-readonly); }\n";
 
 
         shadow.append(style);
@@ -39,6 +41,7 @@ class MaterialsGridLtp extends HTMLElement {
     setMaterials(materials) {
         JsUtils.clear(this.#grid);
         this.#materials = materials;
+        this.#totalValue = 0;
         const columns = materials.length;
         const rows = Math.max(materials.map(cat => cat.classes.length));
         const frag = document.createDocumentFragment();
@@ -69,8 +72,14 @@ class MaterialsGridLtp extends HTMLElement {
                 // TODO handle stepMismatch (should be ignored) https://developer.mozilla.org/en-US/docs/Web/API/ValidityState/stepMismatch
                 const inp = JsUtils.createElement("input", {
                     parent: JsUtils.createElement("div", {parent: material_parent}),
-                    attributes: {min: "0", step: "1000", type: "number"}   // TODO test
+                    attributes: {min: "0", step: "1000", type: "number"}
                 });
+                inp.value = 0;
+                if (material_class.is_default) {
+                    inp.readOnly = true;
+                } else {
+                    inp.addEventListener("change", (event) => this.changeFilling(material_category, material_class.id));
+                }
             }
         }
         this.#grid.style["grid-template-columns"] = "repeat(" + columns + ", 1fr)";
@@ -80,8 +89,9 @@ class MaterialsGridLtp extends HTMLElement {
     }
 
     initTargets(totalValue) {
-        if (!totalValue || !this.#materials)
+        if (totalValue === undefined || !this.#materials)
             return;
+        this.#totalValue = totalValue;
         for (const category of this.#materials) {
             const sharesMissing = category.classes.filter(m => m.default_share === undefined);
             const sharesDefined = sharesMissing.length <= 1;
@@ -107,7 +117,9 @@ class MaterialsGridLtp extends HTMLElement {
                     console.log("Material cell not found:", clzz, "category: ", category?.id);
                     continue;
                 }
-                materialParent.querySelector("input[type=number]").value = amount;
+                const inp = materialParent.querySelector("input[type=number]");
+                inp.value = amount;
+                inp.max = totalValue;
             }
         }
     }
@@ -123,6 +135,7 @@ class MaterialsGridLtp extends HTMLElement {
         return results;
     }
 
+
     reset(setpoints) {
         if (!setpoints)
             return;
@@ -132,5 +145,39 @@ class MaterialsGridLtp extends HTMLElement {
                 el.value = value;
         });
     }
+
+    changeFilling(material_category, changed_class) {
+        const target = this.#totalValue;
+        const allContainers = Array.from(this.#grid.querySelectorAll("div[data-category=\"" + material_category.id + "\"][data-material]"));
+        const defaultContainer = allContainers.find(c => c.dataset["default"] === "true") || allContainers[0];
+        const totalSum = allContainers.map(c => parseFloat(c.querySelector("input[type=number]").value) || 0).reduce((a,b) => a+b, 0);
+        const diff = totalSum - target;
+        if (diff === 0)
+            return false;
+        const defaultValueField = defaultContainer.querySelector("input[type=number]");
+        const defaultValue = parseFloat(defaultValueField.value) || 0;
+        if (changed_class !== undefined && defaultValue - diff >= 0) {  // if possible, adapt the default field only
+            defaultValueField.value = defaultValue - diff;
+            return true;
+        }
+        // else, try to adapt all others
+        const currentChanged = allContainers.find(c => c.dataset["material"] === changed_class);
+        const currentValue = currentChanged !== undefined ? parseFloat(currentChanged.querySelector("input[type=number]").value ) || 0 : 0;
+        if (currentValue <= target) {
+            const totalRemaining = target - currentValue;
+            const totalOther = totalSum - currentValue;
+            for (const el of allContainers) {
+                if (el === currentChanged)
+                    continue;
+                const inp = el.querySelector("input[type=number]");
+                const fraction = parseFloat(inp.value) / totalOther;
+                inp.value = fraction * totalRemaining;
+            }
+            return true;
+        }
+        // else: the newly set value is greater than the total available amount => TODO show warning to user and disable Accept button
+        return false; // FIXME
+    }
+
 
 }

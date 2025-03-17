@@ -7,7 +7,6 @@
     const materialsTag = "dynreact-material-grid2";
     const catAggregationWidgetTag = "dynreact-backlog-aggregation";
 
-    // TODO handle case that only totalProduction changed... no need to reinitialize the grid from scratch then
     globalThis.dash_clientside.lots2.initMaterialGrid = function(totalProduction, process, setpoints, gridId) {
         if (!globalThis.customElements.get(materialsTag))
             globalThis.customElements.define(materialsTag, MaterialsGrid2);     //use class MaterialGrid
@@ -20,14 +19,14 @@
             grid = grid || JsUtils.createElement(materialsTag, {parent: gridContainer, attributes: {"columns-selectable": ""}});
             const site = dynreact?.getSite();
             if (site) {
-                //todo 20250306 hier hat man schon site, auch die primaries holen , site.structure_planning
                 grid.setMaterials(process, site.material_categories);
                 if (totalProduction)
                     grid.initTargets(totalProduction);
             }
+        } else {
+            // lots2-details-plants changed -> try to add diff to default field
+            grid.totalValueChanged(totalProduction);
         }
-        // lots2-details-plants changed -> add diff to default field
-        const sumsChanged = grid.checkSums();
     }
 
     globalThis.dash_clientside.lots2.setMaterialSetpoints = function(_, gridId) {
@@ -39,15 +38,12 @@
         return materialGrid?.getSetpoints();
     }
 
-    globalThis.dash_clientside.lots2.resetMaterialGrid = function(_, gridId) {
+    globalThis.dash_clientside.lots2.resetMaterialGrid = function(_, totalWeight, gridId) {
         // set grid to default
-        let lotsWeightTotal = Number(document.getElementById("lots2-weight-total").value);
         const gridContainer = document.querySelector("#" + gridId);
-        let grid = gridContainer.querySelector(materialsTag) || null;
-        if (grid)
-            grid.resetGrid(lotsWeightTotal);
-        //document.querySelector("div#" + gridId + " " + materialsTag)?.reset(setpoints);
-        return "lots2";
+        const grid = gridContainer.querySelector(materialsTag);
+        grid?.initTargets(totalWeight);
+        return "ltr";
     }
 
     // used by lot creation page and lots planning page

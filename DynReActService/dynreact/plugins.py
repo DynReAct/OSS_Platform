@@ -99,6 +99,8 @@ class Plugins:
             else:
                 self._long_term_planning = Plugins._load_module("dynreact.longtermplanning.LongTermPlanningImpl", LongTermPlanning,
                                                         self._config.long_term_provider, site)
+            if self._long_term_planning is None:
+                raise Exception("Long term planning not found: " + str(self._config.long_term_provider))
         return self._long_term_planning
 
     def get_stp_config_params(self) -> ShortTermPlanning:
@@ -206,6 +208,12 @@ class Plugins:
 
     @staticmethod
     def _load_module(module: str, clzz, *args, **kwargs) -> Any|None:   # returns an instance of the clzz, if found
+        # if *args starts with class: replace module by that arg
+        if len(args) > 0 and isinstance(args[0], str) and args[0].startswith("class:"):
+            first = args[0]
+            module = first[first.index(":")+1:first.index(",")]
+            first = first[first.index(",")+1:]
+            args = tuple(a if idx > 0 else first for idx, a in enumerate(args))
         mod0 = sys.modules.get(module)
         do_raise = kwargs.pop("do_raise", False)
         errors = []

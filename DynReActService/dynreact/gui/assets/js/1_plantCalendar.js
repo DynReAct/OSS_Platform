@@ -136,7 +136,7 @@ class PlantCalendar extends HTMLElement {
         if (Object.keys(deltas).length === 0)
             deltas = undefined;
         return {
-            plant: this.#plant,
+            equipment: this.#plant,
             period: [JsUtils.formatDate(this.#startDate, {skipTime: true}), JsUtils.formatDate(this.#endDate, {skipTime: true})],
             daily_baseline: baseline,
             deltas: deltas

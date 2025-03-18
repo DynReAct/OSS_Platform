@@ -262,6 +262,8 @@ class SnapshotProvider:
                             OrderInitMethod.INACTIVE_LOTS,
                             OrderInitMethod.OMIT_CURRENT_LOT
                         ],
+                        include_previous_processes_planned: list[str]|None = None,
+                        include_previous_processes_all: list[str] | None = None,
                         ) -> list[str]:
         """
         Determine the orders eligible for planning/lot creation for a specific process.
@@ -274,7 +276,8 @@ class SnapshotProvider:
             * current_planning: based on the lots already in the snapshot
             * active_process (default): based on the current process ids of the coils
             * active_plant: based on the current plant (location) of the coils
-        :param include_scheduled_orders: include those orders that are contained in a lot for the specified process already
+        :param include_previous_processes_planned: include all orders scheduled for the specified predecessor stages
+        :param include_previous_processes_all: include all orders currently at the specified predecessor stages
         :return:
         """
         method = list(method) if isinstance(method, Iterable) else [method]
@@ -313,6 +316,39 @@ class SnapshotProvider:
                 if len(applicable_proc_ids) == 0:
                     continue
                 applicable_orders0.add(o.id)
+        add_prev_all = include_previous_processes_all is not None and len(include_previous_processes_all) > 0
+        add_prev_lot = include_previous_processes_planned is not None and len(include_previous_processes_planned) > 0
+        if add_prev_all and add_prev_lot and len(include_previous_processes_planned) == len(include_previous_processes_all) and \
+                    all(p in include_previous_processes_all for p in include_previous_processes_planned):
+            add_prev_lot = False
+        if add_prev_all or add_prev_lot:
+            prev_eligible_lots: list[Lot] = []
+            if not add_prev_all:
+                proc_ids_all = []
+            else:
+                procs_all: list[Process] = [self._site.get_process(p, do_raise=True) for p in include_previous_processes_all]
+                procs_all.append(proc)  # also accept those that are already partially at the current process step
+                proc_ids_all: list[int] = [proc_id for prc in procs_all for proc_id in prc.process_ids]
+            if not add_prev_lot:
+                proc_ids_lot = []
+            else:
+                procs_lot: list[Process] = [self._site.get_process(p, do_raise=True) for p in include_previous_processes_planned]
+                prev_eligible_plants = [p.id for prev_proc in procs_lot for p in self._site.get_process_equipment(prev_proc.name_short)]
+                procs_lot.append(proc)  # also accept those that are already partially at the current process step
+                proc_ids_lot: list[int] = [proc_id for prc in procs_lot for proc_id in prc.process_ids]
+                prev_eligible_lots = [lot for plant, lots in snapshot.lots.items() for lot in lots if plant in prev_eligible_plants]
+            proc_ids = list(set(proc_ids_all + proc_ids_lot))
+            for o in snapshot.orders:
+                oid = o.id
+                if oid in applicable_orders0 or len(o.current_processes) == 0:
+                    continue
+                if not all(p in proc_ids for p in o.current_processes):
+                    continue
+                if add_prev_lot and not all(p in proc_ids_all for p in o.current_processes) and \
+                                                not any(oid in lot.orders and lot.active for lot in prev_eligible_lots):
+                    continue
+                applicable_orders0.add(o.id)
+
         omit_active_lots: bool = OrderInitMethod.OMIT_ACTIVE_LOTS in method
         omit_inactive_lots: bool = OrderInitMethod.OMIT_INACTIVE_LOTS in method
         if omit_active_lots or omit_inactive_lots:

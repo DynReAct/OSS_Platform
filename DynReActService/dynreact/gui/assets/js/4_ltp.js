@@ -9,9 +9,8 @@
 
     // TODO handle case that only totalProduction changed... no need to reinitialize the grid from scratch then
     globalThis.dash_clientside.ltp.initMaterialGrid = function(totalProduction, gridId) {
-        console.log ('loc 12 here ltp.initMaterialGrid ')
         if (!globalThis.customElements.get(materialsTag))
-            globalThis.customElements.define(materialsTag, MaterialsGrid);
+            globalThis.customElements.define(materialsTag, MaterialsGridLtp);
         const grid = document.querySelector("#" + gridId);
         JsUtils.clear(grid);
         const el = JsUtils.createElement(materialsTag, {parent: grid});
@@ -36,6 +35,7 @@
         return materialGrid?.getSetpoints() || {};
     }
 
+    // FIXME
     globalThis.dash_clientside.ltp.resetMaterialGrid = function(_, setpoints, gridId) {
         document.querySelector("div#" + gridId + " " + materialsTag)?.reset(setpoints);
         return "ltr";

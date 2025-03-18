@@ -261,17 +261,27 @@
 }
 
 .lots2-orders-init-submenu {
+    display: flex;
+    column-gap: 4em;
+    row-gap: 0.5em;
+    padding-top: 1em;
+    /*
+    justify-content: start;
+    align-items: center;
+    */
+}
+
+.lots2-orders-init-submenu[hidden] {
+    display: none;
+}
+
+.lots2-orders-init-submenu1 {
     display: grid;
     grid-template-columns: auto auto;
     column-gap: 1em;
     row-gap: 0.5em;
     justify-content: start;
     align-items: center;
-    padding-top: 1em;
-}
-
-.lots2-orders-init-submenu[hidden] {
-    display: none;
 }
 
 .lots2-orders-init-buttons {
@@ -292,7 +302,7 @@
     padding-right: 0.5em;
 }
 
-.lots2-orders-lots-editor .lots2-order-lots-selector {
+.lots2-order-lots-selector {
     min-width: 12em;
 }
 

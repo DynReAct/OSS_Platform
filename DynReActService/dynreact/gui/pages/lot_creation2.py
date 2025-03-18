@@ -19,7 +19,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Equipment, Order, Lot, ProductionPlanning, ProductionTargets, EquipmentProduction, \
-    MidTermTargets, ObjectiveFunction
+    MidTermTargets, ObjectiveFunction, Process
 from pydantic.fields import FieldInfo
 
 from dynreact.app import state, config
@@ -55,6 +55,9 @@ def layout(*args, **kwargs):
         tab = "targets"
     #horizon: int = int(kwargs.get("horizon", 24))  # planning horizon in hours # required at all?
     site = state.get_site()
+    excluded_processes = [] if site.lot_creation is None or site.lot_creation.processes is None else \
+            [proc for proc, config in site.lot_creation.processes.items() if config.plannable == False]
+    procs = [p for p in site.processes if p.name_short not in excluded_processes]
     layout = html.Div([
         html.H1("Lot creation", id="lots2-title"),
         # ======= Top row: snapshot and process selector =========
@@ -62,7 +65,7 @@ def layout(*args, **kwargs):
             html.Div([html.Div("Snapshot: "), html.Div(id="lots2-current_snapshot")]),
             html.Div([html.Div("Process: "), dcc.Dropdown(id="lots2-process-selector",
                         options=[{"value": p.name_short, "label": p.name_short,
-                                  "title": p.name if p.name is not None else p.name_short} for p in site.processes],
+                                  "title": p.name if p.name is not None else p.name_short} for p in procs],
                         value=process,
                         className="lots2-process-selector", persistence=True)]),
             # TODO display here the state of the optimization for the selected process
@@ -198,20 +201,27 @@ def orders_tab():
                     {"value": "current_planning", "label": "All lots", "title": "Select orders currently assigned to lots for the selected process"},
                 ])
             ], className="lots2-orders-init-menu"),
-            # TODO orders init sub-settings
             html.Div([
-                html.Div("Exclude processed lots:", title="Exclude lots currently being processed?"),
-                html.Div(dcc.Checklist(options=[""], value=[""], id="lots2-init-submenu-processedlots-value"), title="Exclude lots currently being processed?"),
-                # Note: this one is always selected and disabled if the one above is selected
-                #html.Div("Exclude processed orders:", title="Exclude orders currently being processed?"),
-                #html.Div(dcc.Checklist(options=[""], value=[""], id="lots2-init-submenu-processedorders-value"), title="Exclude orders currently being processed?"),
+                html.Div([
+                    html.Div("Exclude processed lots:", title="Exclude lots currently being processed?"),
+                    html.Div(dcc.Checklist(options=[""], value=[""], id="lots2-init-submenu-processedlots-value"), title="Exclude lots currently being processed?"),
+                    # Note: this one is always selected and disabled if the one above is selected
+                    #html.Div("Exclude processed orders:", title="Exclude orders currently being processed?"),
+                    #html.Div(dcc.Checklist(options=[""], value=[""], id="lots2-init-submenu-processedorders-value"), title="Exclude orders currently being processed?"),
 
-                # The two below should only be visible if method is active_process or active_plant
-                html.Div("Exclude active lots:", title="Exclude orders that are currently assigned to an active lot?", id="lots2-init-submenu-activelots-label"),
-                html.Div(dcc.Checklist(options=[""], value=[""], id="lots2-init-submenu-activelots-value"), title="Exclude orders that are currently assigned to an active lot?",  id="lots2-init-submenu-activelots"),
-                html.Div("Exclude all lots:", title="Exclude orders that are currently assigned to any lot?", id="lots2-init-submenu-alllots-label"),
-                html.Div(dcc.Checklist(options=[""], value=[], id="lots2-init-submenu-alllots-value"), title="Exclude orders that are currently assigned to any lot?",  id="lots2-init-submenu-alllots")
-            ], id="lots2-orders-init-submenu", className="lots2-orders-init-submenu", hidden=True),  # visible if and only if a main method is selected
+                    # The two below should only be visible if method is active_process or active_plant
+                    html.Div("Exclude active lots:", title="Exclude orders that are currently assigned to an active lot?", id="lots2-init-submenu-activelots-label"),
+                    html.Div(dcc.Checklist(options=[""], value=[""], id="lots2-init-submenu-activelots-value"), title="Exclude orders that are currently assigned to an active lot?",  id="lots2-init-submenu-activelots"),
+                    html.Div("Exclude all lots:", title="Exclude orders that are currently assigned to any lot?", id="lots2-init-submenu-alllots-label"),
+                    html.Div(dcc.Checklist(options=[""], value=[], id="lots2-init-submenu-alllots-value"), title="Exclude orders that are currently assigned to any lot?",  id="lots2-init-submenu-alllots")
+                ], className="lots2-orders-init-submenu1"),  # visible if and only if a main method is selected
+                html.Div([
+                    html.Div("Include lots from previous processes:", title="Include orders from active lots at previous process stages?"),
+                    html.Div(dcc.Dropdown(id="lots2-init-prev-proc-selector_lot", className="lots2-order-lots-selector", multi=True)),
+                    html.Div("Include all orders from previous processes:", title="Include orders from previous process stages, irrespectively of their planning status"),
+                    html.Div(dcc.Dropdown(id="lots2-init-prev-proc-selector_all", className="lots2-order-lots-selector", multi=True))
+                ], className="lots2-orders-init-submenu1")
+            ], id="lots2-orders-init-submenu", className="lots2-orders-init-submenu", hidden=True),
             html.Div([
                 html.Div(html.Button("Init", id="lots2-orders-backlog-init", className="dynreact-button dynreact-button-small"), title="Initialize orders from backlog"),
                 html.Div(html.Button("Clear", id="lots2-orders-backlog-clear", className="dynreact-button dynreact-button-small"), title="Clear order backlog"),
@@ -724,6 +734,51 @@ def init_method_changed(method: Literal["active_process", "active_plant", "inact
 
 
 @callback(
+    Output("lots2-init-prev-proc-selector_lot", "options"),
+    Output("lots2-init-prev-proc-selector_lot", "value"),
+    Output("lots2-init-prev-proc-selector_all", "options"),
+    Output("lots2-init-prev-proc-selector_all", "value"),
+    Input("lots2-process-selector", "value")
+)
+def set_predecessor_procs_for_backlog_init(process: str|None):
+    if not process or not dash_authenticated(config):
+        return [], []
+    predecessors = _find_predecessor_processes(process, skip_self=True)
+    options = [{"value": p.name_short, "label": p.name_short, "title": p.name or p.name_short} for p in predecessors]
+    settings = state.get_site().lot_creation
+    selected_all = []
+    selected_lot = []
+    if settings is not None and settings.processes is not None and process in settings.processes and settings.processes[process].order_backlog is not None:
+        backlog_settings = settings.processes[process].order_backlog
+        if backlog_settings.default_select_predecessors_all is not None:
+            selected_all = list(backlog_settings.default_select_predecessors_all)
+        if backlog_settings.default_select_predecessors_lot is not None:
+            selected_lot = list(backlog_settings.default_select_predecessors_lot)
+    return options, selected_lot, list(options), selected_all
+
+
+def _find_predecessor_processes(process: str|None, skip_self: bool=False) -> list[Process]:
+    if not process:
+        return []
+    site = state.get_site()
+    proc = site.get_process(process)
+    if proc is None:
+        return []
+    all_processes = site.processes
+    predecessors = [proc]
+    new_predecessors = list(predecessors)
+    while len(new_predecessors) > 0:
+        proc_names = [p.name_short for p in new_predecessors]
+        new_predecessors = [proc for proc in all_processes if proc.next_steps is not None and
+                            proc not in predecessors and
+                            next((p for p in proc.next_steps if p in proc_names), None) is not None]
+        predecessors.extend(new_predecessors)
+    if skip_self:
+        predecessors.pop(0)
+    return predecessors
+
+
+@callback(
     Output("lots2-oders-lots-processes", "options"),
     Output("lots2-oders-lots-processes", "value"),
     Output("lots2-oders-lots-lots", "options"),
@@ -749,17 +804,9 @@ def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] 
     if update_selection:
         selected_processes = [process]
     site = state.get_site()
-    all_processes = site.processes
-    predecessors = [site.get_process(process)]
-    new_predecessors = list(predecessors)
-    while len(new_predecessors) > 0:
-        proc_names = [p.name_short for p in new_predecessors]
-        new_predecessors = [proc for proc in all_processes if proc.next_steps is not None and
-                            proc not in predecessors and
-                            next((p for p in proc.next_steps if p in proc_names), None) is not None]
-        predecessors.extend(new_predecessors)
+    predecessors = _find_predecessor_processes(process)
     processes_options = [{"label": p.name_short, "value": p.name_short, "title": p.name} for p in predecessors]
-    selected_plants = [plant.id for proc in selected_processes for plant in state.get_site().get_process_equipment(proc)]
+    selected_plants = [plant.id for proc in selected_processes for plant in site.get_process_equipment(proc)]
     existing_lots = [lot for plant, lots in snapshot_obj.lots.items() if plant in selected_plants for lot in lots]
     lots_options = sorted([{"label": lot.id, "value": lot.id, "title": lot.id} for lot in existing_lots], key=lambda d: d["label"] )
     return processes_options, selected_processes, lots_options
@@ -819,12 +866,15 @@ def lot_buttons_disabled_check(selected_lots: list[str]|None, selected_rows: lis
             #State("lots2-init-submenu-processedorders-value", "value"),
             State("lots2-init-submenu-alllots-value", "value"),
             State("lots2-init-submenu-activelots-value", "value"),
+            State("lots2-init-prev-proc-selector_lot", "value"),
+            State("lots2-init-prev-proc-selector_all", "value"),
 )
 def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7,
                   orders_data: dict[str, str]|None, selected_lots: list[str],
                   selected_rows: list[dict[str, any]]|None, filtered_rows: list[dict[str, any]]|None, horizon_hours: int,
                   init_method: Literal["active_process", "active_plant", "inactive_lots", "active_lots", "current_planning"]|None,
-                  processed_lots: list[Literal[""]], all_lots_value: list[Literal[""]], active_lots_value: list[Literal[""]]):
+                  processed_lots: list[Literal[""]], all_lots_value: list[Literal[""]], active_lots_value: list[Literal[""]],
+                  selected_prev_steps_lot: list[str], selected_prev_steps_all: list[str]):
     if not dash_authenticated(config):
         return None, None, None, None
     snapshot = DatetimeUtils.parse_date(snapshot)
@@ -931,8 +981,8 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7,
             method.append(OrderInitMethod.OMIT_INACTIVE_LOTS)
         if init_method != "current_planning" and method != "active_lots" and len(active_lots_value) > 0:
             method.append(OrderInitMethod.OMIT_ACTIVE_LOTS)
-
-        eligible_orders: list[str] = state.get_snapshot_provider().eligible_orders(snapshot_obj, process, (snapshot, snapshot + timedelta(hours=horizon_hours)), method=method)
+        eligible_orders: list[str] = state.get_snapshot_provider().eligible_orders(snapshot_obj, process, (snapshot, snapshot + timedelta(hours=horizon_hours)),
+                                            method=method, include_previous_processes_all=selected_prev_steps_all, include_previous_processes_planned=selected_prev_steps_lot)
         # maintain old selection, if appropriate
         if not update_selection and selected_rows is not None:
             eligible_orders = eligible_orders + [row for row in  (row0["id"] if isinstance(row0, dict) else row0 for row0 in selected_rows) if row not in eligible_orders]
@@ -1505,7 +1555,7 @@ clientside_callback(
     # in theory it should be ok to have no ouput, but it does not work # https://dash.plotly.com/advanced-callbacks#callbacks-with-no-outputs
     Output("lots2-materials-grid", "dir"),
     Input("lots2-materials-setdefault", "n_clicks"),
-    #State("lots2-material-setpoints", "data"),
+    State("lots2-weight-total", "value"),
     State("lots2-materials-grid", "id"),
 )
 

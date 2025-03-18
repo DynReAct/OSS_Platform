@@ -38,14 +38,18 @@ class MaterialsGridLtp extends HTMLElement {
         this.#tooltipContainer = tooltipContainer;
     }
 
-    setMaterials(materials) {
+    setMaterials(materials, setpoints, totalValue) {
         JsUtils.clear(this.#grid);
         this.#materials = materials;
-        this.#totalValue = 0;
+        this.#totalValue = totalValue;
+        if (totalValue === 0)
+            setpoints = undefined;
         const columns = materials.length;
         const rows = Math.max(materials.map(cat => cat.classes.length));
         const frag = document.createDocumentFragment();
         let column = 0;
+        const updatesRequired = []; // list of category ids
+        let fullInitRequired = false;
         for (const material_category of materials) {
             column++;
             const categoryHeader = JsUtils.createElement("div", {
@@ -55,6 +59,7 @@ class MaterialsGridLtp extends HTMLElement {
                 style: {"grid-column-start": column, "grid-row-start": 1}
             });
             let row = 1;
+            let sum = 0;
             for (const material_class of material_category.classes) {
                 row = row + 1;
                 const data_dict = {"data-category": material_category.id, "data-material": material_class.id};
@@ -72,18 +77,35 @@ class MaterialsGridLtp extends HTMLElement {
                 // TODO handle stepMismatch (should be ignored) https://developer.mozilla.org/en-US/docs/Web/API/ValidityState/stepMismatch
                 const inp = JsUtils.createElement("input", {
                     parent: JsUtils.createElement("div", {parent: material_parent}),
-                    attributes: {min: "0", step: "1000", type: "number"}
+                    attributes: {min: "0", max: totalValue, step: "1000", type: "number"}
                 });
-                inp.value = 0;
+                const value = setpoints ? setpoints[material_class.id] || 0 : 0;
+                inp.value = value;
+                sum += value;
                 if (material_class.is_default) {
                     inp.readOnly = true;
                 } else {
                     inp.addEventListener("change", (event) => this.changeFilling(material_category, material_class.id));
                 }
             }
+            const mismatch = Math.abs(sum - totalValue)/Math.abs(sum + totalValue) > 0.01;
+            if (mismatch) {
+                if (sum > 0 && totalValue > 0) {
+                    updatesRequired.push(material_category.id)
+                } else if (totalValue > 0) {
+                    fullInitRequired = true;
+                }
+            }
+
+
         }
         this.#grid.style["grid-template-columns"] = "repeat(" + columns + ", 1fr)";
         this.#grid.appendChild(frag);
+        if (fullInitRequired) {
+            this.initTargets(totalValue);
+        } else {
+            updatesRequired.map(cat => this.changeFilling(materials.find(catObj => catObj.id === cat), undefined));
+        }
         // FIXME
         window.materialsltp = this;
     }
@@ -91,7 +113,6 @@ class MaterialsGridLtp extends HTMLElement {
     initTargets(totalValue) {
         if (totalValue === undefined || !this.#materials)
             return;
-        this.#totalValue = totalValue;
         for (const category of this.#materials) {
             const sharesMissing = category.classes.filter(m => m.default_share === undefined);
             const sharesDefined = sharesMissing.length <= 1;
@@ -133,17 +154,6 @@ class MaterialsGridLtp extends HTMLElement {
             results[container.dataset.material] = parseFloat(inp.value) || 0;
         }
         return results;
-    }
-
-
-    reset(setpoints) {
-        if (!setpoints)
-            return;
-        Object.entries(setpoints).forEach(([key, value]) => {
-            const el = this.#grid.querySelector("div[data-material=\"" + key + "\"] input[type=\"number\"]");
-            if (el)
-                el.value = value;
-        });
     }
 
     changeFilling(material_category, changed_class) {

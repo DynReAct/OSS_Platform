@@ -119,9 +119,10 @@ def structure_portfolio_popup(initial_production: float):
             html.Div(id="ltp-materials-grid"),
             html.Div([
                 html.Button("Accept", id="ltp-materials-accept", className="dynreact-button"),
+                html.Button("Reset", id="ltp-materials-reset", className="dynreact-button"),
                 html.Button("Cancel", id="ltp-materials-cancel", className="dynreact-button")
             ], className="ltp-materials-buttons")
-        ]),
+        ], title=""),
         id="ltp-structure-dialog", className="dialog-filled", open=False)
 
 
@@ -255,6 +256,18 @@ def material_settings_accepted(_, start_time: str, horizon: str) -> str:
     except:
         traceback.print_exc()
 
+clientside_callback(
+    ClientsideFunction(
+        namespace="ltp",
+        function_name="initMaterialGrid"
+    ),
+    Output("ltp-materials-grid", "title"),
+    Input("ltp-structure-btn", "n_clicks"),    # open structure popup
+    Input("ltp-materials-reset", "n_clicks"),  # reset structure popup
+    Input("ltp-production-total", "value"),
+    State("ltp-material-setpoints", "data"),   # active setpoints
+    State("ltp-materials-grid", "id"),
+)
 
 clientside_callback(
     ClientsideFunction(
@@ -265,30 +278,6 @@ clientside_callback(
     Input("ltp-materials-accept", "n_clicks"),
     State("ltp-materials-grid", "id"),
     #config_prevent_initial_callbacks=True
-)
-
-# On cancel reset material grid
-clientside_callback(
-    ClientsideFunction(
-        namespace="ltp",
-        function_name="resetMaterialGrid"
-    ),
-    # in theory it should be ok to have no ouput, but it does not work # https://dash.plotly.com/advanced-callbacks#callbacks-with-no-outputs
-    Output("ltp-materials-grid", "dir"),
-    Input("ltp-materials-cancel", "n_clicks"),
-    State("ltp-material-setpoints", "data"),
-    State("ltp-materials-grid", "id"),
-)
-
-
-clientside_callback(
-    ClientsideFunction(
-        namespace="ltp",
-        function_name="initMaterialGrid"
-    ),
-    Output("ltp-materials-grid", "title"),
-    Input("ltp-production-total", "value"),
-    State("ltp-materials-grid", "id"),
 )
 
 clientside_callback(

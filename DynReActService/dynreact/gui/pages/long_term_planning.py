@@ -5,16 +5,19 @@ from datetime import datetime, timedelta, date
 
 import dash
 from dash import html, dcc, callback, Output, Input, clientside_callback, ClientsideFunction, State
+
+from dynreact.auth.authentication import dash_authenticated
 from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import LongTermTargets, EquipmentAvailability, StorageLevel
+from dynreact.base.model import LongTermTargets, EquipmentAvailability, StorageLevel, Storage
 from pydantic import TypeAdapter
 
-from dynreact.app import state
+from dynreact.app import state, config
 from dynreact.gui.gui_utils import GuiUtils
 from dynreact.gui.pages.plants_graph import plants_graph, default_stylesheet
+from dynreact.gui.pages.session_state import selected_snapshot, get_date_range
 
 dash.register_page(__name__, path="/ltp")
 translations_key = "ltp"
@@ -26,8 +29,8 @@ ltp_thread: threading.Thread|None = None
 allowed_shift_durations: list[int] = [1, 2, 4, 8, 12, 24, 48, 72, 168]
 
 
-# TODO for structure introduce Accept, Reset, Clear, Cancel buttons and a store like for lots
-# TODO storage initialization
+# TODO visualize structure and storage initialization state together
+# TODO storage initialization from snapshot
 def layout(*args, **kwargs):
     horizon_weeks: int = int(kwargs.get("weeks", 4))    # planning horizon in weeks
     total_production: float = kwargs.get("total", 100_000)
@@ -66,6 +69,7 @@ def layout(*args, **kwargs):
                 ], className="control-panel-entry"),
                 html.Div(html.Button("Structure Portfolio", className="dynreact-button", id="ltp-structure-btn")),
                 html.Div(id="ltp-amount-selected"),
+                html.Div(html.Button("Storages initialization", className="dynreact-button", id="ltp-storages-btn")),
                 html.Div([
                     html.Button("Start", className="dynreact-button", id="ltp-start", disabled=True),
                     html.Button("Stop", className="dynreact-button", id="ltp-stop", disabled=True)
@@ -91,6 +95,7 @@ def layout(*args, **kwargs):
         # ======== Popups and hidden elements =========
         structure_portfolio_popup(total_production),
         plant_calendar_popup(),
+        storage_init_popup(),
         # stores information about the last start time and horizon for which material properties have been set,
         # in the format {"startTime": startTime, "horizon": horizon}
         dcc.Store(id="ltp-material-settings"),
@@ -103,6 +108,7 @@ def layout(*args, **kwargs):
         # contains a json serialized PlantAvailability object for the currently selected plant, or None,
         # as output from the calendar popup
         dcc.Store(id="ltp-availability-buffer", storage_type="memory"),
+        dcc.Store(id="ltp-storage-levels"),  # None or {storage id: StorageLevel}
         dcc.Interval(id="ltp-interval", n_intervals=3_600_000),  # for polling when optimization is running
     ], id="ltp")
 
@@ -143,8 +149,36 @@ def plant_calendar_popup():
                 html.Button("Clear", id="ltp-calendar-clear", className="dynreact-button", title="Delete all entries for this plant and the selected period."),
                 html.Button("Cancel", id="ltp-calendar-cancel", className="dynreact-button")
             ], className="ltp-materials-buttons")
-        ]),
+        ], title=""),
         id="ltp-calendar-dialog", className="dialog-filled", open=False)
+
+
+def storage_init_popup():
+    start_date, end_date, snap_options, selected_snap = get_date_range(selected_snapshot.data)  # : tuple[date, date, list[datetime], str]
+    return html.Dialog(
+        html.Div([
+            html.H3("Storages status"),
+            html.Div([
+                html.Div([html.Div("Snapshot: ", id="ltp-storage-snapshot"),
+                          dcc.Dropdown(id="ltp-storage-snapshots-selector", className="snap-select",
+                                       options=snap_options, value=selected_snap)]),
+                html.Div([html.Div("Selection range: ", id="ltp-storage-snapshot-selection_range"),
+                          dcc.DatePickerRange(id="ltp-storage-snapshots-date-range", display_format="YYYY-MM-DD",
+                                              start_date=start_date, end_date=end_date)])
+            ], className="snapshots-selector-row"),
+            html.Br(),
+            html.Div([
+                html.Button("Init from snapshot", id="ltp-storageinit-snap-trigger", className="dynreact-button",
+                                title="Initialize storage levels according to selected snapshot. " + \
+                                      "The individual storage levels can then be edited by clicking on the respective storage in the visualization below."),
+                html.Button("Init half filled", id="ltp-storageinit-half-trigger", className="dynreact-button",
+                                title="Initialize storages such that they are half-filled, with default shares for each material class. " + \
+                                      "The individual storage levels can then be edited by clicking on the respective storage in the visualization below."),
+                html.Button("Clear storages", id="ltp-storageinit-clear", className="dynreact-button",
+                                title="Clear storage initial values."),
+            ], className="ltp-materials-buttons"),
+        ], title=""),
+        id="ltp-storageinit-dialog", className="dialog-filled", open=False)
 
 
 def graph_stylesheets(start_date: date, end_date: date):
@@ -344,13 +378,57 @@ clientside_callback(
     State("ltp-calendar-accept", "title"),
 )
 
+clientside_callback(
+    ClientsideFunction(
+        namespace="dialog",
+        function_name="showModal"
+    ),
+    Output("ltp-storageinit-dialog", "title"),
+    Input("ltp-storages-btn", "n_clicks"),
+    State("ltp-storageinit-dialog", "id"),
+)
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="dialog",
+        function_name="closeModal"
+    ),
+    Output("ltp-storageinit-clear", "title"),
+    Input("ltp-storageinit-clear", "n_clicks"),
+    State("ltp-storageinit-dialog", "id"),
+    State("ltp-storageinit-clear", "title"),
+)
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="dialog",
+        function_name="closeModal"
+    ),
+    Output("ltp-storageinit-half-trigger", "title"),
+    Input("ltp-storageinit-half-trigger", "n_clicks"),
+    State("ltp-storageinit-dialog", "id"),
+    State("ltp-storageinit-half-trigger", "title"),
+)
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="dialog",
+        function_name="closeModal"
+    ),
+    Output("ltp-storageinit-snap-trigger", "title"),
+    Input("ltp-storageinit-snap-trigger", "n_clicks"),
+    State("ltp-storageinit-dialog", "id"),
+    State("ltp-storageinit-snap-trigger", "title"),
+)
+
+
 @callback(Output("ltp-calendar-plant", "children"),
           Output("ltp-calendar-start-time", "children"),
           Output("ltp-selected_plant", "data"),
           Input("ltp-plants-graph", "tapNode"),
           State("ltp-start-time", "value"))
 def tap_graph_node(tapNode: dict[str, any]|None, start_time: datetime|str):
-    if tapNode is None or "data" not in tapNode or not isinstance(tapNode.get("data"), dict):
+    if tapNode is None or "data" not in tapNode or not isinstance(tapNode.get("data"), dict) or not dash_authenticated(config):
         return "", "",None
     node_data: dict[str, any] = tapNode.get("data")
     node_id: str = node_data.get("id", "")
@@ -374,7 +452,7 @@ def tap_graph_node(tapNode: dict[str, any]|None, start_time: datetime|str):
         State("ltp-horizon-weeks", "value"),
         config_prevent_initial_callbacks=True)
 def init_calendar(selected_plant: int|None, _, start_time: datetime|str, horizon: str|int):
-    if selected_plant is None or start_time is None or horizon is None:
+    if selected_plant is None or start_time is None or horizon is None or not dash_authenticated(config):
         return None
     selected_plant = int(selected_plant)
     start_time = DatetimeUtils.parse_date(start_time)
@@ -430,6 +508,42 @@ def availabilities_changed(availabilities_json: dict[str, any]|None):   # user c
     return graph_stylesheets(av.period[0], av.period[1])
 
 
+@callback(Output("ltp-storage-levels", "data"),
+          Input("ltp-storageinit-snap-trigger", "n_clicks"),
+          Input("ltp-storageinit-half-trigger", "n_clicks"),
+          Input("ltp-storageinit-clear", "n_clicks"),
+          Input("ltp-start-time", "value"),
+          State("ltp-storage-levels", "data"),
+          config_prevent_initial_callbacks=True)
+def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
+    if not dash_authenticated(config):
+        return None
+    start_time = DatetimeUtils.parse_date(start_time)
+    if start_time is None:
+        return dash.no_update
+    changed_ids: list[str] = GuiUtils.changed_ids(excluded_ids=[""])
+    if "ltp-storageinit-clear-trigger" in changed_ids:
+        return None
+    site = state.get_site()
+    storages: dict[str, StorageLevel] = {}
+    if "ltp-storageinit-half-trigger" in changed_ids:
+        for storage in site.storages:
+            material_levels = {cl.id: 0.5 * (cl.default_share if cl.default_share is not None else 1 if cl.is_default else 0) \
+                                                                    for cat in site.material_categories for cl in cat.classes}
+            level = StorageLevel(storage=storage.name_short, filling_level=0.5, timestamp=start_time, material_levels=material_levels)
+            storages[storage.name_short] = level
+    if "ltp-storageinit-snap-trigger" in changed_ids:
+        # TODO
+        raise Exception("not implemented yet")
+    if "ltp-start-time" in changed_ids:
+        if levels is None:
+            return dash.no_update
+        storages = TypeAdapter(dict[str, StorageLevel]).validate_json(levels)
+        for level in storages.values():
+            level.timestamp = start_time
+    return TypeAdapter(dict[str, StorageLevel]).dump_json(storages).decode("utf-8")
+
+
 @callback(Output("ltp-start", "disabled"),
           Output("ltp-start", "title"),
           Output("ltp-stop", "disabled"),
@@ -443,12 +557,16 @@ def availabilities_changed(availabilities_json: dict[str, any]|None):   # user c
           Input("ltp-stop", "n_clicks"),
           Input("ltp-interval", "n_intervals"),
           Input("ltp-material-setpoints", "data"),  # keys: material class id, values: production / t
+          Input("ltp-storage-levels", "data"),
           State("ltp-start-time", "value"),
           State("ltp-horizon-weeks", "value"),
           State("ltp-shift-hours", "value"),
           State("ltp-production-total", "value"),
           config_prevent_initial_callbacks=True)
-def check_start_stop(_, __, ___, setpoints: dict[str, float], start_time: datetime|str, horizon_weeks: str|int, shift_duration_hours: str|int, total_production: float|str|None):
+def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: str|None, start_time: datetime|str, horizon_weeks: str|int, shift_duration_hours: str|int,
+                     total_production: float|str|None):
+    if not dash_authenticated(config):
+        return None
     is_running, new_solution_id = check_running_optimization()
     total_amount = _get_total_selected_amount(setpoints)
     changed_ids = GuiUtils.changed_ids()
@@ -467,10 +585,13 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], start_time: dateti
                 total_production = float(total_production)
             if total_production <= 0:
                 raise ValueError("Total production must be positive, got " + str(total_production))
+            if storage_levels is None:
+                raise Exception("Storage levels not defined yet")
         except:  # TODO display error
             raise
         if ltp_thread is None and total_amount is not None:
-            start(start_time, horizon_weeks, shift_duration_hours, setpoints, total_production)
+            levels = TypeAdapter(dict[str, StorageLevel]).validate_json(storage_levels)
+            start(start_time, horizon_weeks, shift_duration_hours, setpoints, total_production, levels)
     if "ltp-stop" in changed_ids and ltp_thread is not None:
         stop()
     is_running = ltp_thread is not None
@@ -478,12 +599,13 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], start_time: dateti
     if not is_running:
         result_container_hidden = new_solution_id is None
         new_solution_id = new_solution_id if new_solution_id is not None else ""
-        if total_amount is None:
+        amount_msg = "Total production target: " + str(total_amount) + " t" if total_amount is not None else ""
+        if total_amount is None or storage_levels is None:
             return (True,  # start disabled
-                    "Material structure not defined, yet. Please open the structure portfolio menu and select the material to produce.", # start title
+                    "Material structure or storage levels not defined, yet. Please open the structure portfolio menu and select the material to produce.", # start title
                     True,  # end disabled
                     "Not running.",  # end title
-                    "",  # selected amount
+                    amount_msg,  # selected amount
                     itv,  # polling interval,
                     True,   # running indicator hidden
                     result_container_hidden,   # result container hidden
@@ -493,7 +615,7 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], start_time: dateti
                 "Run long-term planning.", # start title
                 True,  # end disabled
                 "Not running.",  # end title
-                "Total production target: " + str(total_amount) + " t",  # selected amount
+                amount_msg,  # selected amount
                 itv,  # polling interval
                 True,  # running indicator hidden
                 result_container_hidden,  # result container hidden
@@ -521,7 +643,7 @@ def check_running_optimization() -> tuple[bool, str|None]:
     return ltp_thread is not None, solution_id
 
 
-def start(start_time: datetime, horizon_weeks: int, shift_duration_hours: int, setpoints: dict[str, float], total_production: float):
+def start(start_time: datetime, horizon_weeks: int, shift_duration_hours: int, setpoints: dict[str, float], total_production: float, storage_levels: dict[str, StorageLevel]):
     global ltp_thread
     shift_duration = timedelta(hours=shift_duration_hours)
     end_time = start_time + timedelta(weeks=horizon_weeks)
@@ -548,7 +670,7 @@ def start(start_time: datetime, horizon_weeks: int, shift_duration_hours: int, s
     while persistence.has_solution_ltp(start_time, actual_id):
         cnt += 1
         actual_id = new_id + "_" + str(cnt)
-    ltp_thread = LTPKillableOptimizationThread(actual_id, ltp, ltp_targets, initial_storage_levels=None, shifts=shifts, persistence=persistence)
+    ltp_thread = LTPKillableOptimizationThread(actual_id, ltp, ltp_targets, initial_storage_levels=storage_levels, shifts=shifts, persistence=persistence)
     ltp_thread.start()
 
 

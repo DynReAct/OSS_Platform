@@ -13,7 +13,7 @@ from pydantic.fields import FieldInfo
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
-from dynreact.gui.pages.session_state import selected_snapshot
+from dynreact.gui.pages.session_state import selected_snapshot, get_date_range
 
 dash.register_page(__name__, path="/")
 translations_key = "snapshot"
@@ -101,52 +101,6 @@ def _material_overview(categories: list[MaterialCategory]):
         columnSize="responsiveSizeToFit"
         # "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
     )])
-
-
-# FIXME here the selection value modifies the selection range
-#@callback(
-#    Output("snapshots-date-range", "start_date"),
-#    Output("snapshots-date-range", "end_date"),
-#    Output("snapshots-selector", "options"),
-#    Output("snapshots-selector", "value"),
-#    Input("selected-snapshot", "data"),
-#)
-def get_date_range(current_snapshot: str|datetime|None) -> tuple[date, date, list[datetime], str]:  # list[options] not list[datetime]
-    if not dash_authenticated(config):
-        return None, None, [], None
-    # 1) snapshot already selected
-    current: datetime | None = DatetimeUtils.parse_date(current_snapshot)
-    if current is None:
-        # 3) use current snapshot
-        current = state.get_snapshot_provider().current_snapshot_id()
-    if current is None:  # should not really happen
-        now = DatetimeUtils.now()
-        return (now - timedelta(days=30)).date(), (now + timedelta(days=1)).date(), [], None
-    dates = []
-    cnt = 0
-    iterator = state.get_snapshot_provider().snapshots(start_time=current - timedelta(days=90), end_time=current + timedelta(minutes=1), order="desc") #if current_snapshot is None \
-        #else state.get_snapshot_provider().snapshots(start_time=current - timedelta(hours=2), end_time=current + timedelta(days=90), order="asc")
-    for dt in iterator:
-        dates.append(dt)
-        if cnt > 100:  # ?
-            break
-        cnt += 1
-    dates = sorted(dates, reverse=True)
-    if len(dates) == 0:
-        return None, None, [], None
-    to_be_selected = dates[0]
-    min_dist = abs(to_be_selected - current)
-    for dt in dates:
-        distance = abs(dt - current)
-        if distance < min_dist:
-            to_be_selected = dt
-            min_dist = distance
-    options = [{"label": snap_id, "value": snap_id, "selected": selected} for snap_id, selected in ((DatetimeUtils.format(d), d == to_be_selected) for d in dates)]
-    if len(options) == 1:
-        dt = dates[0].date()
-        return dt - timedelta(days=1), dt + timedelta(days=1), options, DatetimeUtils.format(to_be_selected)
-    return dates[-1].date(), dates[0].date(), options, DatetimeUtils.format(to_be_selected)
-
 
 @callback(
     Output("selected-snapshot", "data"),

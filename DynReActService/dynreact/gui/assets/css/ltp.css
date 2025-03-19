@@ -87,3 +87,21 @@
     padding-bottom: 1em;
 }
 
+.ltp-init-structure-body {
+    display: flex;
+    flex-direction: column;
+    row-gap: 0.5em;
+}
+
+.ltp-init-storages-result {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    column-gap: 1em;
+    row-gap: 0.3em;
+}
+
+.ltp-overview-grid-header {
+    font-weight: bold;
+    /*color: rgba(235, 112, 25, 1); *//* rgba(2, 69, 17, 1); */
+}
+

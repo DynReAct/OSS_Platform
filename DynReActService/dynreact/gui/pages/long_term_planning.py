@@ -71,7 +71,6 @@ def layout(*args, **kwargs):
                     ], className="ltp-horizon-widget", title="Specify the planning horizon in weeks")
                 ], className="control-panel-entry"),
                 html.Div(html.Button("Structure Portfolio", className="dynreact-button", id="ltp-structure-btn")),
-                html.Div(id="ltp-amount-selected"),
                 html.Div(html.Button("Storages initialization", className="dynreact-button", id="ltp-storages-btn")),
                 html.Div([
                     html.Button("Start", className="dynreact-button", id="ltp-start", disabled=True),
@@ -91,7 +90,7 @@ def layout(*args, **kwargs):
         html.Div([
             html.Div("Initialization"),
             html.Div([
-                html.Div([
+                html.Div([  # this extra layer is only there to avoid applying the control panel styles for subelements to the div below
                     html.Div([
                         html.H3("Equipment availabilities"),
                         html.Div("To be defined", id="ltp-init-availabilities-result",
@@ -99,13 +98,17 @@ def layout(*args, **kwargs):
                     ], id="ltp-init-availabilities"),
                     html.Div([
                         html.H3("Material structure"),
-                        html.Div("To be defined", id="ltp-init-structure-result",
-                                title="Click the \"Structure Portfolie\" button above to define the target structure")  # TODO content
+                        html.Div([
+                            html.Div("To be defined", id="ltp-init-structure-total"),
+                            html.Div(id="ltp-init-structure-result")
+                        ], className="ltp-init-structure-body")
                     ], id="ltp-init-structure"),
                     html.Div([
                         html.H3("Initial storage content"),
-                        html.Div("To be defined", id="ltp-init-storages-result",
-                                 title="Click the \"Storage initialization\" button above to define the initial storage content")  # TODO content
+                        html.Div([
+                            html.Div("To be defined", id="ltp-init-storages-total"),
+                            html.Div(id="ltp-init-storages-result", className="ltp-init-storages-result")
+                        ], className="ltp-init-structure-body")
                     ], id="ltp-init-storages")
                 ], className="ltp-init-panel2")
             ])
@@ -535,6 +538,8 @@ clientside_callback(
 def availabilities_changed(availabilities_json: dict[str, any]|None):   # user clicked the Save button in the calendar popup
     if availabilities_json is None:
         return dash.no_update
+    # FIXME
+    print(" AV json", availabilities_json)
     av = EquipmentAvailability.model_validate(availabilities_json)
     persistence = state.get_availability_persistence()
     persistence.store(av)
@@ -598,11 +603,71 @@ def set_initial_availabilities(_: Any, start_time: datetime|str, horizon: str|in
     return [html.Div(f"{plants[pid].name_short}: {round(period.total_seconds()/3_600)}h") for pid, period in hours_per_plant.items()]
 
 
+@callback(
+            Output("ltp-init-structure-total", "children"),
+            Output("ltp-init-structure-total", "title"),
+            Output("ltp-init-structure-result", "style"),
+            Output("ltp-init-structure-result", "children"),
+            Input("ltp-material-setpoints", "data")
+)
+# TODO currently returns a flat structure, i.e. one div per plant. Better: make it a grid, with 2 divs per plant, also divide between 3 or so columns
+def set_structure_targets_overview(structure: dict[str, float]|None):
+    title = "Click the \"Structure Portfolie\" button above to define the target structure"
+    if not structure or not dash_authenticated(config):
+        return "To be defined", title, None, None
+    categories = state.get_site().material_categories
+    structure_by_category: dict[str, dict[str, float]] = \
+        {c.id: {cl.id: structure[cl.id] for cl in c.classes if cl.id in structure} for c in categories}
+    total_value_by_cat: dict[str, float] = {cat: sum(dct.values()) for cat, dct in structure_by_category.items()}
+    epsilon = 1e-5
+    total_value_by_cat = {cat: val for cat, val in total_value_by_cat.items() if val > epsilon}
+    if len(total_value_by_cat) == 0:
+        return "To be defined", title, None, None
+    first_total = next(v for v in total_value_by_cat.values())
+    if any(v for v in total_value_by_cat.values() if abs(v - first_total) / abs(v + first_total) > epsilon):
+        return "Inconsistent state", title, None, None,
+    #structure_by_category = {cat: strct for cat, strct in structure_by_category.items() if cat in total_value_by_cat}
+    applicable_cats = [cat for cat in categories if cat.id in total_value_by_cat]
+    divs = [html.Div(cat.name or cat.id, style={"grid-column-start": str(idx+1), "grid-row-start": "1"}, className="ltp-overview-grid-header") for idx, cat in enumerate(applicable_cats)]
+    for col_idx, cat in enumerate(applicable_cats):
+        divs = divs + [html.Div(f"{cl.name or cl.id}: {round(structure.get(cl.id, 0)/1000)}",
+                                style={"grid-column-start": str(col_idx+1), "grid-row-start": str(2 + row_idx)}) for row_idx, cl in enumerate(cat.classes)]
+    grid_style = {"display": "grid", "grid-template-columns": f"repeat({len(applicable_cats)}, auto)", "column-gap": "1em", "row-gap": "0.3em" }
+    return "Total production target: " + str(round(first_total/1000)) + "kt", None, grid_style, divs
+
+
+@callback(
+        Output("ltp-init-storages-total", "children"),
+        Output("ltp-init-storages-total", "title"),
+        #Output("ltp-init-storages-result", "style"),
+        Output("ltp-init-storages-result", "children"),
+        Input("ltp-storage-levels", "data")
+)
+# TODO currently returns a flat structure, i.e. one div per plant. Better: make it a grid, with 2 divs per plant, also divide between 3 or so columns
+def set_storage_targets_overview(levels: str|None):  # {storage id: StorageLevel}
+    title="Click the \"Storage initialization\" button above to define the initial storage content"
+    if not levels or not dash_authenticated(config):
+        return "To be defined", title, None
+    storage_levels = TypeAdapter(dict[str, StorageLevel]).validate_json(levels)
+    storages = [s for s in state.get_site().storages if s.name_short in storage_levels]
+    divs = [html.Div("Storage id", className="ltp-overview-grid-header"), html.Div("Content", className="ltp-overview-grid-header"),
+            html.Div("Filling level", className="ltp-overview-grid-header")]
+    for storage in storages:
+        lv: StorageLevel|None = storage_levels.get(storage.name_short)
+        level: float = lv.filling_level if lv is not None else 0
+        capacity = storage.capacity_weight or 0
+        name = html.Div(storage.name_short)
+        value_abs = html.Div(f"{(level * capacity)/1000} kt")
+        value_rel = html.Div(f"{round(level * 100)}%")
+        divs.extend((name, value_abs, value_rel))
+    return None, None, divs
+
+
 @callback(Output("ltp-start", "disabled"),
           Output("ltp-start", "title"),
           Output("ltp-stop", "disabled"),
           Output("ltp-stop", "title"),
-          Output("ltp-amount-selected", "children"),
+          #Output("ltp-amount-selected", "children"),
           Output("ltp-interval", "interval"),
           Output("ltp-running-indicator", "hidden"),
           Output("ltp-result-container", "hidden"),
@@ -659,7 +724,7 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
                     "Material structure or storage levels not defined, yet. Please open the structure portfolio menu and select the material to produce.", # start title
                     True,  # end disabled
                     "Not running.",  # end title
-                    amount_msg,  # selected amount
+                    #amount_msg,  # selected amount
                     itv,  # polling interval,
                     True,   # running indicator hidden
                     result_container_hidden,   # result container hidden
@@ -669,7 +734,7 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
                 "Run long-term planning.", # start title
                 True,  # end disabled
                 "Not running.",  # end title
-                amount_msg,  # selected amount
+                #amount_msg,  # selected amount
                 itv,  # polling interval
                 True,  # running indicator hidden
                 result_container_hidden,  # result container hidden
@@ -679,7 +744,7 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
             "Already running.", # start title
             False,  # end disabled
             "Stop optimization.",  # end title
-            "Total production target: " + str(total_amount) + " t",   # selected amount  # TODO retrieve from running optimization
+            #"Total production target: " + str(total_amount) + " t",   # selected amount  # TODO retrieve from running optimization
             itv,  # polling interval
             False,  # running indicator hidden
             True,  # result container hidden

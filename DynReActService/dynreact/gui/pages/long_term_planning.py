@@ -92,21 +92,23 @@ def layout(*args, **kwargs):
             html.Div("Initialization"),
             html.Div([
                 html.Div([
-                    html.H3("Equipment availabilities"),
-                    html.Div("To be defined", id="ltp-init-availabilities-result",
-                            title="Click equipment icons below to adapt the availabilities.")  # TODO content
-                ], id="ltp-init-availabilities"),
-                html.Div([
-                    html.H3("Material structure"),
-                    html.Div("To be defined", id="ltp-init-structure-result",
-                            title="Click the \"Structure Portfolie\" button above to define the target structure")  # TODO content
-                ], id="ltp-init-structure"),
-                html.Div([
-                    html.H3("Initial storage content"),
-                    html.Div("To be defined", id="ltp-init-storages-result",
-                             title="Click the \"Storage initialization\" button above to define the initial storage content")  # TODO content
-                ], id="ltp-init-storages")
-            ], className="ltp-init-panel")
+                    html.Div([
+                        html.H3("Equipment availabilities"),
+                        html.Div("To be defined", id="ltp-init-availabilities-result",
+                                title="Click equipment icons below to adapt the availabilities.")  # TODO content
+                    ], id="ltp-init-availabilities"),
+                    html.Div([
+                        html.H3("Material structure"),
+                        html.Div("To be defined", id="ltp-init-structure-result",
+                                title="Click the \"Structure Portfolie\" button above to define the target structure")  # TODO content
+                    ], id="ltp-init-structure"),
+                    html.Div([
+                        html.H3("Initial storage content"),
+                        html.Div("To be defined", id="ltp-init-storages-result",
+                                 title="Click the \"Storage initialization\" button above to define the initial storage content")  # TODO content
+                    ], id="ltp-init-storages")
+                ], className="ltp-init-panel2")
+            ])
         ], className="control-panel", id="ltp-initialization"),
         # ======== Process panel ============
         html.Div([
@@ -580,6 +582,7 @@ def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
             State("ltp-start-time", "value"),
             State("ltp-horizon-weeks", "value")
 )
+# TODO currently returns a flat structure, i.e. one div per plant. Better: make it a grid, with 2 divs per plant, also divide between 3 or so columns
 def set_initial_availabilities(_: Any, start_time: datetime|str, horizon: str|int):
     persistence = state.get_availability_persistence()
     start, end = _get_start_end_time(start_time, horizon)

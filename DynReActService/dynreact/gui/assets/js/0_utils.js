@@ -40,13 +40,17 @@ class JsUtils {
     static parseDurationHours(duration, defaultHours=24) {
          if (!duration)
             return defaultHours;
+         duration = duration.trim();
          let parsed = undefined;
+         const isMinus = duration.startsWith("-");
+         if (isMinus)
+            duration = duration.substring(1);
          if (duration.startsWith("PT") && duration.endsWith("H")) {  // handle PXXH
              parsed = parseInt(duration.substring(2, duration.length - 1));
          } else if (duration.startsWith("P") && duration.endsWith("D")) {
              parsed = parseInt(duration.substring(1, duration.length - 1)) * 24;
          }
-         return Number.isFinite(parsed) ? parsed : defaultHours;
+         return Number.isFinite(parsed) ? (isMinus ? -parsed : parsed) : defaultHours;
     }
 
     static clear(element) {

@@ -74,13 +74,14 @@
     padding-bottom: 1em;
 }
 
-.ltp-init-panel {
+.ltp-init-panel2 {
     display: flex;
-    column-gap: 1em;
-    padding-left: 2em;
+    align-items: flex-start;
+    padding-left: 1em;
+    column-gap: 4em;
 }
 
-.ltp-init-panel>div {
+.ltp-init-panel2>div {
     display: flex;
     flex-direction: column;
     padding-bottom: 1em;

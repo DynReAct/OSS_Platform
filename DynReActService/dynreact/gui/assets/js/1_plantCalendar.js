@@ -100,7 +100,8 @@ class PlantCalendar extends HTMLElement {
                 let currentValue = baselineHours1;
                 if (applicableAvailability?.deltas && formatted2 in applicableAvailability.deltas) {
                      const delta = applicableAvailability.deltas[formatted2]
-                     currentValue += delta;
+                     const deltaHours = JsUtils.parseDurationHours(delta, 0);
+                     currentValue += deltaHours;
                 }
                 const dayContainer = JsUtils.createElement("div", {parent: frag, classes: "ltp-day", attributes: {"data-day": formatted2}});
                 JsUtils.createElement("div", {parent: dayContainer, text: dateFormatted});
@@ -125,13 +126,17 @@ class PlantCalendar extends HTMLElement {
         if (!this.#startDate)
             return undefined;
         const baselineHours = this.#baselineHours;
-        const baseline = "PT" + baselineHours + "H";
+        const baseline = baselineHours == 24 ? "P1D" : "PT" + baselineHours + "H";
         let deltas = Object.fromEntries(Array.from(this.#grid.querySelectorAll("div[data-day]")).map(dayContainer => {
                 const value = parseFloat(dayContainer.querySelector("input")?.value);
                 const day = dayContainer.dataset.day;
                 if (!Number.isFinite(value) || value < 0 || value > 24 || !day || value === baselineHours)
                     return undefined;
-                return [day, value - baselineHours];
+                const newValue0 = value - baselineHours;
+                const isMinus = newValue0 < 0;
+                let newValue = isMinus ? "-" : "";
+                newValue += "PT" + Math.abs(newValue0) + "H";
+                return [day, newValue];
             }).filter(arr => arr));
         if (Object.keys(deltas).length === 0)
             deltas = undefined;

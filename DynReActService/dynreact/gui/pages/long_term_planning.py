@@ -31,7 +31,6 @@ ltp_thread: threading.Thread|None = None
 allowed_shift_durations: list[int] = [1, 2, 4, 8, 12, 24, 48, 72, 168]
 
 
-# TODO visualize structure and storage initialization state together
 # TODO storage initialization from snapshot
 # TODO pass plant availabilities to LTP
 def layout(*args, **kwargs):
@@ -538,8 +537,6 @@ clientside_callback(
 def availabilities_changed(availabilities_json: dict[str, any]|None):   # user clicked the Save button in the calendar popup
     if availabilities_json is None:
         return dash.no_update
-    # FIXME
-    print(" AV json", availabilities_json)
     av = EquipmentAvailability.model_validate(availabilities_json)
     persistence = state.get_availability_persistence()
     persistence.store(av)
@@ -691,12 +688,9 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
     changed_ids = GuiUtils.changed_ids()
     if not is_running and "ltp-start" in changed_ids:
         try:
-            start_time = DatetimeUtils.parse_date(start_time)
-            if start_time is None:
-                raise Exception("Start time is None")
-            horizon_weeks = int(horizon_weeks)
-            if horizon_weeks <= 0:
-                raise Exception("Horizon must be positive, got " + str(horizon_weeks))
+            start, end = _get_start_end_time(start_time, horizon_weeks)
+            if start is None or end is None:
+                raise Exception(f"Invalid start time or horizon: {start_time}, {horizon_weeks}")
             shift_duration_hours = allowed_shift_durations[int(shift_duration_hours)]
             if total_production is None:
                 raise Exception("Total production not set")
@@ -710,7 +704,9 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
             raise
         if ltp_thread is None and total_amount is not None:
             levels = TypeAdapter(dict[str, StorageLevel]).validate_json(storage_levels)
-            start(start_time, horizon_weeks, shift_duration_hours, setpoints, total_production, levels)
+            availabilities: dict[int, list[EquipmentAvailability]] = state.get_availability_persistence().load_all(start, end)
+            availabilities_aggregated = PlantAvailabilityPersistence.aggregate([p.id for p in state.get_site().equipment], start, end, availabilities)
+            run(DatetimeUtils.parse_date(start_time), horizon_weeks, shift_duration_hours, setpoints, total_production, levels, availabilities_aggregated)
     if "ltp-stop" in changed_ids and ltp_thread is not None:
         stop()
     is_running = ltp_thread is not None
@@ -762,10 +758,15 @@ def check_running_optimization() -> tuple[bool, str|None]:
     return ltp_thread is not None, solution_id
 
 
-def start(start_time: datetime, horizon_weeks: int, shift_duration_hours: int, setpoints: dict[str, float], total_production: float, storage_levels: dict[str, StorageLevel]):
+def run(start_time: datetime, horizon_weeks: int, shift_duration_hours: int, setpoints: dict[str, float],
+          total_production: float, storage_levels: dict[str, StorageLevel], availabilities: dict[int, EquipmentAvailability]):
     global ltp_thread
     shift_duration = timedelta(hours=shift_duration_hours)
     end_time = start_time + timedelta(weeks=horizon_weeks)
+    # FIXME need 30 days
+    diff_days: int = round((end_time - start_time).total_seconds()/3600/24)
+    if diff_days != 30 and abs(30-diff_days) < 4:
+        end_time += timedelta(days=30-diff_days)
     shifts: list[tuple[datetime, datetime]] = []
     start_shift = start_time
     end_shift = start_shift + shift_duration
@@ -789,7 +790,7 @@ def start(start_time: datetime, horizon_weeks: int, shift_duration_hours: int, s
     while persistence.has_solution_ltp(start_time, actual_id):
         cnt += 1
         actual_id = new_id + "_" + str(cnt)
-    ltp_thread = LTPKillableOptimizationThread(actual_id, ltp, ltp_targets, initial_storage_levels=storage_levels, shifts=shifts, persistence=persistence)
+    ltp_thread = LTPKillableOptimizationThread(actual_id, ltp, ltp_targets, availabilities, storage_levels, shifts, persistence=persistence)
     ltp_thread.start()
 
 
@@ -808,14 +809,17 @@ class LTPKillableOptimizationThread(threading.Thread):
                  id: str,
                  optimization: LongTermPlanning,
                  structure: LongTermTargets,
-                 initial_storage_levels: dict[str, StorageLevel]|None=None,
-                 shifts: list[tuple[datetime, datetime]]|None=None,
-                 persistence: ResultsPersistence|None = None):
+                 availabilities: dict[int, EquipmentAvailability],
+                 initial_storage_levels: dict[str, StorageLevel],
+                 shifts: list[tuple[datetime, datetime]],
+                 persistence: ResultsPersistence|None = None,
+                 ):
         super().__init__(name=ltp_thread_name)
         self._id = id
         self._kill = threading.Event()
         self.daemon = True  # Allow main to exit even if still running.
         self._optimization = optimization
+        self._availabilities = availabilities
         self._structure = structure
         self._initial_storage_levels = initial_storage_levels
         self._shifts = shifts
@@ -830,7 +834,7 @@ class LTPKillableOptimizationThread(threading.Thread):
     def run(self):
         solution_id = self._id
         results, storage_levels = self._optimization.run(solution_id, self._structure, initial_storage_levels=self._initial_storage_levels,
-                                      shifts=self._shifts)  # TODO pass plant_availabilities (last argument)
+                                      shifts=self._shifts, plant_availabilities=self._availabilities)
         if self._persistence:
             self._persistence.store_ltp(solution_id, results, storage_levels=storage_levels)
         return results

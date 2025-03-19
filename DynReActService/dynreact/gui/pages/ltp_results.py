@@ -127,14 +127,15 @@ def find_solutions(starttime: str|None):
     persistence: ResultsPersistence = state.get_results_persistence()
     solutions: list[str] = persistence.solutions_ltp(parsed)  # TODO is this exact? Or could we specify a range?
     solutions2: list[MidTermTargets] = [persistence.load_ltp(parsed, s)[0] for s in solutions]  # TODO here we ignore storage levels for the time being
-    columns = [{
+    rows = [{
             "id": solutions[idx],
-            "time_horizon": (t.period[1] - t.period[0]) / timedelta(weeks=1),
-            "shift_duration": (t.sub_periods[0][1] - t.sub_periods[0][0]) / timedelta(hours=1),
+            "time_horizon": round((t.period[1] - t.period[0]) / timedelta(days=1)),
+            "shift_duration": round((t.sub_periods[0][1] - t.sub_periods[0][0]) / timedelta(hours=1)),
             "total_production": t.total_production,
             #"delete": ""   # not possible
         } for idx, t in enumerate(solutions2)]
-    return columns, columns
+    table_rows = [{k: v if k != "time_horizon" else round(v/7) for k, v in r.items()} for r in rows]
+    return rows, table_rows
 
 
 # on table row selection change the selected solution
@@ -163,7 +164,7 @@ def solution_changed(solution: dict[str, any]|None, starttime: str|None):
     parsed: datetime = DatetimeUtils.parse_date(starttime)
     if solution is None or parsed is None:
         return 1, None
-    days = solution.get("time_horizon", 0) * 7
+    days = solution.get("time_horizon", 0)
     marker_indices = range(days)
     if days > 8:
         num_marks = 8

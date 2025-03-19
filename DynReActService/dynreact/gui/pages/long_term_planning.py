@@ -2,6 +2,7 @@ import threading
 import traceback
 from calendar import monthrange  # , Day  # Python 3.12
 from datetime import datetime, timedelta, date
+from typing import Any
 
 import dash
 from dash import html, dcc, callback, Output, Input, clientside_callback, ClientsideFunction, State
@@ -11,7 +12,8 @@ from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import LongTermTargets, EquipmentAvailability, StorageLevel, Storage
+from dynreact.base.impl.ModelUtils import ModelUtils
+from dynreact.base.model import LongTermTargets, EquipmentAvailability, StorageLevel, Storage, Equipment
 from pydantic import TypeAdapter
 
 from dynreact.app import state, config
@@ -31,6 +33,7 @@ allowed_shift_durations: list[int] = [1, 2, 4, 8, 12, 24, 48, 72, 168]
 
 # TODO visualize structure and storage initialization state together
 # TODO storage initialization from snapshot
+# TODO pass plant availabilities to LTP
 def layout(*args, **kwargs):
     horizon_weeks: int = int(kwargs.get("weeks", 4))    # planning horizon in weeks
     total_production: float = kwargs.get("total", 100_000)
@@ -84,6 +87,27 @@ def layout(*args, **kwargs):
                 ], id="ltp-result-container", className="ltp-result-container", hidden=True),
             ])
         ], className="control-panel"),
+        # ======== Initial values panel ============
+        html.Div([
+            html.Div("Initialization"),
+            html.Div([
+                html.Div([
+                    html.H3("Equipment availabilities"),
+                    html.Div("To be defined", id="ltp-init-availabilities-result",
+                            title="Click equipment icons below to adapt the availabilities.")  # TODO content
+                ], id="ltp-init-availabilities"),
+                html.Div([
+                    html.H3("Material structure"),
+                    html.Div("To be defined", id="ltp-init-structure-result",
+                            title="Click the \"Structure Portfolie\" button above to define the target structure")  # TODO content
+                ], id="ltp-init-structure"),
+                html.Div([
+                    html.H3("Initial storage content"),
+                    html.Div("To be defined", id="ltp-init-storages-result",
+                             title="Click the \"Storage initialization\" button above to define the initial storage content")  # TODO content
+                ], id="ltp-init-storages")
+            ], className="ltp-init-panel")
+        ], className="control-panel", id="ltp-initialization"),
         # ======== Process panel ============
         html.Div([
             html.Div("Process Panel"),
@@ -445,6 +469,17 @@ def tap_graph_node(tapNode: dict[str, any]|None, start_time: datetime|str):
     return plant.name_short if plant.name_short is not None else str(plant.id), dt_formatted, plant.id
 
 
+def _get_start_end_time(start_time: datetime|str, horizon: str|int) -> tuple[date|None, date|None]:
+    start_time = DatetimeUtils.parse_date(start_time)
+    horizon = int(horizon)
+    if start_time is None or horizon <= 0:
+        return None, None
+    start: date = start_time.date()
+    month_info: tuple[int, int] = monthrange(start.year, start.month)  # tuple[calendar.Day, int] from Python 3.12
+    end_time = start_time + (timedelta(days=month_info[1]) if horizon == 4 else timedelta(weeks=horizon))
+    return start, end_time.date()
+
+
 @callback(Output("ltp-plant-availability", "data"),
         Input("ltp-selected_plant", "data"),           # user clicked on a plant node in the graph
         Input("ltp-calendar-clear", "n_clicks"),
@@ -455,19 +490,15 @@ def init_calendar(selected_plant: int|None, _, start_time: datetime|str, horizon
     if selected_plant is None or start_time is None or horizon is None or not dash_authenticated(config):
         return None
     selected_plant = int(selected_plant)
-    start_time = DatetimeUtils.parse_date(start_time)
-    horizon = int(horizon)
-    if start_time is None or horizon <= 0:
+    start, end = _get_start_end_time(start_time, horizon)
+    if start is None or end is None:
         return None
-    dt: date = start_time.date()
-    month_info: tuple[int, int] = monthrange(dt.year, dt.month)   # tuple[calendar.Day, int] from Python 3.12
-    end_time = start_time + (timedelta(days=month_info[1]) if horizon == 4 else timedelta(weeks=horizon))
     availabilities: PlantAvailabilityPersistence = state.get_availability_persistence()
     changed = GuiUtils.changed_ids()
     if "ltp-calendar-clear" in changed:
-        availabilities.delete(selected_plant, start_time.date(), end_time.date())
+        availabilities.delete(selected_plant, start, end)
         return None
-    av: list[EquipmentAvailability] = availabilities.load(selected_plant, start_time.date(), end_time.date())
+    av: list[EquipmentAvailability] = availabilities.load(selected_plant, start, end)
     av_json = TypeAdapter(list[EquipmentAvailability]).dump_json(av).decode("utf-8")
     return av_json
 
@@ -542,6 +573,26 @@ def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
         for level in storages.values():
             level.timestamp = start_time
     return TypeAdapter(dict[str, StorageLevel]).dump_json(storages).decode("utf-8")
+
+
+@callback(Output("ltp-init-availabilities-result", "children"),
+            Input("ltp-availability-buffer", "data"),  # FIXME are we sure the persistence method is triggered first?
+            State("ltp-start-time", "value"),
+            State("ltp-horizon-weeks", "value")
+)
+def set_initial_availabilities(_: Any, start_time: datetime|str, horizon: str|int):
+    persistence = state.get_availability_persistence()
+    start, end = _get_start_end_time(start_time, horizon)
+    if start is None or end is None:
+        return "Not available"
+    plants: dict[int, Equipment] = {p.id: p for p in state.get_site().equipment}
+    plant_data: dict[int, list[EquipmentAvailability]] = persistence.load_all(start, end)
+    days = end - start
+    hours_per_plant: dict[int, timedelta] = {pid: days for pid in plants.keys() if pid not in plant_data}
+    hours_per_plant.update({pid: ModelUtils.aggregate_availabilities(avail, start, end) for pid, avail in plant_data.items()})
+    # sort according to plants array
+    hours_per_plant = dict(sorted(hours_per_plant.items(), key=lambda key_val: next(idx for idx, pid in enumerate(plants.keys()) if pid == key_val[0])))
+    return [html.Div(f"{plants[pid].name_short}: {round(period.total_seconds()/3_600)}h") for pid, period in hours_per_plant.items()]
 
 
 @callback(Output("ltp-start", "disabled"),
@@ -682,6 +733,7 @@ def stop() -> bool:
     return ltp_thread is None
 
 
+
 class LTPKillableOptimizationThread(threading.Thread):
 
     def __init__(self,
@@ -710,7 +762,7 @@ class LTPKillableOptimizationThread(threading.Thread):
     def run(self):
         solution_id = self._id
         results, storage_levels = self._optimization.run(solution_id, self._structure, initial_storage_levels=self._initial_storage_levels,
-                                      shifts=self._shifts)
+                                      shifts=self._shifts)  # TODO pass plant_availabilities (last argument)
         if self._persistence:
             self._persistence.store_ltp(solution_id, results, storage_levels=storage_levels)
         return results

@@ -73,3 +73,16 @@
     column-gap: 1em;
     padding-bottom: 1em;
 }
+
+.ltp-init-panel {
+    display: flex;
+    column-gap: 1em;
+    padding-left: 2em;
+}
+
+.ltp-init-panel>div {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 1em;
+}
+

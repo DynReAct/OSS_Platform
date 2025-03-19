@@ -111,8 +111,8 @@ class EquipmentAvailability(Model):
     "The period this refers to, typically a month"
     daily_baseline: timedelta|None = None
     "The baseline availability, such as 24h or 1d. Default is 1d."
-    deltas: dict[date, float]|None = None
-    "Deviations from the baseline per day. Defaults to 0 if a day is missing or the field is unset."
+    deltas: dict[date, timedelta]|None = None
+    "Deviations from the baseline per day. Defaults to 0 if a day is missing or the field is unset. Positive values mean extra time, negative values are outages etc."
 
 
 PROPERTIES = TypeVar("PROPERTIES", bound=Model)  # Material-specific properties, not matching the MATERIAL parameter in the Order class

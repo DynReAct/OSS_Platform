@@ -1,6 +1,10 @@
+import traceback
 from datetime import datetime, date
 import glob
 import os
+from functools import lru_cache
+
+from pydantic import ValidationError
 
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
@@ -43,7 +47,7 @@ class FileAvailabilityPersistence(PlantAvailabilityPersistence):
         os.makedirs(folder, exist_ok=True)
         new_file = self._get_file_plant(availability.equipment, availability.period[0])
         json_str = availability.model_dump_json(exclude_unset=True, exclude_none=True)
-        with open(new_file, "w") as file:
+        with open(new_file, "w", encoding="utf-8") as file:
             file.write(json_str)
 
     def delete(self, plant: int, start: date, end: date) -> bool:
@@ -72,14 +76,25 @@ class FileAvailabilityPersistence(PlantAvailabilityPersistence):
             if dt is None:
                 continue
             if dt >= start and dt < end:
-                content = None
-                with open(fl, "r") as file:
-                    content = file.read()
-                av = EquipmentAvailability.model_validate_json(content)
-                result.append(av)
+                av = FileAvailabilityPersistence._parse_file(fl)
+                if av is not None:
+                    result.append(av)
             elif dt > end:
                 break
         return result
+
+    @staticmethod
+    @lru_cache(maxsize=16)
+    def _parse_file(fl: str):
+        try:
+            with open(fl, "r", encoding="utf-8") as file:
+                content = file.read()
+            av = EquipmentAvailability.model_validate_json(content)
+            return av
+        except ValidationError:
+            print("Could not read availability file", fl)
+            traceback.print_exc()
+            return None
 
     def plant_data(self, start: date, end: date) -> list[int]:
         """

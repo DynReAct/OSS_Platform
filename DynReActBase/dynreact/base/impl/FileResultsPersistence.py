@@ -166,7 +166,7 @@ class FileResultsPersistence(ResultsPersistence):
     def load_ltp(self, start_time: datetime, solution_id: str) -> MidTermTargets:
         file = self._get_file_longterm(start_time, solution_id)
         if not os.path.isfile(file):
-            raise Exception("Solution " + str(solution_id) + " does not exist for start time " + str(start_time))
+            raise Exception(f"Solution {solution_id} does not exist for start time {start_time}, no such file: {file}")
         content = None
         with open(file, "r") as fl:
             content = fl.read()

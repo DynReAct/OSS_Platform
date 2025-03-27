@@ -401,7 +401,7 @@ def get_longtermplanning_results(
         end = start + timedelta(days=31)
     results_ctrl = state.get_results_persistence()
     start_times = results_ctrl.start_times_ltp(start, end)
-    return {DatetimeUtils.format(time): [results_ctrl.solutions_ltp(time)] for time in start_times}
+    return {DatetimeUtils.format(time): results_ctrl.solutions_ltp(time) for time in start_times}
 
 
 @fastapi_app.get("/longtermplanning/{start}/{solution_id}",

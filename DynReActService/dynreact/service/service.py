@@ -17,7 +17,7 @@ from pydantic import AliasChoices
 from dynreact.app import config, state
 from dynreact.auth.authentication import fastapi_authentication
 from dynreact.service.model import EquipmentTransition, EquipmentTransitionStateful, LotsOptimizationInput, \
-    LotsOptimizationResults, TransitionInfo, MaterialTransfer
+    LotsOptimizationResults, TransitionInfo, MaterialTransfer, LongTermPlanningResults
 from dynreact.service.optim_listener import LotsOptimizationListener
 
 fastapi_app = FastAPI(
@@ -372,6 +372,54 @@ def get_lots_optimization_results(optimization_id: int, username = username) -> 
         raise HTTPException(status_code=404, detail=f"No such optimization id: {optimization_id}")
     listener = lots_optimization[1]
     return listener.get_results()
+
+
+@fastapi_app.get("/longtermplanning",
+                tags=["dynreact"],
+                summary="Long term planning results with start times in the specified period")
+def get_longtermplanning_results(
+        start:  str|datetime|None = Query(None, description="Start time. If neither start nor end time are specified, "
+                        + "start is set to now.", examples=["now", "now-31d", "2023-04-25T00:00Z"], openapi_examples={
+                "now": {"description": "Get next month's planning", "value": "now"},
+                "now-31d": {"description": "Get last month's planning", "value": "now-31d"},
+                "2023-04-25T00:00Z": {"description": "A specific timestamp", "value": "2023-04-25T00:00Z"},
+            }),
+        end:  str|datetime|None = Query(None, description="End time. If neither start nor end time are specified, "
+                        + "end is set to now+31d", examples=["now", "now+31d", "2023-04-27T00:00Z"], openapi_examples={
+                "now": {"description": "Get last month's planning", "value": "now"},
+                "now+31d": {"description": "A month ahead of now", "value": "now+31d"},
+                "2023-04-27T00:00Z": {"description": "A specific timestamp", "value": "2023-04-27T00:00Z"},
+            }),
+        sort: Literal["asc", "desc"] = "asc", username = username) -> dict[str, list[str]]:
+    if isinstance(start, str):
+        start = parse_datetime_str(start)
+    if isinstance(end, str):
+        end = parse_datetime_str(end)
+    if start is None:
+        start = DatetimeUtils.now()
+    if end is None:
+        end = start + timedelta(days=31)
+    results_ctrl = state.get_results_persistence()
+    start_times = results_ctrl.start_times_ltp(start, end)
+    return {DatetimeUtils.format(time): [results_ctrl.solutions_ltp(time)] for time in start_times}
+
+
+@fastapi_app.get("/longtermplanning/{start}/{solution_id}",
+                tags=["dynreact"],
+                summary="Long term planning results with start times in the specified period")
+def get_longtermplanning_result(
+        start:  str|datetime = Path(..., description="Start time. ",
+                examples=["now", "now-31d", "2023-04-25T00:00Z"], openapi_examples={
+                    "now": {"description": "Get next month's planning", "value": "now"},
+                    "now-31d": {"description": "Get last month's planning", "value": "now-31d"},
+                    "2023-04-25T00:00Z": {"description": "A specific timestamp", "value": "2023-04-25T00:00Z"},
+                }),
+        solution_id: str = Path(..., description="Unique solution id"), username = username) -> LongTermPlanningResults|None:
+    if isinstance(start, str):
+        start = parse_datetime_str(start)
+    results_ctrl = state.get_results_persistence()
+    targets, levels = results_ctrl.load_ltp(start, solution_id)
+    return LongTermPlanningResults(targets=targets, storage_levels=levels)
 
 
 def parse_datetime_str(dt: str) -> datetime:

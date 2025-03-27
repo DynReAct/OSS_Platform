@@ -1,3 +1,4 @@
+import functools
 from datetime import datetime
 import glob
 import os
@@ -109,6 +110,7 @@ class FileResultsPersistence(ResultsPersistence):
         os.remove(file)
         return True
 
+    @functools.lru_cache(maxsize=32)
     def load(self, snapshot_id: datetime, process: str, solution_id: str) -> LotsOptimizationState:
         file = self._get_file_lotcreation(snapshot_id, process, solution_id)
         if not os.path.isfile(file):
@@ -160,6 +162,7 @@ class FileResultsPersistence(ResultsPersistence):
         os.remove(file)
         return True
 
+    @functools.lru_cache(maxsize=32)
     def load_ltp(self, start_time: datetime, solution_id: str) -> MidTermTargets:
         file = self._get_file_longterm(start_time, solution_id)
         if not os.path.isfile(file):
@@ -178,6 +181,7 @@ class FileResultsPersistence(ResultsPersistence):
         return os.path.isfile(file)
 
     def start_times_ltp(self, start: datetime, end: datetime) -> list[datetime]:
+        # TODO cache folder names?
         folder = os.path.join(self._folder, "longterm")
         start_ms = DatetimeUtils.to_millis(start)
         end_ms = DatetimeUtils.to_millis(end)

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, date, time
+from typing import Literal
 
 import dash
 from dash import html, dcc, callback, Output, Input, clientside_callback, ClientsideFunction, State
@@ -93,7 +94,7 @@ def layout(*args, **kwargs):
                 columnDefs=[{"field": "day", "pinned": True}],
                 defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
                 rowData=[],
-                getRowId="params.data.id",
+                getRowId="params.data.day",
                 className="ag-theme-alpine",  # ag-theme-alpine-dark
                 #columnSizeOptions={"defaultMinWidth": 125},
                 columnSize="responsiveSizeToFit",
@@ -108,13 +109,19 @@ def layout(*args, **kwargs):
             )
         ),
         html.H2("Storage levels"),
+        html.Div([html.Div("Storage level: ", id="ltp-storage-snapshot"),
+                  dcc.Dropdown(id="ltp-res_storage-absrel", className="snap-select", value="relative",
+                               options=[{"value": "relative", "label": "Relative", "title": "Show storage filling level in percentage."},
+                                        {"value": "absolute", "label": "Absolute", "title": "Show storage filling level in tons."}])
+                  ], className="ltp-res-absrel-flex"),
+        html.Br(),
         html.Div(
             dash_ag.AgGrid(
                 id="ltp_res-storages-table",
                 columnDefs=[{"field": "day", "pinned": True}],
                 defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
                 rowData=[],
-                getRowId="params.data.id",
+                getRowId="params.data.day",
                 className="ag-theme-alpine",  # ag-theme-alpine-dark
                 # columnSizeOptions={"defaultMinWidth": 125},
                 columnSize="responsiveSizeToFit",
@@ -264,26 +271,30 @@ def update_plants_table(solution: dict[str, Any]):
 @callback(
     Output("ltp_res-storages-table", "columnDefs"),
     Output("ltp_res-storages-table", "rowData"),
-    Input("ltp_res-selected-solution", "data")
+    Input("ltp_res-selected-solution", "data"),
+    Input("ltp-res_storage-absrel", "value"),
 )
-def update_storages_table(solution: dict[str, Any]):
-    if solution is None or not dash_authenticated(config):
+def update_storages_table(solution: dict[str, Any], rel_abs: Literal["relative", "absolute"]|None):
+    if solution is None or rel_abs is None or not dash_authenticated(config):
         return [{"field": "day", "pinned": True}], None
     levels = solution.get("storage_levels")  # serialized list[dict[str, StorageLevel]]
     sub_periods: list[tuple[datetime, datetime]] = [(DatetimeUtils.parse_date(period[0]), DatetimeUtils.parse_date(period[1])) for period in solution.get("targets").get("sub_periods")]
     site = state.get_site()
-    value_formatter_object = {"function": "formatCell(params.value, 2)"}
+    value_formatter_object = {"function": "formatCell(params.value, 4)"}
     column_defs = [{"field": storage.name_short, "headerName": str(storage.name or storage.name_short), "valueFormatter": value_formatter_object}
                         for storage in site.storages]
     column_defs = [{"field": "day", "pinned": True, "headerTooltip": "Storage level at 6 am"}] + column_defs
     row_data = []
+    is_absolute = rel_abs == "absolute"
+    storage_capacities = {s.name_short: s.capacity_weight for s in site.storages}
     for idx, period in enumerate(sub_periods):
         if period[0].time().hour != 8:  # 6:  # FIXME hardcoded
             continue
         current_levels = levels[idx]
         current_data = {"day": period[0].date().strftime("%Y-%m-%d")}
         for stg, stg_level in current_levels.items():
-            current_data[stg] = stg_level.get("filling_level")  # TODO absolute vs level
+            value = stg_level.get("filling_level", 0)
+            current_data[stg] = f"{round(value*100)}%" if not is_absolute else value * storage_capacities.get(stg, 1)
         row_data.append(current_data)
     # TODO final level
     return column_defs, row_data

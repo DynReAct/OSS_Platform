@@ -33,7 +33,7 @@ from confluent_kafka.admin import AdminClient
 import configparser
 
 from common import VAction, sendmsgtopic, TOPIC_GEN, TOPIC_CALLBACK
-from common.data.data_functions import get_equipment_materials
+from common.data.data_functions import get_equipment_materials, end_auction
 import subprocess, sys, os, re, json
 
 from common.data.load_url import DOCKER_MANAGER
@@ -304,7 +304,7 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
             if payload["is_auction_started"]:
                 return
 
-    raise Exception("Failed to start auction, timeout exceeded")
+    raise Exception("Failed to start/run auction, timeout exceeded")
 
 
 def wait_for_callback(topic: str, expected_action: str, consumer: Consumer, verbose: int, sleep_timeout: int = 1, max_iters: int = 10) -> Generator[Optional[Message], None, None]:
@@ -414,53 +414,6 @@ def ask_results(
             payload=dict(msg=msg), vb=verbose
         )
     return dict()
-
-
-def end_auction(topic: str, producer: Producer, verbose: int) -> None:
-    """
-    Ends an auction by instructing all EQUIPMENT, MATERIAL and LOG children of the auction to exit
-
-    :param str topic: Topic name of the auction we want to end
-    :param object producer: A Kafka Producer instance
-    :param int verbose: Verbosity level
-    """
-
-    if verbose > 0:
-        msg = "Auction has ended!"
-        sendmsgtopic(
-            producer=producer,
-            tsend=topic,
-            topic=topic,
-            source="UX",
-            dest="LOG:" + topic,
-            action="WRITE",
-            payload=dict(msg=msg),
-            vb=verbose
-        )
-
-    # Instruct all EQUIPMENT children to exit
-    # We can define the destinations of the message using a regex instead of looping through all equipment IDs
-    # In this case, the regex ".*" matches any sequence of characters; that is, any equipment ID
-    sendmsgtopic(
-        producer=producer,
-        tsend=topic,
-        topic=topic,
-        source="UX",
-        dest="EQUIPMENT:" + topic + ":.*",
-        action="EXIT",
-        vb=verbose
-    )
-
-    # Instruct all MATERIAL children to exit
-    sendmsgtopic(
-        producer=producer,
-        tsend=topic,
-        topic=topic,
-        source="UX",
-        dest="MATERIAL:" + topic + ":.*",
-        action="EXIT",
-        vb=verbose
-    )
 
 
 def sleep(seconds: float, producer: Producer, verbose: int):

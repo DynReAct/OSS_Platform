@@ -3,6 +3,7 @@ import os
 import shlex
 import docker
 
+from common import TOPIC_CALLBACK, TOPIC_GEN
 from common.data.data_setup import LAST_SNAPSHOT
 
 
@@ -50,7 +51,9 @@ class DockerManager:
                     command=command_str,
                     environment={
                       "IS_DOCKER": "true",
-                      "SNAPSHOT_TIME": os.environ.get("SNAPSHOT_TIME", LAST_SNAPSHOT)
+                      "SNAPSHOT_TIME": os.environ.get("SNAPSHOT_TIME", LAST_SNAPSHOT),
+                      "TOPIC_GEN": TOPIC_GEN,
+                      "TOPIC_CALLBACK": TOPIC_CALLBACK
                     },
                     entrypoint="/usr/local/bin/entrypoint.sh",
                     volumes={

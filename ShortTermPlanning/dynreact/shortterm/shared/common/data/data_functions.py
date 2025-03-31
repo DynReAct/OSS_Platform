@@ -5,6 +5,9 @@ This module defines the functions used outside to get relevant data.
 """
 import json
 
+from confluent_kafka import Producer
+
+from common import sendmsgtopic
 from common.data.load_url import URL_INITIAL_STATE, URL_UPDATE_STATUS, load_url_json_get, load_url_json_post
 from common.data.data_setup import (LAST_SNAPSHOT, ALL_MATERIALS_PARAMS, ALL_EQUIPMENTS_MATERIALS)
 
@@ -99,3 +102,48 @@ def get_transition_cost_and_status(
     return cost, new_status
 
 
+def end_auction(topic: str, producer: Producer, verbose: int) -> None:
+    """
+    Ends an auction by instructing all EQUIPMENT, MATERIAL and LOG children of the auction to exit
+
+    :param str topic: Topic name of the auction we want to end
+    :param object producer: A Kafka Producer instance
+    :param int verbose: Verbosity level
+    """
+
+    if verbose > 0:
+        msg = "Auction has ended!"
+        sendmsgtopic(
+            producer=producer,
+            tsend=topic,
+            topic=topic,
+            source="UX",
+            dest="LOG:" + topic,
+            action="WRITE",
+            payload=dict(msg=msg),
+            vb=verbose
+        )
+
+    # Instruct all EQUIPMENT children to exit
+    # We can define the destinations of the message using a regex instead of looping through all equipment IDs
+    # In this case, the regex ".*" matches any sequence of characters; that is, any equipment ID
+    sendmsgtopic(
+        producer=producer,
+        tsend=topic,
+        topic=topic,
+        source="UX",
+        dest="EQUIPMENT:" + topic + ":.*",
+        action="EXIT",
+        vb=verbose
+    )
+
+    # Instruct all MATERIAL children to exit
+    sendmsgtopic(
+        producer=producer,
+        tsend=topic,
+        topic=topic,
+        source="UX",
+        dest="MATERIAL:" + topic + ":.*",
+        action="EXIT",
+        vb=verbose
+    )

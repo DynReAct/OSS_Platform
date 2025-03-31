@@ -23,6 +23,7 @@ from pathlib import Path
 
 from common import sendmsgtopic, TOPIC_CALLBACK
 from agents import Agent
+from common.data.data_functions import end_auction
 from common.data.load_url import DOCKER_REPLICA
 from common.handler import DockerManager
 
@@ -61,7 +62,7 @@ class Log(Agent):
         self.action_methods.update({
             'CREATE': self.handle_create_action, 'CHECK': self.handle_check_action, 'WRITE': self.handle_write_action,
             'PINGANSWER': self.handle_pinganswer_action, "ASKRESULTS": self.handle_askresults_action,
-            "ISAUCTIONACTIVE": self.handle_is_auction_started_action
+            "ISAUCTIONACTIVE": self.handle_is_auction_started_action, "RECIEVEERROR": self.handle_receive_error_action
         })
 
         # To handle the start of the auction
@@ -226,6 +227,25 @@ class Log(Agent):
         )
         self.handle_write_action(full_msg)
         return 'END'
+
+    def handle_receive_error_action(self, dctmsg: dict) -> str:
+        """
+        Handles the ERROR action for any agent.
+
+        :param dict dctmsg: Message dictionary
+
+        :returns: Status of the handling
+        :rtype:  str
+        """
+
+        self.write_log(f"Killing auction early, fatal error in one of the agents {dctmsg['source']}", "f8987e40-e3d3-4045-9e7d-f3b9c39b9e00")
+
+        self.results = {}
+
+        # Force auction to crash due to error
+        end_auction(topic=self.topic, producer=self.producer, verbose=self.verbose)
+
+        return 'CONTINUE'
 
     def handle_create_action(self, dctmsg: dict) -> str:
         """

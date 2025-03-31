@@ -116,6 +116,16 @@ class Agent:
                 print("Captured error message:")
                 print(error_message)  # Prints the traceback as a string
                 self.write_log(f"ERROR: Raised error {type(e)} with message {e}", "1f5b666a-0ee6-4309-b8ea-71c744eb8065")
+                sendmsgtopic(
+                    producer=self.producer,
+                    tsend=self.topic,
+                    topic=self.topic,
+                    source=self.agent,
+                    dest="LOG:" + self.topic,
+                    action="RECIEVEERROR",
+                    payload=dict(msg=f"ERROR: Raised error {type(e)} with message {error_message}"),
+                    vb=self.verbose
+                )
                 return 'ERROR'
         else:
             return 'UNKNOWN-ACTION'

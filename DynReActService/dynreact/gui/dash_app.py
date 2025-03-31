@@ -82,14 +82,18 @@ def layout(*args, **kwargs):
                     #  html.Option(label="test", value="test", selected=False)
                     #], id="menu-lots-selector")
                 ], className="menu-link login-required", title="Open lot creation tab"),
-            dcc.Link("Short term planning", id="menu-agents_header", className="menu-link login-required", href="/dash/stp", title="Open short term planning tab"),
-            dcc.Link("Snapshot", id="menu-snaps_header", className="menu-link login-required", href="/dash/", title="Open snapshots tab"),
-            dcc.Link("Performance models", id="menu-perf_header", className="menu-link login-required", href="/dash/perfmodels",
-                     title="Open plant performance models tab"),
+            dcc.Link("Short term planning", id="menu-agents_header", className="menu-link login-required",
+                     href="/dash/stp", title="Open short term planning tab"),
+            dcc.Link("Snapshot", id="menu-snaps_header", className="menu-link login-required",
+                     href="/dash/", title="Open snapshots tab"),
+            dcc.Link("Performance models", id="menu-perf_header", className="menu-link login-required",
+                     href="/dash/perfmodels", title="Open plant performance models tab"),
             html.Div(id="menu-user_header"),
             html.Div([
                 html.Img(src="/dash/assets/icons/globe.svg", role="img"),
-                dcc.Dropdown(id="menu-lang-select", options=[{"label": "English", "value": "en"}, {"label": "Deutsch", "value": "de"}, {"label": "Español", "value": "es"}])],
+                dcc.Dropdown(id="menu-lang-select", options=[{"label": "English", "value": "en"},
+                                                             {"label": "Deutsch", "value": "de"},
+                                                             {"label": "Español", "value": "es"}])],
                     className="lang-selector", title="Select the language"),
         ], id="main-menu", className="main-menu")
     ],

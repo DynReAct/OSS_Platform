@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
-from dynreact.shortterm.timedelay import TimeDelay
+from .timedelay import TimeDelay
 
 class ShortTermTargets(BaseModel):
     """_summary_

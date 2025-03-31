@@ -31,9 +31,13 @@ Python versions >= 3.10 and <= 3.12 should be supported.
 First, create a virtual environment for the project. Navigate to the folder, and execute
 
 ```commandline
-pipx install poetry
-poetry install --no-root
-eval $(poetry env activate)
+python -m venv --upgrade-deps venv
+```
+
+You can run the setup by installing dependencies:
+
+```commandline
+pip install -r requirements.txt  [--break-system-packages]
 ```
 
 Then, you can build the packages

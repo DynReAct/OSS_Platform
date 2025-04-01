@@ -249,13 +249,13 @@ def plant_status(equipment_id: int, snapshot_timestamp: datetime | str = Path(..
                 "now-1d": {"description": "Get yesterday's snapshot", "value": "now-1d"},
                 "2023-12-04T23:59Z": {"description": "A specific timestamp", "value": "2023-12-04T23:59Z"},
             }),
-                 unit: Literal["material", "order"] = Query("order", description="Treat coils as basic unit or orders (default)?"),
+                 unit: Literal["material", "order"] = Query("order", description="Treat materials as basic unit or orders (default)?"),
                  planning_horizon: Annotated[timedelta|str|None, Query(openapi_examples={"2d": {"value": "2d", "description": "A duration of two days"}},
                      # not working, need to use planning_horizon
                     validation_alias=AliasChoices("planning-horizon", "planning_horizon", "planningHorizon"))] = timedelta(days=1),
                  # how to determine this? default throughput per plant; long term planning results; ...?
                  target_weight: Annotated[float|None, Query(description="Target weight. If not specified, it is determined from the snapshot")] = None,
-                 current: str|None = Query(None, description="Order id or coil id; determined from snapshot by default"),
+                 current: str|None = Query(None, description="Order id or material id; determined from snapshot by default"),
                  username = username) -> EquipmentStatus:
     coil_based: bool = unit.lower().startswith("material")
     if planning_horizon is None:
@@ -266,10 +266,10 @@ def plant_status(equipment_id: int, snapshot_timestamp: datetime | str = Path(..
     current_order=None
     current_coil=None
     interval = [snapshot.timestamp, snapshot.timestamp + planning_horizon]
-    if current is None and snapshot.inline_material is not None and equipment_id in snapshot.inline_material:
+    if current is None and coil_based and snapshot.inline_material is not None and equipment_id in snapshot.inline_material:
         order_coil_data: list[MaterialOrderData] = snapshot.inline_material[equipment_id]
-        if len(order_coil_data) == 1:
-            current = order_coil_data[0].material if order_coil_data[0].material is not None else order_coil_data[0].order
+        if len(order_coil_data) > 0:
+            current = order_coil_data[-1].material if order_coil_data[-1].material is not None else order_coil_data[-1].order
     if current is not None:
         current_coil = snapshot.get_material(current)
         if current_coil is not None:
@@ -281,7 +281,7 @@ def plant_status(equipment_id: int, snapshot_timestamp: datetime | str = Path(..
         target_weights = state.get_snapshot_provider().target_weights_from_snapshot(snapshot, plant.process)
         target_weight = target_weights.get(plant.id, 0)
     return state.get_cost_provider().equipment_status(snapshot, plant, planning_period=interval, target_weight=target_weight,
-                                                      coil_based=coil_based, current=current_order, current_material=current_coils)
+                                                      material_based=coil_based, current=current_order, current_material=current_coils)
 
 
 @fastapi_app.post("/costs/transitions-stateful",

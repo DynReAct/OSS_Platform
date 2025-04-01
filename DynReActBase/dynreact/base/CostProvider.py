@@ -128,7 +128,7 @@ class CostProvider:
         return None
 
     def equipment_status(self, snapshot: Snapshot, plant: Equipment, planning_period: tuple[datetime, datetime], target_weight: float,
-                         coil_based: bool = False,
+                         material_based: bool = False,
                          current: Order|None=None, previous: Order|None=None,
                          current_material: list[Material] | None = None, track_structure: bool=False) -> EquipmentStatus:
         """
@@ -136,7 +136,7 @@ class CostProvider:
         :param plant:
         :param planning_period  TODO validate that planning_period starts with current snapshot?
         :param target_weight
-        :param coil_based: treat coils as basic unit or orders (default)?
+        :param material_based: treat coils as basic unit or orders (default)?
         :param current: current order; by default this will be determined from the snapshot, but it can also be provided explicitly
         :param previous: previous order;  by default this will be determined from the snapshot (if this information is available), but it can also be provided explicitly
         :param: current_coils: should only be present if the last order is not assumed to be processed entirely
@@ -145,7 +145,7 @@ class CostProvider:
         process = self._site.get_process(plant.process, do_raise=True).name_short
         if current is None and current_material is not None and len(current_material) > 0:
             current = snapshot.get_order(current_material[-1].order, do_raise=True)
-        if current is None or (coil_based and current_material is None):
+        if current is None or (material_based and current_material is None):
             inline_coils = snapshot.inline_material.get(plant.id)
             if inline_coils is not None and len(inline_coils) > 0:
                 if current is not None and current.id != inline_coils[-1].order:
@@ -154,7 +154,7 @@ class CostProvider:
                 current_material = [snapshot.get_material(ocd.material, do_raise=True) for ocd in inline_coils]
             else:
                 current_material = []
-        if coil_based and current_material is None:
+        if material_based and current_material is None:
             raise Exception("Could not determine current coils")
         assignments: dict[str, OrderAssignment] = {}
         if previous is not None:
@@ -168,8 +168,8 @@ class CostProvider:
             assignments[current.id] = OrderAssignment(equipment=plant.id, order=current.id, lot=curr_lot if curr_lot is not None else plant.name_short + "_X",
                                                       lot_idx=curr_lot_idx if curr_lot_idx is not None else 1)
         return self.evaluate_equipment_assignments(EquipmentProduction(equipment=plant.id, total_weight=target_weight),
-                                        plant.process, assignments, snapshot, planning_period,
-                                        current_material=current_material if coil_based else None, track_structure=track_structure)
+                                                   plant.process, assignments, snapshot, planning_period,
+                                                   current_material=current_material if material_based else None, track_structure=track_structure)
 
     @staticmethod
     def sum_objectives(objective_functions:list[ObjectiveFunction]) -> ObjectiveFunction:

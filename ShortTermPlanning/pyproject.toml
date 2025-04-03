@@ -1,36 +1,50 @@
-[build-system]
-# Minimum requirements for the build system to execute.
-requires = ["setuptools","wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
-name = "dynreact_shortermplanning"
+name = "dynreact-shortterm"
 version = "0.1.0"
-#authors = [
-#  { name="Example Author", email="author@example.com" },
-#]
 description = "The DynReAct ShortTerm scheduling package"
-readme = "README.md"
-requires-python = ">=3.10"
+
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-# dynamic = ["dependencies"]
+readme = "ReadMe.md"
+requires-python = ">=3.12"
+dependencies = [
+    "wheel (>=0.42.0, <1)",
+    "docker (>=7.1.0)",
+    "toml (>=0.10.2, <1)",
+    "argparse (>= 1.3.0, <2)",
+    "requests (>=2.32.3, <3)",
+    "confluent-kafka (>=2.6.0, <2.8.0)",
+    "pydantic (>=2.10.6, <2.11.0)",
+    "tzdata (>=2024.2, <2025.11)"
+]
 
-dependencies = []
-[tool.setuptools.packages.find]
-where = ["."]
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+pytest-mock = "^3.14"
+coverage = "^7.6"
+psutil = "^7.0"
+testfixtures = "^8.3"
 
 [project.urls]
 Homepage = "https://github.com/DynReAct/OSS_Platform"
 Issues = "https://github.com/DynReAct/OSS_Platform/issues"
 
-# See https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#setuptools-specific-configuration
-# [tool.setuptools]
-# packages = ["dynreact.shortterm","dynreact.auction"]
-# package-dir = {"" = "."}
+[tool.poetry]
+name = "nombre-del-paquete"
+version = "0.1.0"
+description = "Shorterm planning module"
+authors = ["Hector Flores <hc.flores@alumnos.upm.es>"]
+packages = [
+	{include = "shortterm", from = "dynreact"},
+	{include = "auction", from = "dynreact"}
+]
 
-# [tool.setuptools.dynamic]
-# dependencies = {file = ["requirements.txt"]}
+[tool.poetry.dependencies]
+python = ">=3.12"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

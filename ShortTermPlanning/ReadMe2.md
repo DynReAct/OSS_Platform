@@ -7,7 +7,7 @@ It does include several agent prototypes, such as
 
 * **log.py**: Log Agent, in charge for recording all the messages
 
-* **resource.py**: Resource Agent (plants), in charge of handling the auction's bids 
+* **equipment.py**: Resource Agent (plants), in charge of handling the auction's bids 
                    considering the different setup status parameters.
 
 * **material.py**: Material Agent (coils), in charge of representing the status
@@ -31,13 +31,9 @@ Python versions >= 3.10 and <= 3.12 should be supported.
 First, create a virtual environment for the project. Navigate to the folder, and execute
 
 ```commandline
-python -m venv --upgrade-deps venv
-```
-
-You can run the setup by installing dependencies:
-
-```commandline
-pip install -r requirements.txt  [--break-system-packages]
+pipx install poetry
+poetry install --no-root
+eval $(poetry env activate)
 ```
 
 Then, you can build the packages

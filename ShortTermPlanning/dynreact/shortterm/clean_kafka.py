@@ -21,15 +21,12 @@ Note:
 
 """
 
-import time, os, sys, random, string,re,json
+import time, os, sys
 import argparse
 from confluent_kafka import Producer, Consumer
 from confluent_kafka.admin import AdminClient
 import configparser
 from common import VAction, sendmsgtopic, TOPIC_GEN
-from data.data_functions import get_equipment_materials
-import subprocess
-
 
 config = configparser.ConfigParser()
 config.read('config.cnf')

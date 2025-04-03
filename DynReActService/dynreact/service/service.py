@@ -6,6 +6,7 @@ from typing import Iterator, Literal, Annotated
 
 from dynreact.base.LotsOptimizer import LotsOptimizer
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
+from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, \
     MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction
 from fastapi import FastAPI, HTTPException, Response
@@ -16,7 +17,7 @@ from pydantic import AliasChoices
 from dynreact.app import config, state
 from dynreact.auth.authentication import fastapi_authentication
 from dynreact.service.model import EquipmentTransition, EquipmentTransitionStateful, LotsOptimizationInput, \
-    LotsOptimizationResults, TransitionInfo
+    LotsOptimizationResults, TransitionInfo, MaterialTransfer, LongTermPlanningResults
 from dynreact.service.optim_listener import LotsOptimizationListener
 
 fastapi_app = FastAPI(
@@ -49,7 +50,7 @@ username = fastapi_authentication(config)
                 summary="Get a list of process steps and plants configured for the site")
 def site(response: Response, username = username) -> Site:
     try:
-        response.headers["Cache-Control"] = "max-age=600"  # 10 minutes
+        response.headers["Cache-Control"] = "max-age=6000"  # 100 minutes
         return state.get_site()
     except:
         raise HTTPException(status_code=502, detail="Information not available")
@@ -58,7 +59,7 @@ def site(response: Response, username = username) -> Site:
 def _get_snapshot_plant(snapshot_id: str|datetime, plant_id: int) -> tuple[Snapshot, Equipment]:
     if isinstance(snapshot_id, str):
         snapshot_id = parse_datetime_str(snapshot_id)
-    site0 = site()
+    site0 = state.get_site()
     snapshot: Snapshot = state.get_snapshot(snapshot_id)
     if snapshot is None:
         raise HTTPException(status_code=404, detail="No such snapshot: " + DatetimeUtils.format(snapshot_id))
@@ -83,7 +84,8 @@ def snapshots(response: Response, start: str|datetime|None=Query(None, descripti
                 "now": {"description": "Current timestamp", "value": "now"},
                 "2023-04-26T00:00Z": {"description": "A specific timestamp", "value": "2023-04-26T00:00Z"}
             }),
-            sort: Literal["asc", "desc"] = "asc", limit: int=100,
+            sort: Literal["asc", "desc"] = "asc",
+            limit: int=100,
             username = username) -> list[datetime]:
     if isinstance(start, str):
         start = parse_datetime_str(start)
@@ -102,6 +104,32 @@ def snapshots(response: Response, start: str|datetime|None=Query(None, descripti
             break
     response.headers["Cache-Control"] = "max-age=60"  # 1 minute...
     return result
+
+
+@fastapi_app.get("/snapshots/{timestamp}/aggregation",
+                 tags=["dynreact"],
+                 summary="Get a specific snapshot; the one with largest timestamp <= the provided timestamp")
+def aggregate_material(response: Response, timestamp: str | datetime = Path(..., examples=["now", "now-1d", "2023-12-04T23:59Z"],
+                                               openapi_examples={
+                "now": {"description": "Get the most recent snapshot", "value": "now"},
+                "now-1d": {"description": "Get yesterday's snapshot", "value": "now-1d"},
+                "2023-04-25T23:59Z": {"description": "A specific timestamp", "value": "2023-04-25T23:59Z"},
+            }),
+            level: Literal["plant","storage","process"] = Query("plant", description="The aggregation level."),
+            username = username) -> dict:
+    is_relative_timestamp: bool = isinstance(timestamp, str) and timestamp.startswith("now")
+    if isinstance(timestamp, str):
+        timestamp = parse_datetime_str(timestamp)
+    snapshot0: Snapshot = state.get_snapshot(timestamp)
+    agg = MaterialAggregation(state.get_site(), state.get_snapshot_provider())
+    agg_by_plants = agg.aggregate_categories_by_plant(snapshot0)
+    if not is_relative_timestamp:
+        response.headers["Cache-Control"] = "max-age=604800"  # 1 week
+    if level == "storage":
+        return agg.aggregate_by_storage(agg_by_plants)
+    elif level == "process":
+        return agg.aggregate_by_process(agg_by_plants)
+    return agg_by_plants
 
 
 @fastapi_app.get("/snapshots/{timestamp}",
@@ -166,7 +194,7 @@ def plant_downtimes(
     return result
 
 
-@fastapi_app.post("/costs/transitions",  # TODO
+@fastapi_app.post("/costs/transitions",
                 tags=["dynreact"],
                 response_model_exclude_unset=True,
                 response_model_exclude_none=True,
@@ -192,6 +220,24 @@ def transition_cost(transition: EquipmentTransition, username = username) -> flo
     return costs
 
 
+@fastapi_app.post("/costs/logistics",
+                tags=["dynreact"],
+                response_model_exclude_unset=True,
+                response_model_exclude_none=True,
+                summary="Query logistics costs for transfer of material from one equipment to the other.")
+def logistics_cost(transfer_data: MaterialTransfer, username = username) -> float:
+    snapshot, plant = _get_snapshot_plant(transfer_data.snapshot_id, transfer_data.new_equipment)
+    order: Order|None = snapshot.get_order(transfer_data.order)
+    if order is None:
+        raise HTTPException(status_code=404, detail=f"Current order {transfer_data.order} not found")
+    coil = None
+    if transfer_data.material is not None:
+        coil = snapshot.get_material(transfer_data.material)
+        if coil is None:
+            raise HTTPException(status_code=404, detail=f"Current coil {transfer_data.material} not found or not provided")
+    costs: float = state.get_cost_provider().logistic_costs(new_equipment=plant, order=order, material=coil)
+    return costs
+
 @fastapi_app.get("/costs/status/{equipment_id}/{snapshot_timestamp}",
                 tags=["dynreact"],
                 response_model_exclude_unset=True,
@@ -203,13 +249,13 @@ def plant_status(equipment_id: int, snapshot_timestamp: datetime | str = Path(..
                 "now-1d": {"description": "Get yesterday's snapshot", "value": "now-1d"},
                 "2023-12-04T23:59Z": {"description": "A specific timestamp", "value": "2023-12-04T23:59Z"},
             }),
-                 unit: Literal["material", "order"] = Query("order", description="Treat coils as basic unit or orders (default)?"),
+                 unit: Literal["material", "order"] = Query("order", description="Treat materials as basic unit or orders (default)?"),
                  planning_horizon: Annotated[timedelta|str|None, Query(openapi_examples={"2d": {"value": "2d", "description": "A duration of two days"}},
                      # not working, need to use planning_horizon
                     validation_alias=AliasChoices("planning-horizon", "planning_horizon", "planningHorizon"))] = timedelta(days=1),
                  # how to determine this? default throughput per plant; long term planning results; ...?
                  target_weight: Annotated[float|None, Query(description="Target weight. If not specified, it is determined from the snapshot")] = None,
-                 current: str|None = Query(None, description="Order id or coil id; determined from snapshot by default"),
+                 current: str|None = Query(None, description="Order id or material id; determined from snapshot by default"),
                  username = username) -> EquipmentStatus:
     coil_based: bool = unit.lower().startswith("material")
     if planning_horizon is None:
@@ -220,10 +266,10 @@ def plant_status(equipment_id: int, snapshot_timestamp: datetime | str = Path(..
     current_order=None
     current_coil=None
     interval = [snapshot.timestamp, snapshot.timestamp + planning_horizon]
-    if current is None and snapshot.inline_material is not None and equipment_id in snapshot.inline_material:
+    if current is None and coil_based and snapshot.inline_material is not None and equipment_id in snapshot.inline_material:
         order_coil_data: list[MaterialOrderData] = snapshot.inline_material[equipment_id]
-        if len(order_coil_data) == 1:
-            current = order_coil_data[0].material if order_coil_data[0].material is not None else order_coil_data[0].order
+        if len(order_coil_data) > 0:
+            current = order_coil_data[-1].material if order_coil_data[-1].material is not None else order_coil_data[-1].order
     if current is not None:
         current_coil = snapshot.get_material(current)
         if current_coil is not None:
@@ -235,7 +281,7 @@ def plant_status(equipment_id: int, snapshot_timestamp: datetime | str = Path(..
         target_weights = state.get_snapshot_provider().target_weights_from_snapshot(snapshot, plant.process)
         target_weight = target_weights.get(plant.id, 0)
     return state.get_cost_provider().equipment_status(snapshot, plant, planning_period=interval, target_weight=target_weight,
-                                                      coil_based=coil_based, current=current_order, current_material=current_coils)
+                                                      material_based=coil_based, current=current_order, current_material=current_coils)
 
 
 @fastapi_app.post("/costs/transitions-stateful",
@@ -269,7 +315,7 @@ def target_function_update(transition: EquipmentTransitionStateful, username = u
     #    raise HTTPException(status_code=404, detail="Current coil or order " + str(transition.current) + " not found")
     status = transition.equipment_status
     initial_solution = ProductionPlanning(process=plant.process, equipment_status={plant.id: status}, order_assignments={})
-    targets = ProductionTargets(process=plant.process, target_weight={plant.id: EquipmentProduction(equipment=plant.id, total_weight=status.target_weight)},
+    targets = ProductionTargets(process=plant.process, target_weight={plant.id: status.targets},
                                 period=status.planning_period)
     optimizer: LotsOptimizer = state.get_lots_optimization().create_instance(plant.process, snapshot, state.get_cost_provider(),
                                                                     initial_solution=initial_solution, targets=targets)
@@ -326,6 +372,54 @@ def get_lots_optimization_results(optimization_id: int, username = username) -> 
         raise HTTPException(status_code=404, detail=f"No such optimization id: {optimization_id}")
     listener = lots_optimization[1]
     return listener.get_results()
+
+
+@fastapi_app.get("/longtermplanning",
+                tags=["dynreact"],
+                summary="Long term planning results with start times in the specified period")
+def get_longtermplanning_results(
+        start:  str|datetime|None = Query(None, description="Start time. If neither start nor end time are specified, "
+                        + "start is set to now.", examples=["now", "now-31d", "2023-04-25T00:00Z"], openapi_examples={
+                "now": {"description": "Get next month's planning", "value": "now"},
+                "now-31d": {"description": "Get last month's planning", "value": "now-31d"},
+                "2023-04-25T00:00Z": {"description": "A specific timestamp", "value": "2023-04-25T00:00Z"},
+            }),
+        end:  str|datetime|None = Query(None, description="End time. If neither start nor end time are specified, "
+                        + "end is set to now+31d", examples=["now", "now+31d", "2023-04-27T00:00Z"], openapi_examples={
+                "now": {"description": "Get last month's planning", "value": "now"},
+                "now+31d": {"description": "A month ahead of now", "value": "now+31d"},
+                "2023-04-27T00:00Z": {"description": "A specific timestamp", "value": "2023-04-27T00:00Z"},
+            }),
+        sort: Literal["asc", "desc"] = "asc", username = username) -> dict[str, list[str]]:
+    if isinstance(start, str):
+        start = parse_datetime_str(start)
+    if isinstance(end, str):
+        end = parse_datetime_str(end)
+    if start is None:
+        start = DatetimeUtils.now()
+    if end is None:
+        end = start + timedelta(days=31)
+    results_ctrl = state.get_results_persistence()
+    start_times = results_ctrl.start_times_ltp(start, end)
+    return {DatetimeUtils.format(time): results_ctrl.solutions_ltp(time) for time in start_times}
+
+
+@fastapi_app.get("/longtermplanning/{start}/{solution_id}",
+                tags=["dynreact"],
+                summary="Long term planning results with start times in the specified period")
+def get_longtermplanning_result(
+        start:  str|datetime = Path(..., description="Start time. ",
+                examples=["now", "now-31d", "2023-04-25T00:00Z"], openapi_examples={
+                    "now": {"description": "Get next month's planning", "value": "now"},
+                    "now-31d": {"description": "Get last month's planning", "value": "now-31d"},
+                    "2023-04-25T00:00Z": {"description": "A specific timestamp", "value": "2023-04-25T00:00Z"},
+                }),
+        solution_id: str = Path(..., description="Unique solution id"), username = username) -> LongTermPlanningResults|None:
+    if isinstance(start, str):
+        start = parse_datetime_str(start)
+    results_ctrl = state.get_results_persistence()
+    targets, levels = results_ctrl.load_ltp(start, solution_id)
+    return LongTermPlanningResults(targets=targets, storage_levels=levels)
 
 
 def parse_datetime_str(dt: str) -> datetime:

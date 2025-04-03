@@ -13,8 +13,9 @@ from pydantic.fields import FieldInfo
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationState
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
+from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import ProductionPlanning, EquipmentStatus, Lot, Order, Material, Snapshot, Equipment, \
-    ObjectiveFunction
+    ObjectiveFunction, MaterialCategory
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
@@ -75,6 +76,10 @@ def layout(*args, **kwargs):
         ),
         lots_view("planning", *args, **kwargs),
         html.Div([
+            html.H2("Structure"),
+            html.Div(id="lotplanning-structure-view", className="lotplanning-structure-container")
+        ], id="lotplanning-structure-container", hidden=True),
+        html.Div([
             html.H2("Lots"),
             html.Button("Download lots csv", id="download-csv", className="dynreact-button"),
             html.Br(),html.Br(),
@@ -130,6 +135,8 @@ def layout(*args, **kwargs):
         dcc.Store(id="lotplanning-transferred-lot"),
         dcc.Store(id="lotplanning-transfer-message"),
         dcc.Store(id="lotplanning-transfer-type"),
+        dcc.Store(id="lotplanning-material-structure"),   # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
+        dcc.Store(id="lotplanning-material-targets"),     # dict[str, float]
 
         dcc.Interval(id="planning-interval", n_intervals=3_600_000),  # for polling when lot transfer is running
     ], id="lotsplanned")
@@ -197,10 +204,11 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
     if not dash_authenticated(config):
         return []
     snapshot = DatetimeUtils.parse_date(snapshot)
+    value_formatter_object = {"function": "formatCell(params.value, 4)"}
     col_defs: list[dict[str, Any]] = [{"field": "id", "pinned": True},
-         {"field": "target_production", "filter": "agNumberColumnFilter", "headerName": "Target Production / t"},
+         {"field": "target_production", "filter": "agNumberColumnFilter", "headerName": "Target Production / t", "valueFormatter": value_formatter_object},
          {"field": "initialization"},
-         {"field": "target_fct", "filter": "agNumberColumnFilter", "headerName": "Target function",
+         {"field": "target_fct", "filter": "agNumberColumnFilter", "headerName": "Target function", "valueFormatter": value_formatter_object,
           "headerTooltip": "Value of the objective function. The lower the better, but results are only comparable for the same target weights and init settings."},
          {"field": "iterations", "filter": "agNumberColumnFilter"},
          {"field": "orders_considered", "filter": "agNumberColumnFilter", "headerName": "Orders",
@@ -237,7 +245,7 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
 
     random_sol = next(value for key, value in sol_objects.items() if key != "_SNAPSHOT_" or len(sol_objects) <= 1)
     objective_keys = [f for f in random_sol.current_object_value.model_dump().keys() if f != "total_value"]
-    col_defs.extend([{"field": f, "filter": "agNumberColumnFilter"} for f in objective_keys])
+    col_defs.extend([{"field": f, "filter": "agNumberColumnFilter", "valueFormatter": value_formatter_object} for f in objective_keys])
 
     def merge_dicts(d1: dict, d2: dict) -> dict:
         d1.update(d2)
@@ -251,16 +259,13 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
         "iterations": len(solution.history),
         "orders_considered": len(best_planning[sol_id].order_assignments),
         "lots": sum(status.planning.lots_count if status.planning is not None else 0 for status in plant_statuses[sol_id]),
-        "plants": [site.get_equipment(status.equipment).name_short for status in plant_statuses[sol_id]],
+        "plants": [site.get_equipment(status.targets.equipment).name_short for status in plant_statuses[sol_id]],
         #"transition_costs": sum(status.planning.transition_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
         #"weight_costs": sum(status.planning.delta_weight * delta_weight_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
         "performance_models": params[sol_id].get("performance_models")
     },
        {key: (getattr(solution.best_objective_value, key) if hasattr(solution.best_objective_value, key) else 0) or 0 for key in objective_keys })
                 for sol_id, solution in sol_objects.items()]
-
-
-
     return col_defs, row_data
 
 
@@ -281,6 +286,9 @@ def solution_selected(selected_rows: list[dict[str, any]]|None) -> str|None:
     Output("planning-lotsview-header", "hidden"),
     Output("planning-lots-order-table", "columnDefs"),
     Output("planning-lots-order-table", "rowData"),
+    Output("lotplanning-material-structure", "data"),
+    Output("lotplanning-material-targets", "data"),
+    Output("lotplanning-structure-container", "hidden"),
     State("selected-snapshot", "data"),
     State("process-selector-lotplanning", "value"),
     Input("planning-selected-solution", "data"),
@@ -288,7 +296,7 @@ def solution_selected(selected_rows: list[dict[str, any]]|None) -> str|None:
 def solution_changed(snapshot: str|datetime|None, process: str|None, solution: str|None):
     snapshot = DatetimeUtils.parse_date(snapshot)
     if not dash_authenticated(config) or process is None or snapshot is None or solution is None:
-        return True, None, None, True, None, None
+        return True, None, None, True, None, None, None, None, True
     best_result: ProductionPlanning
     if solution == "_SNAPSHOT_":
         best_result = state.get_snapshot_solution(process, snapshot)[0]
@@ -297,11 +305,12 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
     else:
         result: LotsOptimizationState = state.get_results_persistence().load(snapshot, process, solution)
         if result is None or result.best_solution is None:
-            return True, None, None, True, None, None
+            return True, None, None, True, None, None, None, None, True
         best_result = result.best_solution
     lots: list[Lot] = [lot for plant_lots in best_result.get_lots().values() for lot in plant_lots]
     unassigned_order_ids: list[str] = [ass.order for ass in best_result.order_assignments.values() if ass.lot == ""]
-    plants = {p.id: p for p in state.get_site().equipment}
+    site = state.get_site()
+    plants = {p.id: p for p in site.equipment}
     snap_obj = state.get_snapshot(snapshot)
     orders_by_lot: dict[str, list[Order|None]] = {}
     for lot in lots:
@@ -357,7 +366,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
 
     props = snap_obj.orders[0].material_properties
     if props is None:
-        return False, data, data, False, None, None
+        return False, data, data, False, None, None, None, None, True
 
     costs = state.get_cost_provider()
     relevant_fields = costs.relevant_fields(plants[lots[0].equipment]) if len(lots) > 0 else None
@@ -407,7 +416,17 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         [order_to_json(o, None) for o in unassigned_orders.values()]
 
     fields = [f for f in fields if any(order.get(f["field"]) is not None for order in order_rows)]
-    return False, data, data, False, fields, order_rows
+    structure = None
+    structure_targets = None
+    show_structure: bool = best_result.target_structure is not None and len(best_result.target_structure) > 0
+    if show_structure:
+        structure0 = ModelUtils.aggregated_structure(site, best_result)  # dict[str, dict[str, float]]
+        # required format: { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
+        all_cats: list[MaterialCategory] = site.material_categories
+        structure = {cat.id: {"name": cat.name or cat.id, "classes": {cl.id: {"name": cl.name or cl.id, "weight": structure0[cat.id][cl.id]} for cl in cat.classes if cl.id in structure0[cat.id] }}
+                                                        for cat in all_cats if cat.id in structure0}
+        structure_targets = best_result.target_structure  # dict[str, float]
+    return False, data, data, False, fields, order_rows, structure, structure_targets, not show_structure
 
 
 # Lots export
@@ -428,8 +447,6 @@ def export_data_as_csv(n_clicks, snapshot: str|None, process: str|None, solution
                DatetimeUtils.format(snapshot).replace("+0000","").replace(":", "").replace("-", "").replace("T", "") + \
                "_" + solution.replace("\\", "_").replace("/", "_").replace(":", "_") + ".csv"
     options = {"fileName": filename, "columnSeparator": ";" }
-
-
     return True, options
 
 
@@ -476,6 +493,16 @@ clientside_callback(
     Input("planning-swimlane-mode", "value")
 )
 
+clientside_callback(
+    ClientsideFunction(
+        namespace="lots2",
+        function_name="setBacklogStructureOverview"
+    ),
+    Output("lotplanning-structure-view", "title"),
+    Input("lotplanning-material-structure", "data"),
+    Input("lotplanning-material-targets", "data"),
+    State("lotplanning-structure-view", "id"),
+)
 
 # FIXME closing the popup and reopening the same lot does not work
 # open popup on selection, but only if a lot is really selected, and if it is not part of the snapshot solution

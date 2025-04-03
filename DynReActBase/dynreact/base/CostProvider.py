@@ -29,6 +29,13 @@ class CostProvider:
         """
         raise Exception("not implemented")
 
+    def logistic_costs(self, new_equipment: Equipment, order: Order, material: Material | None = None) -> float:
+        """
+        Calculates the transition costs for an order or individual material from an order to be transported to a new
+        equipment.
+        """
+        return 0
+
     def evaluate_order_assignments(self, process: str, assignments: dict[str, OrderAssignment], targets: ProductionTargets, snapshot: Snapshot) -> ProductionPlanning:
         """
         :param process:
@@ -38,20 +45,20 @@ class CostProvider:
         #plants = [p for p in self._site.plants if p.process == process]
         plant_ids = list(targets.target_weight.keys())
         plants = [p for p in self._site.equipment if p.process == process and p.id in plant_ids]
-
+        track_structure: bool = targets.material_weights is not None and len(targets.material_weights) > 0
+        target_structure = targets.material_weights if track_structure else None
         status: dict[int, EquipmentStatus] = \
-            {plant.id: self.evaluate_equipment_assignments(plant.id, process, assignments, snapshot, targets.period,
-                                                           targets.target_weight.get(plant.id).total_weight,
-                                                           target_lot_size=targets.target_weight.get(plant.id).lot_weight_range) for plant in plants}
+            {plant.id: self.evaluate_equipment_assignments(targets.target_weight.get(plant.id, EquipmentProduction(equipment=plant.id, total_weight=0.0)),
+                                                process, assignments, snapshot, targets.period, track_structure=track_structure) for plant in plants}
         order_assignments = {o: ass for o, ass in assignments.items() if ass.equipment in plant_ids}
         unassigned = {o: ass for o, ass in assignments.items() if ass.equipment < 0}
         order_assignments.update(unassigned)
-        return ProductionPlanning(process=process, order_assignments=order_assignments, equipment_status=status)
+        return ProductionPlanning(process=process, order_assignments=order_assignments, equipment_status=status, target_structure=target_structure)
 
-    def evaluate_equipment_assignments(self, equipment: id, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
-                                       planning_period: tuple[datetime, datetime], target_weight: float,
-                                       target_lot_size: tuple[float, float]|None=None, min_due_date: datetime|None=None,
-                                       current_material: list[Material] | None=None) -> EquipmentStatus:
+    def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
+                                       planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None,
+                                       current_material: list[Material] | None=None,
+                                       track_structure: bool=False) -> EquipmentStatus:
         """
         Main function to be implemented in derived class taking into account global status.
         Note that this must set the PlantStatus.planning.target_fct value.
@@ -92,9 +99,21 @@ class CostProvider:
         process = planning.process
         all_plants: dict[int, Equipment] = {p.id: p for p in self._site.equipment}
         process_plants: list[EquipmentStatus] \
-            = [status for status in planning.equipment_status.values() if status.equipment in all_plants and all_plants[status.equipment].process == process]
+            = [status for status in planning.equipment_status.values() if status.targets.equipment in all_plants and all_plants[status.targets.equipment].process == process]
         objectives: list[ObjectiveFunction] = [self.objective_function(s) for s in process_plants]
-        return CostProvider.sum_objectives(objectives)
+        aggregated = CostProvider.sum_objectives(objectives)
+        if planning.target_structure is not None and len(planning.target_structure) > 0:
+            structure_costs = self.structure_costs(planning)
+            aggregated.structure_deviation = structure_costs
+            aggregated.total_value += structure_costs
+        return aggregated
+
+    def structure_costs(self, planning: ProductionPlanning):
+        """
+        :param planning
+        :return:
+        """
+        return 0
 
     def optimum_possible_costs(self, process: str, num_plants: int):
         return 0
@@ -109,15 +128,15 @@ class CostProvider:
         return None
 
     def equipment_status(self, snapshot: Snapshot, plant: Equipment, planning_period: tuple[datetime, datetime], target_weight: float,
-                         coil_based: bool = False,
+                         material_based: bool = False,
                          current: Order|None=None, previous: Order|None=None,
-                         current_material: list[Material] | None = None) -> EquipmentStatus:
+                         current_material: list[Material] | None = None, track_structure: bool=False) -> EquipmentStatus:
         """
         :param snapshot:
         :param plant:
         :param planning_period  TODO validate that planning_period starts with current snapshot?
         :param target_weight
-        :param coil_based: treat coils as basic unit or orders (default)?
+        :param material_based: treat coils as basic unit or orders (default)?
         :param current: current order; by default this will be determined from the snapshot, but it can also be provided explicitly
         :param previous: previous order;  by default this will be determined from the snapshot (if this information is available), but it can also be provided explicitly
         :param: current_coils: should only be present if the last order is not assumed to be processed entirely
@@ -126,7 +145,7 @@ class CostProvider:
         process = self._site.get_process(plant.process, do_raise=True).name_short
         if current is None and current_material is not None and len(current_material) > 0:
             current = snapshot.get_order(current_material[-1].order, do_raise=True)
-        if current is None or (coil_based and current_material is None):
+        if current is None or (material_based and current_material is None):
             inline_coils = snapshot.inline_material.get(plant.id)
             if inline_coils is not None and len(inline_coils) > 0:
                 if current is not None and current.id != inline_coils[-1].order:
@@ -135,7 +154,7 @@ class CostProvider:
                 current_material = [snapshot.get_material(ocd.material, do_raise=True) for ocd in inline_coils]
             else:
                 current_material = []
-        if coil_based and current_material is None:
+        if material_based and current_material is None:
             raise Exception("Could not determine current coils")
         assignments: dict[str, OrderAssignment] = {}
         if previous is not None:
@@ -148,8 +167,9 @@ class CostProvider:
             curr_lot_idx = current.lot_positions.get(process) if curr_lot is not None else None
             assignments[current.id] = OrderAssignment(equipment=plant.id, order=current.id, lot=curr_lot if curr_lot is not None else plant.name_short + "_X",
                                                       lot_idx=curr_lot_idx if curr_lot_idx is not None else 1)
-        return self.evaluate_equipment_assignments(plant.id, plant.process, assignments, snapshot, planning_period, target_weight,
-                                                   current_material=current_material if coil_based else None)
+        return self.evaluate_equipment_assignments(EquipmentProduction(equipment=plant.id, total_weight=target_weight),
+                                                   plant.process, assignments, snapshot, planning_period,
+                                                   current_material=current_material if material_based else None, track_structure=track_structure)
 
     @staticmethod
     def sum_objectives(objective_functions:list[ObjectiveFunction]) -> ObjectiveFunction:

@@ -6,7 +6,7 @@ properties.
 
 The classes defined in this module are serializable and can be made accessible via a REST interface.
 """
-
+from __future__ import annotations
 from datetime import datetime, timedelta, timezone, date
 from typing import Any, TypeVar, Generic, Literal
 
@@ -80,7 +80,7 @@ class Storage(LabeledItem):
     equipment: list[int]
     "Equipment served by this storage primarily."
     #secondary_plants: list[int]|None = Field(None, description="Plants served by this storage.")
-    capacity_tonnage: float|None = None
+    capacity_weight: float|None = None
     "Capacity in t."
     capacity_items: int|None = None
     "Capacity in items / material."
@@ -111,8 +111,8 @@ class EquipmentAvailability(Model):
     "The period this refers to, typically a month"
     daily_baseline: timedelta|None = None
     "The baseline availability, such as 24h or 1d. Default is 1d."
-    deltas: dict[date, float]|None = None
-    "Deviations from the baseline per day. Defaults to 0 if a day is missing or the field is unset."
+    deltas: dict[date, timedelta]|None = None
+    "Deviations from the baseline per day. Defaults to 0 if a day is missing or the field is unset. Positive values mean extra time, negative values are outages etc."
 
 
 PROPERTIES = TypeVar("PROPERTIES", bound=Model)  # Material-specific properties, not matching the MATERIAL parameter in the Order class
@@ -213,9 +213,10 @@ class PlanningData(Model):
     lot_weights: list[float] = []
     "Lot weights in tons."
     orders_count: int = 0
-    # TODO this is difficult to translate into costs
     delta_weight: float = 0.0
     "Deviation from target weight in t. Positive for missing tonnage."
+    material_structure: dict[str, dict[str, float]]|None = None
+    "Keep track of material classes"
     min_due_date: datetime|None = None
 
 
@@ -224,11 +225,7 @@ P = TypeVar("P", bound=PlanningData)
 
 class EquipmentStatus(Model, Generic[P]):
 
-    equipment: int
-    target_weight: float
-    "Target weight in t for this equipment"
-    target_lot_size: tuple[float, float]|None = None
-    "Target lot sizes (min, max) in t for this equipment"
+    targets: EquipmentProduction
     snapshot_id: datetime
     planning_period: tuple[datetime, datetime]
     current_order: str|None = None
@@ -265,14 +262,14 @@ class ObjectiveFunction(Model, extra="allow"):
     "Penalty for deviating from the targeted production size"
     lot_size_deviation: float|None = None
     "Penalty for deviating from the targeted lot sizes"
+    structure_deviation: float|None = None
+    "Penalty for deviating from the targeted material structure"
 
 
 class EquipmentProduction(Model):
 
     equipment: int
     total_weight: float
-    material_weights: dict[str, float] | None = None
-    "Produced quantity by material class id, in t."
     lot_weight_range: tuple[float, float] | None = None
     "Weight restriction for lots in t"
 
@@ -283,6 +280,8 @@ class ProductionTargets(Model):
     target_weight: dict[int, EquipmentProduction]
     "Target production by equipment id"
     period: tuple[datetime, datetime]
+    material_weights: dict[str, float|dict[str, float]] | None = None
+    "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed"
 
 
 class StorageLevel(Model):
@@ -318,6 +317,8 @@ class ProductionPlanning(Model, Generic[P]):
     "keys: order ids"
     equipment_status: dict[int, EquipmentStatus[P]]                  # "vbest"
     "keys: equipment ids"
+    target_structure: dict[str, float|dict[str, float]] | None = None
+    "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed"
 
     # TODO cache results?
     def get_lots(self) -> dict[int, list[Lot]]:
@@ -356,8 +357,8 @@ class ProductionPlanning(Model, Generic[P]):
         if len(self.equipment_status) == 0:
             return None  # ?
         period: tuple[datetime, datetime] = next(iter(self.equipment_status.values())).planning_period
-        targets: dict[int, EquipmentProduction] = {plant: EquipmentProduction(equipment=plant, total_weight=status.target_weight) for plant, status in self.equipment_status.items()}
-        return ProductionTargets(process=self.process, target_weight=targets, period=period)
+        targets: dict[int, EquipmentProduction] = {plant: status.targets for plant, status in self.equipment_status.items()}
+        return ProductionTargets(process=self.process, target_weight=targets, period=period, material_weights=self.target_structure)
 
 
 # LTP WIP
@@ -376,6 +377,7 @@ class MaterialClass(Model):
     is_default: bool = False
     "A class can be assigned the default role within a material category."
     default_share: float|None = None
+    mapping: str|None = None
 
 
 class MaterialCategory(Model):
@@ -388,8 +390,39 @@ class MaterialCategory(Model):
     classes: list[MaterialClass]
     """
     Mutually exclusive material classes. It is assumed
-    that every product and order can be assigned to exactly one class within the category.
+    that every material and order can be assigned to exactly one class within the category.
     """
+    process_steps: list[str]|None = None
+    "Optional list of process steps for which the category is potentially relevant in the mid-term planning."
+
+
+class LotCreationStructureSettings(Model):
+    """
+    Defines a hierarchy for structure categories in the mid term planning;
+    """
+    primary_category: str
+    "Reference to a MaterialCategory"
+    primary_classes: list[str]
+    "References to the MaterialClasses in primary_category.classes. For the time being only a single entry is supported."
+
+
+class LotCreationOrderBacklogSettings(Model):
+    default_select_predecessors_lot: list[str]|None=None
+    "A list of process steps at which scheduled orders are usually included in the order backlog for lot creation"
+    default_select_predecessors_all: list[str]|None=None
+    "A list of process steps at which all orders (scheduled or not) are usually included in the order backlog for lot creation"
+
+
+class ProcessLotCreationSettings(Model):
+    plannable: bool|None = None
+    "Default: true"
+    structure: LotCreationStructureSettings|None=None
+    order_backlog: LotCreationOrderBacklogSettings|None=None
+
+
+class LotCreationSettings(Model):
+    processes: dict[str, ProcessLotCreationSettings]
+    "Settings per process step"
 
 
 class Site(LabeledItem):
@@ -402,6 +435,9 @@ class Site(LabeledItem):
     Logistic costs for transfer of a complete order(?) from one plant to another (only within a single process stage, not considering
     transfer costs between processes)
     """
+    #structure_planning: dict[str, StructurePlanningSettings]|None = None
+    lot_creation: LotCreationSettings|None=None
+
 
     def get_process(self, process: str, do_raise: bool=False) -> Process|None:
         if process is None:
@@ -600,6 +636,7 @@ class MidTermTargets(LongTermTargets):
     """
     production_sub_targets: dict[str, list[ProductionTargets]]
     "Production targets for the planning sub periods. Keys: process ids, values: list of production targets, covering all planning sub periods chronologically."
+
 
 
 class ServiceHealth(Model):

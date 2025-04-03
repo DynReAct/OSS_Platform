@@ -445,6 +445,7 @@ class CTabuWorker:
         objective_value: float = float("inf")
         best_objective: ObjectiveFunction|None = None
         empty_plants = []
+        track_structure: bool = self.targets.material_weights is not None
         for assignment in self.slist:
             order: Order = self.orders[assignment.order]
             forbidden_plants: list[int] = self.tabu_search._forbidden_assignments.get(order.id, empty_plants)
@@ -480,8 +481,9 @@ class CTabuWorker:
                             orders_affected.remove(order)
                     for order in orders_affected:
                         del order_assignments[order]
-                    new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(swp.PlantFrom, self.planning.process,
-                                                                                            order_assignments, self.snapshot, self.targets.period, self.targets.target_weight.get(swp.PlantFrom, EquipmentProduction(equipment=swp.PlantFrom, total_weight=0.0)).total_weight)
+                    equipment_targets = self.targets.target_weight.get(swp.PlantFrom, EquipmentProduction(equipment=swp.PlantFrom, total_weight=0.0))
+                    new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(equipment_targets, self.planning.process,
+                                                                        order_assignments, self.snapshot, self.targets.period, track_structure=track_structure)
                     plant_status[swp.PlantFrom] = new_status
                 if swp.PlantTo >= 0:
                     plant_status[swp.PlantTo] = None
@@ -493,16 +495,20 @@ class CTabuWorker:
                             orders_affected.remove(order)
                     for order in orders_affected:
                         del order_assignments[order]
-                    new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(swp.PlantTo, self.planning.process, order_assignments, self.snapshot,
-                                                                                            self.targets.period, self.targets.target_weight.get(swp.PlantTo, EquipmentProduction(equipment=swp.PlantTo, total_weight=0.0)).total_weight)
+                    equipment_targets = self.targets.target_weight.get(swp.PlantTo, EquipmentProduction(equipment=swp.PlantTo, total_weight=0.0))
+                    new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(equipment_targets, self.planning.process,
+                                                                            order_assignments, self.snapshot, self.targets.period, track_structure=track_structure)
                     plant_status[swp.PlantTo] = new_status
-                total_objectives = CostProvider.sum_objectives([self.costs.objective_function(status) for status in plant_status.values()])
+                planning_candidate = ProductionPlanning(process=self.planning.process, order_assignments=order_assignments,
+                                   equipment_status=plant_status, target_structure=self.targets.material_weights)
+                total_objectives = self.costs.process_objective_function(planning_candidate)
+                #total_objectives = CostProvider.sum_objectives([self.costs.objective_function(status) for status in plant_status.values()])
                 objective_fct = total_objectives.total_value
                 if objective_fct < objective_value:
                     objective_value = objective_fct
                     best_objective = total_objectives
                     best_swap = swp
-                    best_solution = ProductionPlanning(process=self.planning.process, order_assignments=order_assignments, equipment_status=plant_status)
+                    best_solution = planning_candidate
         if best_objective is None:
             best_objective = ObjectiveFunction(total_value=objective_value)
         return best_swap, best_solution, best_objective

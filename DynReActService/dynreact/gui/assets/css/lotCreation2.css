@@ -120,7 +120,7 @@
     column-gap: 1em;
     padding-bottom: 0.5em;
     padding-top: 0.5em;
-    margin-top: 0.5em;
+    margin-top: 1.5em;
 }
 
 .lots2-plants-targets3 {
@@ -238,6 +238,18 @@
     align-items: center;
 }
 
+.lots2-orders-structure-flex {
+    display: flex;
+    column-gap: 4em;
+    align-items: center;
+}
+
+.lots2-orders-structure-subflex {
+    display: flex;
+    column-gap: 1em;
+    align-items: center;
+}
+
 .lots2-orders-init-menu {
     display: flex;
     column-gap: 1em;
@@ -249,17 +261,27 @@
 }
 
 .lots2-orders-init-submenu {
+    display: flex;
+    column-gap: 4em;
+    row-gap: 0.5em;
+    padding-top: 1em;
+    /*
+    justify-content: start;
+    align-items: center;
+    */
+}
+
+.lots2-orders-init-submenu[hidden] {
+    display: none;
+}
+
+.lots2-orders-init-submenu1 {
     display: grid;
     grid-template-columns: auto auto;
     column-gap: 1em;
     row-gap: 0.5em;
     justify-content: start;
     align-items: center;
-    padding-top: 1em;
-}
-
-.lots2-orders-init-submenu[hidden] {
-    display: none;
 }
 
 .lots2-orders-init-buttons {
@@ -280,7 +302,7 @@
     padding-right: 0.5em;
 }
 
-.lots2-orders-lots-editor .lots2-order-lots-selector {
+.lots2-order-lots-selector {
     min-width: 12em;
 }
 
@@ -321,7 +343,12 @@
     display: flex;
     column-gap: 0.2em;
 }
-
+.lots2-message-field {
+    display: flex;
+    margin-top: 1.5em;
+    column-gap: 0.2em;
+    color: red
+}
 
 /* Control row (tabs + graph) */
 

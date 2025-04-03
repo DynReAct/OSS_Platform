@@ -63,7 +63,9 @@ class Equipment(Agent):
         self.previous_price = None
 
         if self.verbose > 1:
-            self.write_log(f"Finished creating the agent {self.agent} with status {self.status}.", "5e0e90e2-12be-4048-b70f-73917bfe947b")
+            self.write_log(msg=f"Finished creating the agent {self.agent} with status {self.status}.",
+                           identifier="5e0e90e2-12be-4048-b70f-73917bfe947b",
+                           to_stdout=True)
 
     def move_to_next_round(self, material_params: dict):
         """
@@ -109,9 +111,10 @@ class Equipment(Agent):
             topic = dctmsg['topic']
             payload = dctmsg['payload']
             equipment = payload['id']
+            snapshot = payload['snapshot']
             counterbid_wait = payload['counterbid_wait']
             agent = f"EQUIPMENT:{topic}:{equipment}:0"
-            status = get_equipment_status(equipment)
+            status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)
             self.equipment = equipment
     
     

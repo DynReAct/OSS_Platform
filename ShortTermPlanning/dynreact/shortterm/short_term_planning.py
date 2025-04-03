@@ -33,7 +33,8 @@ from confluent_kafka.admin import AdminClient
 import configparser
 
 from common import VAction, sendmsgtopic, TOPIC_GEN, TOPIC_CALLBACK
-from common.data.data_functions import get_equipment_materials, end_auction
+from common.data.data_functions import end_auction
+from common.data.data_setup import DataSetup
 import subprocess, sys, os, re, json
 
 from common.data.load_url import DOCKER_MANAGER
@@ -148,7 +149,8 @@ def run_general_agents(producer: Producer, gagents: str, verbose: int):
 
 
 def create_auction(
-        equipments: list[str], producer: Producer, verbose: int, counterbid_wait: float, nmaterials: int = None
+        equipments: list[str], producer: Producer, verbose: int, counterbid_wait: float, nmaterials: int = None,
+        snapshot: str = None
 ) -> tuple[str, int]:
     """
     Creates an auction by instructing the master LOG, EQUIPMENTS and MATERIAL to clone themselves to follow a new topic
@@ -158,10 +160,15 @@ def create_auction(
     :param int verbose: Verbosity level
     :param float counterbid_wait: Number of seconds to wait for the materials to counterbid
     :param int nmaterials: Maximum number of materials cloned for each equipment (default is to clone all)
+    :param str snapshot: Snapshot time in ISO8601 format, otherwise use the latest available
 
     :return: Topic name of the auction and number of agents
     :rtype: tuple(str,int)
     """
+
+    # Initialize search of latest snapshot
+    data_setup = DataSetup(verbose=verbose, snapshot_time=snapshot)
+
     # Keep track of the number of agents created
     num_agents = 0
 
@@ -202,7 +209,7 @@ def create_auction(
             source="UX",
             dest="EQUIPMENT:" + TOPIC_GEN,
             action="CREATE",
-            payload=dict(id=equipment, counterbid_wait=counterbid_wait),
+            payload=dict(id=equipment, counterbid_wait=counterbid_wait, snapshot=data_setup.last_snapshot),
             vb=verbose
         )
         num_agents += 1
@@ -215,7 +222,7 @@ def create_auction(
         equipment_ids = re.findall(r'\d+', equipment)
 
         if len(equipment_ids) == 1:
-            equipment_materials = get_equipment_materials(int(equipment_ids[0]))
+            equipment_materials = data_setup.get_equipment_materials(int(equipment_ids[0]))
             if verbose > 1:
                 msg = f"Obtained list of materials from equipment {equipment}: {equipment_materials}"
                 sendmsgtopic(
@@ -238,7 +245,7 @@ def create_auction(
                 source="UX",
                 dest="MATERIAL:" + TOPIC_GEN,
                 action="CREATE",
-                payload=dict(id=str(material)),
+                payload=dict(id=str(material), params=data_setup.get_material_params(material)),
                 vb=verbose
             )
             num_agents += 1
@@ -488,6 +495,11 @@ def main():
         "-g", "--rungagents", default='000', type=str,
         help="0 => General agents are not launched; 100 => Material ; 010 => Equipment; 001 => Log; "
     )
+
+    ap.add_argument(
+        "-sn", "--snapshot", type=str,
+        help="Optional snapshot time in ISO8601 format, otherwise use the latest available"
+    )
     args = vars(ap.parse_args())
 
     return execute_short_term_planning(args)
@@ -513,6 +525,7 @@ def execute_short_term_planning(args: dict):
     counterbid_wait = float(args["counterbidWait"])
     exit_wait = int(args["exitWait"])
     equipments = args["equipments"]
+    snapshot = args["snapshot"]
     nmaterials = args["nmaterials"]
     config.read(base + '/config.cnf')
     IP = config['DEFAULT']["IP"]
@@ -520,7 +533,7 @@ def execute_short_term_planning(args: dict):
     if verbose > 0:
         print(
             f"Running program with {verbose=}, {base=}, {running_wait=}, {cloning_wait=}, {auction_wait=}, "
-            f"{counterbid_wait=} {exit_wait=}, {equipments=}, {nmaterials=}."
+            f"{counterbid_wait=} {exit_wait=}, {equipments=}, {nmaterials=}, {snapshot=}."
         )
 
     # Uncomment this if there are any uncompleted previous executions that left harmful messages in the general topic
@@ -561,7 +574,7 @@ def execute_short_term_planning(args: dict):
     try:
         act, n_agents = create_auction(
             equipments=equipments, producer=producer, verbose=verbose, counterbid_wait=counterbid_wait,
-            nmaterials=nmaterials
+            nmaterials=nmaterials, snapshot=snapshot
         )
 
         consumer.subscribe([act, TOPIC_CALLBACK])

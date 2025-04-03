@@ -49,13 +49,18 @@ class Agent:
         )
         self.consumer.subscribe([self.topic])
 
-    def write_log(self, msg: str, identifier: str):
+    def write_log(self, msg: str, identifier: str, to_stdout: bool = False):
         """
         Write the given message in the topic's LOG
 
         :param str msg: Message sent by the agent
         :param str identifier: Unique Identifier for traceability
+        :param str to_stdout: Print message also to console
         """
+
+        if to_stdout:
+            print(msg)
+
         sendmsgtopic(
             producer=self.producer, tsend=self.topic, topic=self.topic, source=self.agent,
             dest="LOG:" + self.topic, action="WRITE", payload=dict(msg=msg, identifier=identifier), vb=self.verbose

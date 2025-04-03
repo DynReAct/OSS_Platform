@@ -58,8 +58,8 @@ class Auction:
         :param str matype: Either Coils or Orders
         :param list plants: List of equipments involved in the Auction
         """
-        self.matype     = matype
-        self._equip     = plants
+        self.matype = matype
+        self._equip = plants
         return(None)
 
     def set_ass_materials(self,matype:str, plants:list, ass_mats: str, amats:list):
@@ -87,22 +87,7 @@ class Auction:
 
         :rtype: struct
         """
-        return({self.matype,self._equip,self._all_equip})
-
-    def find_component(self, layout, component_id):
-        """ Busca un componente en un layout de Dash por su ID. """
-        if isinstance(layout, list):  # if the layout has not children
-            for child in layout:
-                result = self.find_component(child, component_id)
-                if result:
-                    return result
-        elif hasattr(layout, 'children'):  # if the layout has children
-            return self.find_component(layout.children, component_id)
-        elif hasattr(layout, 'id') and layout.id == component_id:  
-            # if this is the targeted component
-            return layout
-        return None
-
+        return({self.matype,self._equip})
 
     def set_params(self, htmscr):
         """
@@ -110,18 +95,9 @@ class Auction:
 
         :param obj htmscr: The html object with the settings selected by the user.
         """
-        if self.find_component(htmscr, 'ag-matypes'):
-            self.matype = htmscr.__getitem__('ag-matypes').value
-        else:
-            self.matype = 'Orders'
-        if self.find_component(htmscr, 'ag-ass-matypes'):
-            self._mat_ass_type = htmscr.__getitem__('ag-ass-matypes').value
-        else:
-            self._mat_ass_type = None
-        if self.find_component(htmscr, 'ag-resources'):
-            self._equip= htmscr.__getitem__('ag-resources').value
-        else:
-            self._equip= None
+        self.matype = htmscr.__getitem__('ag-matypes').value
+        self._mat_ass_type = htmscr.__getitem__('ag-ass-matypes').value
+        self._equip= htmscr.__getitem__('ag-resources').value
         if len(htmscr.__getitem__('ag-resources').options) > 0:
             self._all_equip = [j['value'] for j in htmscr.__getitem__('ag-resources').options]
         if len(htmscr.__getitem__('ag-materials').options) > 0:
@@ -158,8 +134,6 @@ class Auction:
            list    amats     is the list of assigned materials
            list    ass_mats  is the list of selected assigned materials
         """
-        if self._equip is None:
-            self._equip = []
         res = (self.matype,self._equip,self._all_equip,self._smats, \
                 self._all_objs,self.code, self._mat_ass_type,self._amats,self._ass_mats)
         return(res)

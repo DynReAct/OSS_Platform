@@ -7,9 +7,7 @@ Version History:
 - 1.0 (2024-03-09): Initial version developed by Rodrigo Castro Freibott.
 """
 
-from multiprocessing import Pool
 from common import sendmsgtopic
-from common.data.data_functions import get_material_params
 from common.data.load_url import DOCKER_REPLICA
 from common.functions import calculate_bidding_price
 from agents import Agent
@@ -48,14 +46,16 @@ class Material(Agent):
             'BID': self.handle_bid_action,
             'ASKCONFIRM': self.handle_askconfirm_action
         })
-        
+
         if manager:
             self.handler = DockerManager(tag=f"material{DOCKER_REPLICA}")
 
         self.assigned_equipment = ""
         self.params = params
         if self.verbose > 1:
-            self.write_log(f"Finished creating the agent {self.agent} with parameters {self.params}.", "ddea8374-6149-41e1-b86f-4cc147580d13")
+            self.write_log(msg=f"Finished creating the agent {self.agent} with parameters {self.params}.",
+                           identifier="ddea8374-6149-41e1-b86f-4cc147580d13",
+                           to_stdout=True)
 
     def handle_create_action(self, dctmsg: dict) -> str:
         """
@@ -71,7 +71,7 @@ class Material(Agent):
             payload = dctmsg['payload']
             material = payload['id']
             agent = f"MATERIAL:{topic}:{material}"
-            params = get_material_params(material)
+            params = payload['params']
     
             init_kwargs = {
                 "topic": topic, 

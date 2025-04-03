@@ -9,41 +9,18 @@ from confluent_kafka import Producer
 
 from common import sendmsgtopic
 from common.data.load_url import URL_INITIAL_STATE, URL_UPDATE_STATUS, load_url_json_get, load_url_json_post
-from common.data.data_setup import (LAST_SNAPSHOT, ALL_MATERIALS_PARAMS, ALL_EQUIPMENTS_MATERIALS)
 
-def get_material_params(material_id: str) -> dict:
-    """
-    Get the parameters of the given material.
-    
-    :param str material_id: Id of the involved material in the production list.
-
-    :return: Dictionary with all the parameters
-    :rtype: dict
-    """
-    return ALL_MATERIALS_PARAMS[material_id]
-
-
-def get_equipment_materials(equipment_id: int) -> list[str]:
-    """
-    Get the list of materials for the given equipment.
-
-    :param int equipment_id: Id of the interesting equipment
-
-    :return: List of all the materials looking at this equipment.
-    :rtype: list
-    """
-    return ALL_EQUIPMENTS_MATERIALS[equipment_id]
-
-def get_equipment_status(equipment_id: int) -> dict:
+def get_equipment_status(equipment_id: int, snapshot_time: str) -> dict:
     """
     Get the initial status of the given equipment.
 
     :param int equipment_id: Id of the interesting equipment
+    :param str snapshot_time: Snapshot time in ISO8601 format, otherwise use the latest available
 
     :return: Status of the interesting equipment
     :rtype: dict
     """
-    url_equipment_status = URL_INITIAL_STATE.format(equipment_id=equipment_id, snapshot_timestamp=LAST_SNAPSHOT)
+    url_equipment_status = URL_INITIAL_STATE.format(equipment_id=equipment_id, snapshot_timestamp=snapshot_time)
     return load_url_json_get(url_equipment_status)
 
 

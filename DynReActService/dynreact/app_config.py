@@ -6,13 +6,13 @@ from dotenv import load_dotenv
 
 class DynReActSrvConfig:
 
-    config_provider: str = "default+file:./data_ras/site.json"
-    snapshot_provider: str = "default+file:./data_ras/snapshots"
+    config_provider: str = "default+file:./data/site.json"
+    snapshot_provider: str = "default+file:./data/snapshots"
     downtime_provider: str = "default+file:./data/downtimes.json"
     cost_provider: str|None = None  # needs to be specified
     "If None, an arbitrary cost provider will be used, if available"
     long_term_provider: str = "default:8h"
-    short_term_planning: str = "default+file:./data_ras/stp_context.json"
+    short_term_planning: str = "default+file:./data/stp_context.json"
     results_persistence: str = "default+file:./results"
     availability_persistence: str = "default+file:./config"
     lot_sinks: list[str] = ["default+file:./results"]

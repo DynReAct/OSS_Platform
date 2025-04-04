@@ -28,6 +28,8 @@ Python versions >= 3.10 and <= 3.12 should be supported.
 
 ### Install dependencies
 
+#### Pip environment
+
 First, create a virtual environment for the project. Navigate to the folder, and execute
 
 ```commandline
@@ -45,6 +47,26 @@ Then, you can build the packages
 ```commandline
 pip wheel . --no-cache-dir --disable-pip-version-check --no-deps --wheel-dir dist
 ```
+
+#### Poetry approach
+
+First, if not there, create a virtual environment for the project. Navigate to the folder, and execute
+
+```commandline
+pipx install poetry
+poetry install --no-root
+eval $(poetry env activate)
+
+```
+
+Then you can build packages
+
+```commandline
+poetry build
+
+```
+
+
 
 ## Run
 

@@ -41,7 +41,7 @@ def get_transition_cost_and_status(
     """
     equipment_id = equipment_status["targets"]["equipment"]
     next_material = material_params["id"]
-    prev_material = next_material if len(equipment_status.get("current_material",[])) == 0 else equipment_status["current_material"][-1]
+    prev_material = equipment_status["current_material"][-1]
     if verbose > 0:
         print(f"Transition of equipment {equipment_id} from {prev_material} to {next_material}...")
 

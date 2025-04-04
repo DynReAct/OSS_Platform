@@ -1,5 +1,5 @@
 # Generic dependencies
-numpy>=2.1.2, <3
+numpy>=1.24, <3
 pandas>=2, <3
 
 # FastAPI

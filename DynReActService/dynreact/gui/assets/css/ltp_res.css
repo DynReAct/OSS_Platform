@@ -40,3 +40,10 @@
     min-width: 12em;
 }
 
+.ltp-res-absrel-flex {
+    display: flex;
+    column-gap: 1em;
+    align-items: center;
+}
+
+

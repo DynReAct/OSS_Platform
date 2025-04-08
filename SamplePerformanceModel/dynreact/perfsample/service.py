@@ -2,7 +2,8 @@ import random
 from typing import Annotated
 
 from dynreact.perfsample.config import ServiceConfig
-from dynreact.base.PlantPerformanceModel import PlantPerformanceInput, PerformanceEstimation, PerformanceModelMetadata
+from dynreact.base.PlantPerformanceModel import PlantPerformanceInput, PerformanceEstimation, PerformanceModelMetadata, \
+    PlantPerformanceResultsSuccess
 from dynreact.base.model import ServiceHealth, Order
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -69,13 +70,13 @@ def model(x_token: Annotated[str | None, Header()] = None) -> PerformanceModelMe
           response_model_exclude_unset=True,
           response_model_exclude_none=True,
           summary="Evaluate the plant performance model on some orders, for a fixed plant/equipment.")
-def performance(data: PlantPerformanceInput, x_token: Annotated[str | None, Header()] = None) -> list[PerformanceEstimation]:
+def performance(data: PlantPerformanceInput, x_token: Annotated[str | None, Header()] = None) -> PlantPerformanceResultsSuccess:
     check_secret(x_token)
 
     def performance_for_order(o: Order) -> float:
         if config.feasibility_random_threshold <= 0:
             return 1
         return 0 if random.random() < config.feasibility_random_threshold else 1
-    return [PerformanceEstimation(equipment=data.equipment, order=o.id, performance=performance_for_order(o)) for o in data.orders]
+    return PlantPerformanceResultsSuccess(results=[PerformanceEstimation(equipment=data.equipment, order=o.id, performance=performance_for_order(o)) for o in data.orders])
 
 

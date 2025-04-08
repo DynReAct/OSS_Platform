@@ -1,10 +1,10 @@
-# DynReAct Sample plant performance model
+# DynReAct sample plant performance model
 
-DynReAct Sample plant performance model
+DynReAct sample plant performance model
 
 ## Description
 
-A plant performance model for DynReAct.
+A plant performance model for DynReAct, for testing and development purposes.
 
 ## Run
 
@@ -22,6 +22,8 @@ Create a file `.env` in the present directory with content
 MODEL_ID=sample_model_1
 MODEL_LABEL=My sample model
 APPLICABLE_PROCESSES=FIN
+# Set this property to introduce some randomness... otherwise the model always returns 1.
+FEASIBILITY_RANDOM_THRESHOLD=0.5
 ```
 
 This example applies to the finishing line, cf. process list in [site.json](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/data/site.json). For all configuration options, see [config.py](https://github.com/DynReAct/OSS_Platform/blob/main/SamplePerformanceModel/dynreact/perfsample/config.py)
@@ -38,3 +40,18 @@ c.id()
 c.status()
 ```
 
+See also the `ìf __name__ == "__main__"` run section of the file [PerformanceModelClient.py](../DynReActBase/dynreact/base/impl/PerformanceModelClient.py) for an example how to query the model.
+
+## Integrate with sample use case
+
+In order to activate the plant performance model for the sample use case, add the following line to the *.env* file in the folder *DynReActService*:
+
+```commandline
+PLANT_PERFORMANCE_MODEL_0="dynreact.base.impl.PerformanceModelClient::http://localhost:8081"
+```
+
+In order to provide an access token, append `::` followed by the token. Example:
+
+```commandline
+PLANT_PERFORMANCE_MODEL_0="dynreact.base.impl.PerformanceModelClient::http://localhost:8081::kdnfAe3U§NFI$?'S#fes23A$KFVe24"
+``` 

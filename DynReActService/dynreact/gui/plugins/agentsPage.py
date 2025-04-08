@@ -23,7 +23,7 @@ from dynreact.gui.localization import Localization
 
 from dynreact.app import state
 
-dash.register_page(__name__, path="/agents")
+# dash.register_page(__name__, path="/agents")  # now implemented by proxy
 translations_key = "agp"
 # Setings (From stp_context.json in DynReactService/data)
 # params related to kafka config and timing delays

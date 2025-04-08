@@ -21,6 +21,7 @@ from dynreact.base.impl.FileDowntimeProvider import FileDowntimeProvider
 from dynreact.base.impl.FileLotSink import FileLotSink
 from dynreact.base.impl.FileResultsPersistence import FileResultsPersistence
 from dynreact.base.impl.FileSnapshotProvider import FileSnapshotProvider
+from dynreact.base.impl.PerformanceModelClient import PerformanceModelClientConfig
 from dynreact.base.impl.SimpleLongTermPlanning import SimpleLongTermPlanning
 from dynreact.base.model import Site
 
@@ -98,6 +99,8 @@ class Plugins:
             else:
                 self._long_term_planning = Plugins._load_module("dynreact.longtermplanning.LongTermPlanningImpl", LongTermPlanning,
                                                         self._config.long_term_provider, site)
+            if self._long_term_planning is None:
+                raise Exception("Long term planning not found: " + str(self._config.long_term_provider))
         return self._long_term_planning
 
     def get_stp_config_params(self) -> ShortTermPlanning:
@@ -154,14 +157,46 @@ class Plugins:
                                 config in self._config.plant_performance_models] if self._config.plant_performance_models is not None else []
         return self._plant_performance_models
 
+    def load_stp_page(self):
+        stp = self._config.stp_frontend
+        if not stp:
+            return None
+        if stp == "default":
+            try:
+                import dynreact.gui.plugins.agentsPage
+                return dynreact.gui.plugins.agentsPage.layout
+            except:
+                print("Failed to load standard Agents page")
+                traceback.print_exc()
+                return None
+        importers = iter(sys.meta_path)
+        for importer in importers:
+            try:
+                spec_res = importer.find_spec(stp, path=None)
+                if spec_res is not None:
+                    modl = importlib.util.module_from_spec(spec_res)
+                    spec_res.loader.exec_module(modl)
+                    for name, element in inspect.getmembers(modl):
+                        if name == "layout":
+                            sys.modules[stp] = modl
+                            return element  # return the layout function
+            except:
+                print(f"An error occurred loading the STP frontend {stp}")
+                traceback.print_exc()
+        return None
+
     @staticmethod
     def _load_plant_performance_model(config: str, site: Site) -> PlantPerformanceModel|None:
-        if ":" not in config:
+        if "::" not in config:
             return None
-        idx = config.index(":")
+        idx = config.index("::")
         class_name = config[0:idx]
-        uri = config[idx+1:]
-        return Plugins._load_module(class_name, PlantPerformanceModel, uri, site, do_raise=True)
+        last_idx = config.rindex("::")
+        has_token = last_idx > idx
+        uri = config[idx+2:] if not has_token else config[idx+2:last_idx]
+        token = config[last_idx+2:] if has_token else None
+        config = PerformanceModelClientConfig(address=uri, token=token)
+        return Plugins._load_module(class_name, PlantPerformanceModel, config, do_raise=True)
 
     @staticmethod
     def _load_snapshot_provider(provider_url: str, site: Site) -> SnapshotProvider|None:
@@ -173,6 +208,12 @@ class Plugins:
 
     @staticmethod
     def _load_module(module: str, clzz, *args, **kwargs) -> Any|None:   # returns an instance of the clzz, if found
+        # if *args starts with class: replace module by that arg
+        if len(args) > 0 and isinstance(args[0], str) and args[0].startswith("class:"):
+            first = args[0]
+            module = first[first.index(":")+1:first.index(",")]
+            first = first[first.index(",")+1:]
+            args = tuple(a if idx > 0 else first for idx, a in enumerate(args))
         mod0 = sys.modules.get(module)
         do_raise = kwargs.pop("do_raise", False)
         errors = []
@@ -194,6 +235,8 @@ class Plugins:
         if len(errors) > 0:
             print(f"Failed to load module {module} of type {clzz}: {errors[0]}")
             raise errors[0]
+        if do_raise:
+            raise Exception(f"Module {module} not found")
         return None
 
 

@@ -46,6 +46,7 @@ class DynReActSrvState:
         self._snapshot_solutions_cache:  list[tuple[datetime, str, ProductionPlanning, ProductionTargets]] = []
         self._duedates_solutions_cache: list[tuple[datetime, str, ProductionPlanning, ProductionTargets]] = []
         self._coils_by_orders_cache: dict[datetime, dict[str, list[Material]]] = {}
+        self._stp_page = None
 
     def get_snapshot_provider(self) -> SnapshotProvider:
         if self._snapshot_provider is None:
@@ -183,6 +184,11 @@ class DynReActSrvState:
 
     def get_lot_sinks(self) -> dict[str, LotSink]:
         return self._plugins.get_lot_sinks()
+
+    def get_stp_page(self):
+        if self._stp_page is None:
+            self._stp_page = self._plugins.load_stp_page()
+        return self._stp_page
 #
 # Added by JOM 20241005
 #

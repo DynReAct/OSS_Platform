@@ -206,7 +206,7 @@ class LotsSwimlane extends HTMLElement {
     this.#process = process;
     this.#snapshot = snapshot;
     const plantIds = [...Object.keys(lotsByPlant)].map(v => parseInt(v));
-    this.#plants = site?.plants?.filter(plant => plantIds.indexOf(plant.id) >= 0);
+    this.#plants = site?.equipment?.filter(plant => plantIds.indexOf(plant.id) >= 0);
     if (snapshot && lots) {
         const coilsByOrder = snapshot.getCoilsByOrder();
         // Record<string, Record<string, Array<Coil>>>  // keys: lot id, order id

@@ -41,7 +41,7 @@ class OptimizationTest(unittest.TestCase):
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
         # optimization.add_listener(TestListener())  # for debugging
         optimization_state: LotsOptimizationState = optimization.run(max_iterations=10)
-        objective_value = optimization_state.best_objective_value
+        objective_value = optimization_state.best_objective_value.total_value
         assert objective_value == 1, "Unexpected objective value " + str(objective_value)
         solution: ProductionPlanning = optimization_state.best_solution
         assert orders[0].id in solution.order_assignments and orders[1].id in solution.order_assignments, "Unexpectedly unassigned order found"
@@ -79,7 +79,7 @@ class OptimizationTest(unittest.TestCase):
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
         # optimization.add_listener(TestListener())  # for debugging
         optimization_state: LotsOptimizationState = optimization.run(max_iterations=10)
-        objective_value = optimization_state.best_objective_value
+        objective_value = optimization_state.best_objective_value.total_value
         assert objective_value == 1, "Unexpected objective value " + str(objective_value)
         solution: ProductionPlanning = optimization_state.best_solution
         assert orders[0].id in solution.order_assignments and orders[1].id in solution.order_assignments, "Unexpectedly unassigned order found"

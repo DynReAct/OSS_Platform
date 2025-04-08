@@ -1,0 +1,16 @@
+.perf-model-selection {
+    display: flex;
+    column-gap: 1em;
+    row-gap: 0.5em;
+    align-items: center;
+}
+
+.perf-model-selector {
+    min-width: 16em;
+}
+
+.perf-process-container {
+    display: flex;
+    column-gap: 1em;
+    align-items: center;
+}

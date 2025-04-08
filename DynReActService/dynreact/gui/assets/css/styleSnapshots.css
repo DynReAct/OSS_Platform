@@ -23,4 +23,13 @@
     align-items: center;
 }
 
+.snap-matselect-grid {
+    display: grid;
+    grid-template-columns: auto auto;
+    column-gap: 1em;
+    row-gap: 0.5em;
+    align-items: center;
+    justify-content: start;
+}
+
 

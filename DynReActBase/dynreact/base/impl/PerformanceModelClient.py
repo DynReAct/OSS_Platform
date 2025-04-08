@@ -1,4 +1,5 @@
 import dataclasses
+import traceback
 from datetime import datetime, timedelta
 
 import requests
@@ -37,6 +38,12 @@ class PerformanceModelClient(PlantPerformanceModel):
             self._meta = PerformanceModelMetadata.model_validate(json)
         return self._meta
 
+    def __str__(self):
+        try:
+            return f"PerformanceModelClient[id={self.id()}, label={self.label()}, address={self._address}]"
+        except:
+            return f"PerformanceModelClient[address={self._address}] (disconnected)"
+
     def id(self) -> str:
         return self._get_meta().id
 
@@ -74,11 +81,14 @@ class PerformanceModelClient(PlantPerformanceModel):
                                    headers=PerformanceModelClient._attach_token({"Content-Type": "application/json", "Accept": "application/json"}, self._token)
                                    )
             if not response.ok:
-                return PlantPerformanceResultsFailed(status=response.status_code, message=response.reason)
+                return PlantPerformanceResultsFailed(reason=response.status_code, message=response.reason)
             result = PlantPerformanceResultsSuccess.model_validate(response.json())
             return result
+        except requests.exceptions.ConnectionError:
+            return PlantPerformanceResultsFailed(reason=1, message="Service not available")
         except:
-            return PlantPerformanceResultsFailed(status=1, message="Service not available")
+            traceback.print_exc()
+            return PlantPerformanceResultsFailed(reason=500, message="Internal server error")
 
     @staticmethod
     def _validate_path(pth: str) -> str:
@@ -91,4 +101,18 @@ class PerformanceModelClient(PlantPerformanceModel):
         if token:
             headers["X-Token"] = token
         return headers
+
+
+if __name__ == "__main__":
+    client = PerformanceModelClient(PerformanceModelClientConfig(address="http://localhost:8051"))
+    print(f"Performance model: {client.id()} ({client.label()}, {client.description()}), applicable processes: {client.applicable_processes_and_plants()[0]}")
+    eq = 6
+    perf = client.bulk_performance(eq, [
+        Order(id="order1", allowed_equipment=[eq], current_processes=[3], active_processes={3: "PENDING"}, target_weight=10, actual_weight=10,
+              material_properties={"width": 1020, "thickness_initial": 12, "thickness_final": 1, "finishing_type": "ftype2"}),
+        Order(id="order2", allowed_equipment=[eq], current_processes=[3], active_processes={3: "PENDING"}, target_weight=15, actual_weight=15,
+              material_properties={"width": 1015, "thickness_initial": 11, "thickness_final": 2,
+                                   "finishing_type": "ftype1"})
+    ])
+    print(f"Performance: {perf}")
 

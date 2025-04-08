@@ -1,6 +1,7 @@
 class JsUtils {
 
     static formatNumber(n, numDigits = 3) {
+        numDigits = numDigits || 3;
         const abs = Math.abs(n);
         if (abs >= Math.exp(Math.log(10) * numDigits) || (abs < 0.01 && abs !== 0))
             return n.toExponential(numDigits-1);
@@ -14,14 +15,16 @@ class JsUtils {
                 + JsUtils._asTwoDigits(date.getHours()) + ":" + JsUtils._asTwoDigits(date.getMinutes());
     }
 
-    static format(value) {
+    static format(value, numDigits) {
         if (value === undefined || value === null)
             return "";
         if (value instanceof Date)
             return JsUtils.formatDate(value);
         const tp = typeof value;
+        if (tp === "string")
+            return value;
         if (tp === "number")
-            return JsUtils.formatNumber(value);
+            return JsUtils.formatNumber(value, numDigits);
         if (tp === "object")
             return JSON.stringify(value);
         return value.toString();
@@ -37,13 +40,17 @@ class JsUtils {
     static parseDurationHours(duration, defaultHours=24) {
          if (!duration)
             return defaultHours;
+         duration = duration.trim();
          let parsed = undefined;
+         const isMinus = duration.startsWith("-");
+         if (isMinus)
+            duration = duration.substring(1);
          if (duration.startsWith("PT") && duration.endsWith("H")) {  // handle PXXH
              parsed = parseInt(duration.substring(2, duration.length - 1));
          } else if (duration.startsWith("P") && duration.endsWith("D")) {
              parsed = parseInt(duration.substring(1, duration.length - 1)) * 24;
          }
-         return Number.isFinite(parsed) ? parsed : defaultHours;
+         return Number.isFinite(parsed) ? (isMinus ? -parsed : parsed) : defaultHours;
     }
 
     static clear(element) {

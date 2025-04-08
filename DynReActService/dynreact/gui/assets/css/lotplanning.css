@@ -16,3 +16,8 @@
     justify-content: flex-end;
     column-gap: 0.5em;
 }
+
+.lotplanning-structure-container {
+    display: inline;
+}
+

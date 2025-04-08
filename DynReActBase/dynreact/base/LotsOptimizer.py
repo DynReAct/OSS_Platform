@@ -11,8 +11,9 @@ import numpy as np
 
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
+from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.model import ProductionPlanning, PlanningData, ProductionTargets, Snapshot, OrderAssignment, Site, \
-    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction
+    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction, MaterialClass
 
 
 class OptimizationListener:
@@ -20,10 +21,10 @@ class OptimizationListener:
     def __init__(self):
         self._done: bool = False
 
-    def update_solution(self, planning: ProductionPlanning, objective_value: float):
+    def update_solution(self, planning: ProductionPlanning, objective_value: ObjectiveFunction):
         pass
 
-    def update_iteration(self, iteration_cnt: int, lots_cnt: int, objective_value: float) -> bool:
+    def update_iteration(self, iteration_cnt: int, lots_cnt: int, objective_value: ObjectiveFunction) -> bool:
         """
         :return: false to interrupt the iteration
         """
@@ -43,18 +44,18 @@ P = TypeVar("P", bound=PlanningData)
 # update the values in every iteration
 class LotsOptimizationState(Generic[P]):
 
-    def __init__(self, current_solution: ProductionPlanning[P], current_objective_value: float,
-                 best_solution: ProductionPlanning[P], best_objective_value: float,
+    def __init__(self, current_solution: ProductionPlanning[P], current_objective_value: ObjectiveFunction,
+                 best_solution: ProductionPlanning[P], best_objective_value: ObjectiveFunction,
                  num_iterations: int=0,  # deprecated
-                 history: list[float]|None = None,
+                 history: list[ObjectiveFunction]|None = None,
                  parameters: dict[str, any]|None = None):
         self.current_solution: ProductionPlanning[P] = current_solution
-        self.current_object_value: float = current_objective_value
+        self.current_object_value: ObjectiveFunction = current_objective_value
         self.best_solution: ProductionPlanning[P] = best_solution
-        self.best_objective_value: float = best_objective_value
+        self.best_objective_value: ObjectiveFunction = best_objective_value
         self.num_iterations: int = num_iterations
         "deprecated"
-        self.history: list[float] = list(history) if history is not None else [best_objective_value, current_objective_value]
+        self.history: list[ObjectiveFunction] = list(history) if history is not None else [current_objective_value]
         self.parameters: dict[str, any]|None = parameters
 
 
@@ -67,7 +68,8 @@ class LotsOptimizer(Generic[P]):
                  # Note: we should accept None for the initial solution, for instances only used to assign lots
                  initial_solution: ProductionPlanning[P], min_due_date: datetime|None = None,
                  # the next two are for initialization from a previous optimization run
-                 best_solution: ProductionPlanning[P]|None = None, history: list[float] | None = None,
+                 best_solution: ProductionPlanning[P]|None = None,
+                 history: list[ObjectiveFunction] | None = None,
                  parameters: dict[str, any]|None = None,
                  performance_models: list[PlantPerformanceModel]|None = None
                  ):
@@ -101,10 +103,12 @@ class LotsOptimizer(Generic[P]):
         initial_costs = costs.process_objective_function(initial_solution) if initial_solution is not None else None
         best_costs = initial_costs if best_solution is None else costs.process_objective_function(best_solution)
         best_solution = initial_solution if best_solution is None else best_solution
-        history = [initial_costs] if history is None else history
+        initial_costs_value = initial_costs.total_value if initial_costs is not None else None
+        best_costs_value = best_costs
+        history = [initial_costs] if history is None and initial_costs is not None else history if history is not None else []
         # state
         self._state: LotsOptimizationState[P] = LotsOptimizationState(current_solution=initial_solution, best_solution=best_solution,
-                                        current_objective_value=initial_costs, best_objective_value=best_costs, history=history, parameters=parameters)
+                                        current_objective_value=initial_costs, best_objective_value=best_costs_value, history=history, parameters=parameters)
 
     def parameters(self) -> dict[str, any]|None:
         return self._state.parameters
@@ -120,7 +124,7 @@ class LotsOptimizer(Generic[P]):
         raise Exception("Not implemented")
 
     def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot,
-                                current_material: Material | None = None, next_material: Material | None = None) -> tuple[EquipmentStatus, float]:
+                                current_material: Material | None = None, next_material: Material | None = None) -> tuple[EquipmentStatus, ObjectiveFunction]:
         """
         Note: this is intended to forward to the cost service, the lot optimizer only needs to determine whether this
         leads to a new lot or not
@@ -176,7 +180,49 @@ class LotsOptimizationAlgo:
         planning = costs.evaluate_order_assignments(process, assignments, targets=targets, snapshot=snapshot) if costs is not None else None
         return planning, targets
 
-    def heuristic_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider,
+    def _random_start_orders(self, plants: dict[int, Equipment], targets: ProductionTargets, orders: dict[str, Order],
+                             snapshot_provider: SnapshotProvider, start_orders: dict[int, str]|None) -> dict[int, str]:
+        start_orders = start_orders or {}
+        if targets.material_weights is not None:
+            # try to assign start orders corresponding to different targeted material classes
+            cats = self._site.material_categories
+            total_targets_by_cat = {cat.id: sum(targets.material_weights[cl.id] for cl in cat.classes if cl.id in targets.material_weights
+                                                and isinstance(targets.material_weights[cl.id], (int, float))) for cat in cats}
+            class_by_order: dict[str, dict[str, MaterialClass]] = {oid: {cat.id: snapshot_provider.material_class_for_order(o, cat) for cat in cats} for oid, o in orders.items()}
+            start_orders_by_class: dict[str, Order] = {}  # key: class id, target order id
+            for cat in cats:
+                if total_targets_by_cat[cat.id] == 0:
+                    continue
+                relevant_classes = [cl for cl in cat.classes if cl.id in targets.material_weights and isinstance(targets.material_weights[cl.id], (int, float)) and
+                                                targets.material_weights[cl.id] >= total_targets_by_cat[cat.id]/4]
+                if len(relevant_classes) == 0:
+                    continue
+                for clazz in relevant_classes:
+                    if clazz.id in start_orders_by_class:
+                        continue
+                    some_order = next((o for o, cat_dict in class_by_order.items() if cat_dict.get(cat.id) == clazz and orders.get(o) not in start_orders_by_class.values()), None)
+                    if some_order is not None:
+                        start_orders_by_class[clazz.id] = orders.get(some_order)
+                        for cat2 in cats:
+                            if cat == cat2:
+                                continue
+                            other_class = class_by_order[some_order].get(cat2.id)
+                            if other_class is not None and other_class.id not in start_orders_by_class:
+                                start_orders_by_class[other_class.id] = orders.get(some_order)
+            # sort start orders by available equipment
+            start_orders_by_class = dict(sorted(start_orders_by_class.items(), key=lambda t: len([p for p in t[1].allowed_equipment if p in plants and p not in start_orders])))
+            for o in start_orders_by_class.values():
+                plants1 = sorted([p for p in o.allowed_equipment if p in plants and p not in start_orders], key=lambda p: targets.target_weight.get(p).total_weight, reverse=True)
+                if len(plants1) > 0:
+                    start_orders[plants1[0]] = o.id
+        plants2 = [p for p in plants.keys() if p not in start_orders]
+        for p in plants2:
+            random_order: Order | None = next((o for o in orders.values() if p in o.allowed_equipment), None)
+            if random_order is not None:
+                start_orders[p] = random_order.id
+        return start_orders
+
+    def heuristic_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider, snapshot_provider: SnapshotProvider,
                            targets: ProductionTargets, orders: list[str], start_orders: dict[int, str]|None=None) -> tuple[ProductionPlanning, ProductionTargets]:
         """
         If orders is not specified, this method will only consider as many orders for scheduling as are required to
@@ -220,13 +266,12 @@ class LotsOptimizationAlgo:
                 if other_plant in available_tons_by_plant:
                     available_tons_by_plant[other_plant] = available_tons_by_plant[other_plant] - o.actual_weight
 
-        for plant in [p for p in plants.keys() if p not in start_orders]:
-            random_order: Order | None = next((o for o in order_objects.values() if plant in o.allowed_equipment), None)
-            if random_order is not None:
-                start_orders[plant] = random_order.id
-                assign_to_plant(random_order, plant)
-            else:
-                plants.pop(plant)
+        start_orders = self._random_start_orders(plants, targets, order_objects, snapshot_provider, start_orders)
+        for plant in [plant for plant in plants.keys() if plant not in start_orders]:
+            plants.pop(plant)
+        for plant, order_id in start_orders.items():
+            assign_to_plant(order_objects[order_id], plant)
+
         # The main loop
         while len(plants) > 0 and len(order_objects) > 0:
             diff_by_plant: dict[int, float] = {p: available_tons_by_plant[p] - missing_tons_by_plant[p] for p in plants.keys()}
@@ -331,7 +376,8 @@ class LotsOptimizationAlgo:
                         # TODO option to specify the urgency(?)
                         orders: list[str]|None = None,
                         # the next two are for initialization from a previous optimization run
-                        best_solution: ProductionPlanning[P] | None = None, history: list[float] | None = None,
+                        best_solution: ProductionPlanning[P] | None = None,
+                        history: list[ObjectiveFunction] | None = None,
                         performance_models: list[PlantPerformanceModel] | None = None,
                         parameters: dict[str, any] | None = None,
                         include_inactive_lots: bool = False
@@ -350,7 +396,7 @@ class LotsOptimizationAlgo:
     def _create_instance_internal(self, process: str, snapshot: Snapshot, targets: ProductionTargets,
                                   cost_provider: CostProvider, initial_solution: ProductionPlanning, min_due_date: datetime|None = None,
                                   # the next two are for initialization from a previous optimization run
-                                  best_solution: ProductionPlanning[P] | None = None, history: list[float] | None = None,
+                                  best_solution: ProductionPlanning[P] | None = None, history: list[ObjectiveFunction] | None = None,
                                   performance_models: list[PlantPerformanceModel] | None = None,
                                   parameters: dict[str, any] | None = None
                                   ) -> LotsOptimizer:

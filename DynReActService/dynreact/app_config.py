@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 class DynReActSrvConfig:
 
     config_provider: str = "default+file:./data/site.json"
-    snapshot_provider: str = "default+file:./data"
+    snapshot_provider: str = "default+file:./data/snapshots"
     downtime_provider: str = "default+file:./data/downtimes.json"
     cost_provider: str|None = None  # needs to be specified
     "If None, an arbitrary cost provider will be used, if available"
@@ -34,6 +34,7 @@ class DynReActSrvConfig:
     # where the first component identifies a class name (sub class of PlantPerformanceModel) and uri may contain
     # model-specific initialization data
     plant_performance_models: list[str]|None = None
+    stp_frontend: str = "default"  # default is the frontend provided in this module
 
     def __init__(self,
                  config_provider: str | None = None,
@@ -57,7 +58,8 @@ class DynReActSrvConfig:
                  ldap_query_pw: str | None = None,
                  ldap_search_base: str | None = None,
                  ldap_query: str | None = None,
-                 plant_performance_models: list[str]|None = None):
+                 plant_performance_models: list[str]|None = None,
+                 stp_frontend: str|None = None):
         load_dotenv()
         if config_provider is None:
             config_provider = os.getenv("CONFIG_PROVIDER", DynReActSrvConfig.config_provider)
@@ -142,7 +144,9 @@ class DynReActSrvConfig:
                 idx += 1
         if len(plant_performance_models) > 0:
             self.plant_performance_models = plant_performance_models
-
+        if stp_frontend is None:
+            stp_frontend = os.getenv("STP_FRONTEND", DynReActSrvConfig.stp_frontend)
+        self.stp_frontend = stp_frontend
 
 
 class ConfigProvider:

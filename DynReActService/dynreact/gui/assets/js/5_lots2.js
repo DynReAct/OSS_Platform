@@ -47,6 +47,15 @@
         return "ltr";
     }
 
+    // extra function to use buttons Clear and SetDefault
+    globalThis.dash_clientside.lots2.clearMaterialGrid = function(_, totalWeight, gridId) {
+        // set grid to default
+        const gridContainer = document.querySelector("#" + gridId);
+        const grid = gridContainer.querySelector(materialsTag);
+        grid?.initTargets(totalWeight);
+        return "ltr";
+    }
+
     // used by lot creation page and lots planning page
     globalThis.dash_clientside.lots2.setBacklogStructureOverview = function(weightAggregation, targetWeights, parentId) {
         const container = document.querySelector("#" + parentId);

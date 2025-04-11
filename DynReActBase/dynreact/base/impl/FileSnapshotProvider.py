@@ -102,6 +102,7 @@ class FileSnapshotProvider(SnapshotProvider):
         orders: dict[str, Order] = {}
         lots: dict[int, list[Lot]] = {}
         # inline_coils: dict[int, list[InlineCoil]] = {}
+        categories = self._site.material_categories
 
         for row in frame.itertuples(index=False):
             if isinstance(row.plant,float):
@@ -127,8 +128,12 @@ class FileSnapshotProvider(SnapshotProvider):
                 allowed_plants = [int(p) for p in row.allowed_plants.split(",")]
                 o = Order(id=order, current_processes=[process_id], allowed_equipment=allowed_plants,
                           active_processes={process_id: "PENDING"}, actual_weight=weight,
-                          target_weight=float(row.order_weight),
+                          target_weight=float(row.order_weight), material_classes={},
                           material_properties={col: row[idx] for col, idx in material_cols.items()})
+                for cat in categories:
+                    clzz = self.material_class_for_order(o, cat)
+                    if clzz is not None:
+                        o.material_classes[cat.id] = clzz.id
                 orders[order] = o
                 if plant is not None:
                     o.current_equipment = [plant]
@@ -147,7 +152,7 @@ class FileSnapshotProvider(SnapshotProvider):
         snapshot = Snapshot(timestamp=timestamp, orders=list(orders.values()), material=coils, lots={}, inline_material={})
         return snapshot
 
-    def store(self, snapshot: Snapshot):  # TODO json
+    def store(self, snapshot: Snapshot, *args, **kwargs):  # TODO json
         formatted = snapshot.timestamp.strftime(FileSnapshotProvider._DATETIME_FORMAT)
         file_type = self._file_type
         fl = os.path.join(self._folder, "snapshot_" + formatted + "." + self._file_type)

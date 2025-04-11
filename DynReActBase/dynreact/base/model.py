@@ -162,6 +162,8 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
     "Target weight in t"
     actual_weight: float
     "Sum of individual material weights in t"
+    material_classes: dict[str, str] = {}
+    "Keys: material category id, values: material class ids"
     allowed_equipment: list[int]   # TODO dict[process, list[int]]?
     current_equipment: list[int] | None = None
     # @deprecated

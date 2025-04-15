@@ -1,3 +1,6 @@
+/**
+ * MaterialsGrid used in lot creation page
+ */
 class MaterialsGrid2 extends HTMLElement {
 
     #grid;          //from GUI grid

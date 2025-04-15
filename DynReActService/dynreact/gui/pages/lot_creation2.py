@@ -1290,8 +1290,6 @@ def process_changed(snapshot: datetime|None,
 
     primary_category = _get_primary_category(process)
     primary_classes = _get_primary_classes(process)
-    print('loc 1293 ', 'primary_category, primary_classes ', process, primary_category, primary_classes)
-
     use_lot_range: bool = len(use_lot_range0) > 0
     interval = 3_600_000
     if not dash_authenticated(config):
@@ -1427,7 +1425,6 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
     """
     global lot_creation_thread
     global lot_creation_listener
-    print('loc 1430 ', 'material_structure ', material_structure)
     if process is None or snapshot is None:
         return lot_creation_thread is not None, None, None
     error_msg: str|None = None
@@ -1466,7 +1463,6 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                     return lot_creation_thread is not None, error_msg, info_msg
                 if material_structure is not None and len(material_structure) > 0:
                     targets.material_weights = material_structure
-                print('loc 1468 ', 'material_structure ', material_structure)
                 perf_models = performance_models_from_elements(process, perf_model_components)
                 snapshot_serialized: str = DatetimeUtils.format(snapshot)
                 orders: list[str] = [row["id"] if isinstance(row, dict) else row for row in selected_order_rows]

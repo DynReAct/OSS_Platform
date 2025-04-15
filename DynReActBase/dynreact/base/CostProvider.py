@@ -9,8 +9,7 @@ from typing import Mapping
 
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Equipment, Order, Material, Snapshot, EquipmentStatus, Site, ProductionPlanning, \
-    OrderAssignment, \
-    ProductionTargets, EquipmentProduction, ObjectiveFunction, SUM_MATERIAL, MaterialCategory
+    OrderAssignment, ProductionTargets, EquipmentProduction, ObjectiveFunction, SUM_MATERIAL, MaterialCategory
 
 
 class CostProvider:

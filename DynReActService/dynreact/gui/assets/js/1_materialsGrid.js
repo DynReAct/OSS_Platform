@@ -230,7 +230,7 @@ class MaterialsGrid2 extends HTMLElement {
         }
     }
 
-    updateStateColState(masterId){ //&&&
+    updateStateColState(masterId){
         // called by eventListener active-toggle if primary
         // called in case active-toggle change, update current class in #state_arr
         // update colState, details etc no changes
@@ -380,7 +380,7 @@ class MaterialsGrid2 extends HTMLElement {
                     }
                     elem.querySelector("input").disabled = false;
                 }
-                // set all headers active //&&& 2
+                // set all headers active
                 const materialHeader2 = this.#grid.querySelector("div[data-category=\"" + cat_id + "\"].ltp-material-category");
                 if (materialHeader2){
                     const my_toggle = materialHeader2.querySelector(".active-toggle");  //search for class with .
@@ -653,7 +653,7 @@ class MaterialsGrid2 extends HTMLElement {
                             this.changeFilling(material_category, material_class.id, sum2spread);
 
                             // keep state consistent independent from further user action
-                            this.updateStateFromMaster();//&&&
+                            this.updateStateFromMaster();
                             // case masterfield spread all fields
                             if (material_category.id == primary_category_id){
                                 if (this.#state_arr.find(o => o.masterId === masterId))
@@ -712,7 +712,7 @@ class MaterialsGrid2 extends HTMLElement {
                     // update state
                     if (this.is_primary){
                         const masterId = this.getMasterIdFromGrid();
-                        this.updateStateColState(masterId); //&&&
+                        this.updateStateColState(masterId);
                     }
                 });
             }
@@ -739,7 +739,7 @@ class MaterialsGrid2 extends HTMLElement {
                 classes: "grid-sub-buttons-row",
                 });
             const buttons_row1 = JsUtils.createElement("div", { parent: button_parent_row});
-            const buttGosub = JsUtils.createElement("button", { classes: ["grid-sub-button", "grid-sub-buttons-main"], parent: buttons_row1, text: "GoSub", title: "Go to sub categories" , style: {color: "red"}  });
+            const buttGosub = JsUtils.createElement("button", { classes: ["grid-sub-button", "grid-sub-buttons-main"], parent: buttons_row1, text: "Sub Categories", title: "Go to sub categories"  });
             const buttPrev = JsUtils.createElement("button", { classes: ["grid-sub-button", "grid-sub-buttons-main"], text: "Prev", parent: buttons_row1, title: "Go to prev main class" });
             const buttNext = JsUtils.createElement("button", { classes: ["grid-sub-button", "grid-sub-buttons-main"], text: "Next", parent: buttons_row1, title: "Go to next main class" });
             const buttons_row2 = JsUtils.createElement("div", { parent: button_parent_row});
@@ -803,7 +803,7 @@ class MaterialsGrid2 extends HTMLElement {
 
             buttPrev.addEventListener("click", () => {
                 const materialParent = this.#grid.querySelector(".ltp-material-master");
-                masterRow = parseInt(materialParent.style["grid-row-start"]);//&&&&&
+                masterRow = parseInt(materialParent.style["grid-row-start"]);
                 // 0 check if possible
                 if (masterRow > masterRowMin)
                 {
@@ -827,7 +827,7 @@ class MaterialsGrid2 extends HTMLElement {
             buttNext.addEventListener("click", () => {
                 // get masterRow from grid, maybe changed by SetDefault
                 const materialParent = this.#grid.querySelector(".ltp-material-master");
-                masterRow = parseInt(materialParent.style["grid-row-start"]);//&&&&&
+                masterRow = parseInt(materialParent.style["grid-row-start"]);
                 // 0 check if possible
                 if (masterRow < masterRowMax){
                     // 1 dishighlight current mastercell
@@ -989,12 +989,13 @@ class MaterialsGrid2 extends HTMLElement {
     }
 
     getSetpoints() {
-        // get all values from grid
+        // get all values, for later usage in Store
         let my_is_active;
         if (!this.#materials)
             return undefined;
         const results = Object.create(null);
         if (!this.is_primary){
+            // get all values from grid
             results['_sum'] = this.#totalValue;
             for (const container of this.#grid.querySelectorAll("div[data-category][data-material]:not(.ltp-material-disabled)")) {
                 const inp = container.querySelector("input[type=number]");
@@ -1020,6 +1021,20 @@ class MaterialsGrid2 extends HTMLElement {
                     }
                 }
                 results[oneEntry.masterId] = subObj;
+            }
+            //additional get sum from non-stated masters
+            const primary_category_id = this.#lot_creation.processes[this.#processName].structure.primary_category;
+            for (const category of this.#materials) {
+                if (category.id == primary_category_id){
+                    for (const cell of category.classes) {
+                        const cellid = cell.id;
+                        if (!this.#state_arr.find(o => o.masterId === cellid)){
+                            const subObj = Object.create(null);
+                            subObj['_sum'] = this.getOneField(cellid);
+                            results[cellid] = subObj;
+                        }
+                    }
+                }
             }
         }
         return results;

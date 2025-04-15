@@ -17,7 +17,7 @@ from pydantic import AliasChoices
 from dynreact.app import config, state
 from dynreact.auth.authentication import fastapi_authentication
 from dynreact.service.model import EquipmentTransition, EquipmentTransitionStateful, LotsOptimizationInput, \
-    LotsOptimizationResults, TransitionInfo, MaterialTransfer
+    LotsOptimizationResults, TransitionInfo, MaterialTransfer, LongTermPlanningResults
 from dynreact.service.optim_listener import LotsOptimizationListener
 
 fastapi_app = FastAPI(
@@ -249,13 +249,13 @@ def plant_status(equipment_id: int, snapshot_timestamp: datetime | str = Path(..
                 "now-1d": {"description": "Get yesterday's snapshot", "value": "now-1d"},
                 "2023-12-04T23:59Z": {"description": "A specific timestamp", "value": "2023-12-04T23:59Z"},
             }),
-                 unit: Literal["material", "order"] = Query("order", description="Treat coils as basic unit or orders (default)?"),
+                 unit: Literal["material", "order"] = Query("order", description="Treat materials as basic unit or orders (default)?"),
                  planning_horizon: Annotated[timedelta|str|None, Query(openapi_examples={"2d": {"value": "2d", "description": "A duration of two days"}},
                      # not working, need to use planning_horizon
                     validation_alias=AliasChoices("planning-horizon", "planning_horizon", "planningHorizon"))] = timedelta(days=1),
                  # how to determine this? default throughput per plant; long term planning results; ...?
                  target_weight: Annotated[float|None, Query(description="Target weight. If not specified, it is determined from the snapshot")] = None,
-                 current: str|None = Query(None, description="Order id or coil id; determined from snapshot by default"),
+                 current: str|None = Query(None, description="Order id or material id; determined from snapshot by default"),
                  username = username) -> EquipmentStatus:
     coil_based: bool = unit.lower().startswith("material")
     if planning_horizon is None:
@@ -266,10 +266,10 @@ def plant_status(equipment_id: int, snapshot_timestamp: datetime | str = Path(..
     current_order=None
     current_coil=None
     interval = [snapshot.timestamp, snapshot.timestamp + planning_horizon]
-    if current is None and snapshot.inline_material is not None and equipment_id in snapshot.inline_material:
+    if current is None and coil_based and snapshot.inline_material is not None and equipment_id in snapshot.inline_material:
         order_coil_data: list[MaterialOrderData] = snapshot.inline_material[equipment_id]
-        if len(order_coil_data) == 1:
-            current = order_coil_data[0].material if order_coil_data[0].material is not None else order_coil_data[0].order
+        if len(order_coil_data) > 0:
+            current = order_coil_data[-1].material if order_coil_data[-1].material is not None else order_coil_data[-1].order
     if current is not None:
         current_coil = snapshot.get_material(current)
         if current_coil is not None:
@@ -281,7 +281,7 @@ def plant_status(equipment_id: int, snapshot_timestamp: datetime | str = Path(..
         target_weights = state.get_snapshot_provider().target_weights_from_snapshot(snapshot, plant.process)
         target_weight = target_weights.get(plant.id, 0)
     return state.get_cost_provider().equipment_status(snapshot, plant, planning_period=interval, target_weight=target_weight,
-                                                      coil_based=coil_based, current=current_order, current_material=current_coils)
+                                                      material_based=coil_based, current=current_order, current_material=current_coils)
 
 
 @fastapi_app.post("/costs/transitions-stateful",
@@ -372,6 +372,54 @@ def get_lots_optimization_results(optimization_id: int, username = username) -> 
         raise HTTPException(status_code=404, detail=f"No such optimization id: {optimization_id}")
     listener = lots_optimization[1]
     return listener.get_results()
+
+
+@fastapi_app.get("/longtermplanning",
+                tags=["dynreact"],
+                summary="Long term planning results with start times in the specified period")
+def get_longtermplanning_results(
+        start:  str|datetime|None = Query(None, description="Start time. If neither start nor end time are specified, "
+                        + "start is set to now.", examples=["now", "now-31d", "2023-04-25T00:00Z"], openapi_examples={
+                "now": {"description": "Get next month's planning", "value": "now"},
+                "now-31d": {"description": "Get last month's planning", "value": "now-31d"},
+                "2023-04-25T00:00Z": {"description": "A specific timestamp", "value": "2023-04-25T00:00Z"},
+            }),
+        end:  str|datetime|None = Query(None, description="End time. If neither start nor end time are specified, "
+                        + "end is set to now+31d", examples=["now", "now+31d", "2023-04-27T00:00Z"], openapi_examples={
+                "now": {"description": "Get last month's planning", "value": "now"},
+                "now+31d": {"description": "A month ahead of now", "value": "now+31d"},
+                "2023-04-27T00:00Z": {"description": "A specific timestamp", "value": "2023-04-27T00:00Z"},
+            }),
+        sort: Literal["asc", "desc"] = "asc", username = username) -> dict[str, list[str]]:
+    if isinstance(start, str):
+        start = parse_datetime_str(start)
+    if isinstance(end, str):
+        end = parse_datetime_str(end)
+    if start is None:
+        start = DatetimeUtils.now()
+    if end is None:
+        end = start + timedelta(days=31)
+    results_ctrl = state.get_results_persistence()
+    start_times = results_ctrl.start_times_ltp(start, end)
+    return {DatetimeUtils.format(time): results_ctrl.solutions_ltp(time) for time in start_times}
+
+
+@fastapi_app.get("/longtermplanning/{start}/{solution_id}",
+                tags=["dynreact"],
+                summary="Long term planning results with start times in the specified period")
+def get_longtermplanning_result(
+        start:  str|datetime = Path(..., description="Start time. ",
+                examples=["now", "now-31d", "2023-04-25T00:00Z"], openapi_examples={
+                    "now": {"description": "Get next month's planning", "value": "now"},
+                    "now-31d": {"description": "Get last month's planning", "value": "now-31d"},
+                    "2023-04-25T00:00Z": {"description": "A specific timestamp", "value": "2023-04-25T00:00Z"},
+                }),
+        solution_id: str = Path(..., description="Unique solution id"), username = username) -> LongTermPlanningResults|None:
+    if isinstance(start, str):
+        start = parse_datetime_str(start)
+    results_ctrl = state.get_results_persistence()
+    targets, levels = results_ctrl.load_ltp(start, solution_id)
+    return LongTermPlanningResults(targets=targets, storage_levels=levels)
 
 
 def parse_datetime_str(dt: str) -> datetime:

@@ -91,15 +91,18 @@ class FileSnapshotProvider(SnapshotProvider):
         return snapshot
 
     def _read_csv(self, file: str, timestamp: datetime) -> Snapshot:
-        frame: pd.DataFrame = pd.read_csv(file, sep=";", dtype={"id": str, "order": str, "process": "Int64", "order_position": "Int64"})
+        frame: pd.DataFrame = pd.read_csv(file, sep=";", dtype={"id": str, "order": str,
+                                                "process": "Int64", "order_position": "Int64"})
         col_names = frame.columns
-        material_cols: dict[str, int] = {c[len("material_"):]: idx for idx, c in enumerate(col_names) if c.startswith("material_")}
+        material_cols: dict[str, int] = {c[len("material_"):]: idx for idx, c in enumerate(col_names) \
+                                         if c.startswith("material_")}
         plants: dict[str, Equipment] = {p.name_short: p for p in self._site.equipment}
         processes: list[Process] = self._site.processes
         coils: list[Material] = []
         orders: dict[str, Order] = {}
         lots: dict[int, list[Lot]] = {}
         # inline_coils: dict[int, list[InlineCoil]] = {}
+        categories = self._site.material_categories
 
         for row in frame.itertuples(index=False):
             if isinstance(row.plant,float):
@@ -125,8 +128,12 @@ class FileSnapshotProvider(SnapshotProvider):
                 allowed_plants = [int(p) for p in row.allowed_plants.split(",")]
                 o = Order(id=order, current_processes=[process_id], allowed_equipment=allowed_plants,
                           active_processes={process_id: "PENDING"}, actual_weight=weight,
-                          target_weight=float(row.order_weight),
+                          target_weight=float(row.order_weight), material_classes={},
                           material_properties={col: row[idx] for col, idx in material_cols.items()})
+                for cat in categories:
+                    clzz = self.material_class_for_order(o, cat)
+                    if clzz is not None:
+                        o.material_classes[cat.id] = clzz.id
                 orders[order] = o
                 if plant is not None:
                     o.current_equipment = [plant]
@@ -145,7 +152,7 @@ class FileSnapshotProvider(SnapshotProvider):
         snapshot = Snapshot(timestamp=timestamp, orders=list(orders.values()), material=coils, lots={}, inline_material={})
         return snapshot
 
-    def store(self, snapshot: Snapshot):  # TODO json
+    def store(self, snapshot: Snapshot, *args, **kwargs):  # TODO json
         formatted = snapshot.timestamp.strftime(FileSnapshotProvider._DATETIME_FORMAT)
         file_type = self._file_type
         fl = os.path.join(self._folder, "snapshot_" + formatted + "." + self._file_type)

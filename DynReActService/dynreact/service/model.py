@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from dynreact.base.model import EquipmentStatus, ProductionPlanning, ProductionTargets, ObjectiveFunction
+from dynreact.base.model import EquipmentStatus, ProductionPlanning, ProductionTargets, ObjectiveFunction, \
+    MidTermTargets, StorageLevel
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -78,3 +79,7 @@ class LotsOptimizationResults(BaseModel):
     done: bool
     "Optimization completed?"
 
+
+class LongTermPlanningResults(BaseModel, use_attribute_docstrings=True):
+    targets: MidTermTargets
+    storage_levels: list[dict[str, StorageLevel]]|None

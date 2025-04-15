@@ -4,7 +4,7 @@ import time
 import sys
 from confluent_kafka import Producer, Consumer
 from common import sendmsgtopic
-
+import traceback
 
 class Agent:
     """
@@ -29,6 +29,7 @@ class Agent:
         :param str kafka_ip: IP address and TCP port of the broker.
         :param int verbose: Level of details being saved.
         """
+
         self.topic = topic
         self.agent = agent
         self.kafka_ip = kafka_ip
@@ -48,15 +49,21 @@ class Agent:
         )
         self.consumer.subscribe([self.topic])
 
-    def write_log(self, msg: str):
+    def write_log(self, msg: str, identifier: str, to_stdout: bool = False):
         """
         Write the given message in the topic's LOG
 
         :param str msg: Message sent by the agent
+        :param str identifier: Unique Identifier for traceability
+        :param str to_stdout: Print message also to console
         """
+
+        if to_stdout:
+            print(msg)
+
         sendmsgtopic(
             producer=self.producer, tsend=self.topic, topic=self.topic, source=self.agent,
-            dest="LOG:" + self.topic, action="WRITE", payload=dict(msg=msg), vb=self.verbose
+            dest="LOG:" + self.topic, action="WRITE", payload=dict(msg=msg, identifier=identifier), vb=self.verbose
         )
 
     def handle_ping_action(self, dctmsg: dict) -> str:
@@ -107,10 +114,23 @@ class Agent:
             try:
                 return self.action_methods[action](dctmsg)
             except KeyboardInterrupt:
-                self.write_log("Program stopped by user")
+                self.write_log("Program stopped by user", "93df3b98-63e4-4fdf-ac31-49487666e32a")
                 raise KeyboardInterrupt
             except Exception as e:
-                self.write_log(f"ERROR: Raised error {type(e)} with message {e}")
+                error_message = traceback.format_exc()
+                print("Captured error message:")
+                print(error_message)  # Prints the traceback as a string
+                self.write_log(f"ERROR: Raised error {type(e)} with message {e}", "1f5b666a-0ee6-4309-b8ea-71c744eb8065")
+                sendmsgtopic(
+                    producer=self.producer,
+                    tsend=self.topic,
+                    topic=self.topic,
+                    source=self.agent,
+                    dest="LOG:" + self.topic,
+                    action="RECIEVEERROR",
+                    payload=dict(msg=f"ERROR: Raised error {type(e)} with message {error_message}"),
+                    vb=self.verbose
+                )
                 return 'ERROR'
         else:
             return 'UNKNOWN-ACTION'
@@ -124,12 +144,11 @@ class Agent:
         """
         return 'CONTINUE'
 
-    def callback_on_topic_not_available(self):
+    def callback_on_topic_not_available(self, topic: str = None):
         """
         Function executed when 'Subscribed topic not available'
         
         """
-        pass
 
     def callback_on_not_match(self, dctmsg: dict):
         """
@@ -156,8 +175,8 @@ class Agent:
 
         # If there is no message, go to the next iteration
         if message_obj.__str__() == 'None':
-            if (self.verbose > self.min_verbose) and ((self.iter_no_msg - 1) % 5 == 0):
-                self.write_log(f"Iteration {self.iter_no_msg - 1}. No message found.")
+            #if (self.verbose > self.min_verbose) and ((self.iter_no_msg - 1) % 5 == 0):
+                #self.write_log(f"Iteration {self.iter_no_msg - 1}. No message found.")
             time.sleep(1)
             return 'CONTINUE'
 
@@ -174,25 +193,25 @@ class Agent:
         key = message_obj.key()
         offst = message_obj.offset()
 
-        # Commit the message to indicate Kafka that it has already been processed,
-        # so the same message is not received again
-        self.consumer.commit(message_obj)
+        # If the subscribed topic does not exist, go to the next iteration
+        # This must be done before checking message_obj.error()
+        if message_obj.error() is not None:
+            self.callback_on_topic_not_available()
+            return 'CONTINUE'
+        else:
+            # Commit the message to indicate Kafka that it has already been processed,
+            # so the same message is not received again
+            self.consumer.commit(message_obj)
 
         # If the topic of the message doesn't match this topic, go to the next iteration
         if messtpc != self.topic:
-            return 'CONTINUE'
-
-        # If the subscribed topic does not exist, go to the next iteration
-        # This must be done before checking message_obj.error()
-        if 'Subscribed topic not available' in str(vals):
-            self.callback_on_topic_not_available()
             return 'CONTINUE'
 
         # If the message contains an error, raise it
         if message_obj.error():
             # End of partition event
             if self.verbose > 1:
-                self.write_log("Error encountered.")
+                self.write_log("Error encountered.", "41e40c2f-f4fb-4903-aa32-1931e8fb0d40")
             sys.stderr.write('%% %s [%d] reached end at offset %d\n' %
                              (message_obj.topic(), message_obj.partition(),
                               message_obj.offset()))
@@ -212,16 +231,17 @@ class Agent:
         if self.verbose > self.min_verbose:
             self.write_log(
                 f"Polled message with topic {messtpc}, values {vals}, partition {part}, "
-                f"offset {offst} and key {key}"
+                f"offset {offst} and key {key}",
+                "9a1a3eb2-dbb6-42cb-b2f2-05c53a982ff9"
             )
 
         # Perform the action and get the corresponding status
         action = dctmsg['action'].upper()
         if self.verbose > self.min_verbose:
-            self.write_log(f"Performing action {action}...")
+            self.write_log(f"Performing action {action}...", "91a4b9b6-8ed0-4fce-b5c2-196e764280af")
         status = self.process_message(action=action, dctmsg=dctmsg)
         if self.verbose > self.min_verbose:
-            self.write_log(f"Resulting status: {status}")
+            self.write_log(f"Resulting status: {status}", "b3d9c000-ed40-4cfd-a5f6-57a3d980c184")
 
         return status
 
@@ -233,7 +253,7 @@ class Agent:
         """
 
         if self.verbose > 1:
-            self.write_log(f"Spawned a process for agent {self.agent} to follow topic {self.topic}.")
+            self.write_log(f"Spawned a process for agent {self.agent} to follow topic {self.topic}.", "affc0902-8218-4dd1-9df7-8bfed516c57c")
 
         status = 'GO'
         while status != 'END':
@@ -244,4 +264,4 @@ class Agent:
         # https://github.com/confluentinc/confluent-kafka-python/issues/127
         self.consumer.close()
         if self.verbose > 1:
-            self.write_log(f"Ending spawned process for agent {self.agent} in topic {self.topic}.")
+            self.write_log(f"Ending spawned process for agent {self.agent} in topic {self.topic}.", "8dc03f6b-dce4-4a52-a427-900547dd7a5a")

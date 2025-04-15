@@ -8,14 +8,20 @@ import os
 
 config = configparser.ConfigParser()
 current_dir = os.path.dirname(os.path.abspath(__file__))
-config.read(os.path.join(current_dir, "..", "config.cnf"))
-REST_URL = config['DEFAULT']['REST_URL']
+config.read(os.path.join(current_dir, "..", "..", "..", "config.cnf"))
 
+# Docker references are different
+if os.environ.get("IS_DOCKER", "false") == "true":
+    config.read(os.path.join(current_dir, "..", "..", "config.cnf"))
+
+REST_URL = config['DEFAULT']['REST_URL']
 URL_SNAPSHOTS = REST_URL + '/snapshots'
 URL_SNAPSHOT_DATA = REST_URL + '/snapshots/{snapshot_timestamp}'
-URL_INITIAL_STATE = REST_URL + '/costs/status/{plant_id}/{snapshot_timestamp}?unit=coil'
+URL_INITIAL_STATE = REST_URL + '/costs/status/{equipment_id}/{snapshot_timestamp}?unit=material'
 URL_UPDATE_STATUS = REST_URL + '/costs/transitions-stateful'
 
+DOCKER_MANAGER="_manager"
+DOCKER_REPLICA="_replica"
 
 def load_url_json_get(url: str, verbose: int = 1) -> dict:
     """

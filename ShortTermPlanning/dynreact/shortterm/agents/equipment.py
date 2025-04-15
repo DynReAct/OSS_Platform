@@ -9,18 +9,17 @@ Version History:
 """
 
 import time
-import argparse
-import configparser
-from multiprocessing import Pool
-from common import VAction, TOPIC_GEN, sendmsgtopic
-from data.data_functions import get_equipment_status
-from functions import calculate_production_cost, get_new_equipment_status
-from agent import Agent
+from common import sendmsgtopic
+from common.data.data_functions import get_equipment_status
+from common.data.load_url import DOCKER_REPLICA
+from common.functions import calculate_production_cost, get_new_equipment_status
+from agents import Agent
+from common.handler import DockerManager
 
 
-class Resource(Agent):
+class Equipment(Agent):
     """
-    Class Resource supporting the equipment agents.
+    Class Equipment supporting the equipment agents.
 
     Arguments:
         topic     (str): Topic driving the relevant converstaion.
@@ -31,11 +30,11 @@ class Resource(Agent):
         verbose   (int): Level of details being saved.
 
     """
-    def __init__(self, topic: str, agent: str, status: dict, kafka_ip: str, counterbid_wait: float, verbose: int = 1):
+    def __init__(self, topic: str, agent: str, status: dict, kafka_ip: str, counterbid_wait: float, verbose: int = 1, manager=True):
 
         super().__init__(topic=topic, agent=agent, kafka_ip=kafka_ip, verbose=verbose)
         """
-           Constructor function for the Resource Class
+           Constructor function for the Equipment Class
 
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
@@ -49,11 +48,14 @@ class Resource(Agent):
             'COUNTERBID': self.handle_counterbid_action, 'ASKCONFIRM': self.handle_askconfirm_action,
             'CONFIRM': self.handle_confirm_action, 'ASSIGNED': self.handle_assigned_action
         })
+        
+        if manager:
+            self.handler = DockerManager(tag=f"equipment{DOCKER_REPLICA}")
 
         self.round_number = 0
         self.status = status
         self.counterbid_wait = counterbid_wait
-
+        self.equipment = 0
         self.iter_post_bid = 0
         self.bids = []
         self.last_bid_time = None
@@ -61,7 +63,9 @@ class Resource(Agent):
         self.previous_price = None
 
         if self.verbose > 1:
-            self.write_log(f"Finished creating the agent {self.agent} with status {self.status}.")
+            self.write_log(msg=f"Finished creating the agent {self.agent} with status {self.status}.",
+                           identifier="5e0e90e2-12be-4048-b70f-73917bfe947b",
+                           to_stdout=True)
 
     def move_to_next_round(self, material_params: dict):
         """
@@ -70,12 +74,12 @@ class Resource(Agent):
 
         :param dict material_params:
         """
-        self.status = get_new_equipment_status(material_params=material_params, resource_status=self.status)
+        self.status = get_new_equipment_status(material_params=material_params, equipment_status=self.status, verbose=self.verbose)
         roundless_name = self.agent[:self.agent.rfind(":")]
         self.round_number += 1
         self.agent = roundless_name + f":{self.round_number}"
         if self.verbose > 1:
-            self.write_log(f"Moved equipment {roundless_name} to round {self.round_number}. New status: {self.status}")
+            self.write_log(f"Moved equipment {roundless_name} to round {self.round_number}. New status: {self.status}", "eb019471-fbda-43bb-907f-951e503f366e")
 
         self.iter_post_bid = 0
         self.bids = []
@@ -90,38 +94,53 @@ class Resource(Agent):
 
     def handle_create_action(self, dctmsg: dict) -> str:
         """
-        Handles the CREATE action. It clones the master RESOURCE for one auction.
-        This instruction should only be given to the general RESOURCE.
+        Handles the CREATE action. It clones the master EQUIPMENT for one auction.
+        This instruction should only be given to the general EQUIPMENT.
 
         :param dict dctmsg: Message dictionary
         :return: Status of the handling
         :rtype: str
         """
 
-        topic = dctmsg['topic']
-        payload = dctmsg['payload']
-        resource = payload['id']
-        counterbid_wait = payload['counterbid_wait']
-        agent = f"RESOURCE:{topic}:{resource}:0"
-        status = get_equipment_status(resource)
+        print("Got a create action in equipment")
 
-        init_kwargs = dict(
-            topic=topic, agent=agent, status=status, kafka_ip=self.kafka_ip,
-            counterbid_wait=counterbid_wait, verbose=self.verbose,
-        )
-        if self.verbose > 1:
-            self.write_log(f"Creating equipment with configuration {init_kwargs}...")
+        if self.handler:
 
-        pool = Pool(processes=2)
-        pool.apply_async(create_resource, (init_kwargs,))
-        pool.close()
+            print("Inside the handler")
 
-        return 'CONTINUE'
+            topic = dctmsg['topic']
+            payload = dctmsg['payload']
+            equipment = payload['id']
+            snapshot = payload['snapshot']
+            counterbid_wait = payload['counterbid_wait']
+            agent = f"EQUIPMENT:{topic}:{equipment}:0"
+            status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)
+            self.equipment = equipment
+    
+    
+            init_kwargs = {
+                "topic": topic,
+                "agent": agent,
+                "status": status,
+                "kafka-ip": self.kafka_ip,
+                "counter-wait": int(counterbid_wait),
+                "verbose": self.verbose
+            }
+
+            self.handler.launch_container(name=f"{topic}_{equipment}", agent="equipment", mode="replica", params=init_kwargs)
+
+            if self.verbose > 1:
+                self.write_log(f"Creating equipment with configuration {init_kwargs}...", "f886d124-383b-497e-b2a1-841222a3e14d")
+
+            return 'CONTINUE'
+        else:
+            self.write_log(f"Refuse to create equipment replica from another replica instance.", "fe2dbc33-7dcb-486a-af35-9e485674fff2")
+            raise Exception("Replicas can't create new instances. Only managers can")
 
     def handle_start_action(self, dctmsg: dict) -> str:
         """
-        Handles the START action. It starts the RESOURCE's auction by instructing the MATERIALs to start bidding.
-        This instruction should only be given to the RESOURCE children of the auction.
+        Handles the START action. It starts the EQUIPMENT's auction by instructing the MATERIALs to start bidding.
+        This instruction should only be given to the EQUIPMENT children of the auction.
 
         :param dict dctmsg: Message dictionary
         :return: Status of the handling
@@ -144,7 +163,7 @@ class Resource(Agent):
             vb=self.verbose
         )
         if self.verbose > 2:
-            self.write_log(f"Instructed all MATERIAL:{topic} to bid")
+            self.write_log(f"Instructed all MATERIAL:{topic} to bid", "ce79433f-c90b-42bc-a6d8-83e50f25cb5b")
 
         # Reset bidding status
         self.iter_post_bid = 0
@@ -166,12 +185,13 @@ class Resource(Agent):
         material_params = payload['material_params']
         bidding_price = payload['price']
 
-        prod_cost = calculate_production_cost(material_params=material_params, resource_status=self.status)
+        prod_cost = calculate_production_cost(material_params=material_params, equipment_status=self.status, verbose=self.verbose)
         if prod_cost is None:
             if self.verbose > 1:
                 self.write_log(
                     f"Rejected offer from material {payload['id']}. "
-                    f"The transition function to this material returns null"
+                    f"The transition function to this material returns null",
+                    "46d5bed6-4e29-4d99-af76-93d008961dbd"
                 )
             return 'CONTINUE'
 
@@ -185,7 +205,7 @@ class Resource(Agent):
         # Add the bid to the list
         self.bids.append(bid)
         if self.verbose > 1:
-            self.write_log(f"Added {bid} to the list of bids, {self.bids}")
+            self.write_log(f"Added {bid} to the list of bids, {self.bids}", "245bb0ae-d579-4fef-a6a1-6625c97afbe1")
 
         return 'CONTINUE'
 
@@ -214,7 +234,7 @@ class Resource(Agent):
     def handle_confirm_action(self, dctmsg: dict) -> str:
         """
         Handles the CONFIRM action. It receives the confirmation from the material and moves to the next round.
-        This instruction should only be given to the RESOURCE children of the auction,
+        This instruction should only be given to the EQUIPMENT children of the auction,
         and only from the MATERIAL that the equipment previously asked for confirmation.
 
         :param dict dctmsg: Message dictionary
@@ -231,14 +251,15 @@ class Resource(Agent):
                 f"the pending material {self.bid_to_confirm['material']}"
             )
             if self.verbose > 1:
-                self.write_log(f"ERROR: {error_msg}")
+                self.write_log(f"ERROR: {error_msg}", "8515a8be-49c3-4f18-8748-55126f15bb97")
             raise RuntimeError(error_msg)
 
         self.previous_price = self.bid_to_confirm['price']
         if self.verbose > 1:
             self.write_log(
                 f"The equipment will be assigned to material {material} with bid {self.bid_to_confirm}. "
-                f"Moving to the next round..."
+                f"Moving to the next round...",
+                "0f906ad0-5526-45de-8a51-bc43a2a5c19d"
             )
         self.move_to_next_round(material_params=material_params)
         return 'CONTINUE'
@@ -247,7 +268,7 @@ class Resource(Agent):
         """
         Handles the ASSIGNED action. It removes the material from the list of bids or,
         if the material matches the pending material, it no longer waits for its confirmation.
-        This instruction should only be given to the RESOURCE children of the auction.
+        This instruction should only be given to the EQUIPMENT children of the auction.
 
         :param dict dctmsg: Message dictionary
         :return: Status of the handling
@@ -258,7 +279,7 @@ class Resource(Agent):
 
         if self.bid_to_confirm and material == self.bid_to_confirm['material']:
             if self.verbose > 1:
-                self.write_log(f"The material {material} has been assigned to another equipment.")
+                self.write_log(f"The material {material} has been assigned to another equipment.", "91efd53e-43a4-47bb-8da8-61aef92b8fe2")
             self.bid_to_confirm = dict()
             return 'CONTINUE'
 
@@ -266,7 +287,7 @@ class Resource(Agent):
             if bid['material'] == material:
                 self.bids.pop(index)
                 if self.verbose > 1:
-                    self.write_log(f"Removed the assigned material, {material}, from the list of bids: {self.bids}")
+                    self.write_log(f"Removed the assigned material, {material}, from the list of bids: {self.bids}", "a2646085-16ed-41cb-8b3e-745f5f2d7fae")
         return 'CONTINUE'
 
     def callback_before_message(self) -> str:
@@ -283,7 +304,8 @@ class Resource(Agent):
         time_after_bid = time.perf_counter() - self.last_bid_time
         if (self.verbose > 1) and ((self.iter_post_bid - 1) % 15 == 0):
             self.write_log(
-                f"Iteration {self.iter_post_bid - 1} after bid. Passed {time_after_bid:.2f}s after last bid"
+                f"Iteration {self.iter_post_bid - 1} after bid. Passed {time_after_bid:.2f}s after last bid",
+                "1055b7fa-32a0-40b5-800a-33ba6bf1820f"
             )
 
         # Do not proceed if not enough time has passed since the last bid or
@@ -296,7 +318,8 @@ class Resource(Agent):
             if self.verbose > 1:
                 self.write_log(
                     f"No more bids to process. The equipment will not be assigned to any material. "
-                    f"Killing the agent..."
+                    f"Killing the agent...",
+                    "b6afb95b-91ac-4160-81c1-ac539ad2e472"
                 )
             return 'END'
 
@@ -304,71 +327,13 @@ class Resource(Agent):
         self.bids.sort(key=lambda item: item['profit'])
         best_bid = self.bids.pop()
         if self.verbose > 1:
-            self.write_log(f"Removed the best bid, {best_bid}, from the list of bids: {self.bids}")
+            self.write_log(f"Removed the best bid, {best_bid}, from the list of bids: {self.bids}", "1ea89f70-2e6c-4840-9bdb-bb89dfc7bff5")
 
         dctmsg = dict(topic=self.topic, payload=dict(id=best_bid['material']))
         self.process_message(action='ASKCONFIRM', dctmsg=dctmsg)
 
         self.bid_to_confirm = best_bid
         if self.verbose > 1:
-            self.write_log(f"Asked material {best_bid['material']} for confirmation.")
+            self.write_log(f"Equipment: Asked material {best_bid['material']} for confirmation.", "8d7d38bc-00cb-486c-8efa-0e46257bf1a2")
 
         return 'CONTINUE'
-
-
-def create_resource(init_kwargs: dict)-> None:
-    """
-    Helper function to create Resource instances asynchronously with Python's multiprocessing.
-    The reason for this function is that multiprocessing can handle functions but not methods.
-    Source: https://stackoverflow.com/questions/41000818/can-i-pass-a-method-to-apply-async-or-map-in-python-multiprocessing
-
-    :param dict init_kwargs:
-    """
-
-    resource = Resource(**init_kwargs)
-    resource.follow_topic()
-
-
-def main():
-    """
-    Create the general RESOURCE and make it follow the general topic
-
-    :param str base: Path for the configuration file. Passed in the command line
-    :param int verbose: Option to print information. Passed in the command line
-    """
-
-    # Extract the 'verbose' command line argument
-    # The value in 'base' indicates the path to the configuration file
-    # where the IP will be read
-    ap = argparse.ArgumentParser()
-    ap.add_argument("-b", "--base", type=str, dest="base", required=True,
-                    help="Path from current place to find config.cnf file")
-    ap.add_argument("-v", "--verbose", nargs='?', action=VAction,
-                    dest='verbose', help="Option for logging detailed information")
-    args = vars(ap.parse_args())
-    verbose = 0
-    if args["verbose"]:
-        verbose = args["verbose"]
-    base = "."
-    if args["base"]:
-        base = args["base"]
-    if verbose > 0:
-        print(f"Running program with {verbose=}, {base=}.")
-
-    # Global configuration
-    config = configparser.ConfigParser()
-    config.read(base + '/config.cnf')
-    kafka_ip = config['DEFAULT']['IP']
-
-    # The parameter 'counterbid_wait' is irrelevant in the main equipment
-    main_resource = Resource(
-        topic=TOPIC_GEN, agent=f"RESOURCE:{TOPIC_GEN}", status=dict(), kafka_ip=kafka_ip,
-        counterbid_wait=15, verbose=verbose
-    )
-    main_resource.follow_topic()
-
-
-if __name__ == '__main__':
-
-    main()
-

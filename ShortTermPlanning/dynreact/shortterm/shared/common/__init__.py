@@ -1,10 +1,11 @@
 import json
 import argparse
+import os
+
 from confluent_kafka import Producer
 
-
-TOPIC_GEN = "DynReact-Gen"
-
+TOPIC_GEN = os.environ.get("TOPIC_GEN", "DynReact-Gen")
+TOPIC_CALLBACK = os.environ.get("TOPIC_CALLBACK", "DynReact-Callback")
 
 class VAction(argparse.Action):
     """
@@ -22,8 +23,9 @@ class VAction(argparse.Action):
         choices (str): Set of values .
         required (bool): Required or not.
         help (str): String describing the meaning of the parameter for help.
-        metavar (str): 
+        metavar (str):
     """
+
     def __init__(self, option_strings, dest, nargs=None, const=None,
                  default=None, type=None, choices=None, required=False,
                  help=None, metavar=None):
@@ -43,7 +45,7 @@ class VAction(argparse.Action):
         :param bool required: Required or not.
         :param str help: String describing the meaning of the parameter for help.
         :param str metavar: 
-        
+
         """
         self.values = 0
 
@@ -102,5 +104,8 @@ def sendmsgtopic(producer: Producer, tsend: str, topic: str, source: str, dest: 
         payload=payload
     )
     mtxt = json.dumps(msg)
-    producer.produce(value=mtxt, topic=tsend, on_delivery=confirm)
-    producer.flush()
+    try:
+        producer.produce(value=mtxt, topic=tsend, on_delivery=confirm, timestamp=30000) # 30 seconds
+        producer.flush()
+    except Exception as e:
+        print(f'Failed to deliver message: {str(e)}')

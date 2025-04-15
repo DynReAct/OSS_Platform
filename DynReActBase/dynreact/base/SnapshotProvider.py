@@ -243,11 +243,12 @@ class SnapshotProvider:
                 target_weights[plant_id] = 0
                 continue
             order_ids = [order for lot in snapshot.lots[plant_id] for order in lot.orders if lot.active or include_inactive_lots]
-            orders: dict[str, Order | None] = {order_id: next((o for o in snapshot.orders if o.id == order_id), None)
-                                               for order_id in order_ids}
+            orders: dict[str, Order | None] = {order_id: next((o for o in snapshot.orders if o.id == order_id), None) for order_id in order_ids}
             none_orders = [order_id for order_id, order in orders.items() if order is None]
             if len(none_orders) > 0:
-                raise Exception("A lot for plant " + str(plant_id) + " contains unknown orders " + str(none_orders))
+                # may happen for instance for dummies
+                # raise Exception("A lot for plant " + str(plant_id) + " contains unknown orders " + str(none_orders))
+                orders = {oid: order for oid, order in orders.items() if order is not None}
             total_weight = sum(o.target_weight for o in orders.values())
             target_weights[plant_id] = total_weight
         return target_weights

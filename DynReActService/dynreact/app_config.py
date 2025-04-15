@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 class DynReActSrvConfig:
 
     config_provider: str = "default+file:./data/site.json"
-    snapshot_provider: str = "default+file:./data"
+    snapshot_provider: str = "default+file:./data/snapshots"
     downtime_provider: str = "default+file:./data/downtimes.json"
     cost_provider: str|None = None  # needs to be specified
     "If None, an arbitrary cost provider will be used, if available"

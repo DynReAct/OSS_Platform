@@ -111,8 +111,8 @@ class EquipmentAvailability(Model):
     "The period this refers to, typically a month"
     daily_baseline: timedelta|None = None
     "The baseline availability, such as 24h or 1d. Default is 1d."
-    deltas: dict[date, float]|None = None
-    "Deviations from the baseline per day. Defaults to 0 if a day is missing or the field is unset."
+    deltas: dict[date, timedelta]|None = None
+    "Deviations from the baseline per day. Defaults to 0 if a day is missing or the field is unset. Positive values mean extra time, negative values are outages etc."
 
 
 PROPERTIES = TypeVar("PROPERTIES", bound=Model)  # Material-specific properties, not matching the MATERIAL parameter in the Order class
@@ -162,6 +162,8 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
     "Target weight in t"
     actual_weight: float
     "Sum of individual material weights in t"
+    material_classes: dict[str, str] = {}
+    "Keys: material category id, values: material class ids"
     allowed_equipment: list[int]   # TODO dict[process, list[int]]?
     current_equipment: list[int] | None = None
     # @deprecated
@@ -538,36 +540,68 @@ class Snapshot(Model, Generic[MATERIAL_PROPERTIES]):
                                 coil.current_equipment is not None and \
                                 coil.current_equipment_name != equipment_name])
 
-    def get_orders_equipment(self, site: Site, equipment_name: str, storage:str, assigned:int=-1) -> list[str]:
-        if assigned < 0:
-            return(list(set([coil.order for coil in self.material if \
-                            equipment_name in [site.get_equipment(ieq).name_short \
-                                for ieq in self.get_order(coil.order).allowed_equipment] \
-                            and coil.current_storage == storage and \
-                            coil.current_equipment is None] )) )
-        else:
-            return(list(set([coil.order for coil in self.material if \
-                            equipment_name in [site.get_equipment(ieq).name_short \
-                                for ieq in self.get_order(coil.order).allowed_equipment] \
-                            and coil.current_storage == storage and \
-                                coil.current_equipment is not None and \
-                                coil.current_equipment_name != equipment_name] )) )
+    def get_orders_equipment(self, site: Site, equipment_name: str, \
+                             storage:str, assigned:int=-1) -> list[str]:
+        """
+        Get a list of orders when all the materials in the order have as 
+        current_eqipment_name equal to tje equipment_name.
 
+        :param site: The site containing plant details.
+        :param equipment_name: targeted the name of the equipment.
+        :param storage: Useless since the latest input from BFI (2025-02-25).
+        :param assigned: Useless and kept because of OSS_Plantform compatiiity 
+        :return: A list of order IDs representing the selected orders.
+        """
+        # Modified by JOM 2025-02-24
+        # For RAS there is not current_equipment involving Not assigned Materials.
+        # Then, assigned is useless and code gets simplified.
+        # if assigned < 0:
+        # else:
+        #     return(list(set([coil.order for coil in self.material if \
+        #                     equipment_name in [site.get_equipment(ieq).name_short \
+        #                         for ieq in self.get_order(coil.order).allowed_equipment] \
+        #                     and coil.current_storage == storage and \
+        #                         coil.current_equipment is not None and \
+        #                         coil.current_equipment_name != equipment_name] )) )
+        #
+        # Retrieve a list of orders based on current equipment name
+        unique_orders = {coil.order for coil in self.material 
+                        if coil.current_equipment_name == site.get_equipment_by_name(\
+                            equipment_name).name_short}
+        result_list = []
+        for order in unique_orders:
+            belongs_to_equipment = all(
+                coil.current_equipment_name == equipment_name 
+                for coil in self.material if coil.order == order
+            )
+            if belongs_to_equipment:
+                result_list.append(order)
 
-    def get_material_selected_orders(self, orders: list[str], plant_names: list[str], site: Site) -> list[str]:
-        tmp = [(coil.id,coil.order) for coil in self.material if \
-                    coil.current_equipment_name in plant_names and coil.order in orders ]
-        unique_ord = {}
-        # Iterate over the list of tuples to find coils representing the targeted orders
-        for a, b in tmp:
-            mat = self.get_coil(a).current_storage
-            stg_valid = [site.get_plant_by_name(plt).storage_in for plt in plant_names]
-            if b not in unique_ord and mat in stg_valid:  # Only add if 'b' is not already in the dictionary
-                unique_ord[b] = a
-        # Extract only the 'coil' components
-        res = list(unique_ord.values())        
-        return(res)
+        return result_list
+    #
+    def get_material_selected_orders(self, orders: list[str], plant_names: list[str], \
+                                    site: Site) -> list[str]:
+        """
+        Get a list of selected materials (coils) based on the specified orders and plant names.
+        Since the requirement from RAS a single coil represents the whole order.
+        Therefore, only one coil/material is extracted from each order.
+        ** Storage constraints were removed from BFI 2025-02-22, then site param is useless
+        ** coil.current_equipment_name in plant_names  was removed from the selection if,
+        enabling orders from other equipments. Then plant_names is useless as well
 
+        :param orders: A list of order IDs to filter.
+        :param plant_names: A list of plant names to filter.
+        :param site: The site containing plant details.
+        :return: A list of coil IDs representing the selected orders (one coil.id per order).
+        """
+        #
+        # Diccionario para almacenar solo un coil.id por coil.order
+        selected_coils = {}
+        for coil in self.material:
+            if coil.order in orders:
+                if coil.order not in selected_coils:
+                    selected_coils[coil.order] = coil.id
+        return list(selected_coils.values())
 
 
 class LongTermTargets(Model):

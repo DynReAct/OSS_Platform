@@ -1,6 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timedelta, date
 
-from dynreact.base.model import MidTermTargets, ProductionTargets, EquipmentProduction, ProductionPlanning, Site
+from dynreact.base.model import MidTermTargets, ProductionTargets, EquipmentProduction, ProductionPlanning, Site, \
+    EquipmentAvailability
 
 
 class ModelUtils:
@@ -62,3 +63,35 @@ class ModelUtils:
                 overlapping_fraction = (overlap[1] - overlap[0])/(period[1]-period[0])
                 result[idx] = overlapping_fraction
         return result
+
+    @staticmethod
+    def aggregate_availabilities(plant_data: list[EquipmentAvailability], start: date, end: date) -> timedelta:
+        start0 = start
+        availability = timedelta()
+        for data in plant_data:
+            end1 = data.period[1]
+            if end1 <= start0:
+                continue
+            start1 = data.period[0]
+            if start1 >= end:
+                break
+            end1 = min(end, end1)
+            if start1 < start0:
+                start1 = start0
+            elif start0 < start1:  # here we have a period without availability data => assume full availability
+                availability += start1 - start0
+            if start1 >= end1:
+                break
+            start0 = end1
+            days_diff: int = (end1 - start1).days
+            baseline: timedelta = data.daily_baseline or timedelta(days=1)
+            availability += days_diff * baseline
+            if data.deltas is not None:
+                for day, delta in data.deltas.items():
+                    if day < start1 or day >= end1:
+                        continue
+                    availability += delta
+        if len(plant_data) == 0 or end > plant_data[-1].period[1]:
+            last_start = plant_data[-1].period[1] if len(plant_data) > 0 else start
+            availability += end - last_start
+        return availability

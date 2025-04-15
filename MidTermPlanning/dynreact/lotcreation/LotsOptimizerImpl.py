@@ -11,6 +11,7 @@ import numpy as np
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo, LotsOptimizer, LotsOptimizationState
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation
+from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Snapshot, ProductionPlanning, ProductionTargets, Site, OrderAssignment, Order, \
     EquipmentStatus, Lot, Equipment, EquipmentProduction, ObjectiveFunction
 
@@ -370,7 +371,7 @@ class TabuSearch(LotsOptimizer):
         # slp = [[sl1[i] for i in range(len(sl1)) if (i % self.params.NParallel) == r] for r in range(self.params.NParallel)]
         slp: list[list[OrderAssignment]] = [[sl1[i] for i in range(len(sl1)) if (i % self._params.NParallel) == r] for r in range(self._params.NParallel)]
         plants = {plant.id: plant for plant in self._plants}
-        items = [CTabuWorker(self._costs, sl, TabuList, self._params, self, plants, self._snapshot, self._targets, planning, self._min_due_date) for sl in slp]
+        items = [CTabuWorker(self._costs, sl, TabuList, self._params, self, plants, self._snapshot, self._targets, planning, self._min_due_date, self._main_category) for sl in slp]
         solutions: list[tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]] = []
 
         # parallel tabu search loop
@@ -422,8 +423,8 @@ class TabuAlgorithm(LotsOptimizationAlgo):
 class CTabuWorker:
 
     def __init__(self, costs: CostProvider, slist: list[OrderAssignment], TabuList: set[Any], params: TabuParams, tabuSearch,
-                 plants: dict[int, Equipment],
-                 snapshot: Snapshot, targets: ProductionTargets, planning: ProductionPlanning, min_due_date: datetime|None):
+                 plants: dict[int, Equipment], snapshot: Snapshot, targets: ProductionTargets, planning: ProductionPlanning,
+                 min_due_date: datetime|None, main_category: str|None):
         self.slist: list[OrderAssignment] = slist
         order_ids = [ass.order for ass in slist]
         self.orders: dict[int, Order] = {oid: tabuSearch._orders[oid] for oid in order_ids}
@@ -438,6 +439,7 @@ class CTabuWorker:
         self.costs = costs
         self.snapshot = snapshot
         self._min_due_date: datetime|None = min_due_date
+        self._main_category: str|None = main_category
 
     def BestN(self) -> tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]:
         best_swap: TabuSwap = None
@@ -483,7 +485,8 @@ class CTabuWorker:
                         del order_assignments[order]
                     equipment_targets = self.targets.target_weight.get(swp.PlantFrom, EquipmentProduction(equipment=swp.PlantFrom, total_weight=0.0))
                     new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(equipment_targets, self.planning.process,
-                                                                        order_assignments, self.snapshot, self.targets.period, track_structure=track_structure)
+                                                                        order_assignments, self.snapshot, self.targets.period,
+                                                                        track_structure=track_structure, main_category=self._main_category)
                     plant_status[swp.PlantFrom] = new_status
                 if swp.PlantTo >= 0:
                     plant_status[swp.PlantTo] = None
@@ -497,7 +500,8 @@ class CTabuWorker:
                         del order_assignments[order]
                     equipment_targets = self.targets.target_weight.get(swp.PlantTo, EquipmentProduction(equipment=swp.PlantTo, total_weight=0.0))
                     new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(equipment_targets, self.planning.process,
-                                                                            order_assignments, self.snapshot, self.targets.period, track_structure=track_structure)
+                                                                            order_assignments, self.snapshot, self.targets.period,
+                                                                            track_structure=track_structure, main_category=self._main_category)
                     plant_status[swp.PlantTo] = new_status
                 planning_candidate = ProductionPlanning(process=self.planning.process, order_assignments=order_assignments,
                                    equipment_status=plant_status, target_structure=self.targets.material_weights)

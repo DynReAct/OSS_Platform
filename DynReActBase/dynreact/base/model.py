@@ -218,7 +218,14 @@ class PlanningData(Model):
     delta_weight: float = 0.0
     "Deviation from target weight in t. Positive for missing tonnage."
     material_structure: dict[str, dict[str, float]]|None = None
-    "Keep track of material classes"
+    "Keep track of material classes. Outer key: category id, inner key: class id; special keys \"_sum\" represent the total/aggregated values"
+    main_category: str|None = None
+    "For nested structure planning, the main category."
+    nested_material_structure: dict[str, dict[str, dict[str, float]]]|None = None
+    """
+    Keep track of nested material classes. Only used in case of nested structure targets. 
+    Outermost key: class id for main category, middle key: sub category id, innermost key: class id; special keys \"_sum\" represent the total/aggregated values.
+    """
     min_due_date: datetime|None = None
 
 
@@ -276,6 +283,10 @@ class EquipmentProduction(Model):
     "Weight restriction for lots in t"
 
 
+SUM_MATERIAL: str = "_sum"
+"A special entry in material class specifications that represents the aggregated/total value."
+
+
 class ProductionTargets(Model):
 
     process: str
@@ -283,7 +294,7 @@ class ProductionTargets(Model):
     "Target production by equipment id"
     period: tuple[datetime, datetime]
     material_weights: dict[str, float|dict[str, float]] | None = None
-    "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed"
+    "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed. The special value \"_sum\" represents the total weight."
 
 
 class StorageLevel(Model):
@@ -320,7 +331,7 @@ class ProductionPlanning(Model, Generic[P]):
     equipment_status: dict[int, EquipmentStatus[P]]                  # "vbest"
     "keys: equipment ids"
     target_structure: dict[str, float|dict[str, float]] | None = None
-    "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed"
+    "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed. Special key \"_sum\" represents the total/aggregated value."
 
     # TODO cache results?
     def get_lots(self) -> dict[int, list[Lot]]:

@@ -5,9 +5,12 @@ the custom logic for building an objective function for schedules.
 """
 
 from datetime import datetime
+from typing import Mapping
 
-from dynreact.base.model import Equipment, Order, Material, Snapshot, EquipmentStatus, Site, ProductionPlanning, OrderAssignment, \
-    ProductionTargets, EquipmentProduction, ObjectiveFunction
+from dynreact.base.impl.ModelUtils import ModelUtils
+from dynreact.base.model import Equipment, Order, Material, Snapshot, EquipmentStatus, Site, ProductionPlanning, \
+    OrderAssignment, \
+    ProductionTargets, EquipmentProduction, ObjectiveFunction, SUM_MATERIAL, MaterialCategory
 
 
 class CostProvider:
@@ -47,9 +50,11 @@ class CostProvider:
         plants = [p for p in self._site.equipment if p.process == process and p.id in plant_ids]
         track_structure: bool = targets.material_weights is not None and len(targets.material_weights) > 0
         target_structure = targets.material_weights if track_structure else None
+        main_category: MaterialCategory|None = ModelUtils.main_category_for_targets(targets.material_weights, self._site.material_categories) if track_structure else None
         status: dict[int, EquipmentStatus] = \
             {plant.id: self.evaluate_equipment_assignments(targets.target_weight.get(plant.id, EquipmentProduction(equipment=plant.id, total_weight=0.0)),
-                                                process, assignments, snapshot, targets.period, track_structure=track_structure) for plant in plants}
+                                                process, assignments, snapshot, targets.period, track_structure=track_structure,
+                                                main_category=main_category.id if main_category is not None else None) for plant in plants}
         order_assignments = {o: ass for o, ass in assignments.items() if ass.equipment in plant_ids}
         unassigned = {o: ass for o, ass in assignments.items() if ass.equipment < 0}
         order_assignments.update(unassigned)
@@ -58,7 +63,7 @@ class CostProvider:
     def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
                                        planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None,
                                        current_material: list[Material] | None=None,
-                                       track_structure: bool=False) -> EquipmentStatus:
+                                       track_structure: bool=False, main_category: str|None=None) -> EquipmentStatus:
         """
         Main function to be implemented in derived class taking into account global status.
         Note that this must set the PlantStatus.planning.target_fct value.
@@ -66,7 +71,9 @@ class CostProvider:
         :param assignments: order assignments; keys: order ids
         :param target_weight:
         :param snapshot:
-        :param: current_coils: should only be present if the last order is not assumed to be processed entirely
+        :param current_coils: should only be present if the last order is not assumed to be processed entirely
+        :param track_structure:
+        :param main_category: only relevant if track_structure is true; used for nested structure targets
         :return:
         """
         raise Exception("Not implemented")
@@ -111,6 +118,65 @@ class CostProvider:
     def structure_costs(self, planning: ProductionPlanning):
         """
         :param planning
+        :return:
+        """
+        if planning.target_structure is None:
+            return 0
+        costs_parameter = self.structure_costs_parameter()
+        if not isinstance(costs_parameter, float|int) or costs_parameter <= 0:
+            return 0
+        is_nested: bool = any(isinstance(struct, Mapping) for struct in planning.target_structure.values())
+        return self._structure_costs_flat(planning, costs_parameter) if not is_nested else self._structure_costs_nested(planning, costs_parameter)
+
+    def _structure_costs_flat(self, planning: ProductionPlanning, costs_parameter):
+        structure: dict[str, dict[str, float]] = ModelUtils.aggregated_structure(self._site, planning)
+        deviations_by_category: dict[str, list[dict[str, float]]] = {}  # outer key: category, inner keys: "diff", "target", "value"
+        for cl, target in planning.target_structure.items():
+            if cl == SUM_MATERIAL:
+                continue
+            category = next((cat for cat, cl_dict in structure.items() if cl in cl_dict), None)
+            if category is None:  # should not happen
+                continue
+            actual_value: float = structure[category][cl]
+            if category not in deviations_by_category:
+                deviations_by_category[category] = []
+            deviations_by_category[category].append({"diff": target - actual_value, "target": target, "value": actual_value})
+        costs = 0
+        for cat, results in deviations_by_category.items():
+            total_diff = sum(abs(dct["diff"]) for dct in results)
+            total_targets = sum(dct["target"] for dct in results)
+            if total_targets <= 0:
+                raise Exception(f"Targets must be positive, got {total_targets}")
+            costs += total_diff / total_targets * costs_parameter
+        return costs
+
+    def _structure_costs_nested(self, planning: ProductionPlanning, costs_parameter):
+        structure: dict[str, dict[str, dict[str, float]]] = ModelUtils.aggregated_structure_nested(self._site, planning)
+        "Outermost key: class id for main category, middle key: sub category id, innermost key: class id; (special keys \"_sum\" represent the total/aggregated values)."
+        deviations_by_category: dict[str, list[dict[str, float]]] = {}  # outer key: category, inner keys: "diff", "target", "value"
+        # TODO adapt
+        for cl, target in planning.target_structure.items():
+            if cl == SUM_MATERIAL or not isinstance(target, Mapping):
+                continue
+            category = next((cat for cat, cl_dict in structure.items() if cl in cl_dict), None)
+            if category is None:  # should not happen
+                continue
+            actual_value: float = structure[category][cl]
+            if category not in deviations_by_category:
+                deviations_by_category[category] = []
+            deviations_by_category[category].append({"diff": target - actual_value, "target": target, "value": actual_value})
+        costs = 0
+        for cat, results in deviations_by_category.items():
+            total_diff = sum(abs(dct["diff"]) for dct in results)
+            total_targets = sum(dct["target"] for dct in results)
+            if total_targets <= 0:
+                raise Exception(f"Targets must be positive, got {total_targets}")
+            costs += total_diff / total_targets * costs_parameter
+        return costs
+
+    def structure_costs_parameter(self) -> float:
+        """
+        Overwrite this with a positive value to enable the default structure costs algorithm
         :return:
         """
         return 0

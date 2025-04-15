@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, date
+from typing import Mapping
 
 from dynreact.base.model import MidTermTargets, ProductionTargets, EquipmentProduction, ProductionPlanning, Site, \
-    EquipmentAvailability
+    EquipmentAvailability, MaterialCategory, SUM_MATERIAL
 
 
 class ModelUtils:
@@ -34,6 +35,12 @@ class ModelUtils:
 
     @staticmethod
     def aggregated_structure(site: Site, planning: ProductionPlanning) -> dict[str, dict[str, float]]:
+        """
+        Aggregate material structure for one process step over equipments
+        :param site:
+        :param planning:
+        :return:
+        """
         total: dict[str, dict[str, float]] = {cat.id: {cl.id: 0 for cl in cat.classes} for cat in site.material_categories}
         for status in (stat for stat in planning.equipment_status.values() if
                         stat.planning is not None and stat.planning.material_structure is not None):
@@ -43,6 +50,49 @@ class ModelUtils:
                 for cl, value in cat_dict.items():
                     target[cl] = target[cl] + value
         return total
+
+    @staticmethod
+    def aggregated_structure_nested(site: Site, planning: ProductionPlanning, main_category: str) -> dict[str, dict[str, dict[str, float]]]:
+        """
+        Aggregate nested material structure for one process step over equipments
+        :param site:
+        :param planning:
+        :param main_category:
+        :return: Outermost key: class id for main category, middle key: sub category id, innermost key: class id; (special keys \"_sum\" represent the total/aggregated values).
+        """
+        # TODO
+        #  - first adapt planning.material_structure to contain the required nested structure (rather add a new field?),
+        #  - then adapt the aggregation => DONE
+        #  - then adapt the cost function
+        main_cat: MaterialCategory = next(cat for cat in site.material_categories if cat.id == main_category)
+        total: dict[str, dict[str, dict[str, float]]] = \
+                {main.id: {cat.id: {cl.id: 0 for cl in cat.classes} for cat in site.material_categories if cat != main_cat} for main in main_cat.classes}
+        for status in (stat for stat in planning.equipment_status.values() if
+                       stat.planning is not None and stat.planning.nested_material_structure is not None):
+            structure: dict[str, dict[str, dict[str, float]]] = status.planning.nested_material_structure
+            "Outermost key: class id for main category, middle key: sub category id, innermost key: class id; special keys \"_sum\" represent the total/aggregated values."
+            for main_class, cat_dict in structure.items():
+                if main_class == SUM_MATERIAL:
+                    continue
+                targets: dict[str, dict[str, float]] = total[main_class]
+                for cat, cl_dict in cat_dict.items():
+                    if cat == SUM_MATERIAL:
+                        continue
+                    target: dict[str, float] = targets[cat]
+                    for cl, value in cl_dict.items():
+                        target[cl] = target[cl] + value
+        return total
+
+    @staticmethod
+    def main_category_for_targets(material_weight_targets: dict[str, float|dict[str, float]] | None, categories: list[MaterialCategory]) -> MaterialCategory|None:
+        if material_weight_targets is None or not any(isinstance(target, Mapping) for target in material_weight_targets.values()):
+            return None
+        target_classes: list[str] = [cl for cl in material_weight_targets.keys() if cl != SUM_MATERIAL]
+        for cat in categories:
+            missing_class: bool = any(not any(sub.id == cl for sub in cat.classes) for cl in target_classes)
+            if not missing_class:
+                return cat
+        return None
 
     @staticmethod
     def applicable_periods(sub_periods: list[tuple[datetime, datetime]], start_time: datetime, end_time: datetime) -> dict[int, float]:

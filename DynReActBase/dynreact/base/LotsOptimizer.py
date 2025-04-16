@@ -217,7 +217,8 @@ class LotsOptimizationAlgo:
             for o in start_orders_by_class.values():
                 plants1 = sorted([p for p in o.allowed_equipment if p in plants and p not in start_orders], key=lambda p: targets.target_weight.get(p).total_weight, reverse=True)
                 if len(plants1) > 0:
-                    start_orders[plants1[0]] = o.id
+                    if o.id not in start_orders.values():
+                        start_orders[plants1[0]] = o.id
         plants2 = [p for p in plants.keys() if p not in start_orders]
         for p in plants2:
             random_order: Order | None = next((o for o in orders.values() if p in o.allowed_equipment), None)

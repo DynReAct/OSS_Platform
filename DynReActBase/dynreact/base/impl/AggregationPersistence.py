@@ -12,6 +12,9 @@ class AggregationInternal(AggregatedProduction):
 
 class AggregationPersistence:
 
+    def __init__(self, uri: str):
+        self._uri = uri
+
     def store_production(self, level: str, value: AggregationInternal):
         raise Exception("not implemented")
 

@@ -640,6 +640,28 @@ class MidTermTargets(LongTermTargets):
     "Production targets for the planning sub periods. Keys: process ids, values: list of production targets, covering all planning sub periods chronologically."
 
 
+class AggregatedMaterial(Model):
+    total_weight: float
+    material_weights: dict[str, float] | None = None
+
+
+class AggregatedProduction(AggregatedMaterial):
+    """
+    total_weight refers to the total production in the time interval (finished material), and
+    material_weights to finished material by material class id in the time interval
+    """
+    aggregation_interval: tuple[datetime, datetime]
+    "The aggregation interval"
+    closed: bool = True
+    "Indicated whether the aggregation result is final or still subject to change in the future (interval in the past or still ongoing)"
+
+
+class AggregatedStorageContent(Model):
+
+    content_by_storage: dict[str, AggregatedMaterial]
+    content_by_process: dict[str, AggregatedMaterial]
+    content_by_equipment: dict[int, AggregatedMaterial]
+
 
 class ServiceHealth(Model):
 

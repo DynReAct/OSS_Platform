@@ -67,6 +67,8 @@ class FileAggregationPersistence(AggregationPersistence):
             all_files: dict[str, datetime] = {f: dt for f, dt in ((f, FileAggregationPersistence._id_for_file(f)) for f in files) if dt is not None}
             self._prod_files[level] = all_files
         applicable_files = {f: dt for f, dt in all_files.items() if start <= dt < end}
+        if order == "desc":
+            applicable_files = {key: applicable_files[key] for key in reversed(applicable_files)}
         return iter(applicable_files.values())
 
     def storage_values(self, start: datetime, end: datetime, order: Literal["asc", "desc"]="asc") -> Iterator[datetime]:
@@ -76,6 +78,8 @@ class FileAggregationPersistence(AggregationPersistence):
             all_files: dict[str, datetime] = {f: dt for f, dt in ((f, FileAggregationPersistence._id_for_file(f)) for f in files) if dt is not None}
             self._stg_files = all_files
         applicable_files = {f: dt for f, dt in all_files.items() if start <= dt < end}
+        if order == "desc":
+            applicable_files = {key: applicable_files[key] for key in reversed(applicable_files)}
         return iter(applicable_files.values())
 
     def load_production_aggregation(self, level: str, time: datetime) -> AggregationInternal|None:

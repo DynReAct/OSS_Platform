@@ -150,27 +150,34 @@ class CostProvider:
         return costs
 
     def _structure_costs_nested(self, planning: ProductionPlanning, costs_parameter):
-        structure: dict[str, dict[str, dict[str, float]]] = ModelUtils.aggregated_structure_nested(self._site, planning)
+        process = planning.process
+        primary_category_id = self._site.lot_creation.processes[process].structure.primary_category
+        structure: dict[str, dict[str, dict[str, float]]] = ModelUtils.aggregated_structure_nested(self._site, planning, primary_category_id)
         "Outermost key: class id for main category, middle key: sub category id, innermost key: class id; (special keys \"_sum\" represent the total/aggregated values)."
-        deviations_by_category: dict[str, list[dict[str, float]]] = {}  # outer key: category, inner keys: "diff", "target", "value"
-        # TODO adapt
-        for cl, target in planning.target_structure.items():
-            if cl == SUM_MATERIAL or not isinstance(target, Mapping):
+        deviations_by_category: dict[str, dict[str, list[dict[str, float]]]] = {}  # outer key: category, inner keys: "diff", "target", "value"
+        for mastercl, target in planning.target_structure.items():
+            if mastercl == SUM_MATERIAL or not isinstance(target, Mapping):
                 continue
-            category = next((cat for cat, cl_dict in structure.items() if cl in cl_dict), None)
-            if category is None:  # should not happen
-                continue
-            actual_value: float = structure[category][cl]
-            if category not in deviations_by_category:
-                deviations_by_category[category] = []
-            deviations_by_category[category].append({"diff": target - actual_value, "target": target, "value": actual_value})
+            deviations_by_category[mastercl] = {}
+            for cl, target2 in target.items():
+                if cl == SUM_MATERIAL:
+                    continue
+                # get category to class from structure
+                category = next((cat for cat, cl_dict in structure[mastercl].items() if cl in cl_dict), None)
+                if category is None:  # should not happen
+                    continue
+                actual_value: float = structure[mastercl][category][cl]
+                if category not in deviations_by_category[mastercl]:
+                    deviations_by_category[mastercl][category] = []
+                deviations_by_category[mastercl][category].append({"diff": target2 - actual_value, "target": target2, "value": actual_value})
         costs = 0
-        for cat, results in deviations_by_category.items():
-            total_diff = sum(abs(dct["diff"]) for dct in results)
-            total_targets = sum(dct["target"] for dct in results)
-            if total_targets <= 0:
-                raise Exception(f"Targets must be positive, got {total_targets}")
-            costs += total_diff / total_targets * costs_parameter
+        for mastercl, cat in deviations_by_category.items():
+            for cl, results in cat.items():
+                total_diff = sum(abs(dct["diff"]) for dct in results)
+                total_targets = sum(dct["target"] for dct in results)
+                if total_targets <= 0:
+                    raise Exception(f"Targets must be positive, got {total_targets}")
+                costs += total_diff / total_targets * costs_parameter
         return costs
 
     def structure_costs_parameter(self) -> float:

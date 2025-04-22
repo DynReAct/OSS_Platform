@@ -221,7 +221,7 @@ class LotsOptimizationAlgo:
                         start_orders[plants1[0]] = o.id
         plants2 = [p for p in plants.keys() if p not in start_orders]
         for p in plants2:
-            random_order: Order | None = next((o for o in orders.values() if p in o.allowed_equipment), None)
+            random_order: Order | None = next((o for o in orders.values() if p in o.allowed_equipment and o.id not in start_orders.values()), None)
             if random_order is not None:
                 start_orders[p] = random_order.id
         return start_orders

@@ -33,8 +33,8 @@ class AggregationProviderImpl(AggregationProvider):
         self._interval_start = interval_start
         self._aggregations: dict[str, list[AggregatedProduction]] = {}
         "Unfinished production aggregations. Keys: aggregation level ids"
-        self._last_processed_snapshot_prod: datetime|None = None   # TODO init from persistence
-        self._last_processed_snapshot_storage: datetime | None = None  # TODO init from persistence
+        self._last_processed_snapshot_prod: dict[str, datetime|None] = {level.id: None for level in aggregation_levels}   # will be initialized from persistence
+        self._last_processed_snapshot_storage: datetime | None = None   # will be initialized from persistence
         self._stopped: threading.Event = threading.Event()
         self._stg_cache_lock = threading.Lock()
         self._stg_data_cache: dict[datetime, AggregatedStorageContent] = {}
@@ -55,7 +55,7 @@ class AggregationProviderImpl(AggregationProvider):
 
     def _run(self):
         try:
-            if self._last_processed_snapshot_storage is None or self._last_processed_snapshot_prod is None:
+            if self._last_processed_snapshot_storage is None or None in self._last_processed_snapshot_prod.values():
                 self._init_from_persistence()
         except:
             print("AggregationProvider initialization failed")
@@ -76,22 +76,26 @@ class AggregationProviderImpl(AggregationProvider):
         now = datetime.now(tz=timezone.utc)
         try:
             last = next(self._persistence.storage_values(start, now, order="desc"))
-            self._last_processed_snapshot_storage = last
+            if self._last_processed_snapshot_storage is None or last > self._last_processed_snapshot_storage:
+                self._last_processed_snapshot_storage = last
         except StopIteration:
             pass
         for level in self._aggregation_levels:
             try:
                 last = next(self._persistence.production_values(level.id, start, now, order="desc"))
-                if self._last_processed_snapshot_prod is None or last > self._last_processed_snapshot_prod:
-                    self._last_processed_snapshot_prod = last
+                agg = self._persistence.load_production_aggregation(level.id, last)
+                if agg is not None:
+                    last_snap = agg.last_snapshot
+                    if self._last_processed_snapshot_prod[level.id] is None or last_snap > self._last_processed_snapshot_prod[level.id]:
+                        self._last_processed_snapshot_prod[level.id] = last_snap
             except StopIteration:
                 pass
 
     def _run_internal(self):
-        has_none = self._last_processed_snapshot_storage is None or self._last_processed_snapshot_prod is None
-        start_time: datetime = datetime.fromtimestamp(0, tz=timezone.utc) if has_none else min(self._last_processed_snapshot_prod, self._last_processed_snapshot_storage)
+        has_none = self._last_processed_snapshot_storage is None or None in self._last_processed_snapshot_prod.values()
+        start_time: datetime = datetime.fromtimestamp(0, tz=timezone.utc) if has_none else min(list(self._last_processed_snapshot_prod.values()) + [self._last_processed_snapshot_storage])
         for snap in self._snapshot_provider.snapshots(start_time, datetime.now(tz=timezone.utc)):
-            update_prod: bool = self._last_processed_snapshot_prod is None or self._last_processed_snapshot_prod < snap
+            update_prod: bool = None in self._last_processed_snapshot_prod.values() or any(last < snap for last in self._last_processed_snapshot_prod.values())
             update_stg: bool = self._last_processed_snapshot_storage is None or self._last_processed_snapshot_storage < snap
             if not update_prod and not update_stg:
                 continue
@@ -105,7 +109,8 @@ class AggregationProviderImpl(AggregationProvider):
                     print(f"Failed to update production aggregation for snapshot {snap}")
                     traceback.print_exc()
                 finally:
-                    self._last_processed_snapshot_prod = snap
+                    for level in self._aggregation_levels:
+                        self._last_processed_snapshot_prod[level.id] = snap
             if self._stopped.is_set():
                 return
             if update_stg:
@@ -153,16 +158,19 @@ class AggregationProviderImpl(AggregationProvider):
     def _update_prod_aggregations(self, snapshot: Snapshot):
         for level in self._aggregation_levels:
             agg = self.aggregated_production(snapshot.timestamp, level)
-            is_closing: bool = agg is None or agg.aggregation_interval[1] <= snapshot.snapsho
+            is_closing: bool = agg is None or agg.aggregation_interval[1] <= snapshot.timestamp
             if agg is not None and agg.aggregation_interval[0] <= snapshot.timestamp <= agg.aggregation_interval[1]:  # TODO tolerance for end of interval required!
                 self._update_aggregation(agg, snapshot, level, is_closing)
             if is_closing:
                 self._start_new_prod_aggregation(snapshot, level)
+            self._last_processed_snapshot_prod[level.id] = snapshot.timestamp
+
 
     def _update_aggregation(self, agg: AggregationInternal, snapshot: Snapshot, level: AggregationLevel, is_closing: bool):
         current_snapshot = self._prod_snapshots_by_level.get(level.id)
         if current_snapshot is None or current_snapshot.timestamp < agg.aggregation_interval[0] or current_snapshot.timestamp > agg.aggregation_interval[1]:
-            current_snapshot = self._snapshot_provider.previous(snapshot.timestamp - timedelta(minutes=3))
+            current_id = self._snapshot_provider.previous(snapshot.timestamp - timedelta(minutes=3))
+            current_snapshot = self._snapshot_provider.load(current_id) if current_id is not None else None
             if current_snapshot is None:  # ?
                 self._prod_snapshots_by_level[level.id] = snapshot
                 return
@@ -177,21 +185,25 @@ class AggregationProviderImpl(AggregationProvider):
             traceback.print_exc()
 
     def _update_aggregation_internal(self, agg: AggregationInternal, previous_snap: Snapshot, snapshot: Snapshot, level: AggregationLevel, is_closing: bool):
-        # TODO calculate difference between snapshots!
         prev_orders: dict[str, Order] = {o.id: o for o in previous_snap.orders}
         curr_orders: dict[str, Order] = {o.id: o for o in snapshot.orders}
         total_sum: float = agg.total_weight
         material_sums: dict[str, float] = dict(agg.material_weights) if agg.material_weights is not None else {}
         for oid, order in prev_orders.items():
-            if oid in curr_orders:  # TODO algo ok?
-                continue
+            #if oid in curr_orders:  # TODO algo ok?
+            #    continue
+            new = curr_orders.get(oid)
             weight = order.actual_weight
-            total_sum += weight
+            new_weight = new.actual_weight if new is not None else 0
+            if new_weight >= weight:
+                continue
+            weight_diff = weight - new_weight
+            total_sum += weight_diff
             for clzz in order.material_classes.values():
                 if clzz not in material_sums:
                     material_sums[clzz] = 0
-                material_sums[clzz] += weight
-        new_agg = AggregationInternal(total_weight=total_sum, material_sums=material_sums, last_snapshot=agg.last_snapshot,
+                material_sums[clzz] += weight_diff
+        new_agg = AggregationInternal(total_weight=total_sum, material_weights=material_sums, last_snapshot=snapshot.timestamp,
                                       aggregation_interval=agg.aggregation_interval, closed=is_closing)
         return new_agg
 
@@ -200,8 +212,8 @@ class AggregationProviderImpl(AggregationProvider):
         agg = AggregationInternal(aggregation_interval=(start, end), closed=False, last_snapshot=snapshot.timestamp, total_weight=0)
         self._persistence.store_production(level.id, agg)
         with self._prod_cache_lock:
-            self._prod_data_cache[level.id][snapshot.timestamp] = agg
-            self._prod_snapshots_by_level[level.id] = snapshot
+            self._prod_data_cache[level.id][start] = agg
+        self._prod_snapshots_by_level[level.id] = snapshot
 
     # calculate aggregation and update persistence
     def _update_storage_aggregations(self, snapshot: Snapshot):

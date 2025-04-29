@@ -87,7 +87,7 @@ class FileAggregationPersistence(AggregationPersistence):
 
     def load_production_aggregation(self, level: str, time: datetime) -> AggregationInternal|None:
         start_id = FileAggregationPersistence._datetime_to_id(time)
-        fl = os.path.join(self._stg_folder, level.upper(), str(start_id) + ".json")
+        fl = os.path.join(self._prod_folder, level.upper(), str(start_id) + ".json")
         if not os.path.isfile(fl):
             return None
         with open(fl, "r", encoding="utf-8") as file:
@@ -118,7 +118,7 @@ class FileAggregationPersistence(AggregationPersistence):
             return None
         file = file[:file.rindex(".")]
         try:
-            return datetime.strptime(file, FileAggregationPersistence._format).astimezone(tz=timezone.utc)  # datetime.fromtimestamp(int(file), tz=timezone.utc)
+            return datetime.strptime(file, FileAggregationPersistence._format).replace(tzinfo=timezone.utc)  # datetime.fromtimestamp(int(file), tz=timezone.utc)
         except ValueError:
             return None
 

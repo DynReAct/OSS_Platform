@@ -12,6 +12,7 @@ import numpy as np
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.SnapshotProvider import SnapshotProvider
+from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import ProductionPlanning, PlanningData, ProductionTargets, Snapshot, OrderAssignment, Site, \
     EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction, MaterialClass
 
@@ -80,6 +81,8 @@ class LotsOptimizer(Generic[P]):
         self._costs: CostProvider = costs
         self._targets = targets
         self._min_due_date: datetime|None = min_due_date
+        main_cat = ModelUtils.main_category_for_targets(targets.material_weights, site.material_categories)
+        self._main_category = main_cat.id if main_cat is not None else None
         self._performance_models = [pm for pm in performance_models if process in pm.applicable_processes_and_plants()[0]] if performance_models is not None else None
         target_plants: list[int] = list(targets.target_weight.keys())
         assigned_plants: set[int] = set(ass.equipment for ass in initial_solution.order_assignments.values()) \
@@ -214,10 +217,11 @@ class LotsOptimizationAlgo:
             for o in start_orders_by_class.values():
                 plants1 = sorted([p for p in o.allowed_equipment if p in plants and p not in start_orders], key=lambda p: targets.target_weight.get(p).total_weight, reverse=True)
                 if len(plants1) > 0:
-                    start_orders[plants1[0]] = o.id
+                    if o.id not in start_orders.values():
+                        start_orders[plants1[0]] = o.id
         plants2 = [p for p in plants.keys() if p not in start_orders]
         for p in plants2:
-            random_order: Order | None = next((o for o in orders.values() if p in o.allowed_equipment), None)
+            random_order: Order | None = next((o for o in orders.values() if p in o.allowed_equipment and o.id not in start_orders.values()), None)
             if random_order is not None:
                 start_orders[p] = random_order.id
         return start_orders

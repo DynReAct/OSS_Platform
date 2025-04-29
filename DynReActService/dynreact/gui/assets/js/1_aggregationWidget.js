@@ -8,6 +8,7 @@ class AggregationWidget extends HTMLElement {
     #aggregations;
     // dict[str, float]   // <class, weight>
     #targetWeights;
+    #mainCategory;  // string
 
     constructor() {
         super();
@@ -43,6 +44,24 @@ class AggregationWidget extends HTMLElement {
     }
 
     setAggregation(agg, targetWeights) {
+        this.#mainCategory = undefined;
+        const isNestedStructure = !!targetWeights && Object.values(targetWeights).find(t => typeof t === "object") !== undefined;
+        if (isNestedStructure) {
+            this.#mainCategory = AggregationWidget.#determineMainCategory(targetWeights, agg);
+            // convert targetWeights to a flat structure... we do not display the nested structure here
+            const newTargets = {};
+            for (const [main_class, values] of Object.entries(targetWeights)) {
+                if (main_class === "_sum")
+                    continue;
+                newTargets[main_class] = values["_sum"];
+                for (const [sub_class, sub_val] of Object.entries(values)) {
+                    if (!(sub_class in newTargets))
+                        newTargets[sub_class] = 0;
+                    newTargets[sub_class] += sub_val;
+                }
+            }
+            targetWeights = newTargets;
+        }
         this.#aggregations = agg;
         this.#targetWeights = targetWeights;
         this.#init();
@@ -62,7 +81,11 @@ class AggregationWidget extends HTMLElement {
         let title = "Selected tons in backlog";
         if (targetsSpecified)
             title += " / target tons";
-        for (const [cat, material_category] of Object.entries(materials)) {
+        const cats = Object.entries(materials);
+        const main = this.#mainCategory;
+        if (main)
+            cats.sort((a, b) => a[0] === main ? -1 : b[0] === main ? 1 : 0)
+        for (const [cat, material_category] of cats) {
             column++;
             const categoryHeader = JsUtils.createElement("div", {
                 parent: frag,
@@ -109,6 +132,15 @@ class AggregationWidget extends HTMLElement {
         }
         this.#grid.style["grid-template-columns"] = "repeat(" + columns + ", auto)";
         this.#grid.appendChild(frag);
+    }
+
+    static #determineMainCategory(targets, categories) {
+        const cats = categories ? Object.entries(categories) : undefined;
+        if (!(cats?.length > 0))
+            return undefined;
+        return cats
+            .map(([cat, cat_obj]) => [cat, Object.keys(cat_obj.classes).filter(cl => cl in targets).length])
+            .sort((arr1, arr2) => arr2[1]-arr1[1])[0][0];
     }
 
 }

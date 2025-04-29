@@ -152,7 +152,8 @@ def targets_tab(horizon: int):
                 html.Div(id="lots2-details-plants", className="lots2-plants-targets3"),
                 html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
                 html.Div(dcc.Textarea(id='lots2-structure-logging', value='', className="lots2-textarea")),
-                html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "hidden"}))
+                # html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "hidden"}))
+                html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "visible"}))
             ]), html.Div([
                 html.H4("Plant performance models"),
                 html.Div(id="lots2-details-performance-models", className="lots2-performance-models")
@@ -374,11 +375,12 @@ def structure_portfolio_popup(initial_weight: float):
             ], className="lots2-weight-total"),
             # materials_table()
             html.Div(id="lots2-materials-grid"),
+            html.Div(id="lots2-materials-subbuttons"),
             html.Div([
-                html.Button("Accept", id="lots2-materials-accept", className="dynreact-button"),
-                html.Button("Clear", id="lots2-materials-clear", className="dynreact-button"),
-                html.Button("Set default", id="lots2-materials-setdefault", className="dynreact-button"),
-                html.Button("Cancel", id="lots2-materials-cancel", className="dynreact-button")
+                html.Button("Accept", id="lots2-materials-accept", className="dynreact-button", title="Save settings for optimization"),
+                html.Button("Clear", id="lots2-materials-clear", className="dynreact-button", title="Clear settings for optimization and set all settings to default"),
+                html.Button("Set default", id="lots2-materials-setdefault", className="dynreact-button", title="Set all settings to default"),
+                html.Button("Cancel", id="lots2-materials-cancel", className="dynreact-button", title="Cancel dialog")
             ], className="lots2-materials-buttons")
         ], title=""),
         id="lots2-structure-dialog", className="dialog-filled", open=False)
@@ -1288,8 +1290,6 @@ def process_changed(snapshot: datetime|None,
 
     primary_category = _get_primary_category(process)
     primary_classes = _get_primary_classes(process)
-    #print ('loc 1188 ', 'primary_category, primary_classes ', process, primary_category, primary_classes)
-
     use_lot_range: bool = len(use_lot_range0) > 0
     interval = 3_600_000
     if not dash_authenticated(config):
@@ -1463,7 +1463,6 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                     return lot_creation_thread is not None, error_msg, info_msg
                 if material_structure is not None and len(material_structure) > 0:
                     targets.material_weights = material_structure
-
                 perf_models = performance_models_from_elements(process, perf_model_components)
                 snapshot_serialized: str = DatetimeUtils.format(snapshot)
                 orders: list[str] = [row["id"] if isinstance(row, dict) else row for row in selected_order_rows]
@@ -1559,6 +1558,18 @@ clientside_callback(
     State("lots2-materials-grid", "id"),
 )
 
+# reset material grid set default #NEU
+clientside_callback(
+    ClientsideFunction(
+        namespace="lots2",
+        function_name="clearMaterialGrid"
+    ),
+    # in theory it should be ok to have no ouput, but it does not work # https://dash.plotly.com/advanced-callbacks#callbacks-with-no-outputs
+    Output("lots2-materials-grid", "lang"),
+    Input("lots2-materials-clear", "n_clicks"),
+    State("lots2-weight-total", "value"),
+    State("lots2-materials-grid", "id"),
+)
 
 clientside_callback(
     ClientsideFunction(

@@ -19,7 +19,7 @@
             grid = grid || JsUtils.createElement(materialsTag, {parent: gridContainer, attributes: {"columns-selectable": ""}});
             const site = dynreact?.getSite();
             if (site) {
-                grid.setMaterials(process, site.material_categories);
+                grid.setMaterials(process, site.material_categories, site.lot_creation);
                 if (totalProduction)
                     grid.initTargets(totalProduction);
             }
@@ -27,6 +27,7 @@
             // lots2-details-plants changed -> try to add diff to default field
             grid.totalValueChanged(totalProduction);
         }
+
     }
 
     globalThis.dash_clientside.lots2.setMaterialSetpoints = function(_, gridId) {
@@ -39,6 +40,15 @@
     }
 
     globalThis.dash_clientside.lots2.resetMaterialGrid = function(_, totalWeight, gridId) {
+        // set grid to default
+        const gridContainer = document.querySelector("#" + gridId);
+        const grid = gridContainer.querySelector(materialsTag);
+        grid?.initTargets(totalWeight);
+        return "ltr";
+    }
+
+    // extra function to use buttons Clear and SetDefault
+    globalThis.dash_clientside.lots2.clearMaterialGrid = function(_, totalWeight, gridId) {
         // set grid to default
         const gridContainer = document.querySelector("#" + gridId);
         const grid = gridContainer.querySelector(materialsTag);

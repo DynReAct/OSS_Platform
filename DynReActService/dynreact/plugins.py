@@ -15,6 +15,8 @@ from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersiste
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.SnapshotProvider import SnapshotProvider
+from dynreact.base.impl.AggregationPersistence import AggregationPersistence
+from dynreact.base.impl.FileAggregationPersistence import FileAggregationPersistence
 from dynreact.base.impl.FileAvailabilityPersistence import FileAvailabilityPersistence
 from dynreact.base.impl.FileConfigProvider import FileConfigProvider
 from dynreact.base.impl.FileDowntimeProvider import FileDowntimeProvider
@@ -44,6 +46,7 @@ class Plugins:
         self._availability_persistence: PlantAvailabilityPersistence|None = None
         self._plant_performance_models: list[PlantPerformanceModel]|None = None
         self._lot_sinks: dict[str, LotSink]|None = None
+        self._aggregation_persistence: AggregationPersistence|None = None
 
     def get_snapshot_provider(self) -> SnapshotProvider:
         if self._snapshot_provider is None:
@@ -135,6 +138,18 @@ class Plugins:
                 if self._availability_persistence is None:
                     raise Exception("Plant availability persistence not found " + self._config.availability_persistence)
         return self._availability_persistence
+
+    def get_aggregation_persistence(self) -> AggregationPersistence:
+        if self._aggregation_persistence is None:
+            #site = self.get_config_provider().site_config()
+            if self._config.aggregation_persistence.startswith("default+file:"):
+                self._aggregation_persistence = FileAggregationPersistence(self._config.aggregation_persistence)
+            else:
+                self._aggregation_persistence = Plugins._load_module("dynreact.aggregation.AggregationPersistenceImpl",
+                                                                 AggregationPersistence, self._config.aggregation_persistence)
+                if self._aggregation_persistence is None:
+                    raise Exception("Aggregation persistence not found " + self._config.aggregation_persistence)
+        return self._aggregation_persistence
 
     def get_lot_sinks(self) -> dict[str, LotSink]:
         if self._lot_sinks is None:

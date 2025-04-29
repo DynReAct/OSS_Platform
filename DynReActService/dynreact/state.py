@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+from dynreact.base.AggregationProvider import AggregationProvider
 from dynreact.base.ConfigurationProvider import ConfigurationProvider
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.DowntimeProvider import DowntimeProvider
@@ -11,6 +12,8 @@ from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersiste
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.SnapshotProvider import SnapshotProvider
+from dynreact.base.impl.AggregationPersistence import AggregationPersistence
+from dynreact.base.impl.AggregationProviderImpl import AggregationProviderImpl
 from dynreact.base.model import Snapshot, Site, ProductionPlanning, ProductionTargets, Material
 
 from dynreact.app_config import DynReActSrvConfig
@@ -47,11 +50,23 @@ class DynReActSrvState:
         self._duedates_solutions_cache: list[tuple[datetime, str, ProductionPlanning, ProductionTargets]] = []
         self._coils_by_orders_cache: dict[datetime, dict[str, list[Material]]] = {}
         self._stp_page = None
+        self._aggregation: AggregationProvider|None = None
+        self._aggregation_persistence: AggregationPersistence|None = None
 
     def get_snapshot_provider(self) -> SnapshotProvider:
         if self._snapshot_provider is None:
             self._snapshot_provider = self._plugins.get_snapshot_provider()
         return self._snapshot_provider
+
+    def get_aggregation_provider(self) -> AggregationProvider|None:
+        itv = self._config.aggregation_exec_interval_minutes
+        start_offset = self._config.aggregation_exec_offset_minutes
+        if itv <= 0:
+            return None
+        if self._aggregation is None:
+            self._aggregation = AggregationProviderImpl(self.get_site(), self.get_snapshot_provider(), self._plugins.get_aggregation_persistence(),
+                                                interval=timedelta(minutes=itv), interval_start=timedelta(minutes=start_offset))
+        return self._aggregation
 
     def get_config_provider(self) -> ConfigurationProvider:
         if self._config_provider is None:
@@ -189,9 +204,7 @@ class DynReActSrvState:
         if self._stp_page is None:
             self._stp_page = self._plugins.load_stp_page()
         return self._stp_page
-#
-# Added by JOM 20241005
-#
+
     def get_auction_obj(self):
         if self._auction_obj is not None:
             return(self._auction_obj)

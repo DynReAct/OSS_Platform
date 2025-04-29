@@ -15,6 +15,9 @@ class DynReActSrvConfig:
     short_term_planning: str = "default+file:./data/stp_context.json"
     results_persistence: str = "default+file:./results"
     availability_persistence: str = "default+file:./config"
+    aggregation_persistence: str = "default+file:./aggregation"
+    aggregation_exec_interval_minutes: int = 5
+    aggregation_exec_offset_minutes: int = 1
     lot_sinks: list[str] = ["default+file:./results"]
     max_snapshot_caches: int = 3
     max_snapshot_solutions_caches: int = 10
@@ -42,6 +45,9 @@ class DynReActSrvConfig:
                  downtime_provider: str|None = None,
                  results_persistence: str|None = None,
                  availability_persistence: str|None = None,
+                 aggregation_persistence: str|None = None,
+                 aggregation_exec_interval_minutes: int|None=None,
+                 aggregation_exec_offset_minutes: int|None = None,
                  lot_sinks: list[str]|str|None = None,
                  cost_provider: str|None = None,
                  long_term_provider: str|None = None,
@@ -77,6 +83,14 @@ class DynReActSrvConfig:
             results_persistence = os.getenv("RESULTS_PERSISTENCE", DynReActSrvConfig.results_persistence)
         if availability_persistence is None:
             availability_persistence = os.getenv("AVAILABILITY_PERSISTENCE", DynReActSrvConfig.availability_persistence)
+        if aggregation_persistence is None:
+            aggregation_persistence = os.getenv("AGGREGATION_PERSISTENCE", DynReActSrvConfig.aggregation_persistence)
+        if aggregation_exec_interval_minutes is None:
+            aggregation_exec_interval_minutes = int(os.getenv("AGGREGATION_INTERVAL_MINUTES", DynReActSrvConfig.aggregation_exec_interval_minutes))
+        self.aggregation_exec_interval_minutes = aggregation_exec_interval_minutes
+        if aggregation_exec_offset_minutes is None:
+            aggregation_exec_offset_minutes = int(os.getenv("AGGREGATION_OFFSET_MINUTES", DynReActSrvConfig.aggregation_exec_offset_minutes))
+        self.aggregation_exec_offset_minutes = aggregation_exec_offset_minutes
         if lot_sinks is None:
             lot_sinks = [sink.strip() for sink in os.getenv("LOT_SINKS", DynReActSrvConfig.lot_sinks[0]).split(",")]
         elif isinstance(lot_sinks, str):
@@ -89,6 +103,7 @@ class DynReActSrvConfig:
         self.short_term_planning: str = short_term_planning
         self.results_persistence = results_persistence
         self.availability_persistence = availability_persistence
+        self.aggregation_persistence = aggregation_persistence
         self.lot_sinks = lot_sinks
         if out_directory is None:
             out_directory = os.getenv("OUT_DIRECTORY", DynReActSrvConfig.out_directory)

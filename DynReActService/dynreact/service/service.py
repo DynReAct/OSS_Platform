@@ -8,7 +8,8 @@ from dynreact.base.LotsOptimizer import LotsOptimizer
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, \
-    MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction
+    MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction, AggregatedStorageContent, \
+    AggregatedMaterial
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.params import Path, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -116,20 +117,30 @@ def aggregate_material(response: Response, timestamp: str | datetime = Path(...,
                 "2023-04-25T23:59Z": {"description": "A specific timestamp", "value": "2023-04-25T23:59Z"},
             }),
             level: Literal["plant","storage","process"] = Query("plant", description="The aggregation level."),
-            username = username) -> dict:
+            username = username) -> dict[int|str, AggregatedMaterial]:
     is_relative_timestamp: bool = isinstance(timestamp, str) and timestamp.startswith("now")
     if isinstance(timestamp, str):
         timestamp = parse_datetime_str(timestamp)
     snapshot0: Snapshot = state.get_snapshot(timestamp)
-    agg = MaterialAggregation(state.get_site(), state.get_snapshot_provider())
-    agg_by_plants = agg.aggregate_categories_by_plant(snapshot0)
+    stg: AggregatedStorageContent = state.get_aggregation_provider().aggregated_storage_content(snapshot0.timestamp)
     if not is_relative_timestamp:
         response.headers["Cache-Control"] = "max-age=604800"  # 1 week
     if level == "storage":
-        return agg.aggregate_by_storage(agg_by_plants)
+        return stg.content_by_storage
     elif level == "process":
-        return agg.aggregate_by_process(agg_by_plants)
-    return agg_by_plants
+        return stg.content_by_process
+    return stg.content_by_equipment
+
+    #snapshot0: Snapshot = state.get_snapshot(timestamp)
+    #agg = MaterialAggregation(state.get_site(), state.get_snapshot_provider())
+    #agg_by_plants = agg.aggregate_categories_by_plant(snapshot0)
+    #if not is_relative_timestamp:
+    #    response.headers["Cache-Control"] = "max-age=604800"  # 1 week
+    #if level == "storage":
+    #    return agg.aggregate_by_storage(agg_by_plants)
+    #elif level == "process":
+    #    return agg.aggregate_by_process(agg_by_plants)
+    #return agg_by_plants
 
 
 @fastapi_app.get("/snapshots/{timestamp}",

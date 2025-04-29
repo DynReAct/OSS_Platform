@@ -1,12 +1,13 @@
 import threading
 import traceback
 from datetime import datetime, date, timedelta, timezone
+from typing import Iterable
 
 from dynreact.base.AggregationProvider import AggregationProvider, AggregationLevel, default_aggregation_levels
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.AggregationPersistence import AggregationPersistence
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
-from dynreact.base.model import AggregatedProduction, AggregatedStorageContent, Snapshot
+from dynreact.base.model import AggregatedProduction, AggregatedStorageContent, Snapshot, AggregatedMaterial
 
 
 class AggregationProviderImpl(AggregationProvider):
@@ -140,10 +141,27 @@ class AggregationProviderImpl(AggregationProvider):
         self._persistence.store_storage(snapshot.timestamp, result)
 
     def _get_storage_aggregations_internal(self, snapshot: Snapshot) -> AggregatedStorageContent:
+        t = snapshot.timestamp
         agg = MaterialAggregation(self._site, self._snapshot_provider)
-        agg_by_plants = agg.aggregate_categories_by_plant(snapshot)
-        agg_by_storage = agg.aggregate_by_storage(agg_by_plants)
-        agg_by_process = agg.aggregate_by_process(agg_by_plants)
+        agg_by_plants0 = agg.aggregate_categories_by_plant(snapshot)
+        total_weights_by_plants: dict[int, float] = AggregationProviderImpl._total_weight(agg_by_plants0)
+        agg_by_storage0 = agg.aggregate_by_storage(agg_by_plants0)
+        total_weights_by_storage = AggregationProviderImpl._total_weight(agg_by_storage0)
+        agg_by_process0 = agg.aggregate_by_process(agg_by_plants0)
+        total_weights_by_process = AggregationProviderImpl._total_weight(agg_by_process0)
+        agg_by_plants = {p: AggregatedMaterial(material_weights=AggregationProviderImpl._merge_dicts(values.values()), total_weight=total_weights_by_plants.get(p, 0),
+                                               aggregation_interval=(t, t)) for p, values in agg_by_plants0.items()}
+        agg_by_storage = {p: AggregatedMaterial(material_weights=AggregationProviderImpl._merge_dicts(values.values()), total_weight=total_weights_by_storage.get(p, 0),
+                                               aggregation_interval=(t, t)) for p, values in agg_by_storage0.items()}
+        agg_by_process = {p: AggregatedMaterial(material_weights=AggregationProviderImpl._merge_dicts(values.values()), total_weight=total_weights_by_process.get(p, 0),
+                                                aggregation_interval=(t, t)) for p, values in agg_by_process0.items()}
         return AggregatedStorageContent(content_by_storage=agg_by_storage, content_by_process=agg_by_process, content_by_equipment=agg_by_plants)
 
+    @staticmethod
+    def _total_weight[T: int|str](agg_by_unit: dict[T, dict[str, dict[str, float]]]) -> dict[T, float]:
+        total_weights: dict[T, list[float]] = {p: [sum(values[cat].values()) for cat in values.keys()] for p, values in agg_by_unit.items()}
+        return {t: max(values) if len(values) > 0 else 0 for t, values in total_weights.items()}
 
+    @staticmethod
+    def _merge_dicts(values: Iterable[dict[str, float]]) -> dict[str, float]:
+        return {key: val for dct in values for key, val in dct.items()}

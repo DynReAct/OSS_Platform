@@ -1,6 +1,7 @@
 import random
 import sys
 import threading
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Iterator, Literal, Annotated
 
@@ -21,6 +22,18 @@ from dynreact.service.model import EquipmentTransition, EquipmentTransitionState
     LotsOptimizationResults, TransitionInfo, MaterialTransfer, LongTermPlanningResults
 from dynreact.service.optim_listener import LotsOptimizationListener
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # start aggregation
+    aggregation = state.get_aggregation_provider()
+    aggregation.start()
+    yield
+    try:
+        aggregation.stop()
+    except:
+        pass
+
 fastapi_app = FastAPI(
     title="DynReAct production planning service",
     description="DynReAct mid-term production planning service for steel plants.",
@@ -31,6 +44,7 @@ fastapi_app = FastAPI(
         "email": "info@bfi.de"
     },
     openapi_tags=[{"name": "dynreact"}],
+    lifespan=lifespan
 )
 if config.cors:
     fastapi_app.add_middleware(

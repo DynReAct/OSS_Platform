@@ -4,7 +4,7 @@ from typing import Literal, Iterator
 from dynreact.base.model import AggregatedProduction, AggregatedStorageContent
 
 
-class AggregationInternal(AggregatedProduction):
+class AggregationInternal(AggregatedProduction, frozen=True):
 
     last_snapshot: datetime
     "Stores information about the last processed snapshot, thus enabling the aggregation provider to continue processing incomplete aggregations"

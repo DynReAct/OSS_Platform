@@ -5,10 +5,13 @@ from typing import Literal, Iterator
 
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.impl.AggregationPersistence import AggregationPersistence, AggregationInternal
+from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import AggregatedStorageContent
 
 
 class FileAggregationPersistence(AggregationPersistence):
+
+    _format: str = "%Y%m%d%H%M"
 
     def __init__(self, uri: str):
         super().__init__(uri)
@@ -104,7 +107,7 @@ class FileAggregationPersistence(AggregationPersistence):
 
     @staticmethod
     def _datetime_to_id(dt: datetime) -> str:
-        return str(int(round(dt.replace(second=0, microsecond=0).timestamp())))
+        return dt.strftime(FileAggregationPersistence._format)  # str(int(round(dt.replace(second=0, microsecond=0).timestamp())))
 
     @staticmethod
     def _id_for_file(fl: str) -> datetime|None:
@@ -115,7 +118,7 @@ class FileAggregationPersistence(AggregationPersistence):
             return None
         file = file[:file.rindex(".")]
         try:
-            return datetime.fromtimestamp(int(file), tz=timezone.utc)
+            return datetime.strptime(file, FileAggregationPersistence._format).astimezone(tz=timezone.utc)  # datetime.fromtimestamp(int(file), tz=timezone.utc)
         except ValueError:
             return None
 

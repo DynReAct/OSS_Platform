@@ -5,12 +5,19 @@ from typing import Iterable
 
 from dynreact.base.AggregationProvider import AggregationProvider, AggregationLevel, default_aggregation_levels
 from dynreact.base.SnapshotProvider import SnapshotProvider
-from dynreact.base.impl.AggregationPersistence import AggregationPersistence
+from dynreact.base.impl.AggregationPersistence import AggregationPersistence, AggregationInternal
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
-from dynreact.base.model import AggregatedProduction, AggregatedStorageContent, Snapshot, AggregatedMaterial
+from dynreact.base.model import AggregatedProduction, AggregatedStorageContent, Snapshot, AggregatedMaterial, Order
 
 
+# TODO init prod data on start
+# TODO timezone handling
+# TODO tests
 class AggregationProviderImpl(AggregationProvider):
+
+    _ONE_MONTH: timedelta = timedelta(days=30)
+    _ONE_WEEK: timedelta = timedelta(days=7)
+    _ONE_DAY: timedelta = timedelta(days=1)
 
     def __init__(self, site,
                  snapshot_provider: SnapshotProvider,
@@ -31,6 +38,9 @@ class AggregationProviderImpl(AggregationProvider):
         self._stopped: threading.Event = threading.Event()
         self._stg_cache_lock = threading.Lock()
         self._stg_data_cache: dict[datetime, AggregatedStorageContent] = {}
+        self._prod_cache_lock = threading.Lock()
+        self._prod_data_cache: dict[str, dict[datetime, AggregationInternal]] = {level.id: {} for level in aggregation_levels}  # guarded by lock
+        self._prod_snapshots_by_level: dict[str, Snapshot|None] = {level.id: None for level in aggregation_levels}
 
     def start(self):
         """
@@ -50,7 +60,9 @@ class AggregationProviderImpl(AggregationProvider):
         except:
             print("AggregationProvider initialization failed")
             traceback.print_exc()
-        self._stopped.wait(self._interval_start.total_seconds())
+        start_wait = self._interval_start.total_seconds()
+        if start_wait > 0:
+            self._stopped.wait(self._interval_start.total_seconds())
         while not self._stopped.is_set():
             try:
                 self._run_internal()
@@ -111,7 +123,16 @@ class AggregationProviderImpl(AggregationProvider):
         return list(self._aggregation_levels)
 
     def aggregated_production(self, t: datetime | date, level: AggregationLevel | timedelta) -> AggregatedProduction | None:
-        raise Exception("not implemented")
+        level = level if isinstance(level, timedelta) else level.interval
+        agg_id = next((l.id for l in self._aggregation_levels if l.interval == level), None)
+        if agg_id is None:
+            raise Exception(f"Unsupported aggregation level {level}")
+        start_time: datetime = AggregationProviderImpl._get_interval_start_end(t, level)[0]
+        with self._prod_cache_lock:
+            cached = self._prod_data_cache[agg_id].get(start_time)
+        if cached is not None:
+            return cached
+        return self._persistence.load_production_aggregation(agg_id, start_time)  # TODO timestamp ok?
 
     def aggregated_storage_content(self, snapshot: datetime) -> AggregatedStorageContent|None:
         result = self._persistence.load_storage_aggregation(snapshot)
@@ -129,9 +150,58 @@ class AggregationProviderImpl(AggregationProvider):
             self._stg_data_cache[snapshot_obj.timestamp] = agg
         return agg
 
-
     def _update_prod_aggregations(self, snapshot: Snapshot):
-        pass  # TODO
+        for level in self._aggregation_levels:
+            agg = self.aggregated_production(snapshot.timestamp, level)
+            is_closing: bool = agg is None or agg.aggregation_interval[1] <= snapshot.snapsho
+            if agg is not None and agg.aggregation_interval[0] <= snapshot.timestamp <= agg.aggregation_interval[1]:  # TODO tolerance for end of interval required!
+                self._update_aggregation(agg, snapshot, level, is_closing)
+            if is_closing:
+                self._start_new_prod_aggregation(snapshot, level)
+
+    def _update_aggregation(self, agg: AggregationInternal, snapshot: Snapshot, level: AggregationLevel, is_closing: bool):
+        current_snapshot = self._prod_snapshots_by_level.get(level.id)
+        if current_snapshot is None or current_snapshot.timestamp < agg.aggregation_interval[0] or current_snapshot.timestamp > agg.aggregation_interval[1]:
+            current_snapshot = self._snapshot_provider.previous(snapshot.timestamp - timedelta(minutes=3))
+            if current_snapshot is None:  # ?
+                self._prod_snapshots_by_level[level.id] = snapshot
+                return
+        updated = self._update_aggregation_internal(agg, current_snapshot, snapshot, level, is_closing)
+        self._prod_snapshots_by_level[level.id] = snapshot
+        with self._prod_cache_lock:
+            self._prod_data_cache[level.id][updated.aggregation_interval[0]] = updated
+        try:
+            self._persistence.store_production(level.id, updated)
+        except:
+            print(f"Failed to store production aggregation at level {level.id}")
+            traceback.print_exc()
+
+    def _update_aggregation_internal(self, agg: AggregationInternal, previous_snap: Snapshot, snapshot: Snapshot, level: AggregationLevel, is_closing: bool):
+        # TODO calculate difference between snapshots!
+        prev_orders: dict[str, Order] = {o.id: o for o in previous_snap.orders}
+        curr_orders: dict[str, Order] = {o.id: o for o in snapshot.orders}
+        total_sum: float = agg.total_weight
+        material_sums: dict[str, float] = dict(agg.material_weights) if agg.material_weights is not None else {}
+        for oid, order in prev_orders.items():
+            if oid in curr_orders:  # TODO algo ok?
+                continue
+            weight = order.actual_weight
+            total_sum += weight
+            for clzz in order.material_classes.values():
+                if clzz not in material_sums:
+                    material_sums[clzz] = 0
+                material_sums[clzz] += weight
+        new_agg = AggregationInternal(total_weight=total_sum, material_sums=material_sums, last_snapshot=agg.last_snapshot,
+                                      aggregation_interval=agg.aggregation_interval, closed=is_closing)
+        return new_agg
+
+    def _start_new_prod_aggregation(self, snapshot: Snapshot, level: AggregationLevel):
+        start, end = AggregationProviderImpl._get_interval_start_end(snapshot.timestamp, level.interval)
+        agg = AggregationInternal(aggregation_interval=(start, end), closed=False, last_snapshot=snapshot.timestamp, total_weight=0)
+        self._persistence.store_production(level.id, agg)
+        with self._prod_cache_lock:
+            self._prod_data_cache[level.id][snapshot.timestamp] = agg
+            self._prod_snapshots_by_level[level.id] = snapshot
 
     # calculate aggregation and update persistence
     def _update_storage_aggregations(self, snapshot: Snapshot):
@@ -165,3 +235,20 @@ class AggregationProviderImpl(AggregationProvider):
     @staticmethod
     def _merge_dicts(values: Iterable[dict[str, float]]) -> dict[str, float]:
         return {key: val for dct in values for key, val in dct.items()}
+
+    @staticmethod
+    def _get_interval_start_end(timestamp: datetime, level: timedelta) -> tuple[datetime, datetime]:  # TODO small tolerance for timestamps close to end of month?
+        if level == AggregationProviderImpl._ONE_MONTH:
+            start = timestamp.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = (start + timedelta(days=31)).replace(day=1)
+            return start, end
+        if level == AggregationProviderImpl._ONE_WEEK:
+            start = (timestamp - timedelta(days=timestamp.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+            end   = start + AggregationProviderImpl._ONE_WEEK
+            return start, end
+        if level == AggregationProviderImpl._ONE_DAY:
+            start = timestamp.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = start + AggregationProviderImpl._ONE_DAY
+            return start, end
+        raise Exception("Aggregation level " + str(level) + " not implemented")
+

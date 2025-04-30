@@ -15,6 +15,7 @@ class DynReActSrvConfig:
     short_term_planning: str = "default+file:./data/stp_context.json"
     results_persistence: str = "default+file:./results"
     availability_persistence: str = "default+file:./config"
+    aggregation: bool = False
     aggregation_persistence: str = "default+file:./aggregation"
     aggregation_exec_interval_minutes: int = 5
     aggregation_exec_offset_minutes: int = 1
@@ -45,6 +46,7 @@ class DynReActSrvConfig:
                  downtime_provider: str|None = None,
                  results_persistence: str|None = None,
                  availability_persistence: str|None = None,
+                 aggregation: bool|None = None,
                  aggregation_persistence: str|None = None,
                  aggregation_exec_interval_minutes: int|None=None,
                  aggregation_exec_offset_minutes: int|None = None,
@@ -83,6 +85,10 @@ class DynReActSrvConfig:
             results_persistence = os.getenv("RESULTS_PERSISTENCE", DynReActSrvConfig.results_persistence)
         if availability_persistence is None:
             availability_persistence = os.getenv("AVAILABILITY_PERSISTENCE", DynReActSrvConfig.availability_persistence)
+        if aggregation is None:
+            aggregation0 = os.getenv("AGGREGATION")
+            aggregation = aggregation0 is not None and aggregation0.lower() != "false"
+        self.aggregation = aggregation
         if aggregation_persistence is None:
             aggregation_persistence = os.getenv("AGGREGATION_PERSISTENCE", DynReActSrvConfig.aggregation_persistence)
         if aggregation_exec_interval_minutes is None:

@@ -44,7 +44,7 @@ fastapi_app = FastAPI(
         "email": "info@bfi.de"
     },
     openapi_tags=[{"name": "dynreact"}],
-    lifespan=lifespan
+    lifespan=lifespan if config.aggregation else None
 )
 if config.cors:
     fastapi_app.add_middleware(
@@ -135,8 +135,8 @@ def aggregate_material(response: Response, timestamp: str | datetime = Path(...,
     is_relative_timestamp: bool = isinstance(timestamp, str) and timestamp.startswith("now")
     if isinstance(timestamp, str):
         timestamp = parse_datetime_str(timestamp)
-    snapshot0: Snapshot = state.get_snapshot(timestamp)
-    stg: AggregatedStorageContent = state.get_aggregation_provider().aggregated_storage_content(snapshot0.timestamp)
+    # snapshot0: Snapshot = state.get_snapshot(timestamp)
+    stg: AggregatedStorageContent = state.get_aggregation_provider().aggregated_storage_content(timestamp)
     if not is_relative_timestamp:
         response.headers["Cache-Control"] = "max-age=604800"  # 1 week
     if level == "storage":

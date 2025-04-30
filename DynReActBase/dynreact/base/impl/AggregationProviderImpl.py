@@ -1,6 +1,7 @@
 import threading
 import traceback
 from datetime import datetime, date, timedelta, timezone
+from functools import lru_cache
 from typing import Iterable
 
 from dynreact.base.AggregationProvider import AggregationProvider, AggregationLevel, default_aggregation_levels
@@ -10,7 +11,6 @@ from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.model import AggregatedProduction, AggregatedStorageContent, Snapshot, AggregatedMaterial, Order
 
 
-# TODO init prod data on start
 # TODO timezone handling
 # TODO tests
 class AggregationProviderImpl(AggregationProvider):
@@ -140,12 +140,20 @@ class AggregationProviderImpl(AggregationProvider):
         return self._persistence.load_production_aggregation(agg_id, start_time)  # TODO timestamp ok?
 
     def aggregated_storage_content(self, snapshot: datetime) -> AggregatedStorageContent|None:
-        result = self._persistence.load_storage_aggregation(snapshot)
+        result = self._load_storage_content_from_persistence(snapshot)
         if result is not None:
             return result
+        prev_snap = self._snapshot_provider.previous(snapshot)
+        # TODO if the timestamp does not match an existing snapshot we might return an interpolation
+        if prev_snap is not None and abs(prev_snap.timestamp() - snapshot.timestamp()) <= 121:
+            result = self._load_storage_content_from_persistence(prev_snap)
+            if result is not None:
+                return result
         # handle case that the calculation has not run yet
         snapshot_obj = self._snapshot_provider.load(time=snapshot)
-        if snapshot_obj is None or abs(snapshot_obj.timestamp.timestamp() - snapshot.timestamp()) > 60:
+        if snapshot_obj is None and prev_snap is not None:
+            snapshot_obj = self._snapshot_provider.load(time=prev_snap)
+        if snapshot_obj is None or abs(snapshot_obj.timestamp.timestamp() - snapshot.timestamp()) > 121:
             return None
         with self._stg_cache_lock:
             cached = self._stg_data_cache.get(snapshot_obj.timestamp)
@@ -155,14 +163,41 @@ class AggregationProviderImpl(AggregationProvider):
             self._stg_data_cache[snapshot_obj.timestamp] = agg
         return agg
 
+    def _load_storage_content_from_persistence(self, snapshot: datetime) -> AggregatedStorageContent | None:
+        try:
+            return self._load_storage_content_from_persistence_internal(snapshot)
+        except _NoCacheException:
+            return None
+
+    @lru_cache(maxsize=256)
+    def _load_storage_content_from_persistence_internal(self, snapshot: datetime) -> AggregatedStorageContent|None:
+        result = self._persistence.load_storage_aggregation(snapshot)
+        if result is None:
+            raise _NoCacheException()
+        return result
+
     def _update_prod_aggregations(self, snapshot: Snapshot):
         for level in self._aggregation_levels:
+            previous = self._last_processed_snapshot_prod[level.id]
+            if previous is not None and snapshot.timestamp <= previous:
+                continue
             agg = self.aggregated_production(snapshot.timestamp, level)
             is_closing: bool = agg is None or agg.aggregation_interval[1] <= snapshot.timestamp
-            if agg is not None and agg.aggregation_interval[0] <= snapshot.timestamp <= agg.aggregation_interval[1]:  # TODO tolerance for end of interval required!
+            if agg is not None and agg.aggregation_interval[0] <= snapshot.timestamp <= agg.aggregation_interval[1]:  # TODO tolerance for end of interval required!?
                 self._update_aggregation(agg, snapshot, level, is_closing)
             if is_closing:
                 self._start_new_prod_aggregation(snapshot, level)
+                # update the previous aggregation and set it to closed
+                try:
+                    if agg is None:
+                        agg = self.aggregated_production(snapshot.timestamp - level.interval, level)
+                    if agg and not agg.closed:
+                        agg: AggregationInternal = agg.copy(update={"closed": True})
+                        self._prod_data_cache[level.id][agg.aggregation_interval[0]] = agg
+                        self._persistence.store_production(level.id, agg)
+                except:
+                    print("Failed to update aggregation object state to closed")
+                    traceback.print_exc()
             self._last_processed_snapshot_prod[level.id] = snapshot.timestamp
 
 
@@ -264,3 +299,6 @@ class AggregationProviderImpl(AggregationProvider):
             return start, end
         raise Exception("Aggregation level " + str(level) + " not implemented")
 
+
+class _NoCacheException(BaseException):
+    pass

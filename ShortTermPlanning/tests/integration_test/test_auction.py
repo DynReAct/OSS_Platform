@@ -8,15 +8,14 @@ from short_term_planning import execute_short_term_planning
 
 @pytest.fixture(autouse=True)
 def initialize():
-    # Initialization code that runs before each test function
     print("Setting up for a test")
+    all_containers = DockerManager(tag=None)
+    all_containers.stop_tracked_containers()
     # admin_client = AdminClient({"bootstrap.servers": "138.100.82.173:9092"})
     # delete_all_topics(admin_client, verbose=3)
     # print("Deleted all topics")
     yield
     print("Tearing down after a test")
-    # all_containers = DockerManager(tag=None)
-    # all_containers.stop_tracked_containers()
 
 @pytest.fixture
 def log_handler_spy():

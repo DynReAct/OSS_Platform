@@ -1,6 +1,7 @@
 import json
 import argparse
 import os
+import traceback
 
 from confluent_kafka import Producer
 
@@ -105,7 +106,10 @@ def sendmsgtopic(producer: Producer, tsend: str, topic: str, source: str, dest: 
     )
     mtxt = json.dumps(msg)
     try:
-        producer.produce(value=mtxt, topic=tsend, on_delivery=confirm, timestamp=30000) # 30 seconds
+        producer.produce(value=mtxt, topic=tsend, on_delivery=confirm) # 30 seconds
         producer.flush()
     except Exception as e:
-        print(f'Failed to deliver message: {str(e)}')
+        error_message = traceback.format_exc()
+        print("Captured error message:")
+        print(error_message)  # Prints the traceback as a string
+        print(f'Failed to deliver message: {str(e)} - Topic {topic} - Source {source} - Dest {dest}')

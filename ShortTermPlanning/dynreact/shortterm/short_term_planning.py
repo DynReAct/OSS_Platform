@@ -26,6 +26,7 @@ import time
 import random
 import string
 import argparse
+from functools import reduce
 from typing import Generator, Optional
 
 from confluent_kafka import Producer, Consumer, Message
@@ -563,9 +564,24 @@ def execute_short_term_planning(args: dict):
         run_general_agents(producer=producer, gagents=rungagnts, verbose=verbose)
         sleep(running_wait, producer=producer, verbose=verbose)
 
-        running_base_agents = running_base_agents + len(log_handler.list_tracked_containers())
-        running_base_agents = running_base_agents + len(equipment_handler.list_tracked_containers())
-        running_base_agents = running_base_agents + len(material_handler.list_tracked_containers())
+        if str(rungagnts)[0] == '1':
+            log_tracked  = len(list(filter(lambda x: x["status"] == "running", log_handler.list_tracked_containers())))
+            running_base_agents = running_base_agents + log_tracked
+
+            if verbose >= 3:
+                print(f"Tracked {log_tracked} LOG containers")
+        if str(rungagnts)[1] == '1':
+            equipment_tracked = len(list(filter(lambda x: x["status"] == "running", equipment_handler.list_tracked_containers())))
+            running_base_agents = running_base_agents + equipment_tracked
+
+            if verbose >= 3:
+                print(f"Tracked {equipment_tracked} EQUIPMENT containers")
+        if str(rungagnts)[2] == '1':
+            material_tracked = len(list(filter(lambda x: x["status"] == "running", material_handler.list_tracked_containers())))
+            running_base_agents = running_base_agents + material_tracked
+
+            if verbose >= 3:
+                print(f"Tracked {material_tracked} MATERIAL containers")
 
         if running_base_agents < min_base_agents:
             raise Exception(

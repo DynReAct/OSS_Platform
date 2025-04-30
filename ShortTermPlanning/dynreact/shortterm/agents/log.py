@@ -372,8 +372,8 @@ class Log(Agent):
         else:
             sendmsgtopic(
                 producer=self.producer,
-                tsend=topic,
-                topic=topic,
+                tsend=TOPIC_CALLBACK,
+                topic=TOPIC_CALLBACK,
                 source=self.agent,
                 dest=sender,
                 action="AUCTIONSTARTED",

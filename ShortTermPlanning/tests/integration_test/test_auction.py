@@ -2,12 +2,9 @@ import os
 from unittest.mock import patch, MagicMock
 
 import pytest
-from confluent_kafka.admin import AdminClient
 
-from common.data.load_url import DOCKER_REPLICA
 from common.handler import DockerManager
-from short_term_planning import execute_short_term_planning, delete_all_topics
-
+from short_term_planning import execute_short_term_planning
 
 @pytest.fixture(autouse=True)
 def initialize():
@@ -15,9 +12,11 @@ def initialize():
     print("Setting up for a test")
     # admin_client = AdminClient({"bootstrap.servers": "138.100.82.173:9092"})
     # delete_all_topics(admin_client, verbose=3)
-    print("Deleted all topics")
+    # print("Deleted all topics")
     yield
     print("Tearing down after a test")
+    all_containers = DockerManager(tag=None)
+    all_containers.stop_tracked_containers()
 
 @pytest.fixture
 def log_handler_spy():
@@ -42,15 +41,16 @@ def test_scenario_00(log_handler_spy, equipment_handler_spy, material_handler_sp
 
     args = {
         "verbose": 3,
-        "base": "../../dynreact/shortterm",
+        "base": "../../shortterm",
         "runningWait": "0",
         "cloningWait": "0",
         "auctionWait": "0",
         "counterbidWait": "0",
         "exitWait": "0",
-        "equipments": "",
+        "equipments": [],
         "nmaterials": 0,
-        "rungagents": 100
+        "rungagents": 100,
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-31T22:00:00Z")
     }
 
     with patch("short_term_planning.create_auction", return_value=("DYN_TEST", 0)):
@@ -74,15 +74,16 @@ def test_scenario_01(log_handler_spy, equipment_handler_spy, material_handler_sp
 
     args = {
         "verbose": 3,
-        "base": "../../dynreact/shortterm",
+        "base": "../../shortterm",
         "runningWait": "0",
         "cloningWait": "0",
         "auctionWait": "0",
         "counterbidWait": "0",
         "exitWait": "0",
-        "equipments": "",
+        "equipments": [],
         "nmaterials": 0,
-        "rungagents": 111
+        "rungagents": 111,
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-31T22:00:00Z")
     }
 
     with patch("short_term_planning.create_auction", return_value=("DYN_TEST", 0)):
@@ -113,57 +114,50 @@ def test_scenario_02(log_handler_spy, equipment_handler_spy, material_handler_sp
 
     args = {
         "verbose": 3,
-        "base": "../../dynreact/shortterm",
+        "base": "../../shortterm",
         "runningWait": "0",
         "cloningWait": "0",
         "auctionWait": "0",
         "counterbidWait": "0",
         "exitWait": "0",
-        "equipments": "",
+        "equipments": [],
         "nmaterials": 0,
-        "rungagents": 100
+        "rungagents": 100,
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-31T22:00:00Z")
     }
 
     # Can't really mock a Docker container isolated execution. Luckly tagging ensure a single reference
-    real_replica_log_container = DockerManager(tag=f"log{DOCKER_REPLICA}", max_allowed=-1)
-    real_replica_log_container.clean_containers()
+    log_handler_spy.clean_containers()
 
     execute_short_term_planning(args)
 
-    assert len(real_replica_log_container.list_tracked_containers()) == 1
+    assert len(log_handler_spy.list_tracked_containers()) == 1
 
 def test_scenario_03(log_handler_spy, equipment_handler_spy, material_handler_spy):
     """General LOG and RESOURCES startup. Agents cloning for an auction, and agents exiting"""
 
     args = {
         "verbose": 3,
-        "base": "../../dynreact/shortterm",
+        "base": "../../shortterm",
         "runningWait": "0",
         "cloningWait": "0",
         "auctionWait": "0",
         "counterbidWait": "0",
         "exitWait": "0",
-        "equipments": "9",
+        "equipments": ["9"],
         "nmaterials": 1,
-        "rungagents": 111
+        "rungagents": 111,
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-31T22:00:00Z")
     }
 
     # Can't really mock a Docker container isolated execution. Luckly tagging ensure a single reference
-    real_replica_equipment_container = DockerManager(tag=f"equipment{DOCKER_REPLICA}", max_allowed=-1)
-    real_replica_equipment_container.clean_containers()
-
-    # Can't really mock a Docker container isolated execution. Luckly tagging ensure a single reference
-    real_replica_log_container = DockerManager(tag=f"log{DOCKER_REPLICA}", max_allowed=-1)
-    real_replica_log_container.clean_containers()
-
-    real_replica_material_container = DockerManager(tag=f"material{DOCKER_REPLICA}", max_allowed=-1)
-    real_replica_material_container.clean_containers()
+    equipment_handler_spy.clean_containers()
+    material_handler_spy.clean_containers()
 
     execute_short_term_planning(args)
 
-    assert len(real_replica_log_container.list_tracked_containers()) == 1
-    assert len(real_replica_equipment_container.list_tracked_containers()) == 1
-    assert len(real_replica_material_container.list_tracked_containers()) == 1
+    assert len(equipment_handler_spy.list_tracked_containers()) == 1
+    assert len(material_handler_spy.list_tracked_containers()) == 1
 
 
 def test_scenario_05():
@@ -171,17 +165,17 @@ def test_scenario_05():
 
     args = {
         "verbose": 3,
-        "base": "../../dynreact/shortterm",
+        "base": "../../shortterm",
         "runningWait": "10",
         "cloningWait": "30",
         "auctionWait": "50",
         "counterbidWait": "15",
         "exitWait": "10",
-        "equipments": "6",
+        "equipments": os.environ.get("SCENARIO_5_EQUIPMENT", "9").split(" "),
         "nmaterials": 1,
-        "rungagents": 111
+        "rungagents": 000,
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-31T22:00:00Z")
     }
-
 
     result = execute_short_term_planning(args)
 
@@ -192,3 +186,99 @@ def test_scenario_05():
         current_equipment = result[equipment]
 
         assert len(current_equipment) == args["nmaterials"]
+
+    print(result)
+
+def test_scenario_06():
+    """Test the return value of short_term_planning()."""
+
+    args = {
+        "verbose": 3,
+        "base": "../../shortterm",
+        "runningWait": "10",
+        "cloningWait": "30",
+        "auctionWait": "50",
+        "counterbidWait": "15",
+        "exitWait": "10",
+        "equipments": os.environ.get("SCENARIO_6_EQUIPMENT", "9").split(" "),
+        "nmaterials": 2,
+        "rungagents": 000,
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-31T22:00:00Z")
+    }
+
+    result = execute_short_term_planning(args)
+
+    list_equipments = args["equipments"].split(" ")
+    assert len(list_equipments) == len(result.keys())
+
+    for equipment in list_equipments:
+        current_equipment = result[equipment]
+
+        assert len(current_equipment) == args["nmaterials"]
+
+    print(result)
+
+def test_scenario_07():
+    """Test the return value of short_term_planning()."""
+
+    args = {
+        "verbose": 3,
+        "base": "../../shortterm",
+        "runningWait": "10",
+        "cloningWait": "30",
+        "auctionWait": "200",
+        "counterbidWait": "15",
+        "exitWait": "10",
+        "equipments": os.environ.get("SCENARIO_7_EQUIPMENT", "9 10").split(" "),
+        "nmaterials": 1,
+        "rungagents": 000,
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-31T22:00:00Z")
+    }
+
+    result = execute_short_term_planning(args)
+
+    list_equipments = args["equipments"]
+    assert len(list_equipments) == len(result.keys())
+
+    for equipment in list_equipments:
+        current_equipment = result[equipment]
+
+        assert len(current_equipment) == args["nmaterials"]
+
+    print(result)
+
+def test_scenario_08():
+    """Test the return value of short_term_planning()."""
+
+    args = {
+        "verbose": 3,
+        "base": "../../shortterm",
+        "runningWait": "10",
+        "cloningWait": "30",
+        "auctionWait": "200",
+        "counterbidWait": "15",
+        "exitWait": "10",
+        "equipments": os.environ.get("SCENARIO_8_EQUIPMENT", "9 11").split(" "),
+        "nmaterials": 2,
+        "rungagents": 000,
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-31T22:00:00Z")
+    }
+
+    result = execute_short_term_planning(args)
+
+    list_equipments = args["equipments"]
+    assert len(list_equipments) == len(result.keys())
+
+    for equipment in list_equipments:
+        current_equipment = result[equipment]
+
+        assert len(current_equipment) == args["nmaterials"]
+
+    orders_ids = []
+
+    for equipment in result.values():
+        orders_ids += list(map(lambda x: x["id"], equipment))
+
+    assert os.environ.get("SCENARIO_8_ORDER_ID", "1199061") in orders_ids
+
+    print(result)

@@ -41,7 +41,7 @@ def test_scenario_00(log_handler_spy, equipment_handler_spy, material_handler_sp
 
     args = {
         "verbose": 3,
-        "base": "../../shortterm",
+        "base": "../../dynreact/shortterm",
         "runningWait": "0",
         "cloningWait": "0",
         "auctionWait": "0",

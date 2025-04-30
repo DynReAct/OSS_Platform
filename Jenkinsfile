@@ -4,7 +4,7 @@ pipeline {
     environment {
         IMAGE_NAME = "dynreact-shortterm"
         IMAGE_TAG = "${BUILD_NUMBER}"
-        LOCAL_REGISTRY = "localhost:5000/"
+        LOCAL_REGISTRY = "192.168.110.176:5000/"
 
         TOPIC_CALLBACK = "DynReact-TEST-Callback"
         TOPIC_GEN = "DynReact-TEST-Gen"

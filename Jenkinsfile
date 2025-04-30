@@ -49,6 +49,8 @@ pipeline {
         stage('Run Scenario 0') {
             steps {
                 script {
+                    def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+                    def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
                     sh """
                     # Run container to execute tests
                     docker run --rm \\
@@ -56,6 +58,7 @@ pipeline {
                       -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
                       -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
                       -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
+                      ${envArgs} \\
                       --user root \\
                       "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
                       bash -c "source .venv/bin/activate && \\
@@ -71,6 +74,8 @@ pipeline {
         stage('Run Scenario 1') {
             steps {
                 script {
+                    def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+                    def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
                     sh """
                     # Run container to execute tests
                     docker run --rm \\
@@ -78,6 +83,7 @@ pipeline {
                       -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
                       -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
                       -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
+                      ${envArgs} \\
                       --user root \\
                       "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
                       bash -c "source .venv/bin/activate && \\
@@ -93,6 +99,8 @@ pipeline {
         stage('Run Scenario 2') {
             steps {
                 script {
+                    def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+                    def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
                     sh """
                     # Run container to execute tests
                     docker run --rm \\
@@ -100,6 +108,7 @@ pipeline {
                       -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
                       -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
                       -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
+                      ${envArgs} \\
                       --user root \\
                       "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
                       bash -c "source .venv/bin/activate && \\

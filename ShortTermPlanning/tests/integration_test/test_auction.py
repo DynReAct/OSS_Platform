@@ -15,8 +15,8 @@ def initialize():
     # print("Deleted all topics")
     yield
     print("Tearing down after a test")
-    all_containers = DockerManager(tag=None)
-    all_containers.stop_tracked_containers()
+    # all_containers = DockerManager(tag=None)
+    # all_containers.stop_tracked_containers()
 
 @pytest.fixture
 def log_handler_spy():

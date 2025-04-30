@@ -240,11 +240,9 @@ pipeline {
 
     post {
         success {
-            sh "docker system prune -f"
             echo "Docker image successfully pushed to ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}"
         }
         failure {
-            sh "docker system prune -f"
             echo "Build failed. Check logs for errors."
         }
     }

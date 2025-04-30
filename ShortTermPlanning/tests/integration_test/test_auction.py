@@ -9,8 +9,6 @@ from short_term_planning import execute_short_term_planning
 @pytest.fixture(autouse=True)
 def initialize():
     print("Setting up for a test")
-    all_containers = DockerManager(tag=None)
-    all_containers.stop_tracked_containers()
     # admin_client = AdminClient({"bootstrap.servers": "138.100.82.173:9092"})
     # delete_all_topics(admin_client, verbose=3)
     # print("Deleted all topics")
@@ -40,7 +38,7 @@ def test_scenario_00(log_handler_spy, equipment_handler_spy, material_handler_sp
 
     args = {
         "verbose": 3,
-        "base": "../../shortterm",
+        "base": "../../dynreact/shortterm",
         "runningWait": "0",
         "cloningWait": "0",
         "auctionWait": "0",
@@ -152,11 +150,13 @@ def test_scenario_03(log_handler_spy, equipment_handler_spy, material_handler_sp
     # Can't really mock a Docker container isolated execution. Luckly tagging ensure a single reference
     equipment_handler_spy.clean_containers()
     material_handler_spy.clean_containers()
+    log_handler_spy.clean_containers()
 
     execute_short_term_planning(args)
 
     assert len(equipment_handler_spy.list_tracked_containers()) == 1
     assert len(material_handler_spy.list_tracked_containers()) == 1
+    assert len(log_handler_spy.list_tracked_containers()) == 1
 
 
 def test_scenario_05():

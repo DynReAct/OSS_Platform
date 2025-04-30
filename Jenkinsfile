@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         IMAGE_NAME = "dynreact-shortterm"
-        IMAGE_TAG = "${BUILD_NUMBER}"
+        IMAGE_TAG = "latest"
         LOCAL_REGISTRY = "192.168.110.176:5000/"
 
         TOPIC_CALLBACK = "DynReact-TEST-Callback"
@@ -39,8 +39,8 @@ pipeline {
             steps {
                 script {
                     sh """
-                    docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${LOCAL_REGISTRY}${IMAGE_NAME}:latest
-                    docker push ${LOCAL_REGISTRY}${IMAGE_NAME}:latest
+                    docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}
+                    docker push ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}
                     """
                 }
             }

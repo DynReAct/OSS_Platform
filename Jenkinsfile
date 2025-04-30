@@ -39,8 +39,8 @@ pipeline {
             steps {
                 script {
                     sh """
-                    docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}
-                    docker push ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}
+                    docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${LOCAL_REGISTRY}${IMAGE_NAME}:latest
+                    docker push ${LOCAL_REGISTRY}${IMAGE_NAME}:latest
                     """
                 }
             }

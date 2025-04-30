@@ -1,0 +1,39 @@
+{
+  "name": "Python 3",
+  "dockerComposeFile": ["./docker-compose.yaml"],
+  "service": "app",
+  "workspaceFolder": "/workspace",
+  
+  // Use this environment variable if you need to bind mount your local source code into a new container.
+  "remoteEnv": {
+     "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}",
+     "PYTHONPATH": "/usr/local/python/bin/python"
+  },
+  
+  // Configure tool-specific properties.
+  "customizations": {
+     // Configure properties specific to Jetbrains.
+     "jetbrains": {
+       "pycharm": {
+          "settingsSync": true,
+          "plugins": [
+            "PythonCore"
+          ]
+        },
+       "settings":{
+         "com.intellij:app:BuiltInServerOptions.builtInServerPort": 64421,
+         "com.intellij:app:HttpConfigurable.use_proxy_pac": true
+       }
+     }
+   },
+
+   // Use 'forwardPorts' to make a list of ports inside the container available locally.
+   "forwardPorts": [8085, 8050, 8080, 9997, 5016],
+
+   // Use 'postCreateCommand' to map 192.168.111.11:5016 locally.
+   // pcudp11 is an .ssh configuration the host machine
+   "postCreateCommand": "sudo service socat-forwarding reload && /usr/local/python/bin/python -m venv /workspace/.venv",
+
+   // Comment out to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
+   "remoteUser": "vscode"
+}

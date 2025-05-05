@@ -54,6 +54,10 @@ RUN sudo mkdir -p /var/log/dynreact-logs  \
 
 RUN pipx install poetry
 
+RUN echo 'unset PS1' >> /home/vscode/.zshrc && \
+    echo '# Ensure prompt is set by Oh My Zsh, not container default' >> /home/vscode/.zshrc && \
+    chown vscode:vscode /home/vscode/.zshrc
+
 # [Optional] If your pip requirements rarely change, uncomment this section to add them to the image.
 # COPY requirements.txt /tmp/pip-tmp/
 # RUN pip3 --disable-pip-version-check --no-cache-dir install -r /tmp/pip-tmp/requirements.txt \

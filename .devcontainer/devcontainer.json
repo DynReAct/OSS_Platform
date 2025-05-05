@@ -12,7 +12,7 @@
 
   "features": {
     "ghcr.io/devcontainers-extra/features/zsh-plugins:0": {
-      plugins: "git docker pip poetry sudo python"
+      "plugins": "git docker pip poetry sudo python"
     }
   },
   

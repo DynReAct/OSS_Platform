@@ -47,11 +47,12 @@ RUN apt update && apt upgrade -y && apt install -y gosu
 
 WORKDIR /app
 
-ENV VIRTUAL_ENV=/app/.venv \
+# Execute the command as 'appuser' and redirect logs to Docker logs
+ENV PYTHONUNBUFFERED=1 \
+    VIRTUAL_ENV=/app/.venv \
     PYTHONPATH="/app/shortterm" \
     IS_DOCKER="true" \
     PATH="/app/.venv/bin:$PATH"
-
 
 COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 
@@ -63,7 +64,7 @@ COPY dynreact/shortterm/agents/ dynreact/shortterm/config.cnf ./shortterm/
 
 RUN groupadd -r appgroup && useradd -r -u 1050 -g appgroup appuser
 RUN groupadd docker
-RUN usermod -aG docker appuser  # Replace 'myuser' with your container user
+RUN usermod -aG docker appuser
 
 COPY extras/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

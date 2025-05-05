@@ -9,7 +9,4 @@ fi
 
 # Give AppUser permissions to access the directory
 chown -R appuser:appgroup /var/log/dynreact-logs
-
-# Execute the command as 'appuser' and redirect logs to Docker logs
-export PYTHONUNBUFFERED=1
 exec gosu appuser "$@" >> /proc/1/fd/1 2>> /proc/1/fd/2

@@ -76,6 +76,7 @@ def material_base(verbose: int):
 
 
 def main():
+    print("Starting agent")
     parser = argparse.ArgumentParser(description="Select an agent to run.")
 
     subparsers = parser.add_subparsers(dest="agent", required=True, help="Choose an agent to run")

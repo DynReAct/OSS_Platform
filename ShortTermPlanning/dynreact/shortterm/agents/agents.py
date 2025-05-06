@@ -262,6 +262,7 @@ class Agent:
         # We close the consumer to release any equipment it is using
         # The producer does not need to be closed, since it is automatically garbage collected:
         # https://github.com/confluentinc/confluent-kafka-python/issues/127
+        print(f"Closing consumer received status {status}")
         self.consumer.close()
         if self.verbose > 1:
             self.write_log(f"Ending spawned process for agent {self.agent} in topic {self.topic}.", "8dc03f6b-dce4-4a52-a427-900547dd7a5a")

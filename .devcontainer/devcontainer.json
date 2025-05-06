@@ -11,8 +11,15 @@
   },
 
   "features": {
+    "ghcr.io/devcontainers/features/common-utils": {
+      "installZsh": true,
+      "installOhMyZsh": true,
+      "installOhMyZshConfig": true,
+      "configureZshAsDefaultShell": true
+    },
     "ghcr.io/devcontainers-extra/features/zsh-plugins:0": {
-      "plugins": "git docker pip poetry sudo python"
+      "plugins": "zsh-autosuggestions zsh-syntax-highlighting",
+      "omzPlugins": "https://github.com/zsh-users/zsh-autosuggestions.git https://github.com/zsh-users/zsh-syntax-highlighting.git"
     }
   },
   
@@ -27,12 +34,9 @@
           ]
         },
        "settings":{
-         "com.intellij:app:BuiltInServerOptions.builtInServerPort": 64421,
-         "com.intellij:app:HttpConfigurable.use_proxy_pac": true,
-         "org.jetbrains.plugins.terminal:app:TerminalOptionsProvider.myShellPath":"/bin/zsh",
-         "org.jetbrains.plugins.terminal:app:TerminalOptionsProvider.useShellPrompt":false,
-         "org.jetbrains.plugins.terminal:app:TerminalOptionsProvider.myReportMouse": false,
-         "org.jetbrains.plugins.terminal:app:TerminalOptionsProvider.myShellIntegration": false
+         "com.intellij:app:BuiltInServerOptions.builtInServerPort":53017,
+        "com.intellij:app:HttpConfigurable.use_proxy_pac":true,
+        "org.jetbrains.plugins.terminal:app:TerminalOptionsProvider.myShellPath":"/usr/bin/zsh"
        }
      }
    },
@@ -42,7 +46,7 @@
 
    // Use 'postCreateCommand' to map 192.168.111.11:5016 locally.
    // pcudp11 is an .ssh configuration the host machine
-   "postCreateCommand": "sudo service socat-forwarding reload && /usr/local/python/bin/python -m venv /workspace/.venv",
+   "postCreateCommand": "sudo service socat-forwarding reload && .devcontainer/scripts/postinstall.sh && /usr/local/python/bin/python -m venv /workspace/.venv",
 
    // Comment out to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
    "remoteUser": "vscode"

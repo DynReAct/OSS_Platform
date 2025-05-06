@@ -34,9 +34,10 @@
           ]
         },
        "settings":{
+         "org.jetbrains.plugins.terminal:app:TerminalOptionsProvider.myReportMouse":false,
          "com.intellij:app:BuiltInServerOptions.builtInServerPort":53017,
-        "com.intellij:app:HttpConfigurable.use_proxy_pac":true,
-        "org.jetbrains.plugins.terminal:app:TerminalOptionsProvider.myShellPath":"/usr/bin/zsh"
+         "com.intellij:app:HttpConfigurable.use_proxy_pac":true,
+         "org.jetbrains.plugins.terminal:app:TerminalOptionsProvider.myShellPath":"/usr/bin/zsh"
        }
      }
    },

@@ -46,7 +46,7 @@
 
    // Use 'postCreateCommand' to map 192.168.111.11:5016 locally.
    // pcudp11 is an .ssh configuration the host machine
-   "postCreateCommand": "sudo service socat-forwarding reload && .devcontainer/scripts/postinstall.sh && /usr/local/python/bin/python -m venv /workspace/.venv",
+   "postCreateCommand": ".devcontainer/extras/postinstall.sh",
 
    // Comment out to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
    "remoteUser": "vscode"

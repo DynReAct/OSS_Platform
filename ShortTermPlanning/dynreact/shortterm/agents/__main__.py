@@ -1,6 +1,7 @@
 import argparse
 import json
 from datetime import datetime
+from pathlib import Path
 
 from log import Log
 import platform
@@ -22,6 +23,12 @@ def log_base(verbose: int):
     config.read(os.path.join(current_dir, "config.cnf"))
     kafka_ip = config['DEFAULT']['IP']
     left_path = config['DEFAULT']['LogFilePath']
+
+    folder_path = Path(left_path)
+
+    # Create log folder if not added
+    if not folder_path.exists():
+        folder_path.mkdir(parents=True)
 
     # Creation of the main log file
     now = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")

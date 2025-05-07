@@ -21,22 +21,14 @@ Note:
         To replace all base agents run: python3 replace_base.py -v 3  -b . -g 111
 """
 
-import time, os
+import os
 import argparse
+import time
+
 from confluent_kafka import Producer
 import configparser
 from common import VAction
 from short_term_planning import clean_agents
-
-if os.environ.get('SPHINX_BUILD'):
-    # Mock REST_URL for Sphinx Documentatiom
-    IP = '127.0.0.1:9092'
-else:
-    config = configparser.ConfigParser()
-    config.read('config.cnf')
-    IP = os.environ.get('REST_API_OVERRIDE', config['DEFAULT'].get('IP'))
-
-SMALL_WAIT = 5
 
 def main():
     """
@@ -53,33 +45,35 @@ def main():
         dest='verbose', help="Option for detailed information"
     )
     ap.add_argument(
-        "-b", "--base", type=str, dest="base", required=True,
-        help="Path from current place to find config.cnf file"
-    )
-    ap.add_argument(
         "-g", "--rungagents", default='000', type=str,
         help="0 => General agents are not launched; 100 => Material ; 010 => Equipment; 001 => Log; "
     )
     args = vars(ap.parse_args())
 
     verbose = args["verbose"]
-    base = args["base"]
     rungagnts = str(args['rungagents'])
 
-    config.read(base + '/config.cnf')
-    IP = config['DEFAULT']["IP"]
+    config = configparser.ConfigParser()
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    config.read(os.path.join(current_dir, "config.cnf"))
+    kafka_ip = config['DEFAULT']['IP']
 
     if verbose > 0:
-        print( f"Running program with {verbose=}, {base=}, {rungagnts=} ")
+        print( f"Running program with {verbose=}, {rungagnts=} ")
 
     producer_config = {
-        "bootstrap.servers": IP,
+        "bootstrap.servers": kafka_ip,
         'linger.ms': 100,  # Reduce latency
         'acks': 'all'  # Ensure message durability
     }
     producer = Producer(producer_config)
 
     clean_agents(producer=producer, verbose=verbose, rungagnts=rungagnts)
+
+    print("Sleeping for 30 seconds")
+    time.sleep(30)
+
+    print("Done, containers should be restarting")
 
     return None
 

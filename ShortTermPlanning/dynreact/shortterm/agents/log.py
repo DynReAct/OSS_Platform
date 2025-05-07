@@ -26,6 +26,7 @@ from agents import Agent
 from common.data.data_functions import end_auction
 from common.data.load_url import DOCKER_REPLICA
 from common.handler import DockerManager
+from short_term_planning import SMALL_WAIT
 
 
 class Log(Agent):
@@ -243,7 +244,7 @@ class Log(Agent):
         self.results = {}
 
         # Force auction to crash due to error
-        end_auction(topic=self.topic, producer=self.producer, verbose=self.verbose)
+        end_auction(topic=self.topic, producer=self.producer, verbose=self.verbose, wait_time=SMALL_WAIT)
 
         return 'CONTINUE'
 

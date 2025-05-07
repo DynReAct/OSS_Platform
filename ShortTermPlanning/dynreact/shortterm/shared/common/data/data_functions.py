@@ -9,8 +9,6 @@ from confluent_kafka import Producer
 
 from common import sendmsgtopic
 from common.data.load_url import URL_INITIAL_STATE, URL_UPDATE_STATUS, load_url_json_get, load_url_json_post
-from short_term_planning import SMALL_WAIT
-
 
 def get_equipment_status(equipment_id: int, snapshot_time: str) -> dict:
     """
@@ -81,13 +79,14 @@ def get_transition_cost_and_status(
     return cost, new_status
 
 
-def end_auction(topic: str, producer: Producer, verbose: int) -> None:
+def end_auction(topic: str, producer: Producer, verbose: int, wait_time: int = 5) -> None:
     """
     Ends an auction by instructing all EQUIPMENT, MATERIAL and LOG children of the auction to exit
 
     :param str topic: Topic name of the auction we want to end
     :param object producer: A Kafka Producer instance
     :param int verbose: Verbosity level
+    :param int wait_time: Wait Time to end the auction
     """
 
     if verbose > 0:
@@ -127,7 +126,7 @@ def end_auction(topic: str, producer: Producer, verbose: int) -> None:
         vb=verbose
     )
 
-    time.sleep(SMALL_WAIT)
+    time.sleep(wait_time)
 
     # Instruct the LOG of the auction to exit
     sendmsgtopic(

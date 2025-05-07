@@ -579,7 +579,7 @@ def execute_short_term_planning(args: dict):
             sleep(SMALL_WAIT, producer=producer, verbose=verbose)
 
     finally:
-        end_auction(topic=act, producer=producer, verbose=verbose)
+        end_auction(topic=act, producer=producer, verbose=verbose, wait_time=SMALL_WAIT)
         sleep(exit_wait, producer=producer, verbose=verbose)
 
         # Remove all main agents

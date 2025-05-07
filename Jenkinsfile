@@ -33,7 +33,7 @@ node {
     stage('Build Docker Image') {
         sh """
         cd ShortTermPlanning
-        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+        docker build --build-arg DOCKER_REGISTRY=${LOCAL_REGISTRY} -t ${IMAGE_NAME}:${IMAGE_TAG} .
         """
     }
 

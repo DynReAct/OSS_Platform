@@ -563,6 +563,8 @@ def execute_short_term_planning(args: dict):
             nmaterials=nmaterials, snapshot=snapshot
         )
 
+        print(f"Creating auction for topic {act}")
+
         consumer.subscribe([act, TOPIC_CALLBACK])
         sleep(cloning_wait, producer=producer, verbose=verbose)
 

@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 from confluent_kafka.admin import AdminClient
 
+from common import TOPIC_CALLBACK, TOPIC_GEN
 from common.handler import DockerManager
 from short_term_planning import execute_short_term_planning
 
@@ -11,7 +12,7 @@ from short_term_planning import execute_short_term_planning
 def initialize():
     print("Setting up for a test")
     admin_client = AdminClient({"bootstrap.servers": "138.100.82.173:9092"})
-    admin_client.delete_topics(topics=['DynReact-TEST-Callback', 'DynReact-TEST-Gen', 'DYN_TEST'])
+    admin_client.delete_topics(topics=[TOPIC_CALLBACK, TOPIC_GEN, 'DYN_TEST'])
     print("Deleted test topics")
     yield
     print("Tearing down after a test")
@@ -159,7 +160,6 @@ def test_scenario_03(log_handler_spy, equipment_handler_spy, material_handler_sp
     assert len(material_handler_spy.list_tracked_containers()) == 1
     assert len(log_handler_spy.list_tracked_containers()) == 1
 
-
 def test_scenario_04():
     """Test the return value of short_term_planning()."""
 
@@ -171,9 +171,9 @@ def test_scenario_04():
         "auctionWait": "50",
         "counterbidWait": "15",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_4_EQUIPMENT", "9").split(" "),
+        "equipments": os.environ.get("SCENARIO_4_5_EQUIPMENT", "9").split(" "),
         "nmaterials": 1,
-        "rungagents": 000,
+        "rungagents": 111,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
     }
 
@@ -200,15 +200,13 @@ def test_scenario_05():
         "auctionWait": "50",
         "counterbidWait": "15",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_5_EQUIPMENT", "9").split(" "),
-        "nmaterials": 2,
+        "equipments": os.environ.get("SCENARIO_4_5_EQUIPMENT", "9").split(" "),
+        "nmaterials": 1,
         "rungagents": 000,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
     }
 
     result = execute_short_term_planning(args)
-
-    assert result is not None
 
     list_equipments = args["equipments"]
     assert len(list_equipments) == len(result.keys())
@@ -228,11 +226,11 @@ def test_scenario_06():
         "base": "../../shortterm",
         "runningWait": "10",
         "cloningWait": "30",
-        "auctionWait": "200",
+        "auctionWait": "50",
         "counterbidWait": "15",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_6_EQUIPMENT", "9 10").split(" "),
-        "nmaterials": 1,
+        "equipments": os.environ.get("SCENARIO_6_EQUIPMENT", "9").split(" "),
+        "nmaterials": 2,
         "rungagents": 000,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
     }
@@ -262,7 +260,38 @@ def test_scenario_07():
         "auctionWait": "200",
         "counterbidWait": "15",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_7_EQUIPMENT", "9 11").split(" "),
+        "equipments": os.environ.get("SCENARIO_7_EQUIPMENT", "9 10").split(" "),
+        "nmaterials": 1,
+        "rungagents": 000,
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+    }
+
+    result = execute_short_term_planning(args)
+
+    assert result is not None
+
+    list_equipments = args["equipments"]
+    assert len(list_equipments) == len(result.keys())
+
+    for equipment in list_equipments:
+        current_equipment = result[equipment]
+
+        assert len(current_equipment) == args["nmaterials"]
+
+    print(result)
+
+def test_scenario_08():
+    """Test the return value of short_term_planning()."""
+
+    args = {
+        "verbose": 3,
+        "base": "../../shortterm",
+        "runningWait": "10",
+        "cloningWait": "30",
+        "auctionWait": "200",
+        "counterbidWait": "15",
+        "exitWait": "10",
+        "equipments": os.environ.get("SCENARIO_8_EQUIPMENT", "9 11").split(" "),
         "nmaterials": 2,
         "rungagents": 000,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")

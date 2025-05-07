@@ -70,8 +70,8 @@ def main():
 
     clean_agents(producer=producer, verbose=verbose, rungagnts=rungagnts)
 
-    print("Sleeping for 30 seconds")
-    time.sleep(30)
+    print("Sleeping for 2 minutes")
+    time.sleep(120)
 
     print("Done, containers should be restarting")
 

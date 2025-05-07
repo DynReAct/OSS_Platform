@@ -171,7 +171,7 @@ def test_scenario_04():
         "auctionWait": "50",
         "counterbidWait": "15",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_5_EQUIPMENT", "9").split(" "),
+        "equipments": os.environ.get("SCENARIO_4_EQUIPMENT", "9").split(" "),
         "nmaterials": 1,
         "rungagents": 000,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
@@ -179,7 +179,7 @@ def test_scenario_04():
 
     result = execute_short_term_planning(args)
 
-    list_equipments = args["equipments"].split(" ")
+    list_equipments = args["equipments"]
     assert len(list_equipments) == len(result.keys())
 
     for equipment in list_equipments:
@@ -200,7 +200,7 @@ def test_scenario_05():
         "auctionWait": "50",
         "counterbidWait": "15",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_6_EQUIPMENT", "9").split(" "),
+        "equipments": os.environ.get("SCENARIO_5_EQUIPMENT", "9").split(" "),
         "nmaterials": 2,
         "rungagents": 000,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
@@ -208,7 +208,9 @@ def test_scenario_05():
 
     result = execute_short_term_planning(args)
 
-    list_equipments = args["equipments"].split(" ")
+    assert result is not None
+
+    list_equipments = args["equipments"]
     assert len(list_equipments) == len(result.keys())
 
     for equipment in list_equipments:
@@ -229,13 +231,15 @@ def test_scenario_06():
         "auctionWait": "200",
         "counterbidWait": "15",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_7_EQUIPMENT", "9 10").split(" "),
+        "equipments": os.environ.get("SCENARIO_6_EQUIPMENT", "9 10").split(" "),
         "nmaterials": 1,
         "rungagents": 000,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
     }
 
     result = execute_short_term_planning(args)
+
+    assert result is not None
 
     list_equipments = args["equipments"]
     assert len(list_equipments) == len(result.keys())
@@ -258,13 +262,15 @@ def test_scenario_07():
         "auctionWait": "200",
         "counterbidWait": "15",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_8_EQUIPMENT", "9 11").split(" "),
+        "equipments": os.environ.get("SCENARIO_7_EQUIPMENT", "9 11").split(" "),
         "nmaterials": 2,
         "rungagents": 000,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
     }
 
     result = execute_short_term_planning(args)
+
+    assert result is not None
 
     list_equipments = args["equipments"]
     assert len(list_equipments) == len(result.keys())
@@ -279,6 +285,6 @@ def test_scenario_07():
     for equipment in result.values():
         orders_ids += list(map(lambda x: x["id"], equipment))
 
-    assert os.environ.get("SCENARIO_8_ORDER_ID", "1199061") in orders_ids
+    assert os.environ.get("SCENARIO_7_ORDER_ID", "1199061") in orders_ids
 
     print(result)

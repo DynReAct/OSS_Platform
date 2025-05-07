@@ -3,6 +3,7 @@ node {
     def IMAGE_TAG = "latest"
     def LOCAL_REGISTRY = "192.168.110.176:5000/"
 
+    env.LOCAL_REGISTRY = LOCAL_REGISTRY
     env.TOPIC_CALLBACK = "DynReact-TEST-Callback"
     env.TOPIC_GEN = "DynReact-TEST-Gen"
 
@@ -142,7 +143,7 @@ node {
     }
 
     runStageWithCleanup('Run Scenario 4') {
-        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_4_EQUIPMENT']
+        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_4_EQUIPMENT', 'LOCAL_REGISTRY']
         def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
         sh """
         # Run container to execute tests
@@ -163,7 +164,7 @@ node {
     }
 
     runStageWithCleanup('Run Scenario 5') {
-        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_5_EQUIPMENT']
+        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_5_EQUIPMENT', 'LOCAL_REGISTRY']
         def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
         sh """
         # Run container to execute tests
@@ -184,7 +185,7 @@ node {
     }
 
     runStageWithCleanup('Run Scenario 6') {
-        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_6_EQUIPMENT']
+        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_6_EQUIPMENT', 'LOCAL_REGISTRY']
         def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
         sh """
         # Run container to execute tests
@@ -205,7 +206,7 @@ node {
     }
 
     runStageWithCleanup('Run Scenario 7') {
-        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_7_EQUIPMENT', 'SCENARIO_7_ORDER_ID']
+        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_7_EQUIPMENT', 'SCENARIO_7_ORDER_ID', 'LOCAL_REGISTRY']
         def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
         sh """
         # Run container to execute tests

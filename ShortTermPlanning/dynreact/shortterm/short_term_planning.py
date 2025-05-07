@@ -590,42 +590,43 @@ def execute_short_term_planning(args: dict):
 
 def clean_agents(producer, verbose, rungagnts):
 
-    # Exit EQUIPMENT BASE
-    if str(rungagnts)[1] == '1':
-        sendmsgtopic(
-            producer=producer,
-            tsend=TOPIC_GEN,
-            topic=TOPIC_GEN,
-            source="UX",
-            dest=f"EQUIPMENT:{TOPIC_GEN}",
-            action="EXIT",
-            vb=verbose
-        )
+    if int(rungagnts) > 0:
+        # Exit EQUIPMENT BASE
+        if str(rungagnts)[1] == '1':
+            sendmsgtopic(
+                producer=producer,
+                tsend=TOPIC_GEN,
+                topic=TOPIC_GEN,
+                source="UX",
+                dest=f"EQUIPMENT:{TOPIC_GEN}",
+                action="EXIT",
+                vb=verbose
+            )
 
-    # Exit MATERIAL BASE
-    if str(rungagnts)[2] == '1':
-        sendmsgtopic(
-            producer=producer,
-            tsend=TOPIC_GEN,
-            topic=TOPIC_GEN,
-            source="UX",
-            dest=f"MATERIAL:{TOPIC_GEN}",
-            action="EXIT",
-            vb=verbose
-        )
+        # Exit MATERIAL BASE
+        if str(rungagnts)[2] == '1':
+            sendmsgtopic(
+                producer=producer,
+                tsend=TOPIC_GEN,
+                topic=TOPIC_GEN,
+                source="UX",
+                dest=f"MATERIAL:{TOPIC_GEN}",
+                action="EXIT",
+                vb=verbose
+            )
 
-    # Exit LOG BASE
-    if str(rungagnts)[0] == '1':
-        sleep(SMALL_WAIT, producer=producer, verbose=verbose)
-        sendmsgtopic(
-            producer=producer,
-            tsend=TOPIC_GEN,
-            topic=TOPIC_GEN,
-            source="UX",
-            dest=f"LOG:{TOPIC_GEN}",
-            action="EXIT",
-            vb=verbose
-        )
+        # Exit LOG BASE
+        if str(rungagnts)[0] == '1':
+            sleep(SMALL_WAIT, producer=producer, verbose=verbose)
+            sendmsgtopic(
+                producer=producer,
+                tsend=TOPIC_GEN,
+                topic=TOPIC_GEN,
+                source="UX",
+                dest=f"LOG:{TOPIC_GEN}",
+                action="EXIT",
+                vb=verbose
+            )
 
 
 if __name__ == '__main__':

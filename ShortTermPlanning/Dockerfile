@@ -47,11 +47,14 @@ RUN apt update && apt upgrade -y && apt install -y gosu
 
 WORKDIR /app
 
+ARG DOCKER_REGISTRY=""
+
 # Execute the command as 'appuser' and redirect logs to Docker logs
 ENV PYTHONUNBUFFERED=1 \
     VIRTUAL_ENV=/app/.venv \
     PYTHONPATH="/app/shortterm" \
     IS_DOCKER="true" \
+    LOCAL_REGISTRY=$DOCKER_REGISTRY \
     PATH="/app/.venv/bin:$PATH"
 
 COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}

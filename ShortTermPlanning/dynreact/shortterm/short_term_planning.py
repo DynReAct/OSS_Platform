@@ -32,7 +32,7 @@ from confluent_kafka import Producer, Consumer, Message
 from confluent_kafka.admin import AdminClient
 import configparser
 
-from common import VAction, sendmsgtopic, TOPIC_GEN, TOPIC_CALLBACK
+from common import VAction, sendmsgtopic, TOPIC_GEN, TOPIC_CALLBACK, SMALL_WAIT
 from common.data.data_functions import end_auction
 from common.data.data_setup import DataSetup
 import os, re, json
@@ -47,8 +47,6 @@ else:
     config = configparser.ConfigParser()
     config.read('config.cnf')
     IP = os.environ.get('REST_API_OVERRIDE', config['DEFAULT'].get('IP'))
-
-SMALL_WAIT = 5
 
 log_handler = DockerManager(tag=f"log{DOCKER_MANAGER}", max_allowed=1)
 equipment_handler = DockerManager(tag=f"equipment{DOCKER_MANAGER}", max_allowed=1)

@@ -7,6 +7,7 @@ from confluent_kafka import Producer
 
 TOPIC_GEN = os.environ.get("TOPIC_GEN", "DynReact-Gen")
 TOPIC_CALLBACK = os.environ.get("TOPIC_CALLBACK", "DynReact-Callback")
+SMALL_WAIT = 5
 
 class VAction(argparse.Action):
     """

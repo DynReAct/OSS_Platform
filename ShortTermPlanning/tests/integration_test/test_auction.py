@@ -160,7 +160,7 @@ def test_scenario_03(log_handler_spy, equipment_handler_spy, material_handler_sp
     assert len(log_handler_spy.list_tracked_containers()) == 1
 
 
-def test_scenario_05():
+def test_scenario_04():
     """Test the return value of short_term_planning()."""
 
     args = {
@@ -189,7 +189,7 @@ def test_scenario_05():
 
     print(result)
 
-def test_scenario_06():
+def test_scenario_05():
     """Test the return value of short_term_planning()."""
 
     args = {
@@ -218,7 +218,7 @@ def test_scenario_06():
 
     print(result)
 
-def test_scenario_07():
+def test_scenario_06():
     """Test the return value of short_term_planning()."""
 
     args = {
@@ -247,7 +247,7 @@ def test_scenario_07():
 
     print(result)
 
-def test_scenario_08():
+def test_scenario_07():
     """Test the return value of short_term_planning()."""
 
     args = {

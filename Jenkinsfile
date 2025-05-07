@@ -1,3 +1,15 @@
+def runStageWithCleanup(String stageName, Closure body) {
+    stage(stageName) {
+        sh '''
+            echo "[PRE] Cleaning up dynreact-shortterm containers..."
+            docker ps -a --filter ancestor=dynreact-shortterm -q | xargs -r docker stop
+            docker ps -a --filter ancestor=dynreact-shortterm -q | xargs -r docker rm
+            docker system prune -f
+        '''
+        body()
+    }
+}
+
 pipeline {
     agent any
 
@@ -46,105 +58,96 @@ pipeline {
             }
         }
 
-        stage('Run Scenario 0') {
+        stage('Run Tests') {
             steps {
                 script {
-                    def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
-                    def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
-                    sh """
-                    # Run container to execute tests
-                    docker run --rm \\
-                      -v /var/run/docker.sock:/var/run/docker.sock:rw \\
-                      -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
-                      -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
-                      -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
-                      ${envArgs} \\
-                      --user root \\
-                      "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-                      bash -c "source .venv/bin/activate && \\
-                               pip install poetry && \\
-                               poetry install --no-root && \\
-                               cd /app/tests/integration_test && \\
-                               pytest -s test_auction.py::test_scenario_00"
-                    """
-                }
-            }
-        }
 
-        stage('Run Scenario 1') {
-            steps {
-                script {
-                    def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
-                    def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
-                    sh """
-                    # Run container to execute tests
-                    docker run --rm \\
-                      -v /var/run/docker.sock:/var/run/docker.sock:rw \\
-                      -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
-                      -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
-                      -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
-                      -v "/var/log/dynreact-logs:/var/log/dynreact-logs:rw,rshared" \\
-                      ${envArgs} \\
-                      --user root \\
-                      "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-                      bash -c "source .venv/bin/activate && \\
-                               pip install poetry && \\
-                               poetry install --no-root && \\
-                               cd /app/tests/integration_test && \\
-                               pytest -s test_auction.py::test_scenario_01"
-                    """
-                }
-            }
-        }
+                    runStageWithCleanup('Run Scenario 0') {
+                        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+                        def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
+                        sh """
+                        # Run container to execute tests
+                        docker run --rm \\
+                          -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+                          -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
+                          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
+                          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
+                          ${envArgs} \\
+                          --user root \\
+                          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+                          bash -c "source .venv/bin/activate && \\
+                                   pip install poetry && \\
+                                   poetry install --no-root && \\
+                                   cd /app/tests/integration_test && \\
+                                   pytest -s test_auction.py::test_scenario_00"
+                        """
+                    }
 
-        stage('Run Scenario 2') {
-            steps {
-                script {
-                    def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
-                    def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
-                    sh """
-                    # Run container to execute tests
-                    docker run --rm \\
-                      -v /var/run/docker.sock:/var/run/docker.sock:rw \\
-                      -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
-                      -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
-                      -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
-                      ${envArgs} \\
-                      --user root \\
-                      "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-                      bash -c "source .venv/bin/activate && \\
-                               pip install poetry && \\
-                               poetry install --no-root && \\
-                               cd /app/tests/integration_test && \\
-                               pytest -s test_auction.py::test_scenario_02"
-                    """
-                }
-            }
-        }
+                    runStageWithCleanup('Run Scenario 1') {
+                        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+                        def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
+                        sh """
+                        # Run container to execute tests
+                        docker run --rm \\
+                          -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+                          -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
+                          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
+                          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
+                          -v "/var/log/dynreact-logs:/var/log/dynreact-logs:rw,rshared" \\
+                          ${envArgs} \\
+                          --user root \\
+                          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+                          bash -c "source .venv/bin/activate && \\
+                                   pip install poetry && \\
+                                   poetry install --no-root && \\
+                                   cd /app/tests/integration_test && \\
+                                   pytest -s test_auction.py::test_scenario_01"
+                        """
+                    }
 
-        stage('Run Scenario 3') {
-            steps {
-                script {
-                    def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
-                    def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
-                    sh """
-                    # Run container to execute tests
-                    docker run --rm \\
-                      -v /var/run/docker.sock:/var/run/docker.sock:rw \\
-                      -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
-                      -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
-                      -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
-                      ${envArgs} \\
-                      --user root \\
-                      "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-                      bash -c "source .venv/bin/activate && \\
-                               pip install poetry && \\
-                               poetry install --no-root && \\
-                               cd /app/tests/integration_test && \\
-                               pytest -s test_auction.py::test_scenario_03"
-                    """
+                    runStageWithCleanup('Run Scenario 2') {
+                        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+                        def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
+                        sh """
+                        # Run container to execute tests
+                        docker run --rm \\
+                          -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+                          -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
+                          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
+                          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
+                          ${envArgs} \\
+                          --user root \\
+                          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+                          bash -c "source .venv/bin/activate && \\
+                                   pip install poetry && \\
+                                   poetry install --no-root && \\
+                                   cd /app/tests/integration_test && \\
+                                   pytest -s test_auction.py::test_scenario_02"
+                        """
+                    }
+
+                    runStageWithCleanup('Run Scenario 3') {
+                        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+                        def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
+                        sh """
+                        # Run container to execute tests
+                        docker run --rm \\
+                          -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+                          -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
+                          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
+                          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
+                          ${envArgs} \\
+                          --user root \\
+                          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+                          bash -c "source .venv/bin/activate && \\
+                                   pip install poetry && \\
+                                   poetry install --no-root && \\
+                                   cd /app/tests/integration_test && \\
+                                   pytest -s test_auction.py::test_scenario_03"
+                        """
+                    }
+
                 }
-            }
         }
 
         stage('Replace BASE agents') {

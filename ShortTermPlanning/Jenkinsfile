@@ -1,0 +1,109 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "dynreact-shortterm"
+        IMAGE_TAG = "${BUILD_NUMBER}"
+        LOCAL_REGISTRY = "localhost:5000/"
+        TEST_CONTAINER_NAME = "python-test-container"
+        PYTHON_IMAGE = "python:3.12"
+        PYTHON_PATH = "/app/ShortTermPlanning/dynreact/shortterm/:/app/ShortTermPlanning/dynreact/shortterm/shared/:/app/ShortTermPlanning/dynreact/shortterm/agents/:/app/ShortTermPlanning/dynreact/shortterm/shared/:/app/DynReActBase/:/app/DynReActService/:/app/SampleUseCase/"
+        REST_API_OVERRIDE = "http://localhost:8050"
+
+        SNAPSHOT_VERSION = "2025-01-18T10:00:00Z"
+        SCENARIO_5_EQUIPMENT = "9" // One Equipment, One Material
+        SCENARIO_6_EQUIPMENT = "9" // One Equipment, Two Material
+        SCENARIO_7_EQUIPMENTS = "9 10" // Two Equipments, One Material
+        SCENARIO_8_EQUIPMENTS = "9 11" // Two Equipments, shared material
+        SCENARIO_8_ORDER_ID = "1199061"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    sh """
+                    cd ShortTermPlanning
+                    docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                    """
+                }
+            }
+        }
+
+        stage('Tag & Push Image') {
+            steps {
+                script {
+                    sh """
+                    docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}
+                    docker push ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}
+                    """
+                }
+            }
+        }
+
+        stage('Install Dependencies') {
+            agent {
+                docker {
+                    image 'sunpeek/poetry:py3.12-slim'
+                    args '--user root'
+                }
+            }
+            steps {
+                dir('ShortTermPlanning') {
+                    sh 'python --version'
+                    sh 'poetry config virtualenvs.in-project true'
+                    sh 'poetry lock'
+                    sh 'poetry run virtualenv .venv --copies'
+                    sh 'poetry install --no-root'
+                }
+            }
+            post {
+                always {
+                    stash name: 'venv', includes: 'ShortTermPlanning/.venv/**'
+                    cleanWs()
+                }
+            }
+        }
+
+        stage('Run Tests') {
+            agent {
+                docker {
+                    image 'sunpeek/poetry:py3.12-slim'
+                    args '''\
+                        -v /var/run/docker.sock:/var/run/docker.sock:rw \
+                        -v \"$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:rw\" \
+                        -v \"$WORKSPACE/ShortTermPlanning/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:rw\" \
+                        -v \"$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw\" \
+                        --user root
+                    '''
+                }
+            }
+            steps {
+                unstash 'venv'
+                dir('ShortTermPlanning/tests/integration_testing') {
+                    sh '''
+                     bash -c "source $WORKSPACE/ShortTermPlanning/.venv/bin/activate &&
+                     python $WORKSPACE/ShortTermPlanning/tests/integration_test/test_auction.py"
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            sh "docker system prune -f"
+            echo "Docker image successfully pushed to ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}"
+        }
+        failure {
+            sh "docker system prune -f"
+            echo "Build failed. Check logs for errors."
+        }
+    }
+}

@@ -77,7 +77,7 @@ class TabuSearch(LotsOptimizer):
         if changed:  # need to adapt optimization state
             best_is_current: bool = self._state.best_solution == self._state.current_solution
             new_assignments = {o: ass for o, ass in self._state.current_solution.order_assignments.items() if o in initial_plant_assignments}
-            planning = self._costs.evaluate_order_assignments(self._process, new_assignments, targets=self._targets, snapshot=self._snapshot)
+            planning = self._costs.evaluate_order_assignments(self._process, new_assignments, targets=self._targets, snapshot=self._snapshot, total_priority=self._total_priority)
             objective: ObjectiveFunction = self._costs.process_objective_function(planning)
             self._state.current_solution = planning
             self._state.current_object_value = objective
@@ -104,6 +104,7 @@ class TabuSearch(LotsOptimizer):
         #vbest: ProductionPlanning = self._state.current_solution
         #target_vbest: float = self._state.current_object_value
         vbest: ProductionPlanning = self.optimize_lots(initial_plant_assignments)
+        total_priority = vbest.total_priority
         target_vbest0: ObjectiveFunction = self._costs.process_objective_function(vbest)
         target_vbest: float = target_vbest0.total_value
         self._state.current_solution = vbest
@@ -268,7 +269,7 @@ class TabuSearch(LotsOptimizer):
             for lot in lots:
                 for lot_idx, order in enumerate(lot.orders):
                     new_assignments[order] = OrderAssignment(equipment=plant, order=order, lot=lot.id, lot_idx=lot_idx)
-        new_planning: ProductionPlanning = self._costs.evaluate_order_assignments(self._process, new_assignments, self._targets, self._snapshot)
+        new_planning: ProductionPlanning = self._costs.evaluate_order_assignments(self._process, new_assignments, self._targets, self._snapshot, total_priority=self._total_priority)
         for order, plant in order_plant_assignments.items():
             if plant < 0:
                 new_planning.order_assignments[order] = OrderAssignment(equipment=-1, order=order, lot="", lot_idx=-1)
@@ -504,7 +505,8 @@ class CTabuWorker:
                                                                             track_structure=track_structure, main_category=self._main_category)
                     plant_status[swp.PlantTo] = new_status
                 planning_candidate = ProductionPlanning(process=self.planning.process, order_assignments=order_assignments,
-                                   equipment_status=plant_status, target_structure=self.targets.material_weights)
+                                   equipment_status=plant_status, target_structure=self.targets.material_weights,
+                                   total_priority=self.planning.total_priority)
                 total_objectives = self.costs.process_objective_function(planning_candidate)
                 #total_objectives = CostProvider.sum_objectives([self.costs.objective_function(status) for status in plant_status.values()])
                 objective_fct = total_objectives.total_value

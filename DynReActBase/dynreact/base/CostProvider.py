@@ -207,9 +207,14 @@ class CostProvider:
         :return:
         """
         costs_parameter = self.priority_costs_parameter()
+        if costs_parameter <= 0:
+            return 0
         cnt_assigned_orders_prio = sum(status.planning.assigned_priority for status in planning.equipment_status.values())
         cnt_backlog_orders_prio = planning.total_priority      #ass + unass
-        costs = cnt_backlog_orders_prio / (1+cnt_assigned_orders_prio) * costs_parameter
+        unassigned = cnt_backlog_orders_prio - cnt_assigned_orders_prio
+        if unassigned <= 0:
+            return 0
+        costs = unassigned / (1+cnt_assigned_orders_prio) * costs_parameter
         return costs
 
     def priority_costs_parameter(self) -> float:

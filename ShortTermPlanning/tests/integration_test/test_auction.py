@@ -254,13 +254,13 @@ def test_scenario_07():
 
     args = {
         "verbose": 3,
-        "base": "../../shortterm",
+        "base": "../../dynreact/shortterm",
         "runningWait": "10",
         "cloningWait": "30",
         "auctionWait": "200",
         "counterbidWait": "15",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_7_EQUIPMENT", "9 10").split(" "),
+        "equipments": os.environ.get("SCENARIO_7_EQUIPMENTS", "9 10").split(" "),
         "nmaterials": 1,
         "rungagents": 000,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
@@ -291,7 +291,7 @@ def test_scenario_08():
         "auctionWait": "200",
         "counterbidWait": "15",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_8_EQUIPMENT", "9 11").split(" "),
+        "equipments": os.environ.get("SCENARIO_8_EQUIPMENTS", "9 11").split(" "),
         "nmaterials": 2,
         "rungagents": 000,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")

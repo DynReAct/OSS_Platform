@@ -315,6 +315,6 @@ def test_scenario_08():
     for equipment in result.values():
         orders_ids += list(map(lambda x: x["id"], equipment))
 
-    assert os.environ.get("SCENARIO_8_ORDER_ID", "1199061") in orders_ids
+    assert os.environ.get("SCENARIO_8_ORDER_ID", "1193611") in orders_ids
 
     print(result)

@@ -46,7 +46,7 @@ node {
 
     runStageWithCleanup('Run Scenario 0') {
         def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
-        def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
+        def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
@@ -67,7 +67,7 @@ node {
 
     runStageWithCleanup('Run Scenario 1') {
         def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
-        def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
+        def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
@@ -89,7 +89,7 @@ node {
 
     runStageWithCleanup('Run Scenario 2') {
         def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
-        def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
+        def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
@@ -110,7 +110,7 @@ node {
 
     runStageWithCleanup('Run Scenario 3') {
         def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
-        def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
+        def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
@@ -131,7 +131,7 @@ node {
 
     runStageWithCleanup('Run Scenario 4') {
         def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'SCENARIO_4_5_EQUIPMENT']
-        def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
+        def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
@@ -165,7 +165,7 @@ node {
 
     stage('Run Scenario 5') {
         def vars = ['SNAPSHOT_VERSION', 'SCENARIO_4_5_EQUIPMENT', 'LOCAL_REGISTRY']
-        def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
+        def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
@@ -186,7 +186,7 @@ node {
 
     stage('Run Scenario 6') {
         def vars = ['SNAPSHOT_VERSION', 'SCENARIO_6_EQUIPMENT', 'LOCAL_REGISTRY']
-        def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
+        def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
@@ -207,7 +207,7 @@ node {
 
     stage('Run Scenario 7') {
         def vars = ['SNAPSHOT_VERSION', 'SCENARIO_7_EQUIPMENTS', 'LOCAL_REGISTRY']
-        def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
+        def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
@@ -228,7 +228,7 @@ node {
 
     stage('Run Scenario 8') {
         def vars = ['SNAPSHOT_VERSION', 'SCENARIO_8_EQUIPMENTS', 'SCENARIO_8_ORDER_ID', 'LOCAL_REGISTRY']
-        def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
+        def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\

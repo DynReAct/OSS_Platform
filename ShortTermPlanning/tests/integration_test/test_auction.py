@@ -2,20 +2,21 @@ import os
 from unittest.mock import patch, MagicMock
 
 import pytest
+from confluent_kafka import TopicPartition, OFFSET_END
 from confluent_kafka.admin import AdminClient
 
-from common import TOPIC_CALLBACK, TOPIC_GEN
+from common import TOPIC_CALLBACK, TOPIC_GEN, purge_topics
 from common.handler import DockerManager
 from short_term_planning import execute_short_term_planning
 
 @pytest.fixture(autouse=True)
 def initialize():
     print("Setting up for a test")
-    admin_client = AdminClient({"bootstrap.servers": "138.100.82.173:9092"})
-    admin_client.delete_topics(topics=[TOPIC_CALLBACK, TOPIC_GEN, 'DYN_TEST'])
-    print("Deleted test topics")
+    print("Purging topics")
+    purge_topics(topics=[TOPIC_CALLBACK, TOPIC_GEN, 'DYN_TEST'])
     yield
     print("Tearing down after a test")
+
 
 @pytest.fixture
 def log_handler_spy():

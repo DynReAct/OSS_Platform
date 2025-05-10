@@ -24,7 +24,8 @@ def _compute_partition_topic(topic_name: str, admin_client: AdminClient):
     md = admin_client.list_topics(timeout=10)
 
     if topic_name not in md.topics:
-        raise Exception(f"Topic '{topic_name}' not found.")
+        print(f"Topic '{topic_name}' not found.")
+        return []
     else:
         partitions = md.topics[topic_name].partitions
         return list(map(lambda p: TopicPartition(topic_name, int(p), offset=OFFSET_END), partitions.keys()))

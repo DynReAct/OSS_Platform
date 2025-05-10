@@ -3,11 +3,55 @@ import argparse
 import os
 import traceback
 
-from confluent_kafka import Producer
+from confluent_kafka import Producer, OFFSET_END, TopicPartition
+from confluent_kafka.admin import AdminClient
 
 TOPIC_GEN = os.environ.get("TOPIC_GEN", "DynReact-Gen")
 TOPIC_CALLBACK = os.environ.get("TOPIC_CALLBACK", "DynReact-Callback")
 SMALL_WAIT = 5
+
+def _compute_partition_topic(topic_name: str, admin_client: AdminClient):
+    """
+    Function to list topic partitions.
+
+    :param str topic_name: Topic name to search partitions for.
+    :param AdminClient admin_client: Confluent kafka admin client.
+
+    returns: list of topic partitions.
+    """
+
+    # Fetch metadata for the topic
+    md = admin_client.list_topics(timeout=10)
+
+    if topic_name not in md.topics:
+        print(f"Topic '{topic_name}' not found.")
+        return []
+    else:
+        partitions = md.topics[topic_name].partitions
+        return list(map(lambda p: TopicPartition(topic_name, int(p), offset=OFFSET_END), partitions.keys()))
+
+def purge_topics(topics: list):
+    """
+    Function to purge list of topics.
+
+    :param str topics: Topic names to search partitions for.
+
+    returns: list of purged topics.
+    """
+
+    admin_client = AdminClient({"bootstrap.servers": "138.100.82.173:9092"})
+
+    topics_partitions = []
+    for topic in topics:
+        topics_partitions.extend(_compute_partition_topic(topic, admin_client))
+
+    topics = admin_client.delete_records(topics_partitions)
+
+    for tp, f in topics.items():
+        try:
+            f.result()  # Raises exception if delete failed
+        except Exception as e:
+            raise Exception(f"Failed: {tp} with error {e}")
 
 class VAction(argparse.Action):
     """

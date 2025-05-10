@@ -206,7 +206,7 @@ node {
     }
 
     stage('Run Scenario 7') {
-        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_7_EQUIPMENT', 'LOCAL_REGISTRY']
+        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_7_EQUIPMENTS', 'LOCAL_REGISTRY']
         def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
         sh """
         # Run container to execute tests
@@ -227,7 +227,7 @@ node {
     }
 
     stage('Run Scenario 8') {
-        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_8_EQUIPMENT', 'SCENARIO_8_ORDER_ID', 'LOCAL_REGISTRY']
+        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_8_EQUIPMENTS', 'SCENARIO_8_ORDER_ID', 'LOCAL_REGISTRY']
         def envArgs = vars.collect { varName -> "-e ${varName}=${env.getProperty(varName)}" }.join(' ')
         sh """
         # Run container to execute tests

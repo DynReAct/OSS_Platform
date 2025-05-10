@@ -162,7 +162,7 @@ def test_scenario_03(log_handler_spy, equipment_handler_spy, material_handler_sp
     assert len(log_handler_spy.list_tracked_containers()) == 1
 
 def test_scenario_04():
-    """Test the return value of short_term_planning()."""
+    """Test the return value of short_term_planning() locally."""
 
     args = {
         "verbose": 3,
@@ -191,7 +191,7 @@ def test_scenario_04():
     print(result)
 
 def test_scenario_05():
-    """Test the return value of short_term_planning()."""
+    """Test the return value of short_term_planning() remotely with One Equipment, One Material."""
 
     args = {
         "verbose": 3,
@@ -220,7 +220,7 @@ def test_scenario_05():
     print(result)
 
 def test_scenario_06():
-    """Test the return value of short_term_planning()."""
+    """Test the return value of short_term_planning() remotely with One Equipment, Two Material."""
 
     args = {
         "verbose": 3,
@@ -251,7 +251,7 @@ def test_scenario_06():
     print(result)
 
 def test_scenario_07():
-    """Test the return value of short_term_planning()."""
+    """Test the return value of short_term_planning() remotely with Two Equipments, One Material."""
 
     args = {
         "verbose": 3,
@@ -282,7 +282,7 @@ def test_scenario_07():
     print(result)
 
 def test_scenario_08():
-    """Test the return value of short_term_planning()."""
+    """Test the return value of short_term_planning() remotely with Two Equipments, Two Materials."""
 
     args = {
         "verbose": 3,
@@ -315,6 +315,6 @@ def test_scenario_08():
     for equipment in result.values():
         orders_ids += list(map(lambda x: x["id"], equipment))
 
-    assert os.environ.get("SCENARIO_7_ORDER_ID", "1199061") in orders_ids
+    assert os.environ.get("SCENARIO_8_ORDER_ID", "1199061") in orders_ids
 
     print(result)

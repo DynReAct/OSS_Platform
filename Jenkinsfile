@@ -12,7 +12,7 @@ node {
     env.SCENARIO_6_EQUIPMENT = "9" // One Equipment, Two Material
     env.SCENARIO_7_EQUIPMENTS = "9 10" // Two Equipments, One Material
     env.SCENARIO_8_EQUIPMENTS = "9 11" // Two Equipments, shared material
-    env.SCENARIO_8_ORDER_ID = "1199061"
+    env.SCENARIO_8_ORDER_ID = "1193611"
 
     def runStageWithCleanup = { stageName, body ->
         stage(stageName) {

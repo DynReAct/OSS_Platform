@@ -11,11 +11,11 @@ from short_term_planning import execute_short_term_planning
 
 @pytest.fixture(autouse=True)
 def initialize():
-    print("Setting up for a test")
-    print("Purging topics")
+    print("Setting up for a test.")
+    print("Purging topics.")
     purge_topics(topics=[TOPIC_CALLBACK, TOPIC_GEN, 'DYN_TEST'])
     yield
-    print("Tearing down after a test")
+    print("Tearing down after a test.")
 
 
 @pytest.fixture

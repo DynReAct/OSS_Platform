@@ -1,0 +1,54 @@
+{
+  "name": "Python 3",
+  "dockerComposeFile": ["./docker-compose.yaml"],
+  "service": "app",
+  "workspaceFolder": "/workspace",
+  
+  // Use this environment variable if you need to bind mount your local source code into a new container.
+  "remoteEnv": {
+     "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}",
+     "PYTHONPATH": "/usr/local/python/bin/python"
+  },
+
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils": {
+      "installZsh": true,
+      "installOhMyZsh": true,
+      "installOhMyZshConfig": true,
+      "configureZshAsDefaultShell": true
+    },
+    "ghcr.io/devcontainers-extra/features/zsh-plugins:0": {
+      "plugins": "zsh-autosuggestions zsh-syntax-highlighting",
+      "omzPlugins": "https://github.com/zsh-users/zsh-autosuggestions.git https://github.com/zsh-users/zsh-syntax-highlighting.git"
+    }
+  },
+  
+  // Configure tool-specific properties.
+  "customizations": {
+     // Configure properties specific to Jetbrains.
+     "jetbrains": {
+       "pycharm": {
+          "settingsSync": true,
+          "plugins": [
+            "PythonCore"
+          ]
+        },
+       "settings":{
+         "org.jetbrains.plugins.terminal:app:TerminalOptionsProvider.myReportMouse":false,
+         "com.intellij:app:BuiltInServerOptions.builtInServerPort":53017,
+         "com.intellij:app:HttpConfigurable.use_proxy_pac":true,
+         "org.jetbrains.plugins.terminal:app:TerminalOptionsProvider.myShellPath":"/usr/bin/zsh"
+       }
+     }
+   },
+
+   // Use 'forwardPorts' to make a list of ports inside the container available locally.
+   "forwardPorts": [8085, 8050, 8080, 9997, 5016],
+
+   // Use 'postCreateCommand' to map 192.168.111.11:5016 locally.
+   // pcudp11 is an .ssh configuration the host machine
+   "postCreateCommand": ".devcontainer/extras/postinstall.sh",
+
+   // Comment out to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
+   "remoteUser": "vscode"
+}

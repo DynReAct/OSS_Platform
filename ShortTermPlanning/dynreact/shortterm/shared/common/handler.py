@@ -61,9 +61,12 @@ class DockerManager:
                             "mode": "rw,rshared",
                         }
                     },
-                    labels={"owner": self.tag}  # Use a label to track ownership
+                    labels={"owner": self.tag} if self.tag else []  # Use a label to track ownership
                 )
-                self.tracked_containers.append(container.id)
+                self.tracked_containers.append({
+                    "id": container.id,
+                    "status": container.status,
+                })
                 print(f"Container '{container.name if name else container.short_id}' launched successfully!")
                 return container
             else:
@@ -76,7 +79,7 @@ class DockerManager:
         Stop and remove all containers launched by this instance (using the tag).
         """
         try:
-            containers = self.client.containers.list(filters={"label": f"owner={self.tag}"})
+            containers = self.client.containers.list(filters={"label": f"owner={self.tag}"} if self.tag else {})
             if not containers:
                 print("No tracked containers found.")
                 return
@@ -96,7 +99,7 @@ class DockerManager:
         Stop and remove all containers launched by this instance (using the tag).
         """
         try:
-            result  = self.client.containers.prune(filters={"label": f"owner={self.tag}"})
+            result  = self.client.containers.prune(filters={"label": f"owner={self.tag}"} if self.tag else {})
             deleted_containers = result.get("ContainersDeleted", [])
 
             if not deleted_containers:
@@ -124,7 +127,7 @@ class DockerManager:
             print(f"Container '{container.name}' stopped and removed.")
 
             # Clear the internal tracking list
-            self.tracked_containers.remove(container_id)
+            self.tracked_containers = [item for item in self.tracked_containers if item.get('id') != container_id]
         except Exception as e:
             print(f"Error stopping tracked container: {e}")
 
@@ -138,13 +141,16 @@ class DockerManager:
         # Reset the count
         self.tracked_containers = []
 
-        containers = self.client.containers.list(filters={"label": f"owner={self.tag}"}, all=True)
+        containers = self.client.containers.list(filters={"label": f"owner={self.tag}"} if self.tag else {}, all=True)
         if not containers:
             print("No tracked containers found.")
         else:
             print(f"\nTracked Containers for tag '{self.tag}':")
             for container in containers:
-                self.tracked_containers.append(container.id)
+                self.tracked_containers.append({
+                    "id": container.id,
+                    "status": container.status,
+                })
                 print(f"ID: {container.short_id} | Name: {container.name} | Status: {container.status}")
 
         return self.tracked_containers

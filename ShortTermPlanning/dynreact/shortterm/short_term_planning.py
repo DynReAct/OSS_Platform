@@ -32,10 +32,10 @@ from confluent_kafka import Producer, Consumer, Message
 from confluent_kafka.admin import AdminClient
 import configparser
 
-from common import VAction, sendmsgtopic, TOPIC_GEN, TOPIC_CALLBACK
+from common import VAction, sendmsgtopic, TOPIC_GEN, TOPIC_CALLBACK, SMALL_WAIT
 from common.data.data_functions import end_auction
 from common.data.data_setup import DataSetup
-import subprocess, sys, os, re, json
+import os, re, json
 
 from common.data.load_url import DOCKER_MANAGER
 from common.handler import DockerManager
@@ -47,13 +47,6 @@ else:
     config = configparser.ConfigParser()
     config.read('config.cnf')
     IP = os.environ.get('REST_API_OVERRIDE', config['DEFAULT'].get('IP'))
-
-PYTHON_PATH = sys.executable
-SCRIPT_LOG = "log.py"
-SCRIPT_EQUIPMENT = "equipment.py"
-SCRIPT_MATERIAL = "material.py"
-
-SMALL_WAIT = 5
 
 log_handler = DockerManager(tag=f"log{DOCKER_MANAGER}", max_allowed=1)
 equipment_handler = DockerManager(tag=f"equipment{DOCKER_MANAGER}", max_allowed=1)
@@ -93,30 +86,6 @@ def genauction() -> str:
     N = 12
     res = ''.join(random.choices(string.ascii_uppercase + string.digits, k=N))
     return 'DynReact-' + res
-
-def run_script(script: str, producer: Producer, base: str, verbose: int):
-    """
-    Run the given script and notify the LOG about it.
-
-    :param str script: Path to the script to run
-    :param object producer: A Kafka Producer instance
-    :param str base: Path to the configuration file (with the IP address)
-    :param int verbose: Verbosity level
-    """
-
-    command = [PYTHON_PATH, script, "-b", base, "-v", str(verbose)]
-
-    env = os.environ.copy()
-
-    # We use subprocess.Popen() instead of subprocess.run() because we don't want to wait for the program to finish
-    subprocess.Popen(command, env=env)
-    if verbose > 1:
-        msg = f"Executed program {script} to create the general {script.split('.')[0].upper()} agent."
-        sendmsgtopic(
-            producer=producer, tsend=TOPIC_GEN, topic=TOPIC_GEN, source="UX", dest="LOG:" + TOPIC_GEN,
-            action="WRITE", payload=dict(msg=msg), vb=verbose
-        )
-
 
 def run_general_agents(producer: Producer, gagents: str, verbose: int):
     """
@@ -306,6 +275,8 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
             if message is None:
                 print("Exiting start auction loop")
                 break
+            else:
+                print(json.dumps(message["payload"]))
 
             payload = json.loads(message['payload']) if (type(message["payload"]) is str) else message['payload']
             if payload["is_auction_started"]:
@@ -533,7 +504,7 @@ def execute_short_term_planning(args: dict):
     if verbose > 0:
         print(
             f"Running program with {verbose=}, {base=}, {running_wait=}, {cloning_wait=}, {auction_wait=}, "
-            f"{counterbid_wait=} {exit_wait=}, {equipments=}, {nmaterials=}, {snapshot=}."
+            f"{counterbid_wait=} {exit_wait=}, {equipments=}, {nmaterials=}, {snapshot=}, {rungagnts=}."
         )
 
     # Uncomment this if there are any uncompleted previous executions that left harmful messages in the general topic
@@ -563,9 +534,24 @@ def execute_short_term_planning(args: dict):
         run_general_agents(producer=producer, gagents=rungagnts, verbose=verbose)
         sleep(running_wait, producer=producer, verbose=verbose)
 
-        running_base_agents = running_base_agents + len(log_handler.list_tracked_containers())
-        running_base_agents = running_base_agents + len(equipment_handler.list_tracked_containers())
-        running_base_agents = running_base_agents + len(material_handler.list_tracked_containers())
+        if str(rungagnts)[0] == '1':
+            log_tracked  = len(list(filter(lambda x: x["status"] == "running", log_handler.list_tracked_containers())))
+            running_base_agents = running_base_agents + log_tracked
+
+            if verbose >= 3:
+                print(f"Tracked {log_tracked} LOG containers")
+        if str(rungagnts)[1] == '1':
+            equipment_tracked = len(list(filter(lambda x: x["status"] == "running", equipment_handler.list_tracked_containers())))
+            running_base_agents = running_base_agents + equipment_tracked
+
+            if verbose >= 3:
+                print(f"Tracked {equipment_tracked} EQUIPMENT containers")
+        if str(rungagnts)[2] == '1':
+            material_tracked = len(list(filter(lambda x: x["status"] == "running", material_handler.list_tracked_containers())))
+            running_base_agents = running_base_agents + material_tracked
+
+            if verbose >= 3:
+                print(f"Tracked {material_tracked} MATERIAL containers")
 
         if running_base_agents < min_base_agents:
             raise Exception(
@@ -576,6 +562,8 @@ def execute_short_term_planning(args: dict):
             equipments=equipments, producer=producer, verbose=verbose, counterbid_wait=counterbid_wait,
             nmaterials=nmaterials, snapshot=snapshot
         )
+
+        print(f"Creating auction for topic {act}")
 
         consumer.subscribe([act, TOPIC_CALLBACK])
         sleep(cloning_wait, producer=producer, verbose=verbose)
@@ -591,49 +579,56 @@ def execute_short_term_planning(args: dict):
             sleep(SMALL_WAIT, producer=producer, verbose=verbose)
 
     finally:
-        end_auction(topic=act, producer=producer, verbose=verbose)
+        end_auction(topic=act, producer=producer, verbose=verbose, wait_time=SMALL_WAIT)
         sleep(exit_wait, producer=producer, verbose=verbose)
 
         # Remove all main agents
-        clean_agents(act, producer, verbose)
+        clean_agents(producer, verbose, rungagnts)
 
-    sleep(SMALL_WAIT, producer=producer, verbose=verbose)
+        sleep(SMALL_WAIT, producer=producer, verbose=verbose)
 
-    return results
+        return results
 
 
-def clean_agents(act, producer, verbose):
-    # Instruct the LOG of the auction to exit
-    sendmsgtopic(
-        producer=producer,
-        tsend=act,
-        topic=act,
-        source="UX",
-        dest="LOG:" + act,
-        action="EXIT",
-        vb=verbose
-    )
-    # Instruct all general agents (except the LOG) to exit
-    sendmsgtopic(
-        producer=producer,
-        tsend=TOPIC_GEN,
-        topic=TOPIC_GEN,
-        source="UX",
-        dest=f"^(?!.*LOG:{TOPIC_GEN}).*$",
-        action="EXIT",
-        vb=verbose
-    )
-    sleep(SMALL_WAIT, producer=producer, verbose=verbose)
-    # Instruct the general LOG to exit
-    sendmsgtopic(
-        producer=producer,
-        tsend=TOPIC_GEN,
-        topic=TOPIC_GEN,
-        source="UX",
-        dest=f"LOG:{TOPIC_GEN}",
-        action="EXIT",
-        vb=verbose
-    )
+def clean_agents(producer, verbose, rungagnts):
+
+    if int(rungagnts) > 0:
+        # Exit EQUIPMENT BASE
+        if str(rungagnts)[1] == '1':
+            sendmsgtopic(
+                producer=producer,
+                tsend=TOPIC_GEN,
+                topic=TOPIC_GEN,
+                source="UX",
+                dest=f"EQUIPMENT:{TOPIC_GEN}",
+                action="EXIT",
+                vb=verbose
+            )
+
+        # Exit MATERIAL BASE
+        if str(rungagnts)[2] == '1':
+            sendmsgtopic(
+                producer=producer,
+                tsend=TOPIC_GEN,
+                topic=TOPIC_GEN,
+                source="UX",
+                dest=f"MATERIAL:{TOPIC_GEN}",
+                action="EXIT",
+                vb=verbose
+            )
+
+        # Exit LOG BASE
+        if str(rungagnts)[0] == '1':
+            sleep(SMALL_WAIT, producer=producer, verbose=verbose)
+            sendmsgtopic(
+                producer=producer,
+                tsend=TOPIC_GEN,
+                topic=TOPIC_GEN,
+                source="UX",
+                dest=f"LOG:{TOPIC_GEN}",
+                action="EXIT",
+                vb=verbose
+            )
 
 
 if __name__ == '__main__':

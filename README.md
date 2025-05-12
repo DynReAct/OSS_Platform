@@ -114,6 +114,12 @@ Navigate to the subfolder *ShortTermPlanning* and also run
 pip install -r requirements.txt
 ```
 
+Alternatively you can user poetry and run in the DynReActSerivce folder
+
+```commandline
+poetry install
+```
+
 ### IDE settings
 
 #### PyCharm

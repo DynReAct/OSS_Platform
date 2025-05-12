@@ -183,7 +183,8 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
     # FIXME this dict type with arbitrary_types_allowed is just a temporary workaround, need to find a better solution...
     material_properties: dict[str, Any] | MATERIAL_PROPERTIES
     "Use-case specific material characteristics."
-
+    priority: int = 0
+    "Order priority"
 
 class Lot(Model):
     id: str
@@ -227,6 +228,8 @@ class PlanningData(Model):
     Outermost key: class id for main category, middle key: sub category id, innermost key: class id; special keys \"_sum\" represent the total/aggregated values.
     """
     min_due_date: datetime|None = None
+    assigned_priority: int = 0
+    "sum priority of assigned orders"
 
 
 P = TypeVar("P", bound=PlanningData)
@@ -273,6 +276,8 @@ class ObjectiveFunction(Model, extra="allow"):
     "Penalty for deviating from the targeted lot sizes"
     structure_deviation: float|None = None
     "Penalty for deviating from the targeted material structure"
+    priority_costs: float|None = None
+    "Penalty for order priority"
 
 
 class EquipmentProduction(Model):
@@ -332,6 +337,8 @@ class ProductionPlanning(Model, Generic[P]):
     "keys: equipment ids"
     target_structure: dict[str, float|dict[str, float]] | None = None
     "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed. Special key \"_sum\" represents the total/aggregated value."
+    total_priority: int = 0
+    "Sum priority orders"
 
     # TODO cache results?
     def get_lots(self) -> dict[int, list[Lot]]:

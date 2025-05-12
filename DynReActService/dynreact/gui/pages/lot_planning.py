@@ -382,7 +382,8 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
     fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True},
                 {"field": "costs", "headerTooltip": "Transition costs from previous order."},
                 {"field": "weight", "headerTooltip": "Order weight in tons." },
-                {"field": "due_date", "headerTooltip": "Order due date." }] + \
+                {"field": "due_date", "headerTooltip": "Order due date." },
+                {"field": "priority", "headerTooltip": "Order priority."}] + \
              [column_def_for_field(key, info) for key, info in fields_0.items()]
 
     last_plant: int|None = None
@@ -399,6 +400,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         as_dict["lot"] = lot or ""
         as_dict["weight"] = o.actual_weight
         as_dict["due_date"] = o.due_date
+        as_dict["priority"] = o.priority
         if lot is None:
             return as_dict
         lot_obj = next(l for l in lots if l.id == lot)

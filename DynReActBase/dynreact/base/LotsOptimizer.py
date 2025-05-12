@@ -101,8 +101,10 @@ class LotsOptimizer(Generic[P]):
             raise Exception("Configured plant " + str(invalid_plant.name_short if invalid_plant.name_short is not None else invalid_plant.id)  \
                             + " belongs to process " + str(invalid_plant.process) + ", not " + process)
         self._orders: dict[str, Order]|None = None
+        self._total_priority = None
         if initial_solution is not None:
             self._orders = {o: snapshot.get_order(o) for o in initial_solution.order_assignments.keys()}
+            self._total_priority = sum(o.priority for o in self._orders.values())
         initial_costs = costs.process_objective_function(initial_solution) if initial_solution is not None else None
         best_costs = initial_costs if best_solution is None else costs.process_objective_function(best_solution)
         best_solution = initial_solution if best_solution is None else best_solution

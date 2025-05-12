@@ -38,7 +38,8 @@ class CostProvider:
         """
         return 0
 
-    def evaluate_order_assignments(self, process: str, assignments: dict[str, OrderAssignment], targets: ProductionTargets, snapshot: Snapshot) -> ProductionPlanning:
+    def evaluate_order_assignments(self, process: str, assignments: dict[str, OrderAssignment], targets: ProductionTargets,
+                                   snapshot: Snapshot, total_priority: int|None = None) -> ProductionPlanning:
         """
         :param process:
         :param assignments:
@@ -57,7 +58,15 @@ class CostProvider:
         order_assignments = {o: ass for o, ass in assignments.items() if ass.equipment in plant_ids}
         unassigned = {o: ass for o, ass in assignments.items() if ass.equipment < 0}
         order_assignments.update(unassigned)
-        return ProductionPlanning(process=process, order_assignments=order_assignments, equipment_status=status, target_structure=target_structure)
+
+        if total_priority is None:
+            total_priority = 0
+            for order_id in order_assignments:
+                my_order = snapshot.get_order(order_id)
+                my_prio = my_order.priority
+                total_priority += my_prio
+        return ProductionPlanning(process=process, order_assignments=order_assignments, equipment_status=status,
+                                  target_structure=target_structure, total_priority=total_priority)
 
     def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
                                        planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None,
@@ -112,6 +121,11 @@ class CostProvider:
             structure_costs = self.structure_costs(planning)
             aggregated.structure_deviation = structure_costs
             aggregated.total_value += structure_costs
+        my_priority = True
+        if my_priority:
+            priority_costs = self.priority_costs(planning)
+            aggregated.priority_costs = priority_costs
+            aggregated.total_value += priority_costs
         return aggregated
 
     def structure_costs(self, planning: ProductionPlanning):
@@ -186,6 +200,30 @@ class CostProvider:
         :return:
         """
         return 0
+
+    def priority_costs(self, planning: ProductionPlanning):
+        """
+        :param planning
+        :return:
+        """
+        costs_parameter = self.priority_costs_parameter()
+        if costs_parameter <= 0:
+            return 0
+        cnt_assigned_orders_prio = sum(status.planning.assigned_priority for status in planning.equipment_status.values())
+        cnt_backlog_orders_prio = planning.total_priority      #ass + unass
+        unassigned = cnt_backlog_orders_prio - cnt_assigned_orders_prio
+        if unassigned <= 0:
+            return 0
+        costs = unassigned / (1+cnt_assigned_orders_prio) * costs_parameter
+        return costs
+
+    def priority_costs_parameter(self) -> float:
+        """
+        Overwrite this with a positive value to enable the default priority costs algorithm
+        :return:
+        """
+        return 0
+
 
     def optimum_possible_costs(self, process: str, num_plants: int):
         return 0

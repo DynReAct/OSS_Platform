@@ -1,0 +1,81 @@
+#!/bin/bash
+
+# Configuration
+LOCAL_PORT=5016
+REMOTE_HOST=192.168.111.11
+REMOTE_PORT=5016
+PID_FILE="/var/run/socat-forwarding.pid"
+LOG_FILE="/var/log/socat-forwarding.log"
+
+start() {
+    echo "Starting socat forwarding..."
+    if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+        echo "Socat is already running (PID: $(cat "$PID_FILE"))"
+        exit 1
+    fi
+
+    nohup socat TCP-LISTEN:${LOCAL_PORT},fork TCP:${REMOTE_HOST}:${REMOTE_PORT} > "$LOG_FILE" 2>&1 &
+    echo $! > "$PID_FILE"
+    echo "Socat started (PID: $!)"
+}
+
+stop() {
+    echo "Stopping socat forwarding..."
+    if [ ! -f "$PID_FILE" ]; then
+        echo "No PID file found. Socat may not be running."
+        exit 0
+    fi
+
+    PID=$(cat "$PID_FILE")
+    if kill -0 "$PID" 2>/dev/null; then
+        kill "$PID"
+        rm -f "$PID_FILE"
+        echo "Socat stopped."
+    else
+        echo "Socat process not found. Cleaning up PID file."
+        rm -f "$PID_FILE"
+    fi
+}
+
+status() {
+    if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+        echo "Socat is running (PID: $(cat "$PID_FILE"))"
+        exit 0
+    else
+        echo "Socat is not running."
+        exit 1
+    fi
+}
+
+reload() {
+    echo "Reloading socat forwarding..."
+    stop
+    start
+}
+
+force_reload() {
+    echo "Force-reloading socat forwarding..."
+    reload
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    reload)
+        reload
+        ;;
+    force-reload)
+        force_reload
+        ;;
+    status)
+        status
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|reload|force-reload|status}"
+        exit 1
+        ;;
+esac

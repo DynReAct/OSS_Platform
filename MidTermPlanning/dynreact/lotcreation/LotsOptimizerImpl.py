@@ -77,7 +77,7 @@ class TabuSearch(LotsOptimizer):
         if changed:  # need to adapt optimization state
             best_is_current: bool = self._state.best_solution == self._state.current_solution
             new_assignments = {o: ass for o, ass in self._state.current_solution.order_assignments.items() if o in initial_plant_assignments}
-            planning = self._costs.evaluate_order_assignments(self._process, new_assignments, targets=self._targets, snapshot=self._snapshot)
+            planning = self._costs.evaluate_order_assignments(self._process, new_assignments, targets=self._targets, snapshot=self._snapshot, total_priority=self._total_priority)
             objective: ObjectiveFunction = self._costs.process_objective_function(planning)
             self._state.current_solution = planning
             self._state.current_object_value = objective
@@ -104,6 +104,7 @@ class TabuSearch(LotsOptimizer):
         #vbest: ProductionPlanning = self._state.current_solution
         #target_vbest: float = self._state.current_object_value
         vbest: ProductionPlanning = self.optimize_lots(initial_plant_assignments)
+        total_priority = vbest.total_priority
         target_vbest0: ObjectiveFunction = self._costs.process_objective_function(vbest)
         target_vbest: float = target_vbest0.total_value
         self._state.current_solution = vbest
@@ -187,11 +188,13 @@ class TabuSearch(LotsOptimizer):
                 swap_probabilities: dict[str, float] = {lot.id: 1/len(lot.orders) for lots_list in lots.values() for lot in lots_list}
                 order_plant_assignment = {ass.order: ass.equipment for ass in self._state.current_solution.order_assignments.values()}
                 for assignment in self._state.current_solution.order_assignments.values():
+                    order = self._orders.get(assignment.order)
                     swap_probability: float = swap_probabilities[assignment.lot] if assignment.lot in swap_probabilities else 1
+                    if order is not None and order.priority > 0:
+                        swap_probability = swap_probability / (order.priority + 0.5)
                     if swap_probability < rdswap:
                         continue
                     if self._min_due_date is not None:
-                        order = self._orders.get(assignment.order)
                         if order is not None and order.due_date is not None and order.due_date <= self._min_due_date:
                             continue
                     pto = -1
@@ -268,7 +271,7 @@ class TabuSearch(LotsOptimizer):
             for lot in lots:
                 for lot_idx, order in enumerate(lot.orders):
                     new_assignments[order] = OrderAssignment(equipment=plant, order=order, lot=lot.id, lot_idx=lot_idx)
-        new_planning: ProductionPlanning = self._costs.evaluate_order_assignments(self._process, new_assignments, self._targets, self._snapshot)
+        new_planning: ProductionPlanning = self._costs.evaluate_order_assignments(self._process, new_assignments, self._targets, self._snapshot, total_priority=self._total_priority)
         for order, plant in order_plant_assignments.items():
             if plant < 0:
                 new_planning.order_assignments[order] = OrderAssignment(equipment=-1, order=order, lot="", lot_idx=-1)
@@ -478,11 +481,11 @@ class CTabuWorker:
                     assigned_lots: list[Lot] = new_assigned_lots.get(swp.PlantFrom, [])
                     orders_affected: list[str] = [order_id for order_id in affected_orders if order_assignments[order_id].equipment == swp.PlantFrom]
                     for lot in assigned_lots:
-                        for idx, order in enumerate(lot.orders):
-                            order_assignments[order] = OrderAssignment(equipment=swp.PlantFrom, order=order, lot=lot.id, lot_idx=idx+1)
-                            orders_affected.remove(order)
-                    for order in orders_affected:
-                        del order_assignments[order]
+                        for idx, order_id in enumerate(lot.orders):
+                            order_assignments[order_id] = OrderAssignment(equipment=swp.PlantFrom, order=order_id, lot=lot.id, lot_idx=idx+1)
+                            orders_affected.remove(order_id)
+                    for order_id in orders_affected:
+                        del order_assignments[order_id]
                     equipment_targets = self.targets.target_weight.get(swp.PlantFrom, EquipmentProduction(equipment=swp.PlantFrom, total_weight=0.0))
                     new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(equipment_targets, self.planning.process,
                                                                         order_assignments, self.snapshot, self.targets.period,
@@ -493,18 +496,19 @@ class CTabuWorker:
                     assigned_lots: list[Lot] = new_assigned_lots[swp.PlantTo]
                     orders_affected: list[str] = [order_id for order_id in affected_orders if order_assignments[order_id].equipment == swp.PlantTo]
                     for lot in assigned_lots:
-                        for idx, order in enumerate(lot.orders):
-                            order_assignments[order] = OrderAssignment(equipment=swp.PlantTo, order=order, lot=lot.id, lot_idx=idx + 1)
-                            orders_affected.remove(order)
-                    for order in orders_affected:
-                        del order_assignments[order]
+                        for idx, order_id in enumerate(lot.orders):
+                            order_assignments[order_id] = OrderAssignment(equipment=swp.PlantTo, order=order_id, lot=lot.id, lot_idx=idx + 1)
+                            orders_affected.remove(order_id)
+                    for order_id in orders_affected:
+                        del order_assignments[order_id]
                     equipment_targets = self.targets.target_weight.get(swp.PlantTo, EquipmentProduction(equipment=swp.PlantTo, total_weight=0.0))
                     new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(equipment_targets, self.planning.process,
                                                                             order_assignments, self.snapshot, self.targets.period,
                                                                             track_structure=track_structure, main_category=self._main_category)
                     plant_status[swp.PlantTo] = new_status
                 planning_candidate = ProductionPlanning(process=self.planning.process, order_assignments=order_assignments,
-                                   equipment_status=plant_status, target_structure=self.targets.material_weights)
+                                   equipment_status=plant_status, target_structure=self.targets.material_weights,
+                                   total_priority=self.planning.total_priority)
                 total_objectives = self.costs.process_objective_function(planning_candidate)
                 #total_objectives = CostProvider.sum_objectives([self.costs.objective_function(status) for status in plant_status.values()])
                 objective_fct = total_objectives.total_value

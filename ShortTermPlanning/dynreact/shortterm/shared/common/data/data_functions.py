@@ -4,10 +4,10 @@ Module: Data_Functions data_functions.py
 This module defines the functions used outside to get relevant data.
 """
 import json
-
+import time
 from confluent_kafka import Producer
 
-from common import sendmsgtopic
+from common import sendmsgtopic, SMALL_WAIT
 from common.data.load_url import URL_INITIAL_STATE, URL_UPDATE_STATUS, load_url_json_get, load_url_json_post
 
 def get_equipment_status(equipment_id: int, snapshot_time: str) -> dict:
@@ -79,13 +79,14 @@ def get_transition_cost_and_status(
     return cost, new_status
 
 
-def end_auction(topic: str, producer: Producer, verbose: int) -> None:
+def end_auction(topic: str, producer: Producer, verbose: int, wait_time: int = SMALL_WAIT) -> None:
     """
     Ends an auction by instructing all EQUIPMENT, MATERIAL and LOG children of the auction to exit
 
     :param str topic: Topic name of the auction we want to end
     :param object producer: A Kafka Producer instance
     :param int verbose: Verbosity level
+    :param int wait_time: Wait Time to end the auction
     """
 
     if verbose > 0:
@@ -121,6 +122,19 @@ def end_auction(topic: str, producer: Producer, verbose: int) -> None:
         topic=topic,
         source="UX",
         dest="MATERIAL:" + topic + ":.*",
+        action="EXIT",
+        vb=verbose
+    )
+
+    time.sleep(wait_time)
+
+    # Instruct the LOG of the auction to exit
+    sendmsgtopic(
+        producer=producer,
+        tsend=topic,
+        topic=topic,
+        source="UX",
+        dest="LOG:" + topic,
         action="EXIT",
         vb=verbose
     )

@@ -44,14 +44,16 @@ class TabuSearch(LotsOptimizer):
                  # the next two are for initialization from a previous optimization run
                  best_solution: ProductionPlanning|None = None, history: list[ObjectiveFunction] | None = None,
                  parameters: dict[str, any] | None = None,
-                 performance_models: list[PlantPerformanceModel] | None = None
+                 performance_models: list[PlantPerformanceModel] | None = None,
+                 orders_custom_priority: dict[str, int] | None = None
                  ):
         super().__init__(site, process, costs, snapshot, targets, initial_solution, min_due_date=min_due_date,
-                         best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models)
+                         best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
+                         orders_custom_priority=orders_custom_priority)
         self._params: TabuParams = TabuParams()
         self._performance_restrictions: list[PerformanceEstimation]|None = None
         self._forbidden_assignments: dict[str, list[int]] = {}
-
+        self._orders_custom_priority = orders_custom_priority
     def _init_performance_models(self, initial_plant_assignments: dict[str, int]) -> dict[str, int]:
         if self._performance_models is None or len(self._performance_models) == 0 or self._orders is None:
             return initial_plant_assignments
@@ -190,6 +192,7 @@ class TabuSearch(LotsOptimizer):
                 for assignment in self._state.current_solution.order_assignments.values():
                     order = self._orders.get(assignment.order)
                     swap_probability: float = swap_probabilities[assignment.lot] if assignment.lot in swap_probabilities else 1
+                    #todo custom prio
                     if order is not None and order.priority > 0:
                         swap_probability = swap_probability / (order.priority + 0.5)
                     if swap_probability < rdswap:
@@ -374,7 +377,8 @@ class TabuSearch(LotsOptimizer):
         # slp = [[sl1[i] for i in range(len(sl1)) if (i % self.params.NParallel) == r] for r in range(self.params.NParallel)]
         slp: list[list[OrderAssignment]] = [[sl1[i] for i in range(len(sl1)) if (i % self._params.NParallel) == r] for r in range(self._params.NParallel)]
         plants = {plant.id: plant for plant in self._plants}
-        items = [CTabuWorker(self._costs, sl, TabuList, self._params, self, plants, self._snapshot, self._targets, planning, self._min_due_date, self._main_category) for sl in slp]
+        items = [CTabuWorker(self._costs, sl, TabuList, self._params, self, plants, self._snapshot,
+                             self._targets, planning, self._min_due_date, self._main_category, self._orders_custom_priority) for sl in slp]
         solutions: list[tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]] = []
 
         # parallel tabu search loop
@@ -417,17 +421,19 @@ class TabuAlgorithm(LotsOptimizationAlgo):
                                   # the next two are for initialization from a previous optimization run
                                   best_solution: ProductionPlanning | None = None, history: list[ObjectiveFunction] | None = None,
                                   performance_models: list[PlantPerformanceModel] | None = None,
-                                  parameters: dict[str, any] | None = None
+                                  parameters: dict[str, any] | None = None,
+                                  orders_custom_priority: dict[str, int] | None = None
                                   ) -> TabuSearch:
         return TabuSearch(self._site, process, costs, snapshot, targets, initial_solution=initial_solution, min_due_date=min_due_date,
-                          best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models)
+                          best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
+                          orders_custom_priority=orders_custom_priority)
 
 
 class CTabuWorker:
 
     def __init__(self, costs: CostProvider, slist: list[OrderAssignment], TabuList: set[Any], params: TabuParams, tabuSearch,
                  plants: dict[int, Equipment], snapshot: Snapshot, targets: ProductionTargets, planning: ProductionPlanning,
-                 min_due_date: datetime|None, main_category: str|None):
+                 min_due_date: datetime|None, main_category: str|None, orders_custom_priority: dict[str, int]|None = None):
         self.slist: list[OrderAssignment] = slist
         order_ids = [ass.order for ass in slist]
         self.orders: dict[int, Order] = {oid: tabuSearch._orders[oid] for oid in order_ids}
@@ -443,6 +449,7 @@ class CTabuWorker:
         self.snapshot = snapshot
         self._min_due_date: datetime|None = min_due_date
         self._main_category: str|None = main_category
+        self._orders_custom_priority = orders_custom_priority
 
     def BestN(self) -> tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]:
         best_swap: TabuSwap = None
@@ -489,7 +496,8 @@ class CTabuWorker:
                     equipment_targets = self.targets.target_weight.get(swp.PlantFrom, EquipmentProduction(equipment=swp.PlantFrom, total_weight=0.0))
                     new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(equipment_targets, self.planning.process,
                                                                         order_assignments, self.snapshot, self.targets.period,
-                                                                        track_structure=track_structure, main_category=self._main_category)
+                                                                        track_structure=track_structure, main_category=self._main_category,
+                                                                        orders_custom_priority=self._orders_custom_priority)
                     plant_status[swp.PlantFrom] = new_status
                 if swp.PlantTo >= 0:
                     plant_status[swp.PlantTo] = None
@@ -504,7 +512,8 @@ class CTabuWorker:
                     equipment_targets = self.targets.target_weight.get(swp.PlantTo, EquipmentProduction(equipment=swp.PlantTo, total_weight=0.0))
                     new_status: EquipmentStatus = self.costs.evaluate_equipment_assignments(equipment_targets, self.planning.process,
                                                                             order_assignments, self.snapshot, self.targets.period,
-                                                                            track_structure=track_structure, main_category=self._main_category)
+                                                                            track_structure=track_structure, main_category=self._main_category,
+                                                                            orders_custom_priority=self._orders_custom_priority)
                     plant_status[swp.PlantTo] = new_status
                 planning_candidate = ProductionPlanning(process=self.planning.process, order_assignments=order_assignments,
                                    equipment_status=plant_status, target_structure=self.targets.material_weights,

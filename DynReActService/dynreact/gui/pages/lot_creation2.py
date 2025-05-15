@@ -2,6 +2,7 @@ import threading
 import traceback
 from datetime import datetime, timedelta, date
 from typing import Literal, Any
+import json
 
 import dash
 import pandas as pd
@@ -120,7 +121,8 @@ def layout(*args, **kwargs):
         dcc.Interval(id="lots2-interval", n_intervals=3_600_000),  # for polling when optimization is running
         # ======== Popups  =========
         structure_portfolio_popup(111222),
-        dcc.Store(id="lots2-material-setpoints", data=None),  # dictionary, values?
+        dcc.Store(id="lots2-material-setpoints", data=None),  # dictionary
+        dcc.Store(id="lots2-custom-priority-store", data=None),
     ], id="lots2")
     return layout
 
@@ -282,6 +284,51 @@ def orders_tab():
 
         # By default, we hide those orders, but the user may decide to display them
         html.Div(id="lots2-details-orders-hidden", className="lots2-details-orders", hidden=True),
+
+        html.Fieldset([
+            html.Legend("Custom orders priority"),
+            html.Br(),
+            html.Div([
+                html.Div("Custom priority configuration: "),
+                html.Div(html.Button("Open custom priority", id="lots2-orders-custom-priority-open",
+                                     className="dynreact-button dynreact-button-small"),
+                         title="Set custom orders priority in the table."),
+                html.Div(html.Button("Clear custom priority", id="lots2-orders-custom-priority-clear",
+                                     className="dynreact-button dynreact-button-small"),
+                         title="Clear custom orders priority in the table."),
+                html.Div(html.Button("Save custom priority", id="lots2-orders-custom-priority-save",
+                                     className="dynreact-button dynreact-button-small"),
+                         title="Save custom orders priority for use in optimisation."),
+                html.Div(dcc.Textarea(id='lots2-prio-logging', value='', className="lots2-prio-textarea")) #&&&&
+            ], className="lots2-orders-custom-prio-buttons"),
+
+        ], className="lots2-custom-priority-config"),
+        html.Br(),
+        dash_ag.AgGrid(
+            id="lots2-orders-custom-priority-table",
+            columnDefs=[{"field": "id", "pinned": True},
+                        {"field": "priority", "headerName": "Priority"},
+                        {"field": "custom_priority", "headerName": "Custom Priority", "editable": True,
+                        # 'cellEditor': 'agSelectCellEditor',
+                        # 'cellEditorParams': {'values': [0, 1]},
+                         'cellEditor': 'agNumberCellEditor',
+                         'cellEditorParams': {'min': 0, 'max': 1},
+                         "cellStyle": {'background-color': 'lightblue'}
+                        },
+                       ],
+            rowData=[],
+            getRowId="params.data.id",
+            className="ag-theme-alpine",  # ag-theme-alpine-dark
+            style={"height": "70vh", "width": "40vw", "margin-bottom": "5em"},
+            columnSizeOptions={"defaultMinWidth": 125},
+            columnSize="responsiveSizeToFit",
+            # tooltipField is not used, but it must match an existing field for the tooltip to be shown
+            defaultColDef={"tooltipComponent": "CoilsTooltip", "tooltipField": "id"},
+            dashGridOptions={"rowSelection": "multiple", "suppressRowClickSelection": True, "animateRows": False,
+                             "tooltipShowDelay": 100, "tooltipInteraction": True,
+                             "popupParent": {"function": "setCoilPopupParent()"}},
+        ),
+
     ]
 
 
@@ -1063,6 +1110,49 @@ def show_userinput_structure_planning( json_data):
     sum_setpoints = get_sum_from_setpoints()
     return result_structure_planning, sum_setpoints
 
+@callback(
+    Output("lots2-orders-custom-priority-table", "rowData"),
+    State("lots2-orders-table", "selectedRows"),
+    Input("lots2-orders-custom-priority-open", "n_clicks"),
+    Input("lots2-orders-custom-priority-clear", "n_clicks")
+)
+def show_orders_priority_table(selected_rows: list[dict[str, any]]|None, _1, _2):
+    order_rows = selected_rows
+    if order_rows is not None:
+        for o in order_rows:
+            o["custom_priority"] = o["priority"]
+    return order_rows
+
+@callback(
+    Output("lots2-custom-priority-store", "clear_data"), #&&&&
+    Input("lots2-orders-custom-priority-clear", "n_clicks"),
+)
+def clear_orders_priority_table(_1):
+    my_clear = True
+    return my_clear
+
+@callback(
+    Output("lots2-custom-priority-store", "data"),        #Store
+    State("lots2-orders-custom-priority-table", "rowData"),
+    Input("lots2-orders-custom-priority-save", "n_clicks"),
+)
+def save_orders_priority_table(custom_rows: list[dict[str, any]]|None, _):
+    # take only some cols
+    custom_rows_short = [{key: row[key] for key in {'id', 'priority', 'custom_priority'}} for row in custom_rows]
+    # to use in dash Store json only
+    custom_rows_json = json.dumps(custom_rows_short)
+    # just save to store
+    return custom_rows_json
+
+@callback(
+    Output("lots2-prio-logging", "value"),
+    Input("lots2-custom-priority-store", "data")
+)
+def show_userinput_custom_prio( custom_prio):
+    # just test logging
+    result_custom_prio = str(custom_prio)
+    return result_custom_prio
+
 
 @callback(
     Output("lots2-orders-backlog-count", "children"),
@@ -1167,6 +1257,7 @@ def update_figure(history: list[float]|None):
 
 
 
+
 # It would be nice to extract this from the huge function below, but it would inevitably lead to circular dependencies
 #@callback(
 #          Output("lots2-iterations-value", "children"),
@@ -1217,6 +1308,7 @@ def update_figure(history: list[float]|None):
           State("lots2-store-results", "value"),
           State("lots2-structure-sum", "value"),
           State("lots2-material-setpoints", "data"),
+          State("lots2-custom-priority-store", "data"),
           State("lots2-details-plants", "children"),
 
           Input("lots2-active-tab", "data"),                               # as a workaround for the above problem we trigger on tab changes
@@ -1242,6 +1334,7 @@ def process_changed(snapshot: datetime|None,
                     store_results0: list[Literal[""]],
                     structure_sum: int|None,
                     material_structure: dict[str, any]|None,
+                    orders_custom_priority_json: str|None,
                     components: list[Component]|None,
                     _tab,
                     horizon_hours: int,
@@ -1274,7 +1367,7 @@ def process_changed(snapshot: datetime|None,
 
     # prepare using primary_category
     site = state.get_site()
-    def _get_primary_category(process_name) -> str | None:  # &&&NEW TODO
+    def _get_primary_category(process_name) -> str | None:
         #structure_planning = site.structure_planning
         if not site.lot_creation or not site.lot_creation.processes or process_name not in site.lot_creation.processes:
             return None
@@ -1288,6 +1381,13 @@ def process_changed(snapshot: datetime|None,
         structure_planning = site.lot_creation.processes[process_name].structure
         return structure_planning.primary_classes if structure_planning is not None else None
 
+    if orders_custom_priority_json is not None:
+        orders_custom_priority_all = json.loads(orders_custom_priority_json)  # in Store as json -> list of dicts
+        orders_custom_priority = {order['id']: order['custom_priority'] for order in orders_custom_priority_all if order['priority'] != order['custom_priority']}
+        if not orders_custom_priority:  #{}
+            orders_custom_priority = None
+    else:
+        orders_custom_priority = None
     primary_category = _get_primary_category(process)
     primary_classes = _get_primary_classes(process)
     use_lot_range: bool = len(use_lot_range0) > 0
@@ -1348,7 +1448,7 @@ def process_changed(snapshot: datetime|None,
     # here start optimization
     start_disabled, error_msg, info_msg = check_start_optimization(changed_ids, process, snapshot, iterations, horizon_hours, selected_init_method,
                 existing_solution if selected_init_method == "result" else None, use_lot_range, target_elements, perf_model_elements, material_structure,
-                selected_order_rows, create_comment, store_results)
+                orders_custom_priority, selected_order_rows, create_comment, store_results)
     if len(warning_message) == 0 and info_msg is not None:
         warning_message = info_msg
     if error_msg is not None:  # TODO display message!
@@ -1412,7 +1512,8 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                              use_lot_range: bool,
                              plant_target_components: list[Component]|None,
                              perf_model_components: list[Component]|None,
-                             material_structure: dict[str, any]|None,  # TODO
+                             material_structure: dict[str, any]|None,
+                             orders_custom_priority: dict[str, int]|None,
                              #order_data: dict[str, str] | None,
                              selected_order_rows: list[dict[str, any]]|None,
                              create_comment: str|None,
@@ -1474,7 +1575,7 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                                              targets=targets, orders=orders)
                 else:  # init = heuristic
                     initial_solution, targets = optimization_algo.heuristic_solution(process, snapshot_obj, horizon, state.get_cost_provider(),
-                                state.get_snapshot_provider(), targets, orders, start_orders=None)  # TODO start orders
+                                state.get_snapshot_provider(), targets, orders, start_orders=None, orders_custom_priority=orders_custom_priority)  # TODO start orders
                 parameters = {
                     "targets": "snapshot" if not targets_customized else "custom",
                     "horizon_hours": horizon_hours,
@@ -1490,7 +1591,8 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                 parameters["comment"] = create_comment
             optimization: LotsOptimizer[any] = optimization_algo.create_instance(process,
                     snapshot_obj, state.get_cost_provider(), targets=targets, initial_solution=initial_solution, min_due_date=None,
-                    best_solution=best_solution, history=history, parameters=parameters, orders=orders, performance_models=perf_models)  # TODO due date?
+                    best_solution=best_solution, history=history, parameters=parameters, orders=orders, performance_models=perf_models,
+                    orders_custom_priority=orders_custom_priority)   # TODO due date?
             if lot_creation_thread is not None:  # FIXME rather abort operation?
                 lot_creation_thread.kill()
             if lot_creation_listener is not None:

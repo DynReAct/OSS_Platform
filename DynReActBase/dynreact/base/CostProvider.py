@@ -39,7 +39,7 @@ class CostProvider:
         return 0
 
     def evaluate_order_assignments(self, process: str, assignments: dict[str, OrderAssignment], targets: ProductionTargets,
-                                   snapshot: Snapshot, total_priority: int|None = None) -> ProductionPlanning:
+                                   snapshot: Snapshot, total_priority: int|None = None, orders_custom_priority: dict[str, int]|None=None) -> ProductionPlanning:
         """
         :param process:
         :param assignments:
@@ -58,13 +58,20 @@ class CostProvider:
         order_assignments = {o: ass for o, ass in assignments.items() if ass.equipment in plant_ids}
         unassigned = {o: ass for o, ass in assignments.items() if ass.equipment < 0}
         order_assignments.update(unassigned)
-
+        # calc total prio only first time
         if total_priority is None:
             total_priority = 0
-            for order_id in order_assignments:
-                my_order = snapshot.get_order(order_id)
-                my_prio = my_order.priority
-                total_priority += my_prio
+            if orders_custom_priority is not None:
+                for order_id in order_assignments:
+                    my_prio = orders_custom_priority.get(order_id, None)
+                    if my_prio is None:
+                        my_prio = snapshot.get_order(order_id).priority
+                    total_priority += my_prio
+            else:
+                for order_id in order_assignments:
+                    my_order = snapshot.get_order(order_id)
+                    my_prio = my_order.priority
+                    total_priority += my_prio
         return ProductionPlanning(process=process, order_assignments=order_assignments, equipment_status=status,
                                   target_structure=target_structure, total_priority=total_priority)
 

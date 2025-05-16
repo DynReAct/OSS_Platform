@@ -128,11 +128,9 @@ class CostProvider:
             structure_costs = self.structure_costs(planning)
             aggregated.structure_deviation = structure_costs
             aggregated.total_value += structure_costs
-        my_priority = True
-        if my_priority:
-            priority_costs = self.priority_costs(planning)
-            aggregated.priority_costs = priority_costs
-            aggregated.total_value += priority_costs
+        priority_costs = self.priority_costs(planning)
+        aggregated.priority_costs = priority_costs
+        aggregated.total_value += priority_costs
         return aggregated
 
     def structure_costs(self, planning: ProductionPlanning):

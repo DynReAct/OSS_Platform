@@ -7,6 +7,7 @@ from dynreact.base.model import Site, Equipment, Order, Material, EquipmentStatu
     PlanningData, EquipmentProduction, ObjectiveFunction
 
 
+# FIXME calculation of objective function via dedicated method, incl weight parameters
 class SimpleCostProvider(CostProvider):
     """
     A simple cost calculation function that takes into account transition costs between orders
@@ -23,7 +24,8 @@ class SimpleCostProvider(CostProvider):
                  new_lot_costs: float = 3,
                  missing_weight_costs: float = 1,  # per t
                  surplus_weight_costs: float = 3,  # per t
-                 minimum_possible_costs: float = 0):
+                 minimum_possible_costs: float = 0,
+                 priority_costs_factor: float = 0):
         super().__init__(url, site)
         if url is not None and not url.startswith("simple:"):
             raise NotApplicableException("Unexpected URI for simple cost provider: " + str(url))
@@ -32,6 +34,7 @@ class SimpleCostProvider(CostProvider):
         self._missing_weight_costs = missing_weight_costs
         self._surplus_weight_costs = surplus_weight_costs
         self._minimum_possible_costs = minimum_possible_costs
+        self._priority_costs_factor = priority_costs_factor
 
     def transition_costs(self, plant: Equipment, current: Order | None, next: Order, current_material: Material | None = None,
                          next_material: Material | None = None) -> float:
@@ -44,7 +47,8 @@ class SimpleCostProvider(CostProvider):
         return delta_weight * self._missing_weight_costs if delta_weight >= 0 else -delta_weight * self._surplus_weight_costs
 
     def update_transition_costs(self, plant: Equipment, current: Order | None, next: Order, status: EquipmentStatus, snapshot: Snapshot,
-                                new_lot: bool, current_material: Material | None = None, next_material: Material | None = None) -> tuple[EquipmentStatus, float]:
+                                new_lot: bool, current_material: Material | None = None, next_material: Material | None = None,
+                                orders_custom_priority: dict[str, int]|None=None) -> tuple[EquipmentStatus, float]:
         current_id: str|None = None if current is None else current.id
         if status.current_order == "":
             status.current_order = None
@@ -77,7 +81,8 @@ class SimpleCostProvider(CostProvider):
         return new_status, new_status.planning.target_fct
 
     def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
-                                       planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None, current_material: list[Material] | None=None, track_structure: bool=False, main_category: str|None=None) -> EquipmentStatus:
+                                       planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None, current_material: list[Material] | None=None,
+                                       track_structure: bool=False, main_category: str|None=None, orders_custom_priority: dict[str, int]|None=None) -> EquipmentStatus:
         target_weight = equipment_targets.total_weight
         equipment = equipment_targets.equipment
         num_assignments = len(assignments)
@@ -85,14 +90,16 @@ class SimpleCostProvider(CostProvider):
             delta_weight = target_weight
             order_id: str|None = next(iter(assignments.keys())) if num_assignments==1 else None
             min_due_date = None
+            prio = 0
             if num_assignments == 1:
                 order = snapshot.get_order(order_id, do_raise=True)
                 delta_weight = delta_weight - order.actual_weight
                 min_due_date = order.due_date
+                prio = orders_custom_priority.get(order.id, order.priority) if orders_custom_priority is not None else order.priority
             target_fct = self._weight_deviation_costs(target_weight)
             return EquipmentStatus(targets=equipment_targets, snapshot_id=snapshot.timestamp, planning_period=planning_period, current_order=order_id,
                                    planning=PlanningData(target_fct=target_fct, transition_costs=0, lots_count=num_assignments, orders_count=num_assignments,
-                                              delta_weight=delta_weight, min_due_date=min_due_date))
+                                              delta_weight=delta_weight, min_due_date=min_due_date, assigned_priority=prio))
         plant_obj: Equipment = next(p for p in self._site.equipment if p.id == equipment and p.process == process)
         plant_assignments: list[OrderAssignment] = [a for a in assignments.values() if a.equipment == equipment]
         plant_assignments = sorted(plant_assignments, key=lambda a: (a.lot, a.lot_idx))  # FIXME uses deprecated lot field
@@ -103,6 +110,7 @@ class SimpleCostProvider(CostProvider):
         prev_prev_oder: Order|None = None
         previous_order: Order|None = None
         min_due_date: datetime|None = None
+        sum_prio = 0
         for assignment in plant_assignments:
             order: Order = snapshot.get_order(assignment.order, do_raise=True)
             new_lot = assignment.lot
@@ -116,6 +124,7 @@ class SimpleCostProvider(CostProvider):
                 min_due_date = order.due_date
             prev_prev_oder = previous_order
             previous_order = order
+            sum_prio += orders_custom_priority.get(order.id, order.priority) if orders_custom_priority is not None else order.priority
         weight_diff = target_weight - total_weight
         weight_diff_costs = self._weight_deviation_costs(weight_diff)
         total_costs = transition_costs + (num_lots-1) * self._new_lot_costs + weight_diff_costs
@@ -123,7 +132,7 @@ class SimpleCostProvider(CostProvider):
                                current_order=previous_order.id if previous_order is not None else None, previous_order=prev_prev_oder.id if prev_prev_oder is not None else None,
                                planning=PlanningData(target_fct=total_costs, transition_costs=transition_costs, lots_count=num_lots, orders_count=num_assignments,
                                                      current_material=[c.id for c in current_material] if current_material is not None else None,
-                                                     delta_weight=weight_diff, min_due_date=min_due_date))
+                                                     delta_weight=weight_diff, min_due_date=min_due_date, assigned_priority=sum_prio))
 
     def optimum_possible_costs(self, process: str, num_plants: int):
         return self._minimum_possible_costs
@@ -136,4 +145,7 @@ class SimpleCostProvider(CostProvider):
         result = transition_costs + log_costs + weight_deviation
         return ObjectiveFunction(total_value=result, lots_count=planning.lots_count, weight_deviation=weight_deviation,
                                  transition_costs=transition_costs, logistic_costs=log_costs)
+
+    def priority_costs_parameter(self) -> float:
+        return self._priority_costs_factor
 

@@ -157,6 +157,3 @@ You will see the optimization running and as result a figure of used iterations.
 
 ![lot creation](../images/doc/lot_creation_04.png)
 
-
-
-

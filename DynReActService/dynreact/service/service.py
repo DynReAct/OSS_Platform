@@ -390,17 +390,15 @@ def get_longtermplanning_results(
                 "now+31d": {"description": "A month ahead of now", "value": "now+31d"},
                 "2023-04-27T00:00Z": {"description": "A specific timestamp", "value": "2023-04-27T00:00Z"},
             }),
-        sort: Literal["asc", "desc"] = "asc", username = username) -> dict[str, list[str]]:
+        sort: Literal["asc", "desc"] = "asc",
+        limit: int|None=10,
+        username = username) -> dict[str, list[str]]:
     if isinstance(start, str):
         start = parse_datetime_str(start)
     if isinstance(end, str):
         end = parse_datetime_str(end)
-    if start is None:
-        start = DatetimeUtils.now()
-    if end is None:
-        end = start + timedelta(days=31)
     results_ctrl = state.get_results_persistence()
-    start_times = results_ctrl.start_times_ltp(start, end)
+    start_times = results_ctrl.start_times_ltp(start=start, end=end, sort=sort, limit=limit)
     return {DatetimeUtils.format(time): results_ctrl.solutions_ltp(time) for time in start_times}
 
 

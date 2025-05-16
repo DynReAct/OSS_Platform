@@ -11,7 +11,6 @@ import numpy as np
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo, LotsOptimizer, LotsOptimizationState
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation
-from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Snapshot, ProductionPlanning, ProductionTargets, Site, OrderAssignment, Order, \
     EquipmentStatus, Lot, Equipment, EquipmentProduction, ObjectiveFunction
 
@@ -54,6 +53,10 @@ class TabuSearch(LotsOptimizer):
         self._performance_restrictions: list[PerformanceEstimation]|None = None
         self._forbidden_assignments: dict[str, list[int]] = {}
         self._orders_custom_priority = orders_custom_priority
+        self._order_priorities = None if self._orders is None else {o.id: o.priority for o in self._orders.values()}
+        if orders_custom_priority is not None:
+            self._order_priorities.update(orders_custom_priority)
+
     def _init_performance_models(self, initial_plant_assignments: dict[str, int]) -> dict[str, int]:
         if self._performance_models is None or len(self._performance_models) == 0 or self._orders is None:
             return initial_plant_assignments
@@ -192,9 +195,8 @@ class TabuSearch(LotsOptimizer):
                 for assignment in self._state.current_solution.order_assignments.values():
                     order = self._orders.get(assignment.order)
                     swap_probability: float = swap_probabilities[assignment.lot] if assignment.lot in swap_probabilities else 1
-                    #todo custom prio
-                    if order is not None and order.priority > 0:
-                        swap_probability = swap_probability / (order.priority + 0.5)
+                    if order is not None and self._order_priorities[order.id] > 0:  # either order priority or custom priority
+                        swap_probability = swap_probability / (self._order_priorities[order.id] + 0.5)
                     if swap_probability < rdswap:
                         continue
                     if self._min_due_date is not None:
@@ -256,9 +258,11 @@ class TabuSearch(LotsOptimizer):
         return copy(self._state)
 
     def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot,
-                                current_material: Any | None = None, next_material: Any | None = None) -> tuple[EquipmentStatus, ObjectiveFunction]:
+                                current_material: Any | None = None, next_material: Any | None = None,
+                                orders_custom_priority: dict[str, int]|None=None) -> tuple[EquipmentStatus, ObjectiveFunction]:
         new_lot: bool = self.create_new_lot(plant, current, next, current_material=current_material, next_material=next_material)
-        return self._costs.update_transition_costs(plant, current, next, status, snapshot, new_lot, current_material=current_material, next_material=next_material)
+        return self._costs.update_transition_costs(plant, current, next, status, snapshot, new_lot, current_material=current_material,
+                                                   next_material=next_material, orders_custom_priority=orders_custom_priority)
 
     def create_new_lot(self, plant: Equipment, current: Order, next: Order, current_material: Any | None = None, next_material: Any | None = None) -> bool:
         costs = self._costs.transition_costs(plant, current, next, current_material=current_material, next_material=next_material)

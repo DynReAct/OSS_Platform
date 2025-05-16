@@ -103,16 +103,10 @@ class LotsOptimizer(Generic[P]):
                             + " belongs to process " + str(invalid_plant.process) + ", not " + process)
         self._orders: dict[str, Order]|None = None
         self._total_priority = None
-
         if initial_solution is not None:
             self._orders = {o: snapshot.get_order(o) for o in initial_solution.order_assignments.keys()}
-            if orders_custom_priority is not None:
-                _prio1 = sum(prio for prio in orders_custom_priority.values())
-                _prio2 = sum(o.priority for o in self._orders.values() if orders_custom_priority.get(o.id, None) is None)
-                self._total_priority = _prio1 + _prio2
-            else:
-                self._total_priority = sum(o.priority for o in self._orders.values())
-
+            self._total_priority = sum(orders_custom_priority.get(order.id, order.priority) for order in self._orders.values()) \
+                    if orders_custom_priority is not None else sum(order.priority for order in self._orders.values())
         initial_costs = costs.process_objective_function(initial_solution) if initial_solution is not None else None
         best_costs = initial_costs if best_solution is None else costs.process_objective_function(best_solution)
         best_solution = initial_solution if best_solution is None else best_solution
@@ -137,7 +131,8 @@ class LotsOptimizer(Generic[P]):
         raise Exception("Not implemented")
 
     def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot,
-                                current_material: Material | None = None, next_material: Material | None = None) -> tuple[EquipmentStatus, ObjectiveFunction]:
+                                current_material: Material | None = None, next_material: Material | None = None,
+                                orders_custom_priority: dict[str, int]|None=None) -> tuple[EquipmentStatus, ObjectiveFunction]:
         """
         Note: this is intended to forward to the cost service, the lot optimizer only needs to determine whether this
         leads to a new lot or not

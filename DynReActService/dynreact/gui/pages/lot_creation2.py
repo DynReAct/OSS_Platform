@@ -1381,13 +1381,13 @@ def process_changed(snapshot: datetime|None,
         structure_planning = site.lot_creation.processes[process_name].structure
         return structure_planning.primary_classes if structure_planning is not None else None
 
+    orders_custom_priority = None
     if orders_custom_priority_json is not None:
         orders_custom_priority_all = json.loads(orders_custom_priority_json)  # in Store as json -> list of dicts
-        orders_custom_priority = {order['id']: order['custom_priority'] for order in orders_custom_priority_all if order['priority'] != order['custom_priority']}
+        orders_custom_priority = {order["id"]: order["custom_priority"] for order in orders_custom_priority_all if order["priority"] != order["custom_priority"]}
         if not orders_custom_priority:  #{}
             orders_custom_priority = None
-    else:
-        orders_custom_priority = None
+
     primary_category = _get_primary_category(process)
     primary_classes = _get_primary_classes(process)
     use_lot_range: bool = len(use_lot_range0) > 0

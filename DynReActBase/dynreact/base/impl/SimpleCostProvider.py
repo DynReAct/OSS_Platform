@@ -4,7 +4,7 @@ from datetime import datetime
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.model import Site, Equipment, Order, Material, EquipmentStatus, Snapshot, OrderAssignment, \
-    PlanningData, EquipmentProduction
+    PlanningData, EquipmentProduction, ObjectiveFunction
 
 
 class SimpleCostProvider(CostProvider):
@@ -77,13 +77,13 @@ class SimpleCostProvider(CostProvider):
         return new_status, new_status.planning.target_fct
 
     def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
-                                       planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None, current_material: list[Material] | None=None) -> EquipmentStatus:
+                                       planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None, current_material: list[Material] | None=None, track_structure: bool=False, main_category: str|None=None) -> EquipmentStatus:
         target_weight = equipment_targets.total_weight
         equipment = equipment_targets.equipment
         num_assignments = len(assignments)
         if num_assignments <= 1:
             delta_weight = target_weight
-            order_id: str|None = next(assignments.keys()) if num_assignments==1 else None
+            order_id: str|None = next(iter(assignments.keys())) if num_assignments==1 else None
             min_due_date = None
             if num_assignments == 1:
                 order = snapshot.get_order(order_id, do_raise=True)
@@ -127,4 +127,13 @@ class SimpleCostProvider(CostProvider):
 
     def optimum_possible_costs(self, process: str, num_plants: int):
         return self._minimum_possible_costs
+
+    def objective_function(self, status: EquipmentStatus) -> ObjectiveFunction:
+        planning: PlanningData = status.planning
+        transition_costs = planning.transition_costs  # TODO parameters
+        log_costs = planning.logistic_costs
+        weight_deviation = 10 * abs(planning.delta_weight) / status.targets.total_weight
+        result = transition_costs + log_costs + weight_deviation
+        return ObjectiveFunction(total_value=result, lots_count=planning.lots_count, weight_deviation=weight_deviation,
+                                 transition_costs=transition_costs, logistic_costs=log_costs)
 

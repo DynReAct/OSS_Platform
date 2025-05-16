@@ -84,7 +84,8 @@ class LotsOptimizer(Generic[P]):
         self._min_due_date: datetime|None = min_due_date
         main_cat = ModelUtils.main_category_for_targets(targets.material_weights, site.material_categories)
         self._main_category = main_cat.id if main_cat is not None else None
-        self._performance_models = [pm for pm in performance_models if process in pm.applicable_processes_and_plants()[0]] if performance_models is not None else None
+        self._performance_models = [pm for pm in performance_models if pm.applicable_processes_and_plants()[0] is None or
+                                    process in pm.applicable_processes_and_plants()[0]] if performance_models is not None else None
         target_plants: list[int] = list(targets.target_weight.keys())
         assigned_plants: set[int] = set(ass.equipment for ass in initial_solution.order_assignments.values()) \
             if initial_solution is not None else set()

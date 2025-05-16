@@ -132,7 +132,7 @@ class SimpleCostProvider(CostProvider):
         planning: PlanningData = status.planning
         transition_costs = planning.transition_costs  # TODO parameters
         log_costs = planning.logistic_costs
-        weight_deviation = abs(planning.delta_weight) / status.targets.total_weight
+        weight_deviation = 10 * abs(planning.delta_weight) / status.targets.total_weight
         result = transition_costs + log_costs + weight_deviation
         return ObjectiveFunction(total_value=result, lots_count=planning.lots_count, weight_deviation=weight_deviation,
                                  transition_costs=transition_costs, logistic_costs=log_costs)

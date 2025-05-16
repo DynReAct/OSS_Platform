@@ -7,9 +7,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.TestPerformanceModel import TestPerformanceModel, TestPerformanceConfig, PlantPerformanceBasic, \
     Concatenation, BaseCondition
 from dynreact.base.model import Site, Process, Equipment, ProductionTargets, ProductionPlanning, Snapshot, Order, \
-    Material, \
-    OrderAssignment, EquipmentStatus, Model, EquipmentProduction
-from pydantic import BaseModel
+    Material, OrderAssignment, EquipmentStatus, Model, EquipmentProduction
 
 from dynreact.lotcreation.LotsOptimizerImpl import TabuAlgorithm
 from dynreact.base.impl.SimpleCostProvider import SimpleCostProvider
@@ -45,6 +43,8 @@ class OptimizationTest(unittest.TestCase):
         objective_value = optimization_state.best_objective_value.total_value
         assert objective_value == 1, "Unexpected objective value " + str(objective_value)
         solution: ProductionPlanning = optimization_state.best_solution
+        all_lots = solution.get_lots()
+        assert len(all_lots) > 0 and sum(len(plant_lots) for plant_lots in all_lots.values()) > 0, "No lots generated"
         assert orders[0].id in solution.order_assignments and orders[1].id in solution.order_assignments, "Unexpectedly unassigned order found"
         ass1 = solution.order_assignments[orders[0].id]
         ass2 = solution.order_assignments[orders[1].id]

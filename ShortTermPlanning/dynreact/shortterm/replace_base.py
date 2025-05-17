@@ -27,8 +27,8 @@ import time
 
 from confluent_kafka import Producer
 import configparser
-from common import VAction
-from short_term_planning import clean_agents
+from dynreact.shortterm.common import VAction
+from dynreact.shortterm.short_term_planning import clean_agents
 
 def main():
     """

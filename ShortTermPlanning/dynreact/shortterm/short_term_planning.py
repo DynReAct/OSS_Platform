@@ -32,13 +32,13 @@ from confluent_kafka import Producer, Consumer, Message
 from confluent_kafka.admin import AdminClient
 import configparser
 
-from common import VAction, sendmsgtopic, TOPIC_GEN, TOPIC_CALLBACK, SMALL_WAIT
-from common.data.data_functions import end_auction
-from common.data.data_setup import DataSetup
+from dynreact.shortterm.common import VAction, sendmsgtopic, TOPIC_GEN, TOPIC_CALLBACK, SMALL_WAIT
+from dynreact.shortterm.common.data.data_functions import end_auction
+from dynreact.shortterm.common.data.data_setup import DataSetup
 import os, re, json
 
-from common.data.load_url import DOCKER_MANAGER
-from common.handler import DockerManager
+from dynreact.shortterm.common.data.load_url import DOCKER_MANAGER
+from dynreact.shortterm.common.handler import DockerManager
 
 if os.environ.get('SPHINX_BUILD'):
     # Mock REST_URL for Sphinx Documentatiom

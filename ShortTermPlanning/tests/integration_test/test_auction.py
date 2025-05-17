@@ -1,13 +1,13 @@
-import os
+﻿import os
 from unittest.mock import patch, MagicMock
 
 import pytest
 from confluent_kafka import TopicPartition, OFFSET_END
 from confluent_kafka.admin import AdminClient
 
-from common import TOPIC_CALLBACK, TOPIC_GEN, purge_topics
-from common.handler import DockerManager
-from short_term_planning import execute_short_term_planning
+from dynreact.shortterm.common import TOPIC_CALLBACK, TOPIC_GEN, purge_topics
+from dynreact.shortterm.common.handler import DockerManager
+from dynreact.shortterm.short_term_planning import execute_short_term_planning
 
 @pytest.fixture(autouse=True)
 def initialize():
@@ -21,19 +21,19 @@ def initialize():
 @pytest.fixture
 def log_handler_spy():
     real_log_container = DockerManager(tag="logTEST", max_allowed=1)
-    with patch("short_term_planning.log_handler", MagicMock(wraps=real_log_container)) as mock:
+    with patch("dynreact.shortterm.short_term_planning.log_handler", MagicMock(wraps=real_log_container)) as mock:
         yield mock
 
 @pytest.fixture
 def equipment_handler_spy():
     real_equipment_container = DockerManager(tag="equipmentTEST", max_allowed=1)
-    with patch("short_term_planning.equipment_handler", MagicMock(wraps=real_equipment_container)) as mock:
+    with patch("dynreact.shortterm.short_term_planning.equipment_handler", MagicMock(wraps=real_equipment_container)) as mock:
         yield mock
 
 @pytest.fixture
 def material_handler_spy():
     real_material_container = DockerManager(tag="materialTEST", max_allowed=1)
-    with patch("short_term_planning.material_handler", MagicMock(wraps=real_material_container)) as mock:
+    with patch("dynreact.shortterm.short_term_planning.material_handler", MagicMock(wraps=real_material_container)) as mock:
         yield mock
 
 def test_scenario_00(log_handler_spy, equipment_handler_spy, material_handler_spy):
@@ -53,10 +53,10 @@ def test_scenario_00(log_handler_spy, equipment_handler_spy, material_handler_sp
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
     }
 
-    with patch("short_term_planning.create_auction", return_value=("DYN_TEST", 0)):
+    with patch("dynreact.shortterm.short_term_planning.create_auction", return_value=("DYN_TEST", 0)):
 
         # Import it after mocking the methods
-        from short_term_planning import execute_short_term_planning
+        from dynreact.shortterm.short_term_planning import execute_short_term_planning
 
         execute_short_term_planning(args)
 
@@ -86,10 +86,10 @@ def test_scenario_01(log_handler_spy, equipment_handler_spy, material_handler_sp
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
     }
 
-    with patch("short_term_planning.create_auction", return_value=("DYN_TEST", 0)):
+    with patch("dynreact.shortterm.short_term_planning.create_auction", return_value=("DYN_TEST", 0)):
 
         # Import it after mocking the methods
-        from short_term_planning import execute_short_term_planning
+        from dynreact.shortterm.short_term_planning import execute_short_term_planning
 
         execute_short_term_planning(args)
 

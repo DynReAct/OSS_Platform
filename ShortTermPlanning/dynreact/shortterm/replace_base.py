@@ -55,7 +55,7 @@ def main():
 
     config = configparser.ConfigParser()
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    config.read(os.path.join(current_dir, "config.cnf"))
+    config.read(os.path.join(current_dir, "dynreact", "shortterm", "config.cnf"))
     kafka_ip = config['DEFAULT']['IP']
 
     if verbose > 0:

@@ -1,32 +1,31 @@
 [build-system]
-# Minimum requirements for the build system to execute.
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
 
-[project]
+[tool.poetry]
 name = "dynreact_plugin_sampleuc"
 version = "0.0.1"
-#authors = [
-#  { name="Example Author", email="author@example.com" },
-#]
 description = "The DynReAct sample use case plugin"
 readme = "README.md"
-requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
+    "Operating System :: OS Independent"
 ]
-dynamic = ["dependencies"]
+packages = [
+    { include = "dynreact/cost" },
+    { include = "dynreact/sample" }
+]
 
-[project.urls]
+[tool.poetry.dependencies]
+python = ">=3.12"
+python-dotenv = ">=1.0.0,<2.0"
+pandas = ">=2,<3"
+numpy = ">=1.24,<3"
+
+dynreact_base = { path = "../DynReActBase", develop = true }
+
+[tool.poetry.urls]
 Homepage = "https://github.com/DynReAct/OSS_Platform"
 Issues = "https://github.com/DynReAct/OSS_Platform/issues"
 
-# See https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#setuptools-specific-configuration
-[tool.setuptools]
-packages = ["dynreact.cost", "dynreact.sample"]
-package-dir = {"" = "."}
-
-[tool.setuptools.dynamic]
-dependencies = {file = ["requirements.txt"]}

@@ -3,7 +3,7 @@ import re
 import time
 import sys
 from confluent_kafka import Producer, Consumer
-from common import sendmsgtopic
+from dynreact.shortterm.common import sendmsgtopic
 import traceback
 
 class Agent:

@@ -3,14 +3,14 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from log import Log
+from dynreact.shortterm.agents.log import Log
 import platform
 import configparser
 import os
 
-from equipment import Equipment
-from material import Material
-from common import VAction, TOPIC_GEN, TOPIC_CALLBACK
+from dynreact.shortterm.agents.equipment import Equipment
+from dynreact.shortterm.agents.material import Material
+from dynreact.shortterm.common import VAction, TOPIC_GEN, TOPIC_CALLBACK
 
 def log_base(verbose: int):
 
@@ -20,7 +20,7 @@ def log_base(verbose: int):
     # Global configuration - assign the values to the global variables using the information above
     config = configparser.ConfigParser()
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    config.read(os.path.join(current_dir, "config.cnf"))
+    config.read(os.path.join(current_dir, "dynreact", "shortterm", "config.cnf"))
     kafka_ip = config['DEFAULT']['IP']
     left_path = config['DEFAULT']['LogFilePath']
 
@@ -54,7 +54,7 @@ def equipment_base(verbose: int):
     # Global configuration - assign the values to the global variables using the information above
     config = configparser.ConfigParser()
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    config.read(os.path.join(current_dir, "config.cnf"))
+    config.read(os.path.join(current_dir, "dynreact", "shortterm", "config.cnf"))
     kafka_ip = config['DEFAULT']['IP']
 
     main_equipment = Equipment(
@@ -71,7 +71,7 @@ def material_base(verbose: int):
     # Global configuration - assign the values to the global variables using the information above
     config = configparser.ConfigParser()
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    config.read(os.path.join(current_dir, "config.cnf"))
+    config.read(os.path.join(current_dir, "dynreact", "shortterm", "config.cnf"))
     kafka_ip = config['DEFAULT']['IP']
 
     main_material = Material(

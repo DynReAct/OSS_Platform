@@ -1,7 +1,9 @@
 import importlib
-import sys
+import sys, os
 import traceback
-from typing import Any, Iterator
+from typing import Any  # , Iterator   Updated by JOM 20250521
+import pkgutil
+from collections.abc import Iterator as ABCIterator # For type hinting, if needed elsewhere
 
 from dynreact.base.ConfigurationProvider import ConfigurationProvider
 from dynreact.base.CostProvider import CostProvider
@@ -108,7 +110,7 @@ class Plugins:
             if self._config.short_term_planning.startswith("default+file:"):
                 self._short_term_planning = ShortTermPlanning(self._config.short_term_planning)
             else:
-                self._short_term_planning = Plugins._load_module("dynreact.shorttermplanning", ShortTermPlanning,
+                self._short_term_planning = Plugins._load_module("dynreact.shortterm", ShortTermPlanning,
                                                                 self._config.short_term_planning)
         return self._short_term_planning
 
@@ -169,10 +171,14 @@ class Plugins:
                 print("Failed to load standard Agents page")
                 traceback.print_exc()
                 return None
-        importers = iter(sys.meta_path)
+        # Updated by JOM 20250521
+        # importers = iter(sys.meta_path)
+        importers = iter(sys.path)
         for importer in importers:
             try:
-                spec_res = importer.find_spec(stp, path=None)
+                # Updated by JOM 20250518
+                # spec_res = importer.find_spec(stp, path=None)
+                spec_res = importlib.util.find_spec(stp)
                 if spec_res is not None:
                     modl = importlib.util.module_from_spec(spec_res)
                     spec_res.loader.exec_module(modl)
@@ -207,60 +213,250 @@ class Plugins:
         return Plugins._load_module("dynreact.cost.CostCalculatorImpl", CostProvider, cost_provider, site)
 
     @staticmethod
-    def _load_module(module: str, clzz, *args, **kwargs) -> Any|None:   # returns an instance of the clzz, if found
-        # if *args starts with class: replace module by that arg
-        if len(args) > 0 and isinstance(args[0], str) and args[0].startswith("class:"):
-            first = args[0]
-            module = first[first.index(":")+1:first.index(",")]
-            first = first[first.index(",")+1:]
-            args = tuple(a if idx > 0 else first for idx, a in enumerate(args))
-        mod0 = sys.modules.get(module)
-        do_raise = kwargs.pop("do_raise", False)
-        errors = []
-        mod_set: bool = mod0 is not None
-        mod_iterator: Iterator = iter([mod0]) if mod_set else _ModIterator(module)
-        for mod in mod_iterator:
-            for name, element in inspect.getmembers(mod):
+    def _load_module(module_spec_arg: str, clzz: type, *args_to_pass: Any, **kwargs_to_pass: Any) -> Any | None:
+        """
+        Loads a module and returns an instance of the first class found
+        that is a subclass of 'clzz'.
+
+        This method robustly handles namespace packages by manually discovering all
+        contributing paths and searching within each.
+
+        Args:
+            module_spec_arg: The fully qualified name of the module (e.g., "dynreact.shortterm")
+                             or "class:<module.path.ClassName>,<uri>" syntax.
+            clzz: The base class type to search for.
+            *args_to_pass: Positional arguments for the class constructor.
+                           If "class:" syntax is used, URI is prepended.
+            **kwargs_to_pass: Keyword arguments for the class constructor.
+                              "do_raise" (bool, default False) controls exception raising.
+
+        Returns:
+            An instance of the found class, or None.
+        """
+        module_name_to_load: str = module_spec_arg
+        final_constructor_args: tuple = args_to_pass
+        final_constructor_kwargs: dict = dict(kwargs_to_pass) # Mutable copy
+
+        if isinstance(module_spec_arg, str) and module_spec_arg.startswith("class:"):
+            spec_uri_content = module_spec_arg[len("class:"):]
+            parts = spec_uri_content.split(',', 1)
+            module_name_to_load = parts[0].strip()
+            uri_arg = parts[1].strip() if len(parts) > 1 else ""
+            final_constructor_args = (uri_arg,) + args_to_pass
+
+        do_raise: bool = final_constructor_kwargs.pop("do_raise", False)
+        errors: list[Exception] = []
+        
+        # --- Path Discovery for Namespace Packages ---
+        explicit_search_paths = []
+        module_name_parts = module_name_to_load.split('.')
+
+        for path_entry in sys.path:
+            potential_module_dir = os.path.join(path_entry, *module_name_parts)
+            if os.path.isdir(potential_module_dir):
+                # This directory matches the structure (e.g., .../dynreact/shortterm)
+                # For pkgutil-style or PEP 420 namespaces, this directory contributes.
+                normalized_path = os.path.normpath(potential_module_dir)
+                if normalized_path not in explicit_search_paths:
+                    explicit_search_paths.append(normalized_path)
+        
+        # Fallback: if manual scan is empty, try importing and using its __path__
+        # This is a fallback because the user reported this __path__ might be incomplete.
+        if not explicit_search_paths:
+            try:
+                imported_module_for_path = importlib.import_module(module_name_to_load)
+                if hasattr(imported_module_for_path, '__path__'):
+                    for p_item in imported_module_for_path.__path__:
+                        norm_p_item = os.path.normpath(p_item)
+                        if norm_p_item not in explicit_search_paths:
+                             explicit_search_paths.append(norm_p_item)
+            except ImportError:
+                pass # Error will be handled below if list remains empty
+
+        if not explicit_search_paths and not imported_module_for_path:
+            errors.append(ImportError(f"Could not discover any filesystem paths for module {module_name_to_load}."))
+            if do_raise:
+                raise ModuleNotFoundError(f"Module {module_name_to_load} paths not found. Searched sys.path. Errors: {errors}")
+            return None
+
+        # --- Module Scanning ---
+        # modules_to_scan_objects will hold actual loaded module objects
+        modules_to_scan_objects = []
+        # processed_module_names tracks full module names to avoid redundant processing
+        processed_module_names = set()
+
+        # 1. Attempt to import the main namespace package itself.
+        # This allows scanning for classes defined directly in any of its __init__.py files.
+        try:
+            # This import should ideally create a module object with a complete __path__
+            # due to the pkgutil.extend_path in your __init__.py files.
+            main_namespace_module = importlib.import_module(module_name_to_load)
+            if main_namespace_module not in modules_to_scan_objects:
+                modules_to_scan_objects.append(main_namespace_module)
+            processed_module_names.add(main_namespace_module.__name__)
+        except ImportError as e_ns_import:
+            errors.append(e_ns_import)
+            # Continue, as submodules might still be discoverable via path walking if main import fails for some reason
+
+        # 2. Walk through each discovered path that contributes to the namespace.
+        # explicit_search_paths contains directories like ".../projectA/dynreact/shortterm", ".../projectB/dynreact/shortterm"
+        for ns_path_item in explicit_search_paths:
+            # ns_path_item is a directory, e.g., "/opt/.../OSS_Platform/ShortTermPlanning/dynreact/shortterm"
+            # We want to find modules *within* this directory, such as "ras_short_term_planning_impl.py".
+            # The prefix ensures their names are like "dynreact.shortterm.ras_short_term_planning_impl".
+            for _, submodule_name_full, _ in pkgutil.walk_packages(
+                    path=[ns_path_item], # Search this specific directory portion of the namespace
+                    prefix=module_name_to_load + '.', # e.g., "dynreact.shortterm."
+                    onerror=lambda name_err: errors.append(ImportError(f"Error during walk_packages on {ns_path_item} for {name_err}"))):
+                
+                if submodule_name_full in processed_module_names:
+                    continue
                 try:
-                    if inspect.isclass(element) and issubclass(element, clzz) and element != clzz:
-                        result = element(*args, **kwargs)
-                        if not mod_set:
-                            sys.modules[module] = mod
-                        return result
-                except Exception as e:
-                    if not isinstance(e, NotApplicableException):
-                        errors.append(e)
-                        if do_raise:
-                            raise
-        if len(errors) > 0:
-            print(f"Failed to load module {module} of type {clzz}: {errors[0]}")
-            raise errors[0]
+                    submodule = importlib.import_module(submodule_name_full)
+                    if submodule not in modules_to_scan_objects: # Check by object identity
+                        modules_to_scan_objects.append(submodule)
+                    processed_module_names.add(submodule_name_full)
+                except ImportError as e_sub:
+                    errors.append(ImportError(f"Could not import submodule {submodule_name_full} from path {ns_path_item}: {e_sub}"))
+                    if do_raise: raise
+                except Exception as e_gen_sub: # Catch other potential errors during import
+                    errors.append(e_gen_sub)
+                    if do_raise: raise
+
+
+        # Deduplicate module objects if any identical ones were added (e.g., main_namespace_module and a walked version)
+        final_modules_to_inspect = []
+        seen_module_ids = set()
+        for m_obj in modules_to_scan_objects:
+            if id(m_obj) not in seen_module_ids:
+                final_modules_to_inspect.append(m_obj)
+                seen_module_ids.add(id(m_obj))
+        
+        if not final_modules_to_inspect:
+             errors.append(ImportError(f"No modules found to inspect for {module_name_to_load} across discovered paths: {explicit_search_paths}"))
+             if do_raise:
+                 # If initial errors exist, raise the first one, otherwise a generic not found.
+                 if errors: raise errors[0]
+                 raise ModuleNotFoundError(f"No inspectable modules found for {module_name_to_load}")
+             return None
+
+        # 3. Inspect members of all collected modules
+        for module_to_inspect in final_modules_to_inspect:
+            for member_name, member_obj in inspect.getmembers(module_to_inspect):
+                if inspect.isclass(member_obj) and issubclass(member_obj, clzz) and member_obj is not clzz:
+                    # Ensure class is from the module being inspected or the target namespace
+                    if member_obj.__module__ == module_to_inspect.__name__ or \
+                       member_obj.__module__.startswith(module_name_to_load): # Covers submodules too
+                        try:
+                            instance = member_obj(*final_constructor_args, **final_constructor_kwargs)
+                            return instance
+                        # If using NotApplicableException, uncomment its specific except block here
+                        # except NotApplicableException:
+                        #     if do_raise: raise
+                        except Exception as e_inst:
+                            errors.append(e_inst)
+                            if do_raise: raise
+        
         if do_raise:
-            raise Exception(f"Module {module} not found")
+            if errors: raise errors[0]
+            raise ModuleNotFoundError(f"Class extending {clzz.__name__} not found in {module_name_to_load} or its submodules after scanning {len(final_modules_to_inspect)} modules.")
+            
         return None
 
+    # @staticmethod
+    # def _load_module(module: str, clzz, *args, **kwargs) -> Any|None:   # returns an instance of the clzz, if found
+    #     # if *args starts with class: replace module by that arg
+    #     if len(args) > 0 and isinstance(args[0], str) and args[0].startswith("class:"):
+    #         first = args[0]
+    #         module = first[first.index(":")+1:first.index(",")]
+    #         first = first[first.index(",")+1:]
+    #         args = tuple(a if idx > 0 else first for idx, a in enumerate(args))
+    #     mod0 = sys.modules.get(module)
+    #     do_raise = kwargs.pop("do_raise", False)
+    #     errors = []
+    #     mod_set: bool = mod0 is not None
+    #     mod_iterator: Iterator = iter([mod0]) if mod_set else _ModIterator(module)
+    #     for mod in mod_iterator:
+    #         for name, element in inspect.getmembers(mod):
+    #             try:
+    #                 if inspect.isclass(element) and issubclass(element, clzz) and element != clzz:
+    #                     result = element(*args, **kwargs)
+    #                     if not mod_set:
+    #                         sys.modules[module] = mod
+    #                     return result
+    #             except Exception as e:
+    #                 if not isinstance(e, NotApplicableException):
+    #                     errors.append(e)
+    #                     if do_raise:
+    #                         raise
+    #     if len(errors) > 0:
+    #         print(f"Failed to load module {module} of type {clzz}: {errors[0]}")
+    #         raise errors[0]
+    #     if do_raise:
+    #         raise Exception(f"Module {module} not found")
+    #     return None
 
-class _ModIterator(Iterator):   # returns loaded modules
 
-    def __init__(self, module: str):
-        # Note: this works if there are duplicates in editable installations,
-        # but not if there are duplicate modules in separate wheels
-        self._importers = iter(sys.meta_path)
-        self._module = module
+# class _ModIterator(Iterator):   # returns loaded modules
 
-    def __next__(self):
-        while True:
-            importer = next(self._importers)
-            try:
-                spec_res = importer.find_spec(self._module, path=None)
-                if spec_res is not None:
-                    mod = importlib.util.module_from_spec(spec_res)
-                    # sys.modules[module] = mod  # we'll check first if this is the correct module
-                    spec_res.loader.exec_module(mod)
-                    return mod
-            except:
-                pass
+#     def __init__(self, module: str):
+#         # Note: this works if there are duplicates in editable installations,
+#         # but not if there are duplicate modules in separate wheels
+#         self._importers = iter(sys.meta_path)
+#         self._module = module
 
+#     def __next__(self):
+#         while True:
+#             importer = next(self._importers)
+#             try:
+#                 # Updated by JOM 20250515
+#                 # spec_res = importer.find_spec(self._module, path=None)
+#                 spec_res = importlib.util.find_spec(self._module)
+#                 if spec_res is not None:
+#                     mod = importlib.util.module_from_spec(spec_res)
+#                     # sys.modules[module] = mod  # we'll check first if this is the correct module
+#                     spec_res.loader.exec_module(mod)
+#                     return mod
+#             except:
+#                 pass
+#
+# Updated by JOM 20250519
+
+# ModIterator not needed anymore, as we use importlib and pkgutil 
+# class _ModIterator(Iterator):
+#     def __init__(self, module_name: str):
+#         self._module_name = module_name
+#         self._sub_modules = []
+#         self._visited_modules = set()
+#         try:
+#             # Base module import first
+#             module = importlib.import_module(module_name)
+#             self._sub_modules.append(module)
+#             self._visited_modules.add(module_name)
+
+#             # If it is a package, iterating over its submodules
+#             if hasattr(module, '__path__'): 
+#                 # (pkgutil.walk 
+#                 for sub_module_info in pkgutil.walk_packages(module.__path__, module_name + '.'):
+#                     if sub_module_info.name not in self._visited_modules:
+#                         try:
+#                             # Importing found modules
+#                             sub_module = importlib.import_module(sub_module_info.name)
+#                             self._sub_modules.append(sub_module)
+#                             self._visited_modules.add(sub_module_info.name)
+#                         except ImportError:
+#                             print(f"WARNING _ModIterator: Can't import the submodule {sub_module_info.name}")
+#                             pass
+#         except ImportError:
+#             print(f"WARNING _ModIterator: Can't import the main module {module_name}")
+#             pass
+#         self._iter = iter(self._sub_modules)
+
+#     def __next__(self):
+#         return next(self._iter)
+
+#     def __iter__(self):
+#         return self
 
 # for testing
 if __name__ == "__main__":

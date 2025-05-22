@@ -62,8 +62,10 @@ COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 # Copy only the shared library from the builder stage
 COPY --from=builder /usr/lib/lib* /usr/lib/
 
-COPY dynreact/shortterm/shared/common/ ./shortterm/common/
-COPY dynreact/shortterm/agents/ dynreact/shortterm/config.cnf ./shortterm/
+COPY dynreact/shortterm/common/ ./shortterm/dynreact/shortterm/common/
+COPY dynreact/shortterm/config.cnf ./shortterm/dynreact/shortterm/
+COPY dynreact/shortterm/agents/agent.py dynreact/shortterm/agents/equipment.py dynreact/shortterm/agents/log.py dynreact/shortterm/agents/material.py ./shortterm/dynreact/shortterm/agents/
+COPY dynreact/shortterm/agents/__main__.py ./shortterm/
 
 RUN groupadd -r appgroup && useradd -r -u 1050 -g appgroup appuser
 RUN groupadd docker

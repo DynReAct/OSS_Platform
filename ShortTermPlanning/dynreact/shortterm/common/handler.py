@@ -3,7 +3,7 @@ import os
 import shlex
 import docker
 
-from common import TOPIC_CALLBACK, TOPIC_GEN
+from dynreact.shortterm.common import TOPIC_CALLBACK, TOPIC_GEN
 
 
 class DockerManager:

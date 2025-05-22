@@ -21,11 +21,11 @@ from confluent_kafka.admin import AdminClient, NewTopic
 from datetime import datetime
 from pathlib import Path
 
-from common import sendmsgtopic, TOPIC_CALLBACK
-from agents import Agent
-from common.data.data_functions import end_auction
-from common.data.load_url import DOCKER_REPLICA
-from common.handler import DockerManager
+from dynreact.shortterm.common import sendmsgtopic, TOPIC_CALLBACK
+from dynreact.shortterm.agents.agent import Agent
+from dynreact.shortterm.common.data.data_functions import end_auction
+from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
+from dynreact.shortterm.common.handler import DockerManager
 
 class Log(Agent):
     """

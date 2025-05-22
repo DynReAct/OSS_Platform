@@ -8,11 +8,7 @@ import os
 
 config = configparser.ConfigParser()
 current_dir = os.path.dirname(os.path.abspath(__file__))
-config.read(os.path.join(current_dir, "..", "..", "..", "config.cnf"))
-
-# Docker references are different
-if os.environ.get("IS_DOCKER", "false") == "true":
-    config.read(os.path.join(current_dir, "..", "..", "config.cnf"))
+config.read(os.path.join(current_dir, "..", "..",  "config.cnf"))
 
 REST_URL = config['DEFAULT']['REST_URL']
 URL_SNAPSHOTS = REST_URL + '/snapshots'

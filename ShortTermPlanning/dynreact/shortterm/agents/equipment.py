@@ -9,12 +9,12 @@ Version History:
 """
 
 import time
-from common import sendmsgtopic
-from common.data.data_functions import get_equipment_status
-from common.data.load_url import DOCKER_REPLICA
-from common.functions import calculate_production_cost, get_new_equipment_status
-from agents import Agent
-from common.handler import DockerManager
+from dynreact.shortterm.common import sendmsgtopic
+from dynreact.shortterm.common.data.data_functions import get_equipment_status
+from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
+from dynreact.shortterm.common.functions import calculate_production_cost, get_new_equipment_status
+from dynreact.shortterm.agents.agent import Agent
+from dynreact.shortterm.common.handler import DockerManager
 
 
 class Equipment(Agent):

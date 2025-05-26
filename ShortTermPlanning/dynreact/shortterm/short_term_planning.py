@@ -76,16 +76,18 @@ def delete_all_topics(admin_client: AdminClient, verbose: int):
         print("Finished deleting all hanging topics.")
 
 
-def genauction() -> str:
+def genauction(act: str = None) -> str:
     """Generate the name of a topic with 12 random capital letters and digits
+    :param str act: Prefered topic name for the auction.
 
     :return: Generated string as bae for the topic
     :rtype: str
     """
     # return(str(uuid.uuid4()))
-    N = 12
-    res = ''.join(random.choices(string.ascii_uppercase + string.digits, k=N))
-    return 'DynReact-' + res
+    if act is None:
+        act = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
+
+    return 'DynReact-' + act
 
 def run_general_agents(producer: Producer, gagents: str, verbose: int):
     """
@@ -118,8 +120,8 @@ def run_general_agents(producer: Producer, gagents: str, verbose: int):
 
 
 def create_auction(
-        equipments: list[str], producer: Producer, verbose: int, counterbid_wait: float, nmaterials: int = None,
-        snapshot: str = None
+        equipments: list[str], producer: Producer, verbose: int, counterbid_wait: float,
+        snapshot: str = None, act: str = None, nmaterials: int = None, materials: list[str] = None
 ) -> tuple[str, int]:
     """
     Creates an auction by instructing the master LOG, EQUIPMENTS and MATERIAL to clone themselves to follow a new topic
@@ -128,12 +130,17 @@ def create_auction(
     :param object producer: A Kafka Producer instance
     :param int verbose: Verbosity level
     :param float counterbid_wait: Number of seconds to wait for the materials to counterbid
-    :param int nmaterials: Maximum number of materials cloned for each equipment (default is to clone all)
     :param str snapshot: Snapshot time in ISO8601 format, otherwise use the latest available
+    :param str act: Preferred auction name, otherwise a random name will be assigned
+    :param int nmaterials: Maximum number of cloned used for each equipment (default is to clone all). Can't be used along materials param
+    :param list materials: Selected materials to generate the auction, can't be used along nmaterials
 
     :return: Topic name of the auction and number of agents
     :rtype: tuple(str,int)
     """
+
+    if nmaterials is not None and materials is not None:
+        raise Exception("Cannot specify both nmaterials and materials")
 
     # Initialize search of latest snapshot
     data_setup = DataSetup(verbose=verbose, snapshot_time=snapshot)
@@ -142,7 +149,7 @@ def create_auction(
     num_agents = 0
 
     # Instruct the general LOG to clone itself to create a new auction
-    act = genauction()
+    act = genauction(act)
     sendmsgtopic(
         producer=producer,
         tsend=TOPIC_GEN,
@@ -185,9 +192,9 @@ def create_auction(
 
     # Instruct the general MATERIAL to clone itself for the auction,
     # for as many materials associated to each equipment
+    all_materials = []
     for equipment in equipments:
         # Get the list of materials of the equipment
-
         equipment_ids = re.findall(r'\d+', equipment)
 
         if len(equipment_ids) == 1:
@@ -201,23 +208,33 @@ def create_auction(
         else:
             raise Exception(f"No equipment ID found in equipment {equipment}")
 
-        # If a maximum number of materials is given, keep only the first `nmaterials` materials of the equipment
-        if nmaterials is not None:
-            equipment_materials = equipment_materials[:nmaterials]
+        if materials is None and nmaterials is not None:
+            all_materials.extend(equipment_materials[:nmaterials])
+        else:
+            all_materials.extend(equipment_materials)
 
-        # Clone the master MATERIAL for each material ID
-        for material in equipment_materials:
-            sendmsgtopic(
-                producer=producer,
-                tsend=TOPIC_GEN,
-                topic=act,
-                source="UX",
-                dest="MATERIAL:" + TOPIC_GEN,
-                action="CREATE",
-                payload=dict(id=str(material), params=data_setup.get_material_params(material)),
-                vb=verbose
-            )
-            num_agents += 1
+    # If the user provided the materials make sure all are part of at least one equipment
+    if materials is not None:
+        if all(item in all_materials for item in materials):
+            all_materials = materials
+        else:
+            raise Exception("Provided materials are not part of the selected equipment")
+
+    all_materials = list(set(all_materials))
+
+    # Clone the master MATERIAL for each material ID
+    for material in all_materials:
+        sendmsgtopic(
+            producer=producer,
+            tsend=TOPIC_GEN,
+            topic=act,
+            source="UX",
+            dest="MATERIAL:" + TOPIC_GEN,
+            action="CREATE",
+            payload=dict(id=str(material), params=data_setup.get_material_params(material)),
+            vb=verbose
+        )
+        num_agents += 1
 
     return act, num_agents
 

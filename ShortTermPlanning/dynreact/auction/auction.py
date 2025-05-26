@@ -1,4 +1,11 @@
+import enum
 import sys, os
+
+class JobStatus(enum.Enum):
+    I = "Idle"
+    L = "Launched"
+    G = "Started"
+    E = "Ended"
 
 class Auction:
     """
@@ -15,7 +22,7 @@ class Auction:
     """
 
 
-    def __init__(self,CodeId:str):
+    def __init__(self, CodeId:str):
         """ 
         Constructor function for the Auction class
 
@@ -24,9 +31,7 @@ class Auction:
         :returns: None
 
         """
-        self._launched     = 0
-        self._started      = 0
-        self._ended        = 0
+        self.auction_status = JobStatus.I
         self.code          = CodeId
         self.matype        = 'Orders'
         self._equip       = []
@@ -229,21 +234,15 @@ class Auction:
         return(self._resul)
 
 
-    def set_status(self,start):
+    def set_status(self, job_status: JobStatus):
         """ 
         Function establising the current status for the auction
 
-        :param str start: Auction status according to the following code
+        :param JobStatus job_status: Auction status according to the following code
                          'L' => Launched, 'G' => Started, 'E' => Ended.
         """
-        if start == 'L':
-           self._launched = 1
-        if start == 'G':
-           self._started  = 1
-        if start == 'E':
-           self._ended    = 1
-        return(None)
 
+        self.auction_status = job_status
 
     def get_status(self):
         """ 
@@ -251,12 +250,11 @@ class Auction:
         distinguishing when the auction is not launched, launched,
         started or ended.
 
-        :returns: Status on base 10.
+        :returns: JobStatus according to the code
 
-        :rtype: int
+        :rtype: JobStatus
         """
-        return(100*self._ended+10*self._started+self._launched)
-
+        return self.auction_status
 
     def set_message(self,msg):
         """ 

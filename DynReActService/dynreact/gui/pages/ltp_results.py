@@ -179,7 +179,7 @@ def _start_times_to_dates(lst: list[datetime]) -> list[date]:
 def find_solutions(starttime: str|None):
     parsed = DatetimeUtils.parse_date(starttime)
     if parsed is None:
-        return []
+        return [], []
     #parsed_date = parsed.date()
     persistence: ResultsPersistence = state.get_results_persistence()
     solutions: list[str] = persistence.solutions_ltp(parsed)  # TODO is this exact? Or could we specify a range?

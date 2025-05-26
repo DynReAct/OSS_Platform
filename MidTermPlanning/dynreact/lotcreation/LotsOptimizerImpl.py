@@ -58,10 +58,8 @@ class TabuSearch(LotsOptimizer):
         changed: bool = False
         for plant in self._plant_ids:
             orders = [o for o in self._orders.values() if plant in o.allowed_equipment]
-            restrictions: list[PerformanceEstimation] = \
-                [performance for performances in
-                 (model.bulk_performance(plant, orders) for model in self._performance_models) for performance in
-                 performances if performance.performance < 1]
+            restrictions: list[PerformanceEstimation] =  [performance for performances in (model.bulk_performance(plant, orders) for model in self._performance_models)
+                                                          for performance in performances.results if performance.performance < 1]
             if restrictions is not None and len(restrictions) > 0:
                 self._performance_restrictions = restrictions
                 for restriction in (r for r in restrictions if r.performance < 0.3):  # ok?

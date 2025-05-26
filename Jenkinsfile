@@ -52,15 +52,15 @@ node {
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
+          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           ${envArgs} \\
           --user root \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
-                   cd /app/tests/integration_test && \\
+                   cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s test_auction.py::test_scenario_00"
         """
     }
@@ -73,8 +73,8 @@ node {
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
+          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -v "/var/log/dynreact-logs:/var/log/dynreact-logs:rw,rshared" \\
           ${envArgs} \\
           --user root \\
@@ -82,7 +82,7 @@ node {
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
-                   cd /app/tests/integration_test && \\
+                   cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s test_auction.py::test_scenario_01"
         """
     }
@@ -95,15 +95,15 @@ node {
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
+          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           ${envArgs} \\
           --user root \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
-                   cd /app/tests/integration_test && \\
+                   cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s test_auction.py::test_scenario_02"
         """
     }
@@ -116,15 +116,15 @@ node {
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
+          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           ${envArgs} \\
           --user root \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
-                   cd /app/tests/integration_test && \\
+                   cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s test_auction.py::test_scenario_03"
         """
     }
@@ -137,15 +137,15 @@ node {
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
+          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           ${envArgs} \\
           --user root \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
-                   cd /app/tests/integration_test && \\
+                   cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s test_auction.py::test_scenario_04"
         """
     }
@@ -156,7 +156,7 @@ node {
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/replace_base.py:/app/shortterm/__main__.py:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           --user root \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
            python -m shortterm -v 3 -g 111
@@ -171,15 +171,15 @@ node {
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
+          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           ${envArgs} \\
           --user root \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
-                   cd /app/tests/integration_test && \\
+                   cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s test_auction.py::test_scenario_05"
         """
     }
@@ -192,15 +192,15 @@ node {
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
+          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           ${envArgs} \\
           --user root \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
-                   cd /app/tests/integration_test && \\
+                   cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s test_auction.py::test_scenario_06"
         """
     }
@@ -213,15 +213,15 @@ node {
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
+          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           ${envArgs} \\
           --user root \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
-                   cd /app/tests/integration_test && \\
+                   cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s test_auction.py::test_scenario_07"
         """
     }
@@ -234,15 +234,15 @@ node {
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/short_term_planning.py:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/tests/:rw" \\
+          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           ${envArgs} \\
           --user root \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
-                   cd /app/tests/integration_test && \\
+                   cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s test_auction.py::test_scenario_08"
         """
     }

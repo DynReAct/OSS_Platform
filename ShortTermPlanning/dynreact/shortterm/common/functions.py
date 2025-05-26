@@ -7,7 +7,7 @@ These functions depend on how these values are given.
 import json
 from datetime import datetime, timedelta
 import random
-from common.data.data_functions import get_transition_cost_and_status
+from dynreact.shortterm.common.data.data_functions import get_transition_cost_and_status
 
 def calculate_bidding_price(material_params: dict, equipment_status: dict, previous_price: float | None) -> float | None:
     """

@@ -83,7 +83,7 @@ class DynReActSrvState:
             self._stp = self._plugins.get_stp_config_params()
         return (self._stp._stpConfigParams.IP,self._stp._stpConfigParams.TOPIC_GEN,
                 self._stp._stpConfigParams.VB)
-    
+
     def get_stp_context_timing(self):
         if self._stp is None:
             self._stp = self._plugins.get_stp_config_params()
@@ -91,7 +91,7 @@ class DynReActSrvState:
                 self._stp._stpConfigParams.TimeDelays.CW,self._stp._stpConfigParams.TimeDelays.EW,
                 self._stp._stpConfigParams.TimeDelays.SMALL_WAIT)
 
-    
+
     def get_results_persistence(self) -> ResultsPersistence:
         if self._results_persistence is None:
             self._results_persistence = self._plugins.get_results_persistence()

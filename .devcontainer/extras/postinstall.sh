@@ -8,25 +8,9 @@ sudo service socat-forwarding reload
 cd /workspace 
 poetry init
 
-cd DynReActBase
-poetry lock && poetry install
-cd ..
-
-cd MidTermPlanning
-poetry lock && poetry install
-cd ..
-
-cd SampleUseCase
-poetry lock && poetry install
-cd ..
-
 cd ShortTermPlanning
 poetry lock && poetry install --no-root
 cd ..
-
-cd DynReActService
-poetry lock && poetry install
-cd /workspace
 
 #######
 # Config ZSH

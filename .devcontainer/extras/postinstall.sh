@@ -12,23 +12,6 @@ cd DynReActBase
 poetry lock && poetry install
 cd ..
 
-cd DynReActService
-
-git clone git@github.com:DynReAct/ShortTermRAS.git
-cd ShortTermRAS
-poetry lock && poetry install
-cd ..
-
-git clone git@github.com:DynReAct/LotCreationRas.git
-cd LotCreationRas
-poetry lock && poetry install
-cd ..
-
-git clone git@github.com:DynReAct/LongTermPlanning.git
-cd LongTermPlanning
-poetry lock && poetry install
-cd ../..
-
 cd MidTermPlanning
 poetry lock && poetry install
 cd ..

@@ -26,6 +26,7 @@ cd ..
 
 cd DynReActService
 poetry lock && poetry install
+cd /workspace
 
 #######
 # Config ZSH

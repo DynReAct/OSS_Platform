@@ -5,10 +5,35 @@
 #######
 
 sudo service socat-forwarding reload 
-cd /workspace 
+cd /workspace
+
+#######
+# Poetry
+#######
+
+poetry init --no-interaction --name OSS_Plataform --python "^3.12"
+poetry install
+eval $(poetry env activate)
+
+cd DynReActBase
+poetry lock && poetry install
+cd ..
+
+cd MidTermPlanning
+poetry lock && poetry install
+cd ..
+
+cd SampleUseCase
+poetry lock && poetry install
+cd ..
+
 cd ShortTermPlanning
 poetry lock && poetry install --no-root
 cd ..
+
+cd DynReActService
+poetry lock && poetry install
+cd /workspace
 
 #######
 # Config ZSH

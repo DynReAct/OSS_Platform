@@ -6,8 +6,6 @@
 
 sudo service socat-forwarding reload 
 cd /workspace 
-poetry init
-
 cd ShortTermPlanning
 poetry lock && poetry install --no-root
 cd ..

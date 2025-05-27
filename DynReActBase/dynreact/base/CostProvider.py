@@ -39,7 +39,7 @@ class CostProvider:
         return 0
 
     def evaluate_order_assignments(self, process: str, assignments: dict[str, OrderAssignment], targets: ProductionTargets,
-                                   snapshot: Snapshot, total_priority: int|None = None) -> ProductionPlanning:
+                                   snapshot: Snapshot, total_priority: int|None = None, orders_custom_priority: dict[str, int]|None=None) -> ProductionPlanning:
         """
         :param process:
         :param assignments:
@@ -54,24 +54,30 @@ class CostProvider:
         status: dict[int, EquipmentStatus] = \
             {plant.id: self.evaluate_equipment_assignments(targets.target_weight.get(plant.id, EquipmentProduction(equipment=plant.id, total_weight=0.0)),
                                                 process, assignments, snapshot, targets.period, track_structure=track_structure,
-                                                main_category=main_category.id if main_category is not None else None) for plant in plants}
+                                                main_category=main_category.id if main_category is not None else None,
+                                                orders_custom_priority=orders_custom_priority) for plant in plants}
         order_assignments = {o: ass for o, ass in assignments.items() if ass.equipment in plant_ids}
         unassigned = {o: ass for o, ass in assignments.items() if ass.equipment < 0}
         order_assignments.update(unassigned)
-
+        # calc total prio only first time
         if total_priority is None:
             total_priority = 0
-            for order_id in order_assignments:
-                my_order = snapshot.get_order(order_id)
-                my_prio = my_order.priority
-                total_priority += my_prio
+            if orders_custom_priority is not None:
+                for order_id in order_assignments:
+                    my_prio = orders_custom_priority.get(order_id, None)
+                    if my_prio is None:
+                        my_prio = snapshot.get_order(order_id).priority
+                    total_priority += my_prio
+            else:
+                total_priority = sum(snapshot.get_order(order_id, do_raise=True).priority for order_id in order_assignments)
         return ProductionPlanning(process=process, order_assignments=order_assignments, equipment_status=status,
                                   target_structure=target_structure, total_priority=total_priority)
 
     def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
                                        planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None,
                                        current_material: list[Material] | None=None,
-                                       track_structure: bool=False, main_category: str|None=None) -> EquipmentStatus:
+                                       track_structure: bool=False, main_category: str|None=None,
+                                       orders_custom_priority: dict[str, int]|None=None) -> EquipmentStatus:
         """
         Main function to be implemented in derived class taking into account global status.
         Note that this must set the PlantStatus.planning.target_fct value.
@@ -96,7 +102,8 @@ class CostProvider:
     #    raise Exception("not implemented")
 
     def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot,
-                                new_lot: bool, current_material: Material | None = None, next_material: Material | None = None) -> tuple[EquipmentStatus, ObjectiveFunction]:
+                                new_lot: bool, current_material: Material | None = None, next_material: Material | None = None,
+                                orders_custom_priority: dict[str, int]|None=None) -> tuple[EquipmentStatus, ObjectiveFunction]:
         """
         Intended to be called by the lot creation, which first needs to check whether a new lot has to be created
         """
@@ -121,11 +128,9 @@ class CostProvider:
             structure_costs = self.structure_costs(planning)
             aggregated.structure_deviation = structure_costs
             aggregated.total_value += structure_costs
-        my_priority = True
-        if my_priority:
-            priority_costs = self.priority_costs(planning)
-            aggregated.priority_costs = priority_costs
-            aggregated.total_value += priority_costs
+        priority_costs = self.priority_costs(planning)
+        aggregated.priority_costs = priority_costs
+        aggregated.total_value += priority_costs
         return aggregated
 
     def structure_costs(self, planning: ProductionPlanning):

@@ -13,6 +13,7 @@
   --lots2-tabs-button-hover-background: #c0c0c0;
   --lots2-tabs-button-active-color: black;
   --lots2-tabs-button-active-background: white;
+  --lots2-grid-editable-column: lightblue;
 }
 
 
@@ -307,6 +308,13 @@
 }
 
 .lots2-orders-backlog-settings-buttons {
+    display: flex;
+    align-items: center;
+    column-gap: 1em;
+    row-gap: 0.5em;
+}
+
+.lots2-orders-custom-prio-buttons {
     display: flex;
     align-items: center;
     column-gap: 1em;

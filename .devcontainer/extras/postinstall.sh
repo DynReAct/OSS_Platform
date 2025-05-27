@@ -12,7 +12,7 @@ cd /workspace
 #######
 
 poetry init --no-interaction --name OSS_Plataform --python "^3.12"
-poetry install
+poetry install --no-root
 eval $(poetry env activate)
 
 cd DynReActBase
@@ -28,7 +28,7 @@ poetry lock && poetry install
 cd ..
 
 cd ShortTermPlanning
-poetry lock && poetry install --no-root
+poetry lock && poetry install
 cd ..
 
 cd DynReActService

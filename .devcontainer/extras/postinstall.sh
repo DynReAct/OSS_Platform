@@ -7,8 +7,54 @@
 sudo service socat-forwarding reload 
 cd /workspace 
 poetry init
-cd ShorTermPlanning
-poetry install --no-root
+
+cd DynReActBase
+poetry lock && poetry install
+cd ..
+
+cd DynReActService
+
+git clone git@github.com:DynReAct/ShortTermRAS.git
+cd ShortTermRAS
+poetry lock && poetry install
+cd ..
+
+git clone git@github.com:DynReAct/LotCreationRas.git
+cd LotCreationRas
+poetry lock && poetry install
+cd ..
+
+git clone git@github.com:DynReAct/LongTermPlanning.git
+cd LongTermPlanning
+poetry lock && poetry install
+cd ../..
+
+cd MidTermPlanning
+poetry lock && poetry install
+cd ..
+
+cd SampleUseCase
+poetry lock && poetry install
+cd ..
+
+cd ShortTermPlanning
+poetry lock && poetry install --no-root
+cd ..
+
+cd DynReActService
+poetry lock && poetry install
+
+cat <<EOF > .env
+# Environment Variables
+CONFIG_PROVIDER=default+file:./data/config/site.json
+COST_PROVIDER=ras:costs
+PYTHONUNBUFFERED=1
+SHORT_TERM_PLANNING_PARAMS=ras+file:./data/config/stp_context.json
+SNAPSHOT_PROVIDER=ras+file:./data/snapshots
+STP_FRONTEND=dynreact.stp_gui_ras.agentPageRas
+TOPIC_CALLBACK=Dyn-Callback
+TOPIC_GEN=Dyn-Gen
+EOF
 
 #######
 # Config ZSH

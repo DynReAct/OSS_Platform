@@ -164,7 +164,3 @@ out/
 # Kafka config files
 # config.cnf
 ShortTermPlanning/dynreact/shortterm/config.cnf
-
-DynReActService/ShortTermRAS
-DynReActService/LongTermPlanning
-DynReActService/LotCreationRas

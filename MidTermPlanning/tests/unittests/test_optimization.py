@@ -134,10 +134,82 @@ class OptimizationTest(unittest.TestCase):
             assert allowed_order in assignments and assignments.get(allowed_order) >= 0, \
                 "Order " + allowed_order + " should have been assigned to a lot"
 
+    def test_2_orders_1_plant_with_priority(self):
+        process = "testProcess"
+        process_id = 0
+        num_plants = 1
+        plants = [Equipment(id=p, name_short="Plant" + str(p), process=process) for p in range(num_plants)]
+        test_site = Site(
+            processes=[Process(name_short=process, process_ids=[process_id])],
+            equipment=plants, storages=[], material_categories=[]
+        )
+        orders = [
+            OptimizationTest._create_order("a", range(num_plants), 10),
+            OptimizationTest._create_order("b", range(num_plants), 10),
+            OptimizationTest._create_order("c", range(num_plants), 10, priority=10)]  # high priority!
+        snapshot = Snapshot(timestamp=datetime(2024, 5, 1),
+                orders=orders, material=OptimizationTest._create_coils_for_orders(orders, process_id), inline_material={}, lots={})
+        transition_costs = {"a": {"b": 1, "c": 2}, "b": {"a": 1, "c": 2}, "c": {"a": 2, "b": 2}}    # c has high transition costs, but also a high priority
+        costs = SimpleCostProvider("simple:costs", test_site, transition_costs, minimum_possible_costs=1, priority_costs_factor=1)
+        planning_period = (snapshot.timestamp, snapshot.timestamp + timedelta(days=1))
+        target_weight = 20  # include 2 out of three orders
+        targets: ProductionTargets = ProductionTargets(process=process, target_weight={p.id: EquipmentProduction(equipment=p.id, total_weight=target_weight) for p in plants}, period=planning_period)
+        start_assignments: dict[str, OrderAssignment] = {o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for o in orders}  # nothing assigned yet
+        initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period, target_weight) for p in plants}
+        initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
+        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
+        # optimization.add_listener(TestListener())  # for debugging
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=10)
+        solution: ProductionPlanning = optimization_state.best_solution
+        all_lots = solution.get_lots()
+        assert len(all_lots) > 0 and sum(len(plant_lots) for plant_lots in all_lots.values()) > 0, "No lots generated"
+        assert orders[-1].id in solution.order_assignments, "Priority order not in lot"
+        assert solution.order_assignments[orders[-1].id].equipment == plants[0].id, "Priority order not in lot"
+
+    def test_2_orders_1_plant_with_custom_priority(self):
+        """
+        Exactly like the test above, but with custom priority set instead of order priority
+        :return:
+        """
+        process = "testProcess"
+        process_id = 0
+        num_plants = 1
+        plants = [Equipment(id=p, name_short="Plant" + str(p), process=process) for p in range(num_plants)]
+        test_site = Site(
+            processes=[Process(name_short=process, process_ids=[process_id])],
+            equipment=plants, storages=[], material_categories=[]
+        )
+        orders = [
+            OptimizationTest._create_order("a", range(num_plants), 10),
+            OptimizationTest._create_order("b", range(num_plants), 10),
+            OptimizationTest._create_order("c", range(num_plants), 10)]
+        custom_priorities = {"c":  10}  # high prio
+        snapshot = Snapshot(timestamp=datetime(2024, 5, 1),
+                orders=orders, material=OptimizationTest._create_coils_for_orders(orders, process_id), inline_material={}, lots={})
+        transition_costs = {"a": {"b": 1, "c": 2}, "b": {"a": 1, "c": 2}, "c": {"a": 2, "b": 2}}    # c has high transition costs, but also a high priority
+        costs = SimpleCostProvider("simple:costs", test_site, transition_costs, minimum_possible_costs=1, priority_costs_factor=1)
+        planning_period = (snapshot.timestamp, snapshot.timestamp + timedelta(days=1))
+        target_weight = 20  # include 2 out of three orders
+        targets: ProductionTargets = ProductionTargets(process=process, target_weight={p.id: EquipmentProduction(equipment=p.id, total_weight=target_weight) for p in plants}, period=planning_period)
+        start_assignments: dict[str, OrderAssignment] = {o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for o in orders}  # nothing assigned yet
+        initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period, target_weight) for p in plants}
+        initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
+        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, orders_custom_priority=custom_priorities)
+        # optimization.add_listener(TestListener())  # for debugging
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=10)
+        solution: ProductionPlanning = optimization_state.best_solution
+        all_lots = solution.get_lots()
+        assert len(all_lots) > 0 and sum(len(plant_lots) for plant_lots in all_lots.values()) > 0, "No lots generated"
+        assert orders[-1].id in solution.order_assignments, "Priority order not in lot"
+        assert solution.order_assignments[orders[-1].id].equipment == plants[0].id, "Priority order not in lot"
+
+
     @staticmethod
-    def _create_order(id: str, plants: list[int], weight: float, due_date: datetime|None=None):
+    def _create_order(id: str, plants: list[int], weight: float, due_date: datetime|None=None, priority: int=0):
         return Order(id=id, allowed_equipment=plants, target_weight=weight, actual_weight=weight, due_date=due_date, material_properties=TestMaterial(material_id="test"),
-                     current_processes=[], active_processes={})
+                     current_processes=[], active_processes={}, priority=priority)
 
     @staticmethod
     def _create_coils_for_orders(orders: list[Order], process: int) -> list[Material]:  # one coil per order

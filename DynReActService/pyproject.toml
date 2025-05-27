@@ -58,10 +58,10 @@ dynreact_midtermplanning = { path = "../MidTermPlanning", develop = true }
 dynreact_plugin_sampleuc = { path = "../SampleUseCase", develop = true }
 dynreact-shortterm = { path = "../ShortTermPlanning", develop = true }
 
+dynreact_ltp_ras = { path = "./LongTermPlanning", optional = true }
+dynreact_plugin_ras = { path = "./LotCreationRas", ptional = true } 
+dynreact_stp_ras = { path = "./ShortTermRAS", optional = true }
+
 # Optional extras
-[project.optional-dependencies]
-ras = [
-    dynreact_ltp_ras = { path = "./LongTermPlanning", develop = true}
-    dynreact_plugin_ras = { path = "./LotCreationRas", develop = true }
-    dynreact_stp_ras = { path = "./ShortTermRAS", develop = true }
-]
+[tool.poetry.extras]
+ras = ["dynreact_ltp_ras", "dynreact_plugin_ras", "dynreact_stp_ras"]

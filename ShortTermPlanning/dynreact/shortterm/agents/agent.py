@@ -2,7 +2,9 @@ import json
 import re
 import time
 import sys
-from confluent_kafka import Producer, Consumer
+from platform import system
+
+from confluent_kafka import Producer, Consumer, KafkaError
 from dynreact.shortterm.common import sendmsgtopic
 import traceback
 
@@ -45,7 +47,12 @@ class Agent:
         # the message consumed by one AGENT can also be consumed by other AGENTs
         self.producer = Producer({"bootstrap.servers": self.kafka_ip})
         self.consumer = Consumer(
-            {"bootstrap.servers": self.kafka_ip, "group.id": self.agent, "auto.offset.reset": "earliest"}
+            {
+                "bootstrap.servers": self.kafka_ip,
+                "group.id": self.agent,
+                "auto.offset.reset": "earliest",
+                'error_cb': self.kafka_error_callback
+            }
         )
         self.consumer.subscribe([self.topic])
 
@@ -157,6 +164,12 @@ class Agent:
         """
         pass
 
+    def kafka_error_callback(self, err: KafkaError):
+        if err.UNKNOWN_TOPIC_OR_PART or err._UNKNOWN_PARTITION:
+            print("Change on topic partition, rebooting")
+            print(err)
+            sys.exit(1)
+
     def read_message(self) -> str:
         """
         Poll and read a Kafka message
@@ -212,9 +225,9 @@ class Agent:
             # End of partition event
             if self.verbose > 1:
                 self.write_log("Error encountered.", "41e40c2f-f4fb-4903-aa32-1931e8fb0d40")
-            sys.stderr.write('%% %s [%d] reached end at offset %d\n' %
+            sys.stderr.write('%% %s [%d] reached end at offset %d with code %s\n' %
                              (message_obj.topic(), message_obj.partition(),
-                              message_obj.offset()))
+                              message_obj.offset(), message_obj.error().code()))
 
         # If the destinations of the message do not include this AGENT, go to the next iteration
         dctmsg = json.loads(vals)
@@ -266,3 +279,4 @@ class Agent:
         self.consumer.close()
         if self.verbose > 1:
             self.write_log(f"Ending spawned process for agent {self.agent} in topic {self.topic}.", "8dc03f6b-dce4-4a52-a427-900547dd7a5a")
+

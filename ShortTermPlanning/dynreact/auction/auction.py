@@ -5,7 +5,8 @@ class JobStatus(enum.Enum):
     I = "Idle"
     L = "Launched"
     G = "Started"
-    E = "Ended"
+    F = "Finished"
+    E = "Error"
 
 class Auction:
     """

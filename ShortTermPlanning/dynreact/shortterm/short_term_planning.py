@@ -195,7 +195,7 @@ def create_auction(
     all_materials = []
     for equipment in equipments:
         # Get the list of materials of the equipment
-        equipment_ids = re.findall(r'\d+', equipment)
+        equipment_ids = re.findall(r'\d+', str(equipment))
 
         if len(equipment_ids) == 1:
             equipment_materials = data_setup.get_equipment_materials(int(equipment_ids[0]))

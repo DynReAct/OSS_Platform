@@ -2,8 +2,6 @@
 from unittest.mock import patch, MagicMock
 
 import pytest
-from confluent_kafka import TopicPartition, OFFSET_END
-from confluent_kafka.admin import AdminClient
 
 from dynreact.shortterm.common import TOPIC_CALLBACK, TOPIC_GEN, purge_topics
 from dynreact.shortterm.common.handler import DockerManager
@@ -195,7 +193,7 @@ def test_scenario_05():
 
     args = {
         "verbose": 3,
-        "base": "../../shortterm",
+        "base": "../../dynreact/shortterm",
         "runningWait": "10",
         "cloningWait": "30",
         "auctionWait": "50",
@@ -203,7 +201,7 @@ def test_scenario_05():
         "exitWait": "10",
         "equipments": os.environ.get("SCENARIO_4_5_EQUIPMENT", "9").split(" "),
         "nmaterials": 1,
-        "rungagents": 000,
+        "rungagents": 111,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
     }
 

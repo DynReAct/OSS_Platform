@@ -2,7 +2,6 @@ import json
 import re
 import time
 import sys
-from platform import system
 
 from confluent_kafka import Producer, Consumer, KafkaError
 from dynreact.shortterm.common import sendmsgtopic
@@ -166,8 +165,7 @@ class Agent:
 
     def kafka_error_callback(self, err: KafkaError):
         if err.UNKNOWN_TOPIC_OR_PART or err._UNKNOWN_PARTITION:
-            print("Change on topic partition, rebooting")
-            print(err)
+            print("ERROR: Change on topic partition, shutting down", err)
             sys.exit(1)
 
     def read_message(self) -> str:

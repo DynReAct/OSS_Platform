@@ -14,7 +14,7 @@ server = Flask(__name__)
 # requests_pathname_prefix required for operation with FastAPI
 app = dash.Dash(__name__, server=server, routes_pathname_prefix="/", requests_pathname_prefix="/dash/",
                 assets_folder="assets", suppress_callback_exceptions=False, title="DynReAct",
-                use_pages=True, pages_folder="pages")
+                use_pages=True, pages_folder="pages", external_stylesheets=["https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"])
 # app = dash.Dash(__name__, server=server,  url_base_pathname="/dash/",
 #                 assets_folder="assets", suppress_callback_exceptions=False, title="DynReAct",
 #                 use_pages=True, pages_folder="pages")

@@ -1,5 +1,10 @@
 import enum
 import sys, os
+import json
+import hashlib
+from collections import defaultdict
+from traceback import print_tb
+
 
 class JobStatus(enum.Enum):
     I = "Idle"
@@ -7,6 +12,11 @@ class JobStatus(enum.Enum):
     G = "Started"
     F = "Finished"
     E = "Error"
+
+def hash_object(obj):
+    """Serialize the object and return a hash string."""
+    obj_str = json.dumps(obj, sort_keys=True)
+    return hashlib.sha256(obj_str.encode()).hexdigest()
 
 class Auction:
     """
@@ -224,6 +234,35 @@ class Auction:
         """
         return(self._all_equip)
 
+    def set_resul(self, results: dict):
+        """
+        Function establising the auction results
+
+        :param dict results: Auction results.
+        """
+
+        for equipment in results.keys():
+
+            if equipment in self._resul.keys():
+
+                merged = {}
+
+                for job in self._resul[equipment]:
+                    hash_job = hash_object(job)
+
+                    if merged.get(hash_job) is None:
+                        merged[hash_job] = job
+
+                for job in results[equipment]:
+                    hash_job = hash_object(job)
+
+                    if merged.get(hash_job) is None:
+                        merged[hash_job] = job
+
+                self._resul[equipment] = merged.values()
+            else:
+                self._resul[equipment] = results[equipment]
+
 
     def get_resul(self):
         """ 
@@ -232,7 +271,7 @@ class Auction:
         :returns: Return the resutls
         :rtype: dict
         """
-        return(self._resul)
+        return self._resul
 
 
     def set_status(self, job_status: JobStatus):

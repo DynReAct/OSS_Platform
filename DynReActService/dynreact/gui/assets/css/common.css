@@ -1,5 +1,6 @@
 .dynreact-button {
     padding: 0.5em;
+    transition: background-color 0.2s ease;
 }
 
 .dynreact-button:hover:not([disabled]) {
@@ -8,6 +9,32 @@
 
 .dynreact-button-small {
     padding: 0.3em;
+}
+
+.dynreact-button-right {
+    float: right;
+    margin-right: 10px;
+}
+
+.dynreact-button-icon {
+    display: flex;
+    align-items: center;
+    gap: 4px
+}
+
+.stop-button {
+    background-color: #ff4136; /* Bright red like DAQ stop button */
+    color: white;
+    border: 2px solid #ff4136;
+    font-weight: bold;
+}
+
+.stop-button:hover {
+    background-color: #e12d1c;
+}
+
+.stop-button:active {
+    background-color: #c41f13;   /* Slight shrink effect on click */
 }
 
 .flex {

@@ -552,6 +552,21 @@ dash = "*"
 leaflet = ["dash-leaflet (>=1.0.16rc3)"]
 
 [[package]]
+name = "dash-daq"
+version = "0.6.0"
+description = "DAQ components for Dash"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "dash_daq-0.6.0-py3-none-any.whl", hash = "sha256:d155b5586f164d5d4379d5999275759c525b764a1eb5313a34abce13c50aa856"},
+    {file = "dash_daq-0.6.0.tar.gz", hash = "sha256:ae2568aca470b186d6805ff2317a932a6c1a5ed879fe33e525e43810fc354dce"},
+]
+
+[package.dependencies]
+dash = ">=1.6.1"
+
+[[package]]
 name = "dash-html-components"
 version = "2.0.0"
 description = "Vanilla HTML components for Dash"
@@ -2281,4 +2296,4 @@ ras = ["dynreact_ltp_ras", "dynreact_plugin_ras", "dynreact_stp_ras"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "85eb9641c9b1a6a0f90c9ee6c9682743d41b3f051f95dd986ad3b9e336bc4502"
+content-hash = "1b852a0feb3673f80c375ff32daa817a93cc7ced1de5246518f08dfb7b8dff35"

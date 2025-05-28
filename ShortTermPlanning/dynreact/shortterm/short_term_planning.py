@@ -517,16 +517,12 @@ def execute_short_term_planning(args: dict):
     nmaterials = args["nmaterials"]
     config.read(base + '/config.cnf')
     IP = config['DEFAULT']["IP"]
-    results = None
+
     if verbose > 0:
         print(
             f"Running program with {verbose=}, {base=}, {running_wait=}, {cloning_wait=}, {auction_wait=}, "
             f"{counterbid_wait=} {exit_wait=}, {equipments=}, {nmaterials=}, {snapshot=}, {rungagnts=}."
         )
-
-    # Uncomment this if there are any uncompleted previous executions that left harmful messages in the general topic
-    # admin_client = AdminClient({"bootstrap.servers": IP})
-    # delete_all_topics(admin_client, verbose=verbose)
 
     producer_config = {
         "bootstrap.servers": IP,
@@ -574,6 +570,8 @@ def execute_short_term_planning(args: dict):
             raise Exception(
                 f"Missing base agents, expected {min_base_agents} currently running {running_base_agents}. Aborting!")
 
+    results = {}
+
     try:
         act, n_agents = create_auction(
             equipments=equipments, producer=producer, verbose=verbose, counterbid_wait=counterbid_wait,
@@ -594,7 +592,6 @@ def execute_short_term_planning(args: dict):
                 print(results)
                 print("----  ----")
             sleep(SMALL_WAIT, producer=producer, verbose=verbose)
-
     finally:
         end_auction(topic=act, producer=producer, verbose=verbose, wait_time=SMALL_WAIT)
         sleep(exit_wait, producer=producer, verbose=verbose)
@@ -604,8 +601,7 @@ def execute_short_term_planning(args: dict):
 
         sleep(SMALL_WAIT, producer=producer, verbose=verbose)
 
-        return results
-
+    return results
 
 def clean_agents(producer, verbose, rungagnts):
 

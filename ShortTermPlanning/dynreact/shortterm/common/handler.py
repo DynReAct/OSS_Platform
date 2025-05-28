@@ -41,10 +41,12 @@ class DockerManager:
 
             print(f"Launching with {command_str}")
 
+            container_prefix = os.environ.get('CONTAINER_NAME_PREFIX', False)
+
             if self.max_allowed == -1 or (len(self.tracked_containers) + 1) <= self.max_allowed:
                 container = self.client.containers.run(
                     image=f"{os.environ.get("LOCAL_REGISTRY", "")}dynreact-shortterm:{os.environ.get("IMAGE_TAG", "latest")}",
-                    name=f"{agent.upper()}_{name}",
+                    name=f"{container_prefix + '_' if container_prefix else ''}{agent.upper()}_{name}",
                     detach=True,
                     auto_remove=auto_remove,
                     command=command_str,

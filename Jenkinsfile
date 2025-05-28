@@ -6,6 +6,7 @@ node {
     env.LOCAL_REGISTRY = LOCAL_REGISTRY
     env.TOPIC_CALLBACK = "DynReact-TEST-Callback"
     env.TOPIC_GEN = "DynReact-TEST-Gen"
+    env.CONTAINER_NAME_PREFIX = "JENKINS_TEST"
 
     env.SNAPSHOT_VERSION = "2025-01-18T08:00:00Z"
     env.SCENARIO_4_5_EQUIPMENT = "9" // One Equipment, One Material
@@ -31,11 +32,15 @@ node {
     }
 
     stage('Build Docker Image') {
-        sh """
+    sh """
         cd ShortTermPlanning
-        docker build --build-arg DOCKER_REGISTRY=${LOCAL_REGISTRY} -t ${IMAGE_NAME}:${IMAGE_TAG} .
-        """
-    }
+        docker build \
+            --build-arg DOCKER_REGISTRY=${LOCAL_REGISTRY} \
+            --build-arg BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            --build-arg JENKINS_BUILD_ID="${BUILD_ID}" \
+            -t ${IMAGE_NAME}:${IMAGE_TAG} .
+    """
+}
 
     stage('Tag & Push Image') {
         sh """
@@ -45,7 +50,7 @@ node {
     }
 
     runStageWithCleanup('Run Scenario 0') {
-        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -66,7 +71,7 @@ node {
     }
 
     runStageWithCleanup('Run Scenario 1') {
-        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -88,7 +93,7 @@ node {
     }
 
     runStageWithCleanup('Run Scenario 2') {
-        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -109,7 +114,7 @@ node {
     }
 
     runStageWithCleanup('Run Scenario 3') {
-        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -130,7 +135,7 @@ node {
     }
 
     runStageWithCleanup('Run Scenario 4') {
-        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'SCENARIO_4_5_EQUIPMENT']
+        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'SCENARIO_4_5_EQUIPMENT', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests

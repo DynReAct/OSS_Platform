@@ -259,7 +259,7 @@ class Auction:
                     if merged.get(hash_job) is None:
                         merged[hash_job] = job
 
-                self._resul[equipment] = merged.values()
+                self._resul[equipment] = list(merged.values())
             else:
                 self._resul[equipment] = results[equipment]
 

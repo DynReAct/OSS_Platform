@@ -53,6 +53,29 @@ def purge_topics(topics: list):
         except Exception as e:
             raise Exception(f"Failed: {tp} with error {e}")
 
+def delete_topics(topics: list):
+    """
+    Function to delete list of topics.
+
+    :param str topics: Topic names to search partitions for.
+
+    returns: list of purged topics.
+    """
+
+    admin_client = AdminClient({"bootstrap.servers": "138.100.82.173:9092"})
+
+    topics_partitions = []
+    for topic in topics:
+        topics_partitions.extend(_compute_partition_topic(topic, admin_client))
+
+    topics = admin_client.delete_topics(topics=topics)
+
+    for tp, f in topics.items():
+        try:
+            f.result()  # Raises exception if delete failed
+        except Exception as e:
+            raise Exception(f"Failed: {tp} with error {e}")
+
 class VAction(argparse.Action):
     """
     Custom action for argparse to handle verbosity levels.

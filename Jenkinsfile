@@ -35,9 +35,9 @@ node {
     sh """
         cd ShortTermPlanning
         docker build \\
-            --build-arg DOCKER_REGISTRY="${LOCAL_REGISTRY}" \\
+            --build-arg DOCKER_REGISTRY="$LOCAL_REGISTRY" \\
             --build-arg BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \\
-            --build-arg JENKINS_BUILD_ID="${BUILD_ID}" \\
+            --build-arg JENKINS_BUILD_ID="$BUILD_ID" \\
             -t ${IMAGE_NAME}:${IMAGE_TAG} .
     """
 }

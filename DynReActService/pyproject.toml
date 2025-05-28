@@ -59,7 +59,7 @@ dynreact_plugin_sampleuc = { path = "../SampleUseCase", develop = true }
 dynreact-shortterm = { path = "../ShortTermPlanning", develop = true }
 
 dynreact_ltp_ras = { path = "./LongTermPlanning", optional = true }
-dynreact_plugin_ras = { path = "./LotCreationRas", ptional = true } 
+dynreact_plugin_ras = { path = "./LotCreationRas", optional = true }
 dynreact_stp_ras = { path = "./ShortTermRAS", optional = true }
 
 # Optional extras

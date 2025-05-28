@@ -193,7 +193,7 @@ def test_scenario_05():
 
     args = {
         "verbose": 3,
-        "base": "../../dynreact/shortterm",
+        "base": "../../shortterm",
         "runningWait": "10",
         "cloningWait": "30",
         "auctionWait": "50",

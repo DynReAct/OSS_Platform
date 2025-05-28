@@ -43,6 +43,9 @@ RUN poetry install --only main --no-root --no-interaction && rm -rf $POETRY_CACH
 
 FROM python:3.12.3
 
+ARG BUILD_DATE=""
+ARG JENKINS_BUILD_ID=""
+
 LABEL org.opencontainers.image.created="${BUILD_DATE}" \
       es.upm.etsii.jenkins-pi.dynreact.build_id="${JENKINS_BUILD_ID}"
 

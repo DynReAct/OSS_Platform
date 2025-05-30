@@ -27,8 +27,10 @@ import time
 
 from confluent_kafka import Producer
 import configparser
-from dynreact.shortterm.common import VAction
+from dynreact.shortterm.common import VAction, KeySearch
 from dynreact.shortterm.short_term_planning import clean_agents
+from dynreact.shortterm.shorttermtargets import ShortTermTargets
+
 
 def main():
     """
@@ -54,9 +56,16 @@ def main():
     rungagnts = str(args['rungagents'])
 
     config = configparser.ConfigParser()
+    config.optionxform = str
     current_dir = os.path.dirname(os.path.abspath(__file__))
     config.read(os.path.join(current_dir, "dynreact", "shortterm", "config.cnf"))
-    kafka_ip = config['DEFAULT']['IP']
+
+    short_term_config = ShortTermTargets(VB=verbose).model_copy(update=dict(config["DEFAULT"].items()))
+
+    # Class method
+    KeySearch.set_global(config_provider=short_term_config)
+
+    kafka_ip = KeySearch.search_for_value("IP")
 
     if verbose > 0:
         print( f"Running program with {verbose=}, {rungagnts=} ")

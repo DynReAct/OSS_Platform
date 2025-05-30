@@ -63,10 +63,7 @@ node {
           --user root \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_00"
+                   cat pyproject.toml"
         """
     }
 

@@ -1,31 +1,20 @@
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
-
 [tool.poetry]
-name = "dynreact_plugin_sampleuc"
-version = "0.0.1"
-description = "The DynReAct sample use case plugin"
-readme = "README.md"
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent"
-]
+name = "dynreact-sampleusecase" # Assuming package name from folder
+version = "0.1.0" # Replace with actual version
+description = "SampleUseCase" # Replace with actual description
+authors = ["Your Name <you@example.com>"] # Replace with actual author
+readme = "README.md" # Adjust if README file is different
+
 packages = [
-    { include = "dynreact/cost" },
-    { include = "dynreact/sample" }
+    { include = "dynreact", from = "." }
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.12"
-python-dotenv = ">=1.0.0,<2.0"
-pandas = ">=2,<3"
-numpy = ">=1.24,<3"
+python = "^3.9" # Adjust Python version as needed
+python-dotenv = ">=1.0.0,<2.0" 
+pandas = ">=2,<3" 
+numpy = ">=1.24,<3" 
 
-dynreact_base = { path = "../DynReActBase", develop = true }
-
-[tool.poetry.urls]
-Homepage = "https://github.com/DynReAct/OSS_Platform"
-Issues = "https://github.com/DynReAct/OSS_Platform/issues"
-
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

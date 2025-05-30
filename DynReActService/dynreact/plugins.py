@@ -246,7 +246,7 @@ class Plugins:
 
         do_raise: bool = final_constructor_kwargs.pop("do_raise", False)
         errors: list[Exception] = []
-
+        
         # --- Path Discovery for Namespace Packages ---
         explicit_search_paths = []
         module_name_parts = module_name_to_load.split('.')
@@ -259,7 +259,7 @@ class Plugins:
                 normalized_path = os.path.normpath(potential_module_dir)
                 if normalized_path not in explicit_search_paths:
                     explicit_search_paths.append(normalized_path)
-
+        
         # Fallback: if manual scan is empty, try importing and using its __path__
         # This is a fallback because the user reported this __path__ might be incomplete.
         if not explicit_search_paths:
@@ -308,7 +308,7 @@ class Plugins:
                     path=[ns_path_item], # Search this specific directory portion of the namespace
                     prefix=module_name_to_load + '.', # e.g., "dynreact.shortterm."
                     onerror=lambda name_err: errors.append(ImportError(f"Error during walk_packages on {ns_path_item} for {name_err}"))):
-
+                
                 if submodule_name_full in processed_module_names:
                     continue
                 try:
@@ -331,7 +331,7 @@ class Plugins:
             if id(m_obj) not in seen_module_ids:
                 final_modules_to_inspect.append(m_obj)
                 seen_module_ids.add(id(m_obj))
-
+        
         if not final_modules_to_inspect:
              errors.append(ImportError(f"No modules found to inspect for {module_name_to_load} across discovered paths: {explicit_search_paths}"))
              if do_raise:
@@ -356,11 +356,11 @@ class Plugins:
                         except Exception as e_inst:
                             errors.append(e_inst)
                             if do_raise: raise
-
+        
         if do_raise:
             if errors: raise errors[0]
             raise ModuleNotFoundError(f"Class extending {clzz.__name__} not found in {module_name_to_load} or its submodules after scanning {len(final_modules_to_inspect)} modules.")
-
+            
         return None
 
     # @staticmethod
@@ -422,7 +422,7 @@ class Plugins:
 #
 # Updated by JOM 20250519
 
-# ModIterator not needed anymore, as we use importlib and pkgutil
+# ModIterator not needed anymore, as we use importlib and pkgutil 
 # class _ModIterator(Iterator):
 #     def __init__(self, module_name: str):
 #         self._module_name = module_name
@@ -435,8 +435,8 @@ class Plugins:
 #             self._visited_modules.add(module_name)
 
 #             # If it is a package, iterating over its submodules
-#             if hasattr(module, '__path__'):
-#                 # (pkgutil.walk
+#             if hasattr(module, '__path__'): 
+#                 # (pkgutil.walk 
 #                 for sub_module_info in pkgutil.walk_packages(module.__path__, module_name + '.'):
 #                     if sub_module_info.name not in self._visited_modules:
 #                         try:
@@ -467,3 +467,4 @@ if __name__ == "__main__":
     print("Snapshot", snapshot.timestamp, "coils:", len(snapshot.material), ", orders:", len(snapshot.orders), ", lots:", len(snapshot.lots))
     status0 = p.get_cost_provider().status(snapshot, site.equipment[0].id)
     print("Status0", status0)
+

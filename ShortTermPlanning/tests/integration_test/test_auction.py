@@ -20,26 +20,26 @@ def initialize():
     yield
     print("Tearing down after a test.")
 
-
 @pytest.fixture
-def log_handler_spy():
+def run_agents_handler_spy():
     real_log_container = DockerManager(tag="logTEST", max_allowed=1)
-    with patch("dynreact.shortterm.short_term_planning.log_handler", MagicMock(wraps=real_log_container)) as mock:
-        yield mock
-
-@pytest.fixture
-def equipment_handler_spy():
     real_equipment_container = DockerManager(tag="equipmentTEST", max_allowed=1)
-    with patch("dynreact.shortterm.short_term_planning.equipment_handler", MagicMock(wraps=real_equipment_container)) as mock:
-        yield mock
-
-@pytest.fixture
-def material_handler_spy():
     real_material_container = DockerManager(tag="materialTEST", max_allowed=1)
-    with patch("dynreact.shortterm.short_term_planning.material_handler", MagicMock(wraps=real_material_container)) as mock:
-        yield mock
 
-def test_scenario_00(log_handler_spy, equipment_handler_spy, material_handler_spy):
+    with patch("dynreact.shortterm.short_term_planning.DockerManager") as MockDockerManager:
+        mock_log_handler = MagicMock(wraps=real_log_container)
+        mock_equipment_handler = MagicMock(wraps=real_equipment_container)
+        mock_material_handler = MagicMock(wraps=real_material_container)
+
+        MockDockerManager.side_effect = [
+            mock_log_handler,
+            mock_equipment_handler,
+            mock_material_handler
+        ]
+
+        yield mock_log_handler, mock_equipment_handler, mock_material_handler
+
+def test_scenario_00(run_agents_handler_spy):
     """General LOG startup. message sending, and agent exiting"""
 
     args = {
@@ -63,16 +63,16 @@ def test_scenario_00(log_handler_spy, equipment_handler_spy, material_handler_sp
 
         execute_short_term_planning(args)
 
-    log_handler_spy.launch_container.assert_called_once_with(name="Base", agent="log", mode="base", params={
+    run_agents_handler_spy[0].launch_container.assert_called_once_with(name="Base", agent="log", mode="base", params={
         "verbose": args["verbose"]
     }, auto_remove=False)
 
     # Only 1 was added
-    assert len(log_handler_spy.client.containers.list(filters={"label": f"owner=logTEST"}, all=True)) == 1
-    assert equipment_handler_spy.launch_container.call_count == 0
-    assert material_handler_spy.launch_container.call_count == 0
+    assert len(run_agents_handler_spy[0].client.containers.list(filters={"label": f"owner=logTEST"}, all=True)) == 1
+    assert run_agents_handler_spy[1].launch_container.call_count == 0
+    assert run_agents_handler_spy[2].launch_container.call_count == 0
 
-def test_scenario_01(log_handler_spy, equipment_handler_spy, material_handler_spy):
+def test_scenario_01(run_agents_handler_spy):
     """Startup and exit ot all general agents"""
 
     args = {
@@ -96,23 +96,23 @@ def test_scenario_01(log_handler_spy, equipment_handler_spy, material_handler_sp
 
         execute_short_term_planning(args)
 
-    log_handler_spy.launch_container.assert_called_once_with(name="Base", agent="log", mode="base", params={
+    run_agents_handler_spy[0].launch_container.assert_called_once_with(name="Base", agent="log", mode="base", params={
         "verbose": args["verbose"]
     }, auto_remove=False)
 
-    equipment_handler_spy.launch_container.assert_called_once_with(name="Base", agent="equipment", mode="base", params={
+    run_agents_handler_spy[1].launch_container.assert_called_once_with(name="Base", agent="equipment", mode="base", params={
         "verbose": args["verbose"]
     }, auto_remove=False)
 
-    material_handler_spy.launch_container.assert_called_once_with(name="Base", agent="material", mode="base", params={
+    run_agents_handler_spy[2].launch_container.assert_called_once_with(name="Base", agent="material", mode="base", params={
         "verbose": args["verbose"]
     }, auto_remove=False)
 
-    assert len(log_handler_spy.client.containers.list(filters={"label": f"owner=logTEST"}, all=True)) == 1
-    assert len(equipment_handler_spy.client.containers.list(filters={"label": f"owner=equipmentTEST"}, all=True)) == 1
-    assert len(material_handler_spy.client.containers.list(filters={"label": f"owner=materialTEST"}, all=True)) == 1
+    assert len(run_agents_handler_spy[0].client.containers.list(filters={"label": f"owner=logTEST"}, all=True)) == 1
+    assert len(run_agents_handler_spy[1].client.containers.list(filters={"label": f"owner=equipmentTEST"}, all=True)) == 1
+    assert len(run_agents_handler_spy[2].client.containers.list(filters={"label": f"owner=materialTEST"}, all=True)) == 1
 
-def test_scenario_02(log_handler_spy, equipment_handler_spy, material_handler_spy):
+def test_scenario_02(run_agents_handler_spy):
     """General LOG startup, agent cloning for an auction. message sending to the clone, and a ents exitin"""
 
     args = {
@@ -130,13 +130,13 @@ def test_scenario_02(log_handler_spy, equipment_handler_spy, material_handler_sp
     }
 
     # Can't really mock a Docker container isolated execution. Luckly tagging ensure a single reference
-    log_handler_spy.clean_containers()
+    run_agents_handler_spy[0].clean_containers()
 
     execute_short_term_planning(args)
 
-    assert len(log_handler_spy.list_tracked_containers()) == 1
+    assert len(run_agents_handler_spy[0].list_tracked_containers()) == 1
 
-def test_scenario_03(log_handler_spy, equipment_handler_spy, material_handler_spy):
+def test_scenario_03(run_agents_handler_spy):
     """General LOG and RESOURCES startup. Agents cloning for an auction, and agents exiting"""
 
     args = {
@@ -154,15 +154,15 @@ def test_scenario_03(log_handler_spy, equipment_handler_spy, material_handler_sp
     }
 
     # Can't really mock a Docker container isolated execution. Luckly tagging ensure a single reference
-    equipment_handler_spy.clean_containers()
-    material_handler_spy.clean_containers()
-    log_handler_spy.clean_containers()
+    run_agents_handler_spy[1].clean_containers()
+    run_agents_handler_spy[2].clean_containers()
+    run_agents_handler_spy[0].clean_containers()
 
     execute_short_term_planning(args)
 
-    assert len(equipment_handler_spy.list_tracked_containers()) == 1
-    assert len(material_handler_spy.list_tracked_containers()) == 1
-    assert len(log_handler_spy.list_tracked_containers()) == 1
+    assert len(run_agents_handler_spy[1].list_tracked_containers()) == 1
+    assert len(run_agents_handler_spy[2].list_tracked_containers()) == 1
+    assert len(run_agents_handler_spy[0].list_tracked_containers()) == 1
 
 def test_scenario_04():
     """Test the return value of short_term_planning() locally."""

@@ -214,6 +214,8 @@ def create_auction(
             all_materials.extend(equipment_materials)
 
     # If the user provided the materials make sure all are part of at least one equipment
+    #
+    # Updated JOM 20250528 to enable recovering cross materials
     # Now, since other materials coming from different plants can be conveyed to the new 
     # equipment auction, origin checks are meaningless
     #

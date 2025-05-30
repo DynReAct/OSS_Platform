@@ -7,7 +7,7 @@ import json
 import time
 from confluent_kafka import Producer
 
-from dynreact.shortterm.common import sendmsgtopic, SMALL_WAIT
+from dynreact.shortterm.common import sendmsgtopic
 from dynreact.shortterm.common.data.load_url import URL_INITIAL_STATE, URL_UPDATE_STATUS, load_url_json_get, load_url_json_post
 
 def get_equipment_status(equipment_id: int, snapshot_time: str) -> dict:
@@ -79,7 +79,7 @@ def get_transition_cost_and_status(
     return cost, new_status
 
 
-def end_auction(topic: str, producer: Producer, verbose: int, wait_time: int = SMALL_WAIT) -> None:
+def end_auction(topic: str, producer: Producer, verbose: int, wait_time: int) -> None:
     """
     Ends an auction by instructing all EQUIPMENT, MATERIAL and LOG children of the auction to exit
 

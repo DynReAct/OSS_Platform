@@ -6,9 +6,7 @@ import traceback
 from confluent_kafka import Producer, OFFSET_END, TopicPartition
 from confluent_kafka.admin import AdminClient
 
-TOPIC_GEN = os.environ.get("TOPIC_GEN", "DynReact-Gen")
-TOPIC_CALLBACK = os.environ.get("TOPIC_CALLBACK", "DynReact-Callback")
-SMALL_WAIT = 5
+from dynreact.shortterm.shorttermtargets import ShortTermTargets
 
 def _compute_partition_topic(topic_name: str, admin_client: AdminClient):
     """
@@ -75,6 +73,48 @@ def delete_topics(topics: list):
             f.result()  # Raises exception if delete failed
         except Exception as e:
             raise Exception(f"Failed: {tp} with error {e}")
+
+class KeySearch:
+    _global_config: ShortTermTargets = None
+
+    @classmethod
+    def set_global(cls, config_provider: ShortTermTargets):
+        """
+        Function to update the config provider.
+
+        :param str config_provider: The configuration provider with the set values
+        """
+        cls._global_config = config_provider
+
+    @classmethod
+    def search_for_value(cls, key_name, default_value=None):
+        """
+        Function to check for a given key name between env and context including recursive structure.
+
+        Priority list:
+
+            - Environment value
+            - STP Context/Config definition
+
+        :param str key_name: Key name to search for
+        :param str default_value: Default value in case not found
+
+        returns: value of key otherwise null or default value.
+        """
+
+        if cls._global_config is None:
+            raise RuntimeError("KeySearch global config has not been set. Call KeySearch.set_global() first.")
+
+        if key_name in os.environ:
+            return os.environ[key_name]
+
+        if cls._global_config:
+            cfg = cls._global_config.model_dump()
+            delays = cls._global_config.TimeDelays.model_dump()
+
+            return cfg.get(key_name, delays.get(key_name, default_value))
+
+        return default_value
 
 class VAction(argparse.Action):
     """

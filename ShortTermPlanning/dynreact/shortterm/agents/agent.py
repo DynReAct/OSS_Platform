@@ -4,7 +4,7 @@ import time
 import sys
 
 from confluent_kafka import Producer, Consumer, KafkaError
-from dynreact.shortterm.common import sendmsgtopic
+from dynreact.shortterm.common import sendmsgtopic, KeySearch
 import traceback
 
 class Agent:
@@ -21,20 +21,20 @@ class Agent:
        https://google.github.io/styleguide/pyguide.html
     """
 
-    def __init__(self, topic: str, agent: str, kafka_ip: str, verbose: int = 1):
+    def __init__(self, topic: str, agent: str):
         """
            Constructor function for the Log Class
 
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
-        :param str kafka_ip: IP address and TCP port of the broker.
-        :param int verbose: Level of details being saved.
         """
 
         self.topic = topic
         self.agent = agent
-        self.kafka_ip = kafka_ip
-        self.verbose = verbose
+        self.topic_callback = KeySearch.search_for_value("TOPIC_CALLBACK")
+        self.topic_gen = KeySearch.search_for_value("TOPIC_GEN")
+        self.verbose = KeySearch.search_for_value("VB", 1)
+        self.kafka_ip = KeySearch.search_for_value("IP")
 
         self.iter_no_msg = 0
         self.min_verbose = 1

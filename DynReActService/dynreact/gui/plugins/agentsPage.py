@@ -27,7 +27,7 @@ from dynreact.app import state
 translations_key = "agp"
 # Setings (From stp_context.json in DynReactService/data)
 # params related to kafka config and timing delays
-IP, TOPIC_GEN, VB = state.get_stp_context_params()
+IP, TOPIC_GEN, TOPIC_CALLBACK, VB = state.get_stp_context_params()
 AW, BW, CW, EW, SMALL_WAIT = state.get_stp_context_timing()
 
 # Recovering the last snapshot selected as well as Site related plants

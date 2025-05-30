@@ -21,7 +21,7 @@ from confluent_kafka.admin import AdminClient, NewTopic
 from datetime import datetime
 from pathlib import Path
 
-from dynreact.shortterm.common import sendmsgtopic, TOPIC_CALLBACK
+from dynreact.shortterm.common import sendmsgtopic, KeySearch
 from dynreact.shortterm.agents.agent import Agent
 from dynreact.shortterm.common.data.data_functions import end_auction
 from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
@@ -36,26 +36,23 @@ class Log(Agent):
     Attributes:
         topic     (str): Topic driving the relevant converstaion.
         agent     (str): Name of the agent creating the object.
-        kafka_ip  (str): IP address and TCP port of the broker.
         left_path (str): Path to place the log file.
         log_file  (str): Name of the log file.
-        verbose   (int): Level of details being saved.
 
     .. _Google Python Style Guide:
        https://google.github.io/styleguide/pyguide.html
     """
 
-    def __init__(self, topic: str, agent: str, kafka_ip: str, left_path: str, log_file: str, verbose: int = 1, manager=True):
-        super().__init__(topic=topic, agent=agent, kafka_ip=kafka_ip, verbose=verbose)
+    def __init__(self, topic: str, agent: str, left_path: str, log_file: str, manager=True):
+        super().__init__(topic=topic, agent=agent)
         """
-           Constructor function for the Log Class
+        Constructor function for the Log Class
 
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
-        :param str kafka_ip: IP address and TCP port of the broker.
         :param str left_path: Path to place the log file.
         :param str log_file: Name of the log file.
-        :param int verbose: Level of details being saved.
+        :param str manager: Is this instance a base.
         """
 
         self.action_methods.update({
@@ -150,9 +147,11 @@ class Log(Agent):
             equipment_name = dctmsg['dest'].split(':')[-2]  # EQUIPMENT:DynReact-UE9L5LJASTQ1:14:0 -> 14
             round_number = dctmsg['dest'].split(':')[-1]  # EQUIPMENT:DynReact-UE9L5LJASTQ1:14:0 -> 0
             stdat = dctmsg['payload']['material_params']['order']
+            costs = dctmsg['payload']['costs']
             stdat.pop('material', None)
             stdat['round'] = round_number
-            stdat['mat'] = equipment_name
+            stdat['equipment'] = equipment_name
+            stdat['costs'] = costs
 
             if self.verbose > 1:
                 self.write_log(
@@ -352,8 +351,8 @@ class Log(Agent):
 
             sendmsgtopic(
                 producer=self.producer,
-                tsend=TOPIC_CALLBACK,
-                topic=TOPIC_CALLBACK,
+                tsend=self.topic_callback,
+                topic=self.topic_callback,
                 source=self.agent,
                 dest=sender,
                 action="AUCTIONSTARTED",
@@ -371,8 +370,8 @@ class Log(Agent):
         else:
             sendmsgtopic(
                 producer=self.producer,
-                tsend=TOPIC_CALLBACK,
-                topic=TOPIC_CALLBACK,
+                tsend=self.topic_callback,
+                topic=self.topic_callback,
                 source=self.agent,
                 dest=sender,
                 action="AUCTIONSTARTED",
@@ -423,8 +422,8 @@ class Log(Agent):
         sender = dctmsg['source']
         sendmsgtopic(
             producer=self.producer,
-            tsend=TOPIC_CALLBACK,
-            topic=TOPIC_CALLBACK,
+            tsend=self.topic_callback,
+            topic=self.topic_callback,
             source=self.agent,
             dest=sender,
             action="RESULTS",

@@ -15,7 +15,4 @@ class TimeDelay(BaseModel):
     BW: int | None = Field(None, description="Counterbid Wait to decide in seconds")
     CW: int | None = Field(None, description="Agent cloninig Wait in seconds")
     EW: int | None = Field(None, description="Auction Wait to exit in seconds")
-    SMALL_WAIT: int|None = Field(None, description="Small Wait to accomodate processes in seconds")    
-
-    
-
+    SMALL_WAIT: int | None = Field(5, description="Small Wait to accomodate processes in seconds")

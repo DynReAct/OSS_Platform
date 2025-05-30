@@ -112,7 +112,7 @@ def test_handle_askconfirm_action(mock_sendmsgtopic, material_agent):
 
     assert result == "END"
 
-    mock_sendmsgtopic.assert(
+    mock_sendmsgtopic.assert_called_once_with(
         producer=material_agent.producer,
         tsend=dctmsg['topic'],
         topic=dctmsg['topic'],

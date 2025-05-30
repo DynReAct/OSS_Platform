@@ -32,26 +32,14 @@ from confluent_kafka import Producer, Consumer, Message
 from confluent_kafka.admin import AdminClient
 import configparser
 
-from dynreact.shortterm.common import VAction, sendmsgtopic, TOPIC_GEN, TOPIC_CALLBACK, SMALL_WAIT
+from dynreact.shortterm.common import VAction, sendmsgtopic, KeySearch
 from dynreact.shortterm.common.data.data_functions import end_auction
 from dynreact.shortterm.common.data.data_setup import DataSetup
 import os, re, json
 
 from dynreact.shortterm.common.data.load_url import DOCKER_MANAGER
 from dynreact.shortterm.common.handler import DockerManager
-
-if os.environ.get('SPHINX_BUILD'):
-    # Mock REST_URL for Sphinx Documentatiom
-    IP = '127.0.0.1:9092'
-else:
-    config = configparser.ConfigParser()
-    config.read('config.cnf')
-    IP = os.environ.get('REST_API_OVERRIDE', config['DEFAULT'].get('IP'))
-
-log_handler = DockerManager(tag=f"log{DOCKER_MANAGER}", max_allowed=1)
-equipment_handler = DockerManager(tag=f"equipment{DOCKER_MANAGER}", max_allowed=1)
-material_handler = DockerManager(tag=f"material{DOCKER_MANAGER}", max_allowed=1)
-
+from dynreact.shortterm.shorttermtargets import ShortTermTargets
 
 def delete_all_topics(admin_client: AdminClient, verbose: int):
     """
@@ -98,25 +86,36 @@ def run_general_agents(producer: Producer, gagents: str, verbose: int):
     :param int verbose: Verbosity level
     """
 
+    small_wait = KeySearch.search_for_value("SMALL_WAIT")
+
+    log_handler = None
+    equipment_handler = None
+    material_handler = None
+
     # The general LOG must be created first in case the general topic was deleted
     if str(gagents)[0] == '1':
+        log_handler = DockerManager(tag=f"log{DOCKER_MANAGER}", max_allowed=1)
         log_handler.clean_containers()
         log_handler.launch_container(name="Base", agent="log", mode="base", params={
             "verbose": verbose
         }, auto_remove=False)
-        sleep(SMALL_WAIT, producer=producer, verbose=verbose)
+        sleep(small_wait, producer=producer, verbose=verbose)
     if str(gagents)[1] == '1':
+        equipment_handler = DockerManager(tag=f"equipment{DOCKER_MANAGER}", max_allowed=1)
         equipment_handler.clean_containers()
         equipment_handler.launch_container(name="Base", agent="equipment", mode="base", params={
             "verbose": verbose
         }, auto_remove=False)
-        sleep(SMALL_WAIT, producer=producer, verbose=verbose)
+        sleep(small_wait, producer=producer, verbose=verbose)
     if str(gagents)[2] == '1':
+        material_handler = DockerManager(tag=f"material{DOCKER_MANAGER}", max_allowed=1)
         material_handler.clean_containers()
         material_handler.launch_container(name="Base", agent="material", mode="base", params={
             "verbose": verbose
         }, auto_remove=False)
-        sleep(SMALL_WAIT, producer=producer, verbose=verbose)
+        sleep(small_wait, producer=producer, verbose=verbose)
+
+    return log_handler, equipment_handler, material_handler
 
 
 def create_auction(
@@ -139,6 +138,8 @@ def create_auction(
     :rtype: tuple(str,int)
     """
 
+    topic_gen = KeySearch.search_for_value("TOPIC_GEN")
+
     if nmaterials is not None and materials is not None:
         raise Exception("Cannot specify both nmaterials and materials")
 
@@ -152,10 +153,10 @@ def create_auction(
     act = genauction(act)
     sendmsgtopic(
         producer=producer,
-        tsend=TOPIC_GEN,
+        tsend=topic_gen,
         topic=act,
         source="UX",
-        dest="LOG:" + TOPIC_GEN,
+        dest="LOG:" + topic_gen,
         action="CREATE",
         payload=dict(msg=f"Created Topic {act}"),
         vb=verbose
@@ -180,10 +181,10 @@ def create_auction(
     for equipment in equipments:
         sendmsgtopic(
             producer=producer,
-            tsend=TOPIC_GEN,
+            tsend=topic_gen,
             topic=act,
             source="UX",
-            dest="EQUIPMENT:" + TOPIC_GEN,
+            dest="EQUIPMENT:" + topic_gen,
             action="CREATE",
             payload=dict(id=equipment, counterbid_wait=counterbid_wait, snapshot=data_setup.last_snapshot),
             vb=verbose
@@ -202,7 +203,7 @@ def create_auction(
             if verbose > 1:
                 msg = f"Obtained list of materials from equipment {equipment}: {equipment_materials}"
                 sendmsgtopic(
-                    producer=producer, tsend=TOPIC_GEN, topic=act, source="UX", dest="LOG:" + TOPIC_GEN, action="WRITE",
+                    producer=producer, tsend=topic_gen, topic=act, source="UX", dest="LOG:" + topic_gen, action="WRITE",
                     payload=dict(msg=msg), vb=verbose
                 )
         else:
@@ -226,10 +227,10 @@ def create_auction(
     for material in all_materials:
         sendmsgtopic(
             producer=producer,
-            tsend=TOPIC_GEN,
+            tsend=topic_gen,
             topic=act,
             source="UX",
-            dest="MATERIAL:" + TOPIC_GEN,
+            dest="MATERIAL:" + topic_gen,
             action="CREATE",
             payload=dict(id=str(material), params=data_setup.get_material_params(material)),
             vb=verbose
@@ -250,8 +251,11 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
     :param int verbose: Verbosity level
     """
 
+    topic_gen = KeySearch.search_for_value("TOPIC_GEN")
+    topic_callback = KeySearch.search_for_value("TOPIC_CALLBACK")
+
     sendmsgtopic(
-        producer=producer, tsend=TOPIC_GEN, topic=topic, source="UX", dest="LOG:" + TOPIC_GEN,
+        producer=producer, tsend=topic_gen, topic=topic, source="UX", dest="LOG:" + topic_gen,
         action="WRITE", payload=dict(msg="Starting auction"), vb=verbose
     )
 
@@ -266,10 +270,10 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
         vb=verbose
     )
 
-    time.sleep(SMALL_WAIT)
+    time.sleep(KeySearch.search_for_value("SMALL_WAIT"))
 
     sendmsgtopic(
-        producer=producer, tsend=TOPIC_GEN, topic=topic, source="UX", dest="LOG:" + TOPIC_GEN,
+        producer=producer, tsend=topic_gen, topic=topic, source="UX", dest="LOG:" + topic_gen,
         action="WRITE", payload=dict(msg="Waiting for auction confirmation"), vb=verbose
     )
 
@@ -285,7 +289,7 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
             vb=verbose
         )
 
-        message_objs = wait_for_callback(TOPIC_CALLBACK, "AUCTIONSTARTED", consumer, verbose, sleep_timeout=2, max_iters=10)
+        message_objs = wait_for_callback(topic_callback, "AUCTIONSTARTED", consumer, verbose, sleep_timeout=2, max_iters=10)
 
         for message in message_objs:
 
@@ -324,7 +328,7 @@ def wait_for_callback(topic: str, expected_action: str, consumer: Consumer, verb
             # if verbose > 0 and (iter_no_msg - 1) % 5 == 0:
                 # msg = f"Iteration {iter_no_msg - 1}. No message found."
                 # sendmsgtopic(
-                #     producer=producer, tsend=TOPIC_GEN, topic=topic, source="UX", dest="LOG:" + TOPIC_GEN,
+                #     producer=producer, tsend=KeySearch.search_for_value("TOPIC_GEN"), topic=topic, source="UX", dest="LOG:" + KeySearch.search_for_value("TOPIC_GEN"),
                 #     action="WRITE", payload=dict(msg=msg), vb=verbose
                 # )
             time.sleep(sleep_timeout)
@@ -366,6 +370,10 @@ def ask_results(
     :param int max_iters:
         Maximum iterations with no message (if this parameter is 1, the loop will stop once there are no more messages)
     """
+
+    topic_gen = KeySearch.search_for_value("TOPIC_GEN")
+    topic_callback = KeySearch.search_for_value("TOPIC_CALLBACK")
+
     sendmsgtopic(
         producer=producer,
         tsend=topic,
@@ -378,13 +386,13 @@ def ask_results(
     if verbose > 0:
         msg = f"Requested results from LOG"
         sendmsgtopic(
-            producer=producer, tsend=TOPIC_GEN, topic=topic, source="UX", dest="LOG:" + TOPIC_GEN, action="WRITE",
+            producer=producer, tsend=topic_gen, topic=topic, source="UX", dest="LOG:" + topic_gen, action="WRITE",
             payload=dict(msg=msg), vb=verbose
         )
 
     sleep(wait_answer, producer=producer, verbose=verbose)
 
-    message_objs = wait_for_callback(TOPIC_CALLBACK, "RESULTS", consumer, verbose)
+    message_objs = wait_for_callback(topic_callback, "RESULTS", consumer, verbose)
 
     for message in message_objs:
 
@@ -396,7 +404,7 @@ def ask_results(
         if verbose > 0:
             msg = f"Obtained results: {payload}"
             sendmsgtopic(
-                producer=producer, tsend=TOPIC_GEN, topic=topic, source="UX", dest="LOG:" + TOPIC_GEN,
+                producer=producer, tsend=topic_callback, topic=topic, source="UX", dest="LOG:" + topic_gen,
                 action="WRITE", payload=dict(msg=msg), vb=verbose
             )
         return payload
@@ -405,7 +413,7 @@ def ask_results(
     if verbose > 0:
         msg = f"Did not obtain results after waiting for {wait_answer}s and having {max_iters} iters with no message"
         sendmsgtopic(
-            producer=producer, tsend=TOPIC_GEN, topic=topic, source="UX", dest="LOG:" + TOPIC_GEN, action="WRITE",
+            producer=producer, tsend=topic_callback, topic=topic, source="UX", dest="LOG:" + topic_gen, action="WRITE",
             payload=dict(msg=msg), vb=verbose
         )
     return dict()
@@ -419,9 +427,12 @@ def sleep(seconds: float, producer: Producer, verbose: int):
     :param object producer: Kafka object producer.
     :param int verbose: Level of verbosity.
     """
+
+    topic_gen = KeySearch.search_for_value("TOPIC_GEN")
+
     if verbose > 0:
         sendmsgtopic(
-            producer=producer, tsend=TOPIC_GEN, topic=TOPIC_GEN, source="UX", dest="LOG:" + TOPIC_GEN, action="WRITE",
+            producer=producer, tsend=topic_gen, topic=topic_gen, source="UX", dest="LOG:" + topic_gen, action="WRITE",
             payload=dict(msg=f"Waiting for {seconds}s..."), vb=verbose
         )
     time.sleep(seconds)
@@ -500,8 +511,6 @@ def execute_short_term_planning(args: dict):
     param dict args: Arguments to run the test. Definition is mentioned the in the main method
     """
 
-    global IP
-
     verbose = args["verbose"]
     if verbose is None:
         verbose = 0
@@ -515,8 +524,20 @@ def execute_short_term_planning(args: dict):
     equipments = args["equipments"]
     snapshot = args["snapshot"]
     nmaterials = args["nmaterials"]
+
+    config = configparser.ConfigParser()
+    config.optionxform = str
     config.read(base + '/config.cnf')
-    IP = config['DEFAULT']["IP"]
+    short_term_config = ShortTermTargets(VB=verbose).model_copy(update=dict(config["DEFAULT"].items()))
+
+    # Class method
+    KeySearch.set_global(config_provider=short_term_config)
+
+    if os.environ.get('SPHINX_BUILD'):
+        # Mock REST_URL for Sphinx Documentation
+        ip = '127.0.0.1:9092'
+    else:
+        ip = KeySearch.search_for_value("IP")
 
     if verbose > 0:
         print(
@@ -525,13 +546,13 @@ def execute_short_term_planning(args: dict):
         )
 
     producer_config = {
-        "bootstrap.servers": IP,
+        "bootstrap.servers": ip,
         'linger.ms': 100,  # Reduce latency
         'acks': 'all'  # Ensure message durability
     }
     producer = Producer(producer_config)
     consumer_config = {
-        "bootstrap.servers": IP,
+        "bootstrap.servers": ip,
         "group.id": "UX",
         "auto.offset.reset": "earliest",
         'enable.auto.commit': False
@@ -544,7 +565,11 @@ def execute_short_term_planning(args: dict):
         min_base_agents = sum(int(bit) for bit in str(rungagnts))
         running_base_agents = 0
 
-        run_general_agents(producer=producer, gagents=rungagnts, verbose=verbose)
+        log_handler, equipment_handler, material_handler = run_general_agents(
+            producer=producer,
+            gagents=rungagnts,
+            verbose=verbose
+        )
         sleep(running_wait, producer=producer, verbose=verbose)
 
         if str(rungagnts)[0] == '1':
@@ -580,7 +605,7 @@ def execute_short_term_planning(args: dict):
 
         print(f"Creating auction for topic {act}")
 
-        consumer.subscribe([act, TOPIC_CALLBACK])
+        consumer.subscribe([act, KeySearch.search_for_value("TOPIC_CALLBACK")])
         sleep(cloning_wait, producer=producer, verbose=verbose)
 
         if n_agents > 1:
@@ -591,29 +616,31 @@ def execute_short_term_planning(args: dict):
                 print("---- RESULTS ----")
                 print(results)
                 print("----  ----")
-            sleep(SMALL_WAIT, producer=producer, verbose=verbose)
+            sleep(KeySearch.search_for_value("SMALL_WAIT"), producer=producer, verbose=verbose)
     finally:
-        end_auction(topic=act, producer=producer, verbose=verbose, wait_time=SMALL_WAIT)
+        end_auction(topic=act, producer=producer, verbose=verbose, wait_time=KeySearch.search_for_value("SMALL_WAIT"))
         sleep(exit_wait, producer=producer, verbose=verbose)
 
         # Remove all main agents
         clean_agents(producer, verbose, rungagnts)
 
-        sleep(SMALL_WAIT, producer=producer, verbose=verbose)
+        sleep(KeySearch.search_for_value("SMALL_WAIT"), producer=producer, verbose=verbose)
 
     return results
 
 def clean_agents(producer, verbose, rungagnts):
+
+    topic_gen = KeySearch.search_for_value("TOPIC_GEN")
 
     if int(rungagnts) > 0:
         # Exit EQUIPMENT BASE
         if str(rungagnts)[1] == '1':
             sendmsgtopic(
                 producer=producer,
-                tsend=TOPIC_GEN,
-                topic=TOPIC_GEN,
+                tsend=topic_gen,
+                topic=topic_gen,
                 source="UX",
-                dest=f"EQUIPMENT:{TOPIC_GEN}",
+                dest=f"EQUIPMENT:{topic_gen}",
                 action="EXIT",
                 vb=verbose
             )
@@ -622,23 +649,23 @@ def clean_agents(producer, verbose, rungagnts):
         if str(rungagnts)[2] == '1':
             sendmsgtopic(
                 producer=producer,
-                tsend=TOPIC_GEN,
-                topic=TOPIC_GEN,
+                tsend=topic_gen,
+                topic=topic_gen,
                 source="UX",
-                dest=f"MATERIAL:{TOPIC_GEN}",
+                dest=f"MATERIAL:{topic_gen}",
                 action="EXIT",
                 vb=verbose
             )
 
         # Exit LOG BASE
         if str(rungagnts)[0] == '1':
-            sleep(SMALL_WAIT, producer=producer, verbose=verbose)
+            sleep(KeySearch.search_for_value("SMALL_WAIT"), producer=producer, verbose=verbose)
             sendmsgtopic(
                 producer=producer,
-                tsend=TOPIC_GEN,
-                topic=TOPIC_GEN,
+                tsend=topic_gen,
+                topic=topic_gen,
                 source="UX",
-                dest=f"LOG:{TOPIC_GEN}",
+                dest=f"LOG:{topic_gen}",
                 action="EXIT",
                 vb=verbose
             )

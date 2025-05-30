@@ -9,7 +9,7 @@ Version History:
 """
 
 import time
-from dynreact.shortterm.common import sendmsgtopic
+from dynreact.shortterm.common import sendmsgtopic, KeySearch
 from dynreact.shortterm.common.data.data_functions import get_equipment_status
 from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
 from dynreact.shortterm.common.functions import calculate_production_cost, get_new_equipment_status
@@ -25,23 +25,20 @@ class Equipment(Agent):
         topic     (str): Topic driving the relevant converstaion.
         agent     (str): Name of the agent creating the object.
         status   (dict): Status of the equipment
-        kafka_ip  (str): IP address and TCP port of the broker.
         counterbid_wait (float): Number of seconds granted for waiting confirmation.
-        verbose   (int): Level of details being saved.
 
     """
-    def __init__(self, topic: str, agent: str, status: dict, kafka_ip: str, counterbid_wait: float, verbose: int = 1, manager=True):
+    def __init__(self, topic: str, agent: str, status: dict, counterbid_wait: float, manager=True):
 
-        super().__init__(topic=topic, agent=agent, kafka_ip=kafka_ip, verbose=verbose)
+        super().__init__(topic=topic, agent=agent)
         """
            Constructor function for the Equipment Class
 
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
         :param dict status: Status of the equipment
-        :param str kafka_ip: IP address and TCP port of the broker.
         :param float counterbid_wait: Number of seconds granted for waiting confirmation.
-        :param int verbose: Level of details being saved.
+        :param str manager: Is this instance a base.
         """
         self.action_methods.update({
             'CREATE': self.handle_create_action, 'START': self.handle_start_action,
@@ -116,8 +113,7 @@ class Equipment(Agent):
             agent = f"EQUIPMENT:{topic}:{equipment}:0"
             status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)
             self.equipment = equipment
-    
-    
+
             init_kwargs = {
                 "topic": topic,
                 "agent": agent,
@@ -217,6 +213,7 @@ class Equipment(Agent):
         :return: Status of the handling
         :rtype: str
         """
+
         topic = dctmsg['topic']
         material = dctmsg['payload']['id']
         sendmsgtopic(
@@ -226,7 +223,7 @@ class Equipment(Agent):
             source=self.agent,
             dest=material,
             action="ASKCONFIRM",
-            payload=dict(id=self.agent),
+            payload=dict(id=self.agent, costs=self.status["planning"]),
             vb=self.verbose
         )
         return 'CONTINUE'

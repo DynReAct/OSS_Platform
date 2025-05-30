@@ -1,34 +1,24 @@
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
-
 [tool.poetry]
-name = "dynreact_midtermplanning"
-version = "0.0.1"
-description = "The DynReAct Lot creation/mid term planning package"
-authors = ["Your Name <your.email@example.com>"]
-readme = "README.md"
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent"
-]
+name = "dynreact-midtermplanning" # Assuming package name from folder
+version = "0.1.0" # Replace with actual version
+description = "MidTermPlanning" # Replace with actual description
+authors = ["Your Name <you@example.com>"] # Replace with actual author
+readme = "README.md" # Adjust if README file is different
+
 packages = [
-    { include = "dynreact/lotcreation" }
+    { include = "dynreact", from = "." }
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.12"
-networkx = ">=3.4.1,<4"
-numpy = ">=2.1.2,<3"
-# openpyxl = ">=3.1.2,<4"  # Optional Excel support
-ortools = ">=9.11.4210,<10"
-pandas = ">=2.2.3,<3"
-pydantic = ">=2.7,<3"
-python-dotenv = ">=1,<2"
+python = "^3.9" # Adjust Python version as needed
+networkx = ">=3.4.1,<4" 
+numpy = ">=2.1.2,<3" 
+#openpyxl = ">=3.1.2,<4" # Commented out as in requirements.txt 
+ortools = ">=9.11.4210,<10" 
+pandas = ">=2.2.3,<3" 
+pydantic = ">=2.7,<3" 
+python-dotenv = ">=1,<2" 
 
-dynreact_base = { path = "../DynReActBase", develop = true }
-
-[tool.poetry.urls]
-Homepage = "https://github.com/DynReAct/OSS_Platform"
-Issues = "https://github.com/DynReAct/OSS_Platform/issues"
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

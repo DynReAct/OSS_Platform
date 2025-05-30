@@ -1,4 +1,4 @@
 [DEFAULT]
 IP=138.100.82.173:9092
 LogFilePath=/var/log/dynreact-logs/
-REST_URL=http://138.100.82.175:5016
+REST_URL=http://192.168.110.68:5016

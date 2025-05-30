@@ -215,17 +215,11 @@ def create_auction(
             all_materials.extend(equipment_materials)
 
     # If the user provided the materials make sure all are part of at least one equipment
-    #
-    # Updated JOM 20250528 to enable recovering cross materials
-    # Now, since other materials coming from different plants can be conveyed to the new 
-    # equipment auction, origin checks are meaningless
-    #
-    # if materials is not None:
-    #     if all(item in all_materials for item in materials):
-    #         all_materials = materials
-    #     else:
-    #         raise Exception("Provided materials are not part of the selected equipment")
-    all_materials = materials
+    if materials is not None:
+        if all(item in all_materials for item in materials):
+            all_materials = materials
+        else:
+            raise Exception("Provided materials are not part of the selected equipment")
 
     all_materials = list(set(all_materials))
 

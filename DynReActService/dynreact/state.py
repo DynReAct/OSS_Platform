@@ -16,6 +16,7 @@ from dynreact.base.model import Snapshot, Site, ProductionPlanning, ProductionTa
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.plugins import Plugins
 from dynreact.auction import auction
+from dynreact.shortterm.common import KeySearch
 
 
 class DynReActSrvState:
@@ -79,18 +80,15 @@ class DynReActSrvState:
         return self._ltp
 
     def get_stp_context_params(self):
-        if self._stp is None:
-            self._stp = self._plugins.get_stp_config_params()
-        return (self._stp._stpConfigParams.IP,self._stp._stpConfigParams.TOPIC_GEN,
-                self._stp._stpConfigParams.VB)
+        self.set_stp_config()
+        return (KeySearch.search_for_value("IP"),KeySearch.search_for_value("TOPIC_GEN"),
+                KeySearch.search_for_value("TOPIC_CALLBACK"), KeySearch.search_for_value("VB"))
 
     def get_stp_context_timing(self):
-        if self._stp is None:
-            self._stp = self._plugins.get_stp_config_params()
-        return (self._stp._stpConfigParams.TimeDelays.AW,self._stp._stpConfigParams.TimeDelays.BW,
-                self._stp._stpConfigParams.TimeDelays.CW,self._stp._stpConfigParams.TimeDelays.EW,
-                self._stp._stpConfigParams.TimeDelays.SMALL_WAIT)
-
+        self.set_stp_config()
+        return (KeySearch.search_for_value("AW"),KeySearch.search_for_value("BW"),
+                KeySearch.search_for_value("CW"),KeySearch.search_for_value("EW"),
+                KeySearch.search_for_value("SMALL_WAIT"))
 
     def get_results_persistence(self) -> ResultsPersistence:
         if self._results_persistence is None:
@@ -200,3 +198,7 @@ class DynReActSrvState:
     def set_auction_obj(self, auction) -> None:
         if self._auction_obj is None:
             self._auction_obj = auction
+
+    def set_stp_config(self) -> None:
+        if self._stp is None:
+            self._stp = self._plugins.get_stp_config_params()

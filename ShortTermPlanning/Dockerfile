@@ -72,6 +72,8 @@ COPY dynreact/shortterm/common/ ./shortterm/dynreact/shortterm/common/
 COPY dynreact/shortterm/config.cnf ./shortterm/dynreact/shortterm/
 COPY dynreact/shortterm/agents/agent.py dynreact/shortterm/agents/equipment.py dynreact/shortterm/agents/log.py dynreact/shortterm/agents/material.py ./shortterm/dynreact/shortterm/agents/
 COPY dynreact/shortterm/agents/__main__.py ./shortterm/
+COPY dynreact/shortterm/shorttermtargets.py ./shortterm/dynreact/shortterm/
+COPY dynreact/shortterm/timedelay.py ./shortterm/dynreact/shortterm/
 
 RUN groupadd -r appgroup && useradd -r -u 1050 -g appgroup appuser
 RUN groupadd docker

@@ -64,7 +64,7 @@ class Equipment(LabeledItem, ProcessInformation):
     storage_out: str = None
     "Default storage locations of material processed by this equipment"
 
-    def get_equipment_name(self, idp: int):
+    def get_equipment_name(self):
         return self.name_short
 
     def get_equipment_id(self):

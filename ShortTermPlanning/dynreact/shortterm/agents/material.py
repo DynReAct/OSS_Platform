@@ -22,23 +22,17 @@ class Material(Agent):
         topic     (str): Topic driving the relevant converstaion.
         agent     (str): Name of the agent creating the object.
         params   (dict): parameters relevant to the configuration of the agent.
-        kafka_ip  (str): IP address and TCP port of the broker.
-        verbose   (int): Level of details being saved.
-
-         
-
     """
-    def __init__(self, topic: str, agent: str, params: dict, kafka_ip: str, verbose: int = 1, manager=True):
+    def __init__(self, topic: str, agent: str, params: dict, manager=True):
 
-        super().__init__(topic=topic, agent=agent, kafka_ip=kafka_ip, verbose=verbose)
+        super().__init__(topic=topic, agent=agent)
         """
            Constructor function for the Log Class
 
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
         :param dict params: Parameters relevant to the configuration of the agent.
-        :param str kafka_ip: IP address and TCP port of the broker.
-        :param int verbose: Level of details being saved.
+        :param str manager: Is this instance a base.
         """
 
         self.action_methods.update({
@@ -146,6 +140,7 @@ class Material(Agent):
         """
         topic = dctmsg['topic']
         equipment = dctmsg['payload']['id']
+        costs = dctmsg['payload']['costs']
         sendmsgtopic(
             producer=self.producer,
             tsend=topic,
@@ -153,7 +148,7 @@ class Material(Agent):
             source=self.agent,
             dest=equipment,
             action="CONFIRM",
-            payload=dict(id=self.agent, material_params=self.params),
+            payload=dict(id=self.agent, material_params=self.params, costs=costs),
             vb=self.verbose
         )
 

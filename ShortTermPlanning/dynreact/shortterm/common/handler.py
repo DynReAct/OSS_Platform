@@ -3,7 +3,7 @@ import os
 import shlex
 import docker
 
-from dynreact.shortterm.common import TOPIC_CALLBACK, TOPIC_GEN
+from dynreact.shortterm.common import KeySearch
 
 
 class DockerManager:
@@ -52,8 +52,8 @@ class DockerManager:
                     command=command_str,
                     environment={
                       "IS_DOCKER": "true",
-                      "TOPIC_GEN": TOPIC_GEN,
-                      "TOPIC_CALLBACK": TOPIC_CALLBACK
+                      "TOPIC_GEN": KeySearch.search_for_value("TOPIC_GEN"),
+                      "TOPIC_CALLBACK": KeySearch.search_for_value("TOPIC_CALLBACK")
                     },
                     entrypoint="/usr/local/bin/entrypoint.sh",
                     volumes={

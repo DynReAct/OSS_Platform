@@ -3,15 +3,20 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from dynreact.shortterm.common import TOPIC_CALLBACK, TOPIC_GEN, purge_topics
+from dynreact.shortterm.common import purge_topics, KeySearch
 from dynreact.shortterm.common.handler import DockerManager
 from dynreact.shortterm.short_term_planning import execute_short_term_planning
+from dynreact.shortterm.shorttermtargets import ShortTermTargets
+
+KeySearch.set_global(config_provider=ShortTermTargets())
+topic_gen = KeySearch.search_for_value("TOPIC_GEN")
+topic_callback = KeySearch.search_for_value("TOPIC_CALLBACK")
 
 @pytest.fixture(autouse=True)
 def initialize():
     print("Setting up for a test.")
     print("Purging topics.")
-    purge_topics(topics=[TOPIC_CALLBACK, TOPIC_GEN, 'DYN_TEST'])
+    purge_topics(topics=[topic_callback, topic_gen, 'DYN_TEST'])
     yield
     print("Tearing down after a test.")
 
@@ -164,7 +169,7 @@ def test_scenario_04():
 
     args = {
         "verbose": 3,
-        "base": "../../shortterm",
+        "base": "../../dynreact/shortterm",
         "runningWait": "10",
         "cloningWait": "30",
         "auctionWait": "50",

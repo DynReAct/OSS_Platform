@@ -10,7 +10,9 @@ import os
 
 from dynreact.shortterm.agents.equipment import Equipment
 from dynreact.shortterm.agents.material import Material
-from dynreact.shortterm.common import VAction, TOPIC_GEN, TOPIC_CALLBACK
+from dynreact.shortterm.common import VAction, KeySearch
+from dynreact.shortterm.shorttermtargets import ShortTermTargets
+
 
 def log_base(verbose: int):
 
@@ -20,9 +22,15 @@ def log_base(verbose: int):
     # Global configuration - assign the values to the global variables using the information above
     config = configparser.ConfigParser()
     current_dir = os.path.dirname(os.path.abspath(__file__))
+    config.optionxform = str
     config.read(os.path.join(current_dir, "dynreact", "shortterm", "config.cnf"))
-    kafka_ip = config['DEFAULT']['IP']
-    left_path = config['DEFAULT']['LogFilePath']
+
+    short_term_config = ShortTermTargets(VB=verbose).model_copy(update=dict(config["DEFAULT"].items()))
+    KeySearch.set_global(config_provider=short_term_config)
+
+    left_path = KeySearch.search_for_value('LOG_FILE_PATH')
+    topic_gen = KeySearch.search_for_value('TOPIC_GEN')
+    topic_callback = KeySearch.search_for_value('TOPIC_CALLBACK')
 
     folder_path = Path(left_path)
 
@@ -32,18 +40,18 @@ def log_base(verbose: int):
 
     # Creation of the main log file
     now = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
-    log_file = f"{TOPIC_GEN}-{now}.log"
+    log_file = f"{topic_gen}-{now}.log"
     if platform.system() == 'Windows':
         log_file = log_file.replace(":", "_")
     log_file = os.path.join(left_path, log_file)
-    agent_gen = 'LOG:' + TOPIC_GEN
+    agent_gen = 'LOG:' + topic_gen
 
     main_log = Log(
-        topic=TOPIC_GEN, agent=agent_gen, kafka_ip=kafka_ip, left_path=left_path, log_file=log_file, verbose=verbose
+        topic=topic_gen, agent=agent_gen, left_path=left_path, log_file=log_file
     )
 
     # Creates Callback topic!
-    main_log.callback_on_topic_not_available(TOPIC_CALLBACK)
+    main_log.callback_on_topic_not_available(topic_callback)
 
     return main_log
 
@@ -54,12 +62,17 @@ def equipment_base(verbose: int):
     # Global configuration - assign the values to the global variables using the information above
     config = configparser.ConfigParser()
     current_dir = os.path.dirname(os.path.abspath(__file__))
+    config.optionxform = str
     config.read(os.path.join(current_dir, "dynreact", "shortterm", "config.cnf"))
-    kafka_ip = config['DEFAULT']['IP']
+
+    short_term_config = ShortTermTargets(VB=verbose).model_copy(update=dict(config["DEFAULT"].items()))
+    KeySearch.set_global(config_provider=short_term_config)
+
+    topic_gen = KeySearch.search_for_value('TOPIC_GEN')
 
     main_equipment = Equipment(
-        topic=TOPIC_GEN, agent=f"EQUIPMENT:{TOPIC_GEN}", status=dict(), kafka_ip=kafka_ip,
-        counterbid_wait=15, verbose=verbose
+        topic=topic_gen, agent=f"EQUIPMENT:{topic_gen}", status=dict(),
+        counterbid_wait=15
     )
 
     return main_equipment
@@ -71,11 +84,16 @@ def material_base(verbose: int):
     # Global configuration - assign the values to the global variables using the information above
     config = configparser.ConfigParser()
     current_dir = os.path.dirname(os.path.abspath(__file__))
+    config.optionxform = str
     config.read(os.path.join(current_dir, "dynreact", "shortterm", "config.cnf"))
-    kafka_ip = config['DEFAULT']['IP']
+
+    short_term_config = ShortTermTargets(VB=verbose).model_copy(update=dict(config["DEFAULT"].items()))
+    KeySearch.set_global(config_provider=short_term_config)
+
+    topic_gen = KeySearch.search_for_value('TOPIC_GEN')
 
     main_material = Material(
-        topic=TOPIC_GEN, agent=f"MATERIAL:{TOPIC_GEN}", params=dict(), kafka_ip=kafka_ip, verbose=verbose
+        topic=topic_gen, agent=f"MATERIAL:{topic_gen}", params=dict()
     )
 
     return  main_material
@@ -84,6 +102,7 @@ def material_base(verbose: int):
 
 def main():
     print("Starting agent")
+
     parser = argparse.ArgumentParser(description="Select an agent to run.")
 
     subparsers = parser.add_subparsers(dest="agent", required=True, help="Choose an agent to run")
@@ -171,14 +190,19 @@ def main():
 
     if args.agent == "log":
         if args.type == "base":
-            agent = log_base(verbose = args.verbose)
+            agent = log_base(verbose=args.verbose)
         elif args.type == "replica":
-            agent = Log(topic=args.topic,
+
+            KeySearch.set_global(config_provider=ShortTermTargets(
+                VB=args.verbose,
+                IP=args.kafka_ip,
+            ))
+
+            agent = Log(
+                topic=args.topic,
                 agent=args.agent_name,
-                kafka_ip=args.kafka_ip,
                 left_path=args.left_path,
                 log_file=args.log_file,
-                verbose=args.verbose,
                 manager=False
             )
 
@@ -186,13 +210,17 @@ def main():
         if args.type == "base":
             agent = equipment_base(verbose=args.verbose)
         elif args.type == "replica":
+
+            KeySearch.set_global(config_provider=ShortTermTargets(
+                VB=args.verbose,
+                IP=args.kafka_ip,
+            ))
+
             agent = Equipment(
                 topic=args.topic,
                 agent=args.agent_name,
-                kafka_ip=args.kafka_ip,
                 counterbid_wait=args.counter_wait,
                 status=json.loads(args.status),
-                verbose=args.verbose,
                 manager=False
             )
 
@@ -200,12 +228,16 @@ def main():
         if args.type == "base":
             agent = material_base(verbose=args.verbose)
         elif args.type == "replica":
+
+            KeySearch.set_global(config_provider=ShortTermTargets(
+                VB=args.verbose,
+                IP=args.kafka_ip,
+            ))
+
             agent = Material(
                 topic=args.topic,
                 agent=args.agent_name,
-                kafka_ip=args.kafka_ip,
                 params=json.loads(args.params),
-                verbose=args.verbose,
                 manager=False
             )
     else:

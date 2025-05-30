@@ -37,7 +37,7 @@ def purge_topics(topics: list):
     returns: list of purged topics.
     """
 
-    admin_client = AdminClient({"bootstrap.servers": "138.100.82.173:9092"})
+    admin_client = AdminClient({"bootstrap.servers": KeySearch.search_for_value("IP")})
 
     topics_partitions = []
     for topic in topics:
@@ -60,7 +60,7 @@ def delete_topics(topics: list):
     returns: list of purged topics.
     """
 
-    admin_client = AdminClient({"bootstrap.servers": "138.100.82.173:9092"})
+    admin_client = AdminClient({"bootstrap.servers": KeySearch.search_for_value("IP")})
 
     topics_partitions = []
     for topic in topics:

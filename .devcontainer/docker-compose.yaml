@@ -17,7 +17,12 @@ services:
       # Update this to wherever you want VS Code to mount the folder of your project
       - ..:/workspace:cached
 
-    network_mode: service:kafkaUi
+    networks:
+      - kafka-net
+
+    depends_on:
+      - kafka
+      - kafkaUi
       
     # Overrides default command so things don't shut down after the process ends.
     entrypoint: /usr/local/share/docker-init.sh
@@ -32,3 +37,42 @@ services:
       DYNAMIC_CONFIG_ENABLED: 'true'
     volumes:
       - ./kafka/config.yml:/etc/kafkaui/dynamic_config.yaml
+
+    ports:
+      - "8080:8080" # This is needed for forwardPorts to work
+
+    networks:
+      - kafka-net
+    depends_on:
+      - kafka
+
+  zookeeper:
+      image: bitnami/zookeeper:latest
+      environment:
+        ALLOW_ANONYMOUS_LOGIN: yes
+      networks:
+        - kafka-net
+
+  kafka:
+    image: bitnami/kafka:latest
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      ALLOW_PLAINTEXT_LISTENER: yes
+      JMX_PORT: 9999
+      KAFKA_JMX_PORT: 9999
+      KAFKA_JMX_HOSTNAME: kafka
+
+    ports:
+      - "9092:9092"
+      - "9999:9999"
+
+    depends_on:
+      - zookeeper
+    networks:
+      - kafka-net
+
+networks:
+  kafka-net:

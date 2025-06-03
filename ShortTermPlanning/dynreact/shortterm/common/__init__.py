@@ -51,7 +51,7 @@ def purge_topics(topics: list):
         except Exception as e:
             raise Exception(f"Failed: {tp} with error {e}")
 
-def delete_topics(topics: list):
+def delete_topics(topics: list, silent=False):
     """
     Function to delete list of topics.
 
@@ -72,7 +72,8 @@ def delete_topics(topics: list):
         try:
             f.result()  # Raises exception if delete failed
         except Exception as e:
-            raise Exception(f"Failed: {tp} with error {e}")
+            if not silent:
+                raise Exception(f"Failed: {tp} with error {e}")
 
 class KeySearch:
     _global_config: ShortTermTargets = None

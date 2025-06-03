@@ -1,7 +1,12 @@
 kafka:
   clusters:
-    - name: local
+    - name: remote
       bootstrapServers: 138.100.82.173:9092
       metrics:
         port: 9997
+        type: JMX
+    - name: local
+      bootstrapServers: localhost:9092
+      metrics:
+        port: 9999
         type: JMX

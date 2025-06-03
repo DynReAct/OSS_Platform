@@ -214,12 +214,13 @@ def create_auction(
         else:
             all_materials.extend(equipment_materials)
 
-    # If the user provided the materials make sure all are part of at least one equipment
-    if materials is not None:
-        if all(item in all_materials for item in materials):
-            all_materials = materials
-        else:
-            raise Exception("Provided materials are not part of the selected equipment")
+    # # If the user provided the materials make sure all are part of at least one equipment
+    # if materials is not None:
+    #     if all(item in all_materials for item in materials):
+    #         all_materials = materials
+    #     else:
+    #         unwanted = [item for item in materials if item not in all_materials]
+    #         raise Exception(f"Provided materials {unwanted} are not part of the selected equipment")
 
     all_materials = list(set(all_materials))
 

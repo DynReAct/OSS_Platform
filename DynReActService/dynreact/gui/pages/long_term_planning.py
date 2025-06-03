@@ -563,7 +563,8 @@ def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
     storages: dict[str, StorageLevel] = {}
     if "ltp-storageinit-half-trigger" in changed_ids:
         for storage in site.storages:
-            material_levels = {cl.id: 0.5 * (cl.default_share if cl.default_share is not None else 1 if cl.is_default else 0) \
+            exclusions = storage.material_constraints.excluded if storage.material_constraints is not None else []
+            material_levels = {cl.id: 0.5 * (cl.default_share if cl.default_share is not None else 1 if cl.is_default else 0) if cl.id not in exclusions else 0  \
                                                                     for cat in site.material_categories for cl in cat.classes}
             level = StorageLevel(storage=storage.name_short, filling_level=0.5, timestamp=start_time, material_levels=material_levels)
             storages[storage.name_short] = level

@@ -71,6 +71,12 @@ class Equipment(LabeledItem, ProcessInformation):
         return self.id
 
 
+class MaterialConstraint(Model):
+
+    excluded: list[str]
+    "Material class ids"
+
+
 # TODO how to deal with shared storages (common capacity, individual target levels)?
 class Storage(LabeledItem):
     """
@@ -87,6 +93,8 @@ class Storage(LabeledItem):
     target_filling_level: float|None = None  # TODO rather need a range
     "A number between 0 and 1"
     #target_filling_range: tuple[float, float]|None = Field(None, description="Numbers between 0 and 1")
+    material_constraints: MaterialConstraint|None=None
+    "Constraints on the type of material supported by this storage."
 
 
 class EquipmentDowntime(Model):

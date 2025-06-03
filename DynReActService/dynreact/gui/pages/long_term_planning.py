@@ -567,6 +567,8 @@ def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
                                                                     for cat in site.material_categories for cl in cat.classes}
             if storage.material_constraints is not None:
                 exclusions = storage.material_constraints.excluded
+                for cl in exclusions:
+                    material_levels.pop(cl)
                 affected_categories = [cat for cat in site.material_categories if any(cl.id in exclusions for cl in cat.classes)]
                 for cat in affected_categories:
                     remaining_classes = [cl for cl in cat.classes if cl.id not in exclusions]

@@ -20,6 +20,8 @@ services:
     networks:
       - kafka-net
 
+    network_mode: service:kafkaUi
+
     depends_on:
       - kafka
       - kafkaUi

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from dynreact.base.LotsOptimizer import LotsOptimizationState
 from dynreact.base.model import Site, MidTermTargets, StorageLevel
@@ -45,7 +46,7 @@ class ResultsPersistence:
     def solutions_ltp(self, start_time: datetime) -> list[str]:
         raise Exception("not implemented")
 
-    def start_times_ltp(self, start: datetime, end: datetime) -> list[datetime]:
+    def start_times_ltp(self, start: datetime|None=None, end: datetime|None=None, sort: Literal["asc", "desc"]="asc", limit: int=100) -> list[datetime]:
         raise Exception("not implemented")
 
     def has_solution_ltp(self, start_time: datetime, solution_id: str) -> bool:

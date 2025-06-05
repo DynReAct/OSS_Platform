@@ -3,8 +3,8 @@
     if (!globalThis.dashAgGridFunctions)
         globalThis.dashAgGridFunctions = aggrid_functions
 
-    aggrid_functions.formatCell = function(obj) {
-        return JsUtils.format(obj);
+    aggrid_functions.formatCell = function(obj, numDigits) {
+        return JsUtils.format(obj, numDigits);
     }
 
     globalThis.dynreact = Object.assign({}, globalThis.dynreact, {_site: undefined, _snapshot: undefined});

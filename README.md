@@ -20,16 +20,9 @@
 
 <img src="images/Fig7.png" height="380" title="Hierarchical concept" style="float: center;"/>
 
-Within the DynReAct PDP, it is foreseen to develop an open-source platform for dynamic 
-production planning as shown in previous Figure.
-This platform will be realized as SOA enabling a modular connection of multiple
-planning relevant components.
-The backbone of this platform will be the hierarchical planning system developed in 
-the former DynReAct project.
-
-Accordingly, the core of the DynReAct software platform will be published under an 
-open-source license, on a code-hosting platform such as GitHub.
-
+This repository contains the DynReAct open-source platform for dynamic 
+production planning. It consists of several modules, as shown in previous Figure.
+The backbone of this platform is the hierarchical planning system, consisting of long-term planning (time horizon of weeks to months), mid-term planning (horizon: hours to days) and short-term planning (horizon: minutes to hours) modules.
 
 ## Structure
 
@@ -115,6 +108,18 @@ or use your IDE for this purpose. Activate the virtual environment and navigate 
 pip install -r requirements.txt -r requirements_local.txt 
 ```
 
+Navigate to the subfolder *ShortTermPlanning* and also run
+
+```commandline
+pip install -r requirements.txt
+```
+
+Alternatively you can user poetry and run in the DynReActSerivce folder
+
+```commandline
+poetry install
+```
+
 ### IDE settings
 
 #### PyCharm
@@ -134,11 +139,11 @@ Navigate to folder *DynReActService* and run
 python -m uvicorn run:fastapi_app --reload --port 8050 --log-level debug
 ```
 
-The frontend will be available at http://localhost:8050/dash and the service documentation at http://localhost:8050/docs. 
+The frontend will be available at http://localhost:8050/dash and the service documentation at http://localhost:8050/docs. See [app_config.py](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/dynreact/app_config.py) for configuration options.
 
 #### Long-term planning
 
-TODO
+The open-source platform currently only contains a dummy implementation of the long-term planning. It is started alongside the [service](#service) and could be replaced by a custom implementation, if needed. Source code of the dummy long-term planning is available here: [SimpleLongTermPlanning.py](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActBase/dynreact/base/impl/SimpleLongTermPlanning.py).
 
 #### Mid-term planning
 

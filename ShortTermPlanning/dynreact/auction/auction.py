@@ -50,7 +50,7 @@ class Auction:
 
         return(self.code)
 
-    def set_materials(self,matype:str,plants:list):
+    def set_materials(self,matype:str, plants:list):
         """ 
         Function establishing the Auction parameters of
         materials and equipments.
@@ -62,7 +62,7 @@ class Auction:
         self._equip = plants
         return(None)
 
-    def set_ass_materials(self,matype:str,plants:list, ass_mats: str, amats:list):
+    def set_ass_materials(self,matype:str, plants:list, ass_mats: str, amats:list):
         """ 
         Function establishing the Auction parameters of
         assigned materials and equipments.

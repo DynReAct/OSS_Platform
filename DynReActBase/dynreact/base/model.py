@@ -6,7 +6,7 @@ properties.
 
 The classes defined in this module are serializable and can be made accessible via a REST interface.
 """
-
+from __future__ import annotations
 from datetime import datetime, timedelta, timezone, date
 from typing import Any, TypeVar, Generic, Literal
 
@@ -71,6 +71,12 @@ class Equipment(LabeledItem, ProcessInformation):
         return self.id
 
 
+class MaterialConstraint(Model):
+
+    excluded: list[str]
+    "Material class ids"
+
+
 # TODO how to deal with shared storages (common capacity, individual target levels)?
 class Storage(LabeledItem):
     """
@@ -80,13 +86,15 @@ class Storage(LabeledItem):
     equipment: list[int]
     "Equipment served by this storage primarily."
     #secondary_plants: list[int]|None = Field(None, description="Plants served by this storage.")
-    capacity_tonnage: float|None = None
+    capacity_weight: float|None = None
     "Capacity in t."
     capacity_items: int|None = None
     "Capacity in items / material."
     target_filling_level: float|None = None  # TODO rather need a range
     "A number between 0 and 1"
     #target_filling_range: tuple[float, float]|None = Field(None, description="Numbers between 0 and 1")
+    material_constraints: MaterialConstraint|None=None
+    "Constraints on the type of material supported by this storage."
 
 
 class EquipmentDowntime(Model):
@@ -111,8 +119,8 @@ class EquipmentAvailability(Model):
     "The period this refers to, typically a month"
     daily_baseline: timedelta|None = None
     "The baseline availability, such as 24h or 1d. Default is 1d."
-    deltas: dict[date, float]|None = None
-    "Deviations from the baseline per day. Defaults to 0 if a day is missing or the field is unset."
+    deltas: dict[date, timedelta]|None = None
+    "Deviations from the baseline per day. Defaults to 0 if a day is missing or the field is unset. Positive values mean extra time, negative values are outages etc."
 
 
 PROPERTIES = TypeVar("PROPERTIES", bound=Model)  # Material-specific properties, not matching the MATERIAL parameter in the Order class
@@ -127,7 +135,9 @@ class Material(Model):
     weight: float
     "Material weight in t"
     order_position: int|None = None
-    "1-based index of material in order"
+    "@deprecated: 1-based index of material in order; note that this always refers to a lot"
+    order_positions: dict[str, int]|None = None
+    "1-based index of material in order for specific lots (keys: lot id)"
     current_equipment_name: str | None = None
     current_equipment: int | None = None
     current_storage: str | None = None
@@ -160,6 +170,8 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
     "Target weight in t"
     actual_weight: float
     "Sum of individual material weights in t"
+    material_classes: dict[str, str] = {}
+    "Keys: material category id, values: material class ids"
     allowed_equipment: list[int]   # TODO dict[process, list[int]]?
     current_equipment: list[int] | None = None
     # @deprecated
@@ -179,7 +191,8 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
     # FIXME this dict type with arbitrary_types_allowed is just a temporary workaround, need to find a better solution...
     material_properties: dict[str, Any] | MATERIAL_PROPERTIES
     "Use-case specific material characteristics."
-
+    priority: int = 0
+    "Order priority"
 
 class Lot(Model):
     id: str
@@ -206,13 +219,25 @@ class PlanningData(Model):
     "Current value of the target function"
     # lots: list[list[str]] TODO?
     transition_costs: float = 0.0
+    logistic_costs: float = 0.0
     lots_count: int = 0
     lot_weights: list[float] = []
     "Lot weights in tons."
     orders_count: int = 0
     delta_weight: float = 0.0
     "Deviation from target weight in t. Positive for missing tonnage."
+    material_structure: dict[str, dict[str, float]]|None = None
+    "Keep track of material classes. Outer key: category id, inner key: class id; special keys \"_sum\" represent the total/aggregated values"
+    main_category: str|None = None
+    "For nested structure planning, the main category."
+    nested_material_structure: dict[str, dict[str, dict[str, float]]]|None = None
+    """
+    Keep track of nested material classes. Only used in case of nested structure targets. 
+    Outermost key: class id for main category, middle key: sub category id, innermost key: class id; special keys \"_sum\" represent the total/aggregated values.
+    """
     min_due_date: datetime|None = None
+    assigned_priority: int = 0
+    "sum priority of assigned orders"
 
 
 P = TypeVar("P", bound=PlanningData)
@@ -220,12 +245,10 @@ P = TypeVar("P", bound=PlanningData)
 
 class EquipmentStatus(Model, Generic[P]):
 
-    equipment: int
-    target_weight: float
-    "Target weight in t for this equipment"
+    targets: EquipmentProduction
     snapshot_id: datetime
     planning_period: tuple[datetime, datetime]
-    current_order: str|None  = None
+    current_order: str|None = None
     "Current order id"
     previous_order: str | None = None
     "Previous order id"
@@ -242,12 +265,39 @@ class EquipmentStatus(Model, Generic[P]):
     "Internal state of the optimization"
 
 
+class ObjectiveFunction(Model, extra="allow"):
+    """
+    Note that this class may have use-case dependent extra fields
+    """
+
+    total_value: float
+    "The overall objective function value"
+    lots_count: float|None=None
+    "Penalty for number of lots"
+    transition_costs: float|None=None
+    "Penalty for order to order transitions"
+    logistic_costs: float|None=None
+    "Penalty for necessary logistics"
+    weight_deviation: float|None=None
+    "Penalty for deviating from the targeted production size"
+    lot_size_deviation: float|None = None
+    "Penalty for deviating from the targeted lot sizes"
+    structure_deviation: float|None = None
+    "Penalty for deviating from the targeted material structure"
+    priority_costs: float|None = None
+    "Penalty for order priority"
+
+
 class EquipmentProduction(Model):
 
     equipment: int
     total_weight: float
-    material_weights: dict[str, float]|None = None
-    "Produced quantity by material class id, in t."
+    lot_weight_range: tuple[float, float] | None = None
+    "Weight restriction for lots in t"
+
+
+SUM_MATERIAL: str = "_sum"
+"A special entry in material class specifications that represents the aggregated/total value."
 
 
 class ProductionTargets(Model):
@@ -256,6 +306,8 @@ class ProductionTargets(Model):
     target_weight: dict[int, EquipmentProduction]
     "Target production by equipment id"
     period: tuple[datetime, datetime]
+    material_weights: dict[str, float|dict[str, float]] | None = None
+    "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed. The special value \"_sum\" represents the total weight."
 
 
 class StorageLevel(Model):
@@ -280,6 +332,7 @@ class OrderAssignment(Model):  # base for SolutionElement
     lot_idx: int
 
 
+# TODO add lot weight targets to get_targets() return value
 class ProductionPlanning(Model, Generic[P]):
     """
     The optimization needs to generate an object of this type
@@ -290,6 +343,10 @@ class ProductionPlanning(Model, Generic[P]):
     "keys: order ids"
     equipment_status: dict[int, EquipmentStatus[P]]                  # "vbest"
     "keys: equipment ids"
+    target_structure: dict[str, float|dict[str, float]] | None = None
+    "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed. Special key \"_sum\" represents the total/aggregated value."
+    total_priority: int = 0
+    "Sum priority orders"
 
     # TODO cache results?
     def get_lots(self) -> dict[int, list[Lot]]:
@@ -328,8 +385,8 @@ class ProductionPlanning(Model, Generic[P]):
         if len(self.equipment_status) == 0:
             return None  # ?
         period: tuple[datetime, datetime] = next(iter(self.equipment_status.values())).planning_period
-        targets: dict[int, EquipmentProduction] = {plant: EquipmentProduction(equipment=plant, total_weight=status.target_weight) for plant, status in self.equipment_status.items()}
-        return ProductionTargets(process=self.process, target_weight=targets, period=period)
+        targets: dict[int, EquipmentProduction] = {plant: status.targets for plant, status in self.equipment_status.items()}
+        return ProductionTargets(process=self.process, target_weight=targets, period=period, material_weights=self.target_structure)
 
 
 # LTP WIP
@@ -348,6 +405,7 @@ class MaterialClass(Model):
     is_default: bool = False
     "A class can be assigned the default role within a material category."
     default_share: float|None = None
+    mapping: str|None = None
 
 
 class MaterialCategory(Model):
@@ -360,8 +418,39 @@ class MaterialCategory(Model):
     classes: list[MaterialClass]
     """
     Mutually exclusive material classes. It is assumed
-    that every product and order can be assigned to exactly one class within the category.
+    that every material and order can be assigned to exactly one class within the category.
     """
+    process_steps: list[str]|None = None
+    "Optional list of process steps for which the category is potentially relevant in the mid-term planning."
+
+
+class LotCreationStructureSettings(Model):
+    """
+    Defines a hierarchy for structure categories in the mid term planning;
+    """
+    primary_category: str
+    "Reference to a MaterialCategory"
+    primary_classes: list[str]
+    "References to the MaterialClasses in primary_category.classes. For the time being only a single entry is supported."
+
+
+class LotCreationOrderBacklogSettings(Model):
+    default_select_predecessors_lot: list[str]|None=None
+    "A list of process steps at which scheduled orders are usually included in the order backlog for lot creation"
+    default_select_predecessors_all: list[str]|None=None
+    "A list of process steps at which all orders (scheduled or not) are usually included in the order backlog for lot creation"
+
+
+class ProcessLotCreationSettings(Model):
+    plannable: bool|None = None
+    "Default: true"
+    structure: LotCreationStructureSettings|None=None
+    order_backlog: LotCreationOrderBacklogSettings|None=None
+
+
+class LotCreationSettings(Model):
+    processes: dict[str, ProcessLotCreationSettings]
+    "Settings per process step"
 
 
 class Site(LabeledItem):
@@ -374,6 +463,9 @@ class Site(LabeledItem):
     Logistic costs for transfer of a complete order(?) from one plant to another (only within a single process stage, not considering
     transfer costs between processes)
     """
+    #structure_planning: dict[str, StructurePlanningSettings]|None = None
+    lot_creation: LotCreationSettings|None=None
+
 
     def get_process(self, process: str, do_raise: bool=False) -> Process|None:
         if process is None:
@@ -474,36 +566,68 @@ class Snapshot(Model, Generic[MATERIAL_PROPERTIES]):
                                 coil.current_equipment is not None and \
                                 coil.current_equipment_name != equipment_name])
 
-    def get_orders_equipment(self, site: Site, equipment_name: str, storage:str, assigned:int=-1) -> list[str]:
-        if assigned < 0:
-            return(list(set([coil.order for coil in self.material if \
-                            equipment_name in [site.get_equipment(ieq).name_short \
-                                for ieq in self.get_order(coil.order).allowed_equipment] \
-                            and coil.current_storage == storage and \
-                            coil.current_equipment is None] )) )
-        else:
-            return(list(set([coil.order for coil in self.material if \
-                            equipment_name in [site.get_equipment(ieq).name_short \
-                                for ieq in self.get_order(coil.order).allowed_equipment] \
-                            and coil.current_storage == storage and \
-                                coil.current_equipment is not None and \
-                                coil.current_equipment_name != equipment_name] )) )
+    def get_orders_equipment(self, site: Site, equipment_name: str, \
+                             storage:str, assigned:int=-1) -> list[str]:
+        """
+        Get a list of orders when all the materials in the order have as 
+        current_eqipment_name equal to tje equipment_name.
 
+        :param site: The site containing plant details.
+        :param equipment_name: targeted the name of the equipment.
+        :param storage: Useless since the latest input from BFI (2025-02-25).
+        :param assigned: Useless and kept because of OSS_Plantform compatiiity 
+        :return: A list of order IDs representing the selected orders.
+        """
+        # Modified by JOM 2025-02-24
+        # For RAS there is not current_equipment involving Not assigned Materials.
+        # Then, assigned is useless and code gets simplified.
+        # if assigned < 0:
+        # else:
+        #     return(list(set([coil.order for coil in self.material if \
+        #                     equipment_name in [site.get_equipment(ieq).name_short \
+        #                         for ieq in self.get_order(coil.order).allowed_equipment] \
+        #                     and coil.current_storage == storage and \
+        #                         coil.current_equipment is not None and \
+        #                         coil.current_equipment_name != equipment_name] )) )
+        #
+        # Retrieve a list of orders based on current equipment name
+        unique_orders = {coil.order for coil in self.material 
+                        if coil.current_equipment_name == site.get_equipment_by_name(\
+                            equipment_name).name_short}
+        result_list = []
+        for order in unique_orders:
+            belongs_to_equipment = all(
+                coil.current_equipment_name == equipment_name 
+                for coil in self.material if coil.order == order
+            )
+            if belongs_to_equipment:
+                result_list.append(order)
 
-    def get_material_selected_orders(self, orders: list[str], plant_names: list[str], site: Site) -> list[str]:
-        tmp = [(coil.id,coil.order) for coil in self.material if \
-                    coil.current_equipment_name in plant_names and coil.order in orders ]
-        unique_ord = {}
-        # Iterate over the list of tuples to find coils representing the targeted orders
-        for a, b in tmp:
-            mat = self.get_coil(a).current_storage
-            stg_valid = [site.get_plant_by_name(plt).storage_in for plt in plant_names]
-            if b not in unique_ord and mat in stg_valid:  # Only add if 'b' is not already in the dictionary
-                unique_ord[b] = a
-        # Extract only the 'coil' components
-        res = list(unique_ord.values())        
-        return(res)
+        return result_list
+    #
+    def get_material_selected_orders(self, orders: list[str], plant_names: list[str], \
+                                    site: Site) -> list[str]:
+        """
+        Get a list of selected materials (coils) based on the specified orders and plant names.
+        Since the requirement from RAS a single coil represents the whole order.
+        Therefore, only one coil/material is extracted from each order.
+        ** Storage constraints were removed from BFI 2025-02-22, then site param is useless
+        ** coil.current_equipment_name in plant_names  was removed from the selection if,
+        enabling orders from other equipments. Then plant_names is useless as well
 
+        :param orders: A list of order IDs to filter.
+        :param plant_names: A list of plant names to filter.
+        :param site: The site containing plant details.
+        :return: A list of coil IDs representing the selected orders (one coil.id per order).
+        """
+        #
+        # Diccionario para almacenar solo un coil.id por coil.order
+        selected_coils = {}
+        for coil in self.material:
+            if coil.order in orders:
+                if coil.order not in selected_coils:
+                    selected_coils[coil.order] = coil.id
+        return list(selected_coils.values())
 
 
 class LongTermTargets(Model):
@@ -541,4 +665,11 @@ class MidTermTargets(LongTermTargets):
     production_sub_targets: dict[str, list[ProductionTargets]]
     "Production targets for the planning sub periods. Keys: process ids, values: list of production targets, covering all planning sub periods chronologically."
 
+
+
+class ServiceHealth(Model):
+
+    status: int
+    "0: ok"
+    running_since: datetime|None=None
 

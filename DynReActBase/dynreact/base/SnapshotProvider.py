@@ -6,10 +6,10 @@ for more complex use cases.
 
 import enum
 from datetime import datetime, timezone
-from typing import Iterator, Literal, Iterable
+from typing import Iterator, Literal, Iterable, Any
 
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import Snapshot, Site, Lot, Process, Material, Order
+from dynreact.base.model import Snapshot, Site, Lot, Process, Material, Order, MaterialCategory, MaterialClass
 
 
 # Note: requires Python >= 3.11
@@ -77,6 +77,7 @@ class SnapshotProvider:
     def __init__(self, url: str, site: Site):
         self._url = url
         self._site = site
+        self._has_class_mapping: bool = any(cl.mapping is not None for cat in site.material_categories for cl in cat.classes)
 
     def store(self, snapshot: Snapshot, *args, **kwargs):
         """
@@ -150,6 +151,65 @@ class SnapshotProvider:
     def current_snapshot_id(self) -> datetime:
         return self.previous()
 
+    def material_class_for_order(self, order: Order, category: MaterialCategory) -> MaterialClass|None:
+        """
+        Overwrite this method in derived class to provide a custom material class mapping
+        :param order:
+        :param category:
+        :return:
+        """
+        if not self._has_class_mapping:
+            raise Exception("Material class for order not implemented")
+        for cl in category.classes:
+            if not cl.mapping:
+                continue
+            field, operator, cond_value = SnapshotProvider._parse_expression(cl.mapping)
+            if field is None:
+                continue
+            value = SnapshotProvider._get_field_value(order, field)
+            if value is None:
+                continue
+            if isinstance(value, float):
+                cond_value = float(cond_value)
+            elif isinstance(value, bool):
+                cond_value = bool(cond_value)
+            if SnapshotProvider._check_expression(value, operator, cond_value):
+                return cl
+        return None
+
+    @staticmethod
+    def _get_field_value(order: Any, field: str):
+        if order is None:
+            return None
+        if "." in field:
+            first_dot = field.index(".")
+            first_field = field[0:first_dot]
+            last_fields = field[first_dot+1:]
+            return SnapshotProvider._get_field_value(order.get(field) if isinstance(order, dict) else getattr(order, first_field, None), last_fields)
+        return order.get(field) if isinstance(order, dict) else getattr(order, field, None)
+
+    @staticmethod
+    def _check_expression(actual_value: str|float|bool, operator: Literal["=", ">=", ">", "<", "<="], cond_value: str|float|bool):
+        if operator == "=":
+            return actual_value == cond_value
+        if operator == ">":
+            return actual_value > cond_value
+        if operator == ">=":
+            return actual_value >= cond_value
+        if operator == "<":
+            return actual_value < cond_value
+        if operator == "<=":
+            return actual_value <= cond_value
+        raise Exception(f"Invalid operator {operator}")
+
+    @staticmethod
+    def _parse_expression(exp: str) -> tuple[str | None, Literal["=", ">=", ">", "<", "<="] | None, str | None]:
+        operator = next((op for op in [">=", "<=", "=", ">", "<"] if op in exp), None)
+        if operator is None:
+            return None, None, None
+        idx = exp.index(operator)
+        return exp[0: idx].strip(), operator, exp[idx+len(operator):].strip()
+
     def order_plant_assignment_from_snapshot(self, snapshot: Snapshot, process: str, include_inactive_lots: bool=False) -> dict[str, int]:
         """
         :param snapshot:
@@ -182,12 +242,13 @@ class SnapshotProvider:
             if plant_id not in snapshot.lots:
                 target_weights[plant_id] = 0
                 continue
-            order_ids = [order for lot in snapshot.lots[plant_id] for order in lot.order if lot.active or include_inactive_lots]
-            orders: dict[str, Order | None] = {order_id: next((o for o in snapshot.orders if o.id == order_id), None)
-                                               for order_id in order_ids}
+            order_ids = [order for lot in snapshot.lots[plant_id] for order in lot.orders if lot.active or include_inactive_lots]
+            orders: dict[str, Order | None] = {order_id: next((o for o in snapshot.orders if o.id == order_id), None) for order_id in order_ids}
             none_orders = [order_id for order_id, order in orders.items() if order is None]
             if len(none_orders) > 0:
-                raise Exception("A lot for plant " + str(plant_id) + " contains unknown orders " + str(none_orders))
+                # may happen for instance for dummies
+                # raise Exception("A lot for plant " + str(plant_id) + " contains unknown orders " + str(none_orders))
+                orders = {oid: order for oid, order in orders.items() if order is not None}
             total_weight = sum(o.target_weight for o in orders.values())
             target_weights[plant_id] = total_weight
         return target_weights
@@ -202,6 +263,8 @@ class SnapshotProvider:
                             OrderInitMethod.INACTIVE_LOTS,
                             OrderInitMethod.OMIT_CURRENT_LOT
                         ],
+                        include_previous_processes_planned: list[str]|None = None,
+                        include_previous_processes_all: list[str] | None = None,
                         ) -> list[str]:
         """
         Determine the orders eligible for planning/lot creation for a specific process.
@@ -214,7 +277,8 @@ class SnapshotProvider:
             * current_planning: based on the lots already in the snapshot
             * active_process (default): based on the current process ids of the coils
             * active_plant: based on the current plant (location) of the coils
-        :param include_scheduled_orders: include those orders that are contained in a lot for the specified process already
+        :param include_previous_processes_planned: include all orders scheduled for the specified predecessor stages
+        :param include_previous_processes_all: include all orders currently at the specified predecessor stages
         :return:
         """
         method = list(method) if isinstance(method, Iterable) else [method]
@@ -253,6 +317,39 @@ class SnapshotProvider:
                 if len(applicable_proc_ids) == 0:
                     continue
                 applicable_orders0.add(o.id)
+        add_prev_all = include_previous_processes_all is not None and len(include_previous_processes_all) > 0
+        add_prev_lot = include_previous_processes_planned is not None and len(include_previous_processes_planned) > 0
+        if add_prev_all and add_prev_lot and len(include_previous_processes_planned) == len(include_previous_processes_all) and \
+                    all(p in include_previous_processes_all for p in include_previous_processes_planned):
+            add_prev_lot = False
+        if add_prev_all or add_prev_lot:
+            prev_eligible_lots: list[Lot] = []
+            if not add_prev_all:
+                proc_ids_all = []
+            else:
+                procs_all: list[Process] = [self._site.get_process(p, do_raise=True) for p in include_previous_processes_all]
+                procs_all.append(proc)  # also accept those that are already partially at the current process step
+                proc_ids_all: list[int] = [proc_id for prc in procs_all for proc_id in prc.process_ids]
+            if not add_prev_lot:
+                proc_ids_lot = []
+            else:
+                procs_lot: list[Process] = [self._site.get_process(p, do_raise=True) for p in include_previous_processes_planned]
+                prev_eligible_plants = [p.id for prev_proc in procs_lot for p in self._site.get_process_equipment(prev_proc.name_short)]
+                procs_lot.append(proc)  # also accept those that are already partially at the current process step
+                proc_ids_lot: list[int] = [proc_id for prc in procs_lot for proc_id in prc.process_ids]
+                prev_eligible_lots = [lot for plant, lots in snapshot.lots.items() for lot in lots if plant in prev_eligible_plants]
+            proc_ids = list(set(proc_ids_all + proc_ids_lot))
+            for o in snapshot.orders:
+                oid = o.id
+                if oid in applicable_orders0 or len(o.current_processes) == 0:
+                    continue
+                if not all(p in proc_ids for p in o.current_processes):
+                    continue
+                if add_prev_lot and not all(p in proc_ids_all for p in o.current_processes) and \
+                                                not any(oid in lot.orders and lot.active for lot in prev_eligible_lots):
+                    continue
+                applicable_orders0.add(o.id)
+
         omit_active_lots: bool = OrderInitMethod.OMIT_ACTIVE_LOTS in method
         omit_inactive_lots: bool = OrderInitMethod.OMIT_INACTIVE_LOTS in method
         if omit_active_lots or omit_inactive_lots:

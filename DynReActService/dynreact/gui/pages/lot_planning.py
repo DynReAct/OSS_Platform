@@ -1,16 +1,21 @@
 import threading
 import traceback
-from datetime import datetime
-from typing import Iterable
+from datetime import datetime, date
+from typing import Iterable, Any
 import uuid
 
 import dash
 from dash import html, callback, Input, Output, dcc, State, clientside_callback, ClientsideFunction
 import dash_ag_grid as dash_ag
+from pydantic import BaseModel
+from pydantic.fields import FieldInfo
+
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationState
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import ProductionPlanning, EquipmentStatus, Lot, Order, Material, Snapshot
+from dynreact.base.impl.ModelUtils import ModelUtils
+from dynreact.base.model import ProductionPlanning, EquipmentStatus, Lot, Order, Material, Snapshot, Equipment, \
+    ObjectiveFunction, MaterialCategory
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
@@ -51,20 +56,7 @@ def layout(*args, **kwargs):
         html.Div(
             dash_ag.AgGrid(
                 id="plan-solutions-table",
-                columnDefs=[{"field": "id", "pinned": True},
-                            {"field": "target_production", "filter": "agNumberColumnFilter", "headerName": "Target Production / t"},
-                            {"field": "initialization"},
-                            {"field": "target_fct", "filter": "agNumberColumnFilter", "headerName": "Target function",
-                                "headerTooltip": "Value of the objective function. The lower the better, but results are only comparable for the same target weights and init settings."},
-                            {"field": "iterations", "filter": "agNumberColumnFilter"},
-                            {"field": "orders_considered", "filter": "agNumberColumnFilter", "headerName": "Orders",
-                                "headerTooltip": "Number of orders considered in the lot creation, including those not assigned to a lot."},
-                            {"field": "lots", "filter": "agNumberColumnFilter"},
-                            {"field": "plants" },
-                            {"field": "comment"},
-                            {"field": "transition_costs", "filter": "agNumberColumnFilter", "headerName": "Transition costs"},
-                            {"field": "performance_models", "headerName": "Performance models", "headerTooltip": "Plant performance models considered"},
-                ],
+                columnDefs=[],
                 defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
                 rowData=[],
                 getRowId="params.data.id",
@@ -72,7 +64,8 @@ def layout(*args, **kwargs):
                 # style={"height": "70vh", "width": "100%", "margin-bottom": "5em"},
                 columnSizeOptions={"defaultMinWidth": 125},
                 columnSize="responsiveSizeToFit",
-                dashGridOptions={"rowSelection": "single"}
+                dashGridOptions={"rowSelection": "single", "domLayout": "autoHeight"},
+                style={"height": None}
                 ## tooltipField is not used, but it must match an existing field for the tooltip to be shown
                 #defaultColDef={"tooltipComponent": "CoilsTooltip", "tooltipField": "id"},
                 #dashGridOptions={"rowSelection": "multiple", "suppressRowClickSelection": True, "animateRows": False,
@@ -83,8 +76,12 @@ def layout(*args, **kwargs):
         ),
         lots_view("planning", *args, **kwargs),
         html.Div([
+            html.H2("Structure"),
+            html.Div(id="lotplanning-structure-view", className="lotplanning-structure-container")
+        ], id="lotplanning-structure-container", hidden=True),
+        html.Div([
             html.H2("Lots"),
-            html.Button("Download csv", id="download-csv", className="dynreact-button"),
+            html.Button("Download lots csv", id="download-csv", className="dynreact-button"),
             html.Br(),html.Br(),
             html.Div(
                 dash_ag.AgGrid(
@@ -100,11 +97,31 @@ def layout(*args, **kwargs):
                                 {"field": "active"},
                                 ],
                     defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
-                    dashGridOptions={"tooltipShowDelay": 250, "rowSelection": "single"},
+                    dashGridOptions={"tooltipShowDelay": 250, "rowSelection": "single", "domLayout": "autoHeight"},
                     rowData=[],
                     getRowId="params.data.id",
                     className="ag-theme-alpine",  # ag-theme-alpine-dark
+                    # style={"height": None, "width": "100%", "margin-bottom": "5em"},
+                    style={"height": None},   # required with autoHeight
+                    columnSizeOptions={"defaultMinWidth": 125},
+                    columnSize="responsiveSizeToFit",
+                )
+            ),
+            html.H2("Orders"),
+            html.Button("Download orders csv", id="download-orders-csv", className="dynreact-button"),
+            html.Br(), html.Br(),
+            html.Div(
+                dash_ag.AgGrid(
+                    id="planning-lots-order-table",
+                    columnDefs=[{"field": "order", "pinned": True},
+                                {"field": "lot"}],
+                    # defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
+                    dashGridOptions={"tooltipShowDelay": 250, "rowSelection": "single"},
+                    rowData=[],
+                    getRowId="params.data.order",
+                    className="ag-theme-alpine",  # ag-theme-alpine-dark
                     # style={"height": "70vh", "width": "100%", "margin-bottom": "5em"},
+                    style={"margin-bottom": "10em"},
                     columnSizeOptions={"defaultMinWidth": 125},
                     columnSize="responsiveSizeToFit",
                 )
@@ -118,6 +135,8 @@ def layout(*args, **kwargs):
         dcc.Store(id="lotplanning-transferred-lot"),
         dcc.Store(id="lotplanning-transfer-message"),
         dcc.Store(id="lotplanning-transfer-type"),
+        dcc.Store(id="lotplanning-material-structure"),   # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
+        dcc.Store(id="lotplanning-material-targets"),     # dict[str, float]
 
         dcc.Interval(id="planning-interval", n_intervals=3_600_000),  # for polling when lot transfer is running
     ], id="lotsplanned")
@@ -175,6 +194,7 @@ def update_link(snapshot: str|datetime|None, process: str|None) -> str:
 
 
 @callback(
+    Output("plan-solutions-table", "columnDefs"),
     Output("plan-solutions-table", "rowData"),
     State("selected-snapshot", "data"),
     Input("process-selector-lotplanning", "value"),
@@ -184,13 +204,29 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
     if not dash_authenticated(config):
         return []
     snapshot = DatetimeUtils.parse_date(snapshot)
+    value_formatter_object = {"function": "formatCell(params.value, 4)"}
+    col_defs: list[dict[str, Any]] = [{"field": "id", "pinned": True},
+         {"field": "target_production", "filter": "agNumberColumnFilter", "headerName": "Target Production / t", "valueFormatter": value_formatter_object},
+         {"field": "initialization"},
+         {"field": "target_fct", "filter": "agNumberColumnFilter", "headerName": "Target function", "valueFormatter": value_formatter_object,
+          "headerTooltip": "Value of the objective function. The lower the better, but results are only comparable for the same target weights and init settings."},
+         {"field": "iterations", "filter": "agNumberColumnFilter"},
+         {"field": "orders_considered", "filter": "agNumberColumnFilter", "headerName": "Orders",
+          "headerTooltip": "Number of orders considered in the lot creation, including those not assigned to a lot."},
+         {"field": "lots", "filter": "agNumberColumnFilter"},
+         {"field": "plants"},
+         {"field": "comment"},
+         #{"field": "transition_costs", "filter": "agNumberColumnFilter", "headerName": "Transition costs"},
+         {"field": "performance_models", "headerName": "Performance models",
+          "headerTooltip": "Plant performance models considered"},
+    ]
     if snapshot is None or process is None:
-        return []
+        return col_defs, []
     persistence = state.get_results_persistence()
     solutions: list[str] = persistence.solutions(snapshot, process)
     sol_objects: dict[str, LotsOptimizationState] = {sol: persistence.load(snapshot, process, sol) for sol in solutions}
     snap_planning, snap_targets = state.get_snapshot_solution(process, snapshot)
-    snap_objective = state.get_cost_provider().process_objective_function(snap_planning)
+    snap_objective: ObjectiveFunction = state.get_cost_provider().process_objective_function(snap_planning)
     total_production = sum(t.total_weight for t in snap_targets.target_weight.values())
     sol_objects["_SNAPSHOT_"] = LotsOptimizationState(best_solution=snap_planning, current_solution=snap_planning,
                         best_objective_value=snap_objective, current_objective_value=snap_objective,
@@ -206,19 +242,31 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
     best_planning: dict[str, ProductionPlanning] = {sol: state.best_solution for sol, state in sol_objects.items()}
     plant_statuses: dict[str, list[EquipmentStatus]] = {sol: list(planning.equipment_status.values()) for sol, planning in best_planning.items()}
     site = state.get_site()
-    return [{
+
+    random_sol = next(value for key, value in sol_objects.items() if key != "_SNAPSHOT_" or len(sol_objects) <= 1)
+    objective_keys = [f for f in random_sol.current_object_value.model_dump().keys() if f != "total_value"]
+    col_defs.extend([{"field": f, "filter": "agNumberColumnFilter", "valueFormatter": value_formatter_object} for f in objective_keys])
+
+    def merge_dicts(d1: dict, d2: dict) -> dict:
+        d1.update(d2)
+        return d1
+    row_data = [merge_dicts({
         "id": sol_id,
         "comment": params[sol_id].get("comment"),
         "target_production": params[sol_id].get("target_production"),
         "initialization": params[sol_id].get("initialization"),
-        "target_fct": sol_objects[sol_id].best_objective_value,
-        "iterations": len(sol_objects[sol_id].history),
+        "target_fct": solution.best_objective_value.total_value,
+        "iterations": len(solution.history),
         "orders_considered": len(best_planning[sol_id].order_assignments),
         "lots": sum(status.planning.lots_count if status.planning is not None else 0 for status in plant_statuses[sol_id]),
-        "plants": [site.get_equipment(status.equipment).name_short for status in plant_statuses[sol_id]],
-        "transition_costs": sum(status.planning.transition_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
+        "plants": [site.get_equipment(status.targets.equipment).name_short for status in plant_statuses[sol_id]],
+        #"transition_costs": sum(status.planning.transition_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
+        #"weight_costs": sum(status.planning.delta_weight * delta_weight_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
         "performance_models": params[sol_id].get("performance_models")
-    } for sol_id, solution in sol_objects.items()]
+    },
+       {key: (getattr(solution.best_objective_value, key) if hasattr(solution.best_objective_value, key) else 0) or 0 for key in objective_keys })
+                for sol_id, solution in sol_objects.items()]
+    return col_defs, row_data
 
 
 @callback(
@@ -236,6 +284,11 @@ def solution_selected(selected_rows: list[dict[str, any]]|None) -> str|None:
     Output("planning-lots-table", "rowData"),
     Output("planning-solution-data", "data"),
     Output("planning-lotsview-header", "hidden"),
+    Output("planning-lots-order-table", "columnDefs"),
+    Output("planning-lots-order-table", "rowData"),
+    Output("lotplanning-material-structure", "data"),
+    Output("lotplanning-material-targets", "data"),
+    Output("lotplanning-structure-container", "hidden"),
     State("selected-snapshot", "data"),
     State("process-selector-lotplanning", "value"),
     Input("planning-selected-solution", "data"),
@@ -243,7 +296,7 @@ def solution_selected(selected_rows: list[dict[str, any]]|None) -> str|None:
 def solution_changed(snapshot: str|datetime|None, process: str|None, solution: str|None):
     snapshot = DatetimeUtils.parse_date(snapshot)
     if not dash_authenticated(config) or process is None or snapshot is None or solution is None:
-        return True, None, None, True
+        return True, None, None, True, None, None, None, None, True
     best_result: ProductionPlanning
     if solution == "_SNAPSHOT_":
         best_result = state.get_snapshot_solution(process, snapshot)[0]
@@ -252,10 +305,12 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
     else:
         result: LotsOptimizationState = state.get_results_persistence().load(snapshot, process, solution)
         if result is None or result.best_solution is None:
-            return True, None, None, True
+            return True, None, None, True, None, None, None, None, True
         best_result = result.best_solution
     lots: list[Lot] = [lot for plant_lots in best_result.get_lots().values() for lot in plant_lots]
-    plants = {p.id: p for p in state.get_site().equipment}
+    unassigned_order_ids: list[str] = [ass.order for ass in best_result.order_assignments.values() if ass.lot == ""]
+    site = state.get_site()
+    plants = {p.id: p for p in site.equipment}
     snap_obj = state.get_snapshot(snapshot)
     orders_by_lot: dict[str, list[Order|None]] = {}
     for lot in lots:
@@ -271,8 +326,14 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
             except ValueError:
                 continue
         orders_by_lot[lot.id] = lot_orders
+    unassigned_orders: dict[str, Order] = {}
+    for order in snap_obj.orders:
+        if order.id in unassigned_order_ids:
+            unassigned_orders[order.id] = order
+            if len(unassigned_orders) == len(unassigned_order_ids):
+                break
     all_due_dates = {lot: [o.due_date for o in orders if o is not None] for lot, orders in orders_by_lot.items()}
-    first_due_dates = {lot: min((o.due_date for o in orders if o is not None), default=DatetimeUtils.to_datetime(0)) for lot, orders in orders_by_lot.items()}
+    first_due_dates = {lot: min((o.due_date for o in orders if o is not None and o.due_date is not None), default=DatetimeUtils.to_datetime(0)) for lot, orders in orders_by_lot.items()}
     total_weights = {lot: sum(o.actual_weight if o.actual_weight is not None else (o.target_weight if o.target_weight is not None else 0)
                 for o in orders if o is not None) for lot, orders in orders_by_lot.items()}
     all_coils_by_orders: dict[str, list[Material]] = state.get_coils_by_order(snapshot)
@@ -292,9 +353,85 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
             "total_weight": total_weights[lot.id]
         }
     data = sorted([row_for_lot(lot) for lot in lots], key=lambda lot: lot["id"])
-    return False, data, data, False
+
+    def column_def_for_field(field: str, info: FieldInfo):
+        if isinstance(info, FieldInfo):
+            filter_id = "agNumberColumnFilter" if info.annotation == float or info.annotation == int else \
+                "agDateColumnFilter" if info.annotation == datetime or info.annotation == date else "agTextColumnFilter"
+        else:
+            filter_id = "agNumberColumnFilter" if isinstance(info, float) else \
+                "agDateColumnFilter" if isinstance(info, datetime) or isinstance(info, date) else "agTextColumnFilter"
+        col_def = {"field": field, "filter": filter_id}
+        return col_def
+
+    props = snap_obj.orders[0].material_properties
+    if props is None:
+        return False, data, data, False, None, None, None, None, True
+
+    costs = state.get_cost_provider()
+    relevant_fields = costs.relevant_fields(plants[lots[0].equipment]) if len(lots) > 0 else None
+    if relevant_fields is not None:
+        l = len("material_properties.")
+        relevant_fields = [f[l:] if f.startswith("material_properties.") else f for f in relevant_fields]
+    if isinstance(props, dict):
+        fields_0 = props  # TODO sort according to relevant fields info
+    else:
+        fields_0 = dict(sorted(props.model_fields.items(), key=lambda item: relevant_fields.index(item[0]) if item[0] in relevant_fields else len(relevant_fields))) \
+                      if relevant_fields is not None else props.model_fields
+
+    fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True},
+                {"field": "costs", "headerTooltip": "Transition costs from previous order."},
+                {"field": "weight", "headerTooltip": "Order weight in tons." },
+                {"field": "due_date", "headerTooltip": "Order due date." },
+                {"field": "priority", "headerTooltip": "Order priority."}] + \
+             [column_def_for_field(key, info) for key, info in fields_0.items()]
+
+    last_plant: int|None = None
+    last_order: Order|None = None
+    plant_obj: Equipment|None = None
+
+    def order_to_json(o: Order, lot: str|None):
+        nonlocal last_plant
+        nonlocal last_order
+        nonlocal plant_obj
+        as_dict = o.material_properties.model_dump(exclude_none=True, exclude_unset=True) if isinstance(o.material_properties, BaseModel) \
+            else o.material_properties
+        as_dict["order"] = o.id
+        as_dict["lot"] = lot or ""
+        as_dict["weight"] = o.actual_weight
+        as_dict["due_date"] = o.due_date
+        as_dict["priority"] = o.priority
+        if lot is None:
+            return as_dict
+        lot_obj = next(l for l in lots if l.id == lot)
+        plant: int = lot_obj.equipment
+        if plant == last_plant:
+            tr_costs = costs.transition_costs(plant_obj, last_order, o)
+            as_dict["costs"] = tr_costs
+        else:
+            plant_obj = plants[plant]
+        last_plant = plant
+        last_order = o
+        return as_dict
+
+    order_rows = [order_to_json(o, lot) for lot, orders in orders_by_lot.items() for o in orders] + \
+        [order_to_json(o, None) for o in unassigned_orders.values()]
+
+    fields = [f for f in fields if any(order.get(f["field"]) is not None for order in order_rows)]
+    structure = None
+    structure_targets = None
+    show_structure: bool = best_result.target_structure is not None and len(best_result.target_structure) > 0
+    if show_structure:
+        structure0 = ModelUtils.aggregated_structure(site, best_result)  # dict[str, dict[str, float]]
+        # required format: { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
+        all_cats: list[MaterialCategory] = site.material_categories
+        structure = {cat.id: {"name": cat.name or cat.id, "classes": {cl.id: {"name": cl.name or cl.id, "weight": structure0[cat.id][cl.id]} for cl in cat.classes if cl.id in structure0[cat.id] }}
+                                                        for cat in all_cats if cat.id in structure0}
+        structure_targets = best_result.target_structure  # dict[str, float]
+    return False, data, data, False, fields, order_rows, structure, structure_targets, not show_structure
 
 
+# Lots export
 @callback(
     Output("planning-lots-table", "exportDataAsCsv"),
     Output("planning-lots-table", "csvExportParams"),
@@ -307,11 +444,33 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
 def export_data_as_csv(n_clicks, snapshot: str|None, process: str|None, solution: str|None):
     snapshot = DatetimeUtils.parse_date(snapshot)
     if not dash_authenticated(config) or process is None or snapshot is None or solution is None:
-        return True, None, None, True
+        return True, None
     filename = "lots_" + process + "_" + \
                DatetimeUtils.format(snapshot).replace("+0000","").replace(":", "").replace("-", "").replace("T", "") + \
                "_" + solution.replace("\\", "_").replace("/", "_").replace(":", "_") + ".csv"
-    options = {"fileName": filename }
+    options = {"fileName": filename, "columnSeparator": ";" }
+    return True, options
+
+
+# Orders with lot information export
+@callback(
+    Output("planning-lots-order-table", "exportDataAsCsv"),
+    Output("planning-lots-order-table", "csvExportParams"),
+    Input("download-orders-csv", "n_clicks"),
+    State("selected-snapshot", "data"),
+    State("process-selector-lotplanning", "value"),
+    State("planning-selected-solution", "data"),
+    prevent_initial_call=True,
+)
+def export_order_data_as_csv(n_clicks, snapshot: str|None, process: str|None, solution: str|None):
+    snapshot = DatetimeUtils.parse_date(snapshot)
+    if not dash_authenticated(config) or process is None or snapshot is None or solution is None:
+        return False, None
+    filename = "orders_lots_" + process + "_" + \
+               DatetimeUtils.format(snapshot).replace("+0000","").replace(":", "").replace("-", "").replace("T", "") + \
+               "_" + solution.replace("\\", "_").replace("/", "_").replace(":", "_") + ".csv"
+    options = {"fileName": filename, "columnSeparator": ";"}
+    # TODO columns selector
     return True, options
 
 
@@ -336,6 +495,16 @@ clientside_callback(
     Input("planning-swimlane-mode", "value")
 )
 
+clientside_callback(
+    ClientsideFunction(
+        namespace="lots2",
+        function_name="setBacklogStructureOverview"
+    ),
+    Output("lotplanning-structure-view", "title"),
+    Input("lotplanning-material-structure", "data"),
+    Input("lotplanning-material-targets", "data"),
+    State("lotplanning-structure-view", "id"),
+)
 
 # FIXME closing the popup and reopening the same lot does not work
 # open popup on selection, but only if a lot is really selected, and if it is not part of the snapshot solution

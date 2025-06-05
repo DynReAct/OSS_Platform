@@ -1,25 +1,28 @@
+import functools
 from datetime import datetime
 import glob
 import os
-from typing import Any
+from typing import Any, Literal
 
 import pydantic_core
 from pydantic import BaseModel, TypeAdapter
 
 from dynreact.base.LotsOptimizer import LotsOptimizationState
+from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import EquipmentStatus, Site, Process, ProductionPlanning, MidTermTargets, StorageLevel
+from dynreact.base.model import EquipmentStatus, Site, Process, ProductionPlanning, MidTermTargets, StorageLevel, \
+    ObjectiveFunction
 
 
 class LotsOptimizationStateModel(BaseModel):
 
     current_solution: ProductionPlanning
-    current_object_value: float
+    current_object_value: ObjectiveFunction
     best_solution: ProductionPlanning
-    best_objective_value: float
+    best_objective_value: ObjectiveFunction
     #num_iterations: int
-    history: list[float]
+    history: list[ObjectiveFunction]
     parameters: dict[str, Any] | None = None
 
 
@@ -29,7 +32,7 @@ class FileResultsPersistence(ResultsPersistence):
         super().__init__(uri, site)
         uri_lower = uri.lower()
         if not uri_lower.startswith("default+file:"):
-            raise Exception("Unexpected URI for file results persistence: " + str(uri))
+            raise NotApplicableException("Unexpected URI for file results persistence: " + str(uri))
         folder = uri[len("default+file:"):]
         self._folder = folder
         os.makedirs(folder, exist_ok=True)
@@ -107,6 +110,7 @@ class FileResultsPersistence(ResultsPersistence):
         os.remove(file)
         return True
 
+    @functools.lru_cache(maxsize=32)
     def load(self, snapshot_id: datetime, process: str, solution_id: str) -> LotsOptimizationState:
         file = self._get_file_lotcreation(snapshot_id, process, solution_id)
         if not os.path.isfile(file):
@@ -158,10 +162,11 @@ class FileResultsPersistence(ResultsPersistence):
         os.remove(file)
         return True
 
+    @functools.lru_cache(maxsize=32)
     def load_ltp(self, start_time: datetime, solution_id: str) -> MidTermTargets:
         file = self._get_file_longterm(start_time, solution_id)
         if not os.path.isfile(file):
-            raise Exception("Solution " + str(solution_id) + " does not exist for start time " + str(start_time))
+            raise Exception(f"Solution {solution_id} does not exist for start time {start_time}, no such file: {file}")
         content = None
         with open(file, "r") as fl:
             content = fl.read()
@@ -175,13 +180,18 @@ class FileResultsPersistence(ResultsPersistence):
         file = self._get_file_longterm(start_time, solution_id)
         return os.path.isfile(file)
 
-    def start_times_ltp(self, start: datetime, end: datetime) -> list[datetime]:
+    def start_times_ltp(self, start: datetime|None=None, end: datetime|None=None, sort: Literal["asc", "desc"]="asc", limit: int=100) -> list[datetime]:
+        # TODO cache folder names?
         folder = os.path.join(self._folder, "longterm")
-        start_ms = DatetimeUtils.to_millis(start)
-        end_ms = DatetimeUtils.to_millis(end)
-        sub_folders = (dir for dir in glob.glob(folder + "/*") if os.path.isdir(dir))
+        start_ms = DatetimeUtils.to_millis(start) if start is not None else None
+        end_ms = DatetimeUtils.to_millis(end) if end is not None else None
+        sub_folders = sorted(dir for dir in glob.glob(folder + "/*") if os.path.isdir(dir))
         sub_folders_as_millis = (FileResultsPersistence._folder_name_to_millis(FileResultsPersistence._solution_id_for_file(dir, strip_ending=False)) for dir in sub_folders)
-        sub_folders_as_millis = (dir for dir in sub_folders_as_millis if dir is not None and dir >= start_ms and dir < end_ms)
+        sub_folders_as_millis = [dir for dir in sub_folders_as_millis if dir is not None and (start_ms is None or dir >= start_ms) and (end_ms is None or dir < end_ms)]
+        if sort == "desc":
+            sub_folders_as_millis = list(reversed(sub_folders_as_millis))
+        if limit is not None and len(sub_folders_as_millis) > limit:
+            sub_folders_as_millis = sub_folders_as_millis[0:limit]
         return [DatetimeUtils.to_datetime(dir) for dir in sub_folders_as_millis]
 
     def solutions_ltp(self, start_time: datetime) -> list[str]:

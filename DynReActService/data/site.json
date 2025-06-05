@@ -33,15 +33,26 @@
     {
       "id": "rollingType", "name": "Rolling type",
       "classes": [
-        { "id": "rtype1", "name": "Rolling material 1", "is_default": true, "category": "rollingType" },
-        { "id": "rtype2", "name": "Rolling material 2", "category": "rollingType" }
+        { "id": "rtype1", "name": "Rolling material 1", "is_default": true, "category": "rollingType", "mapping": "material_properties.thickness_final>0.15" },
+        { "id": "rtype2", "name": "Rolling material 2", "category": "rollingType", "mapping": "material_properties.thickness_final<=0.15" },
+        { "id": "rtype3", "name": "Rolling material 3", "category": "rollingType" },
+        { "id": "rtype4", "name": "Rolling material 4", "category": "rollingType" }
       ]
     }, {
       "id": "finishingType", "name": "Finishing type",
       "classes": [
-        { "id": "ftype1", "name": "Finishing material 1", "is_default": true, "category": "finishingType" },
-        { "id": "ftype2", "name": "Finishing material 2", "category": "finishingType" }
+        { "id": "ftype1", "name": "Finishing material 1", "is_default": true, "category": "finishingType", "mapping": "material_properties.finishing_type=ftype1" },
+        { "id": "ftype2", "name": "Finishing material 2", "category": "finishingType", "mapping": "material_properties.finishing_type=ftype2" }
       ]
     }
-  ]
+  ],
+  "logistic_costs": {
+      "1": {"2":  1},
+      "2": {"1":  1},
+      "3": {"4":  1, "5":  2},
+      "4": {"3":  1, "5":  2},
+      "5": {"3":  2, "4":  2},
+      "6": {"7":  1},
+      "7": {"6":  1}
+  }
 }

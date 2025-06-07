@@ -14,16 +14,11 @@ ARG USERNAME=vscode
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
-# [Option] Enable non-root Docker access in container
-ARG ENABLE_NONROOT_DOCKER="true"
-
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     # Remove imagemagick due to https://security-tracker.debian.org/tracker/CVE-2019-10131
     && apt-get purge -y imagemagick imagemagick-6-common \
     # Install common packages, non-root user
     && bash /tmp/library-scripts/common-debian.sh "${INSTALL_ZSH}" "${USERNAME}" "${USER_UID}" "${USER_GID}" "${UPGRADE_PACKAGES}" "true" "true" \
-    # Use Docker script from script library to set things up
-    && /bin/bash /tmp/library-scripts/docker-debian.sh "${ENABLE_NONROOT_DOCKER}" "/var/run/docker-host.sock" "/var/run/docker.sock" "${USERNAME}" \
     # Clean up
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*
 
@@ -32,7 +27,7 @@ ARG PYTHON_VERSION="3.12"
 ENV PIPX_HOME=/usr/local/py-utils \
     PIPX_BIN_DIR=/usr/local/py-utils/bin
 ENV PATH=${PATH}:${PIPX_BIN_DIR}
-RUN bash /tmp/library-scripts/python-debian.sh "${PYTHON_VERSION}" "/usr/local/python" "${PIPX_HOME}" "${USERNAME}" \ 
+RUN bash /tmp/library-scripts/python-debian.sh "${PYTHON_VERSION}" "/usr/local/python" "${PIPX_HOME}" "${USERNAME}" \
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*
 
 # [Choice] Node.js version: none, lts/*, 16, 14, 12, 10
@@ -46,12 +41,13 @@ RUN bash /tmp/library-scripts/node-debian.sh "${NVM_DIR}" "${NODE_VERSION}" "${U
 # Make sure to forward private address to localhost, so later devcontainer can re-forward it
 COPY ./extras/socat-forward /etc/init.d/socat-forwarding
 
-RUN sudo chmod 755 /etc/init.d/socat-forwarding \
-    && sudo service socat-forwarding start
+RUN chmod 755 /etc/init.d/socat-forwarding \
+    && service socat-forwarding start
 
-RUN sudo mkdir -p /var/log/dynreact-logs  \
-    && sudo chown vscode:vscode /var/log/dynreact-logs
+RUN mkdir -p /var/log/dynreact-logs \
+    && chown vscode:vscode /var/log/dynreact-logs
 
+RUN getent group docker || groupadd docker && usermod -aG docker vscode
 RUN pipx install poetry
 
 RUN echo 'unset PS1' >> /home/vscode/.zshrc && \
@@ -70,7 +66,4 @@ RUN echo 'unset PS1' >> /home/vscode/.zshrc && \
 # [Optional] Uncomment this line to install global node packages.
 # RUN su vscode -c "source /usr/local/share/nvm/nvm.sh && npm install -g <your-package-here>" 2>&1
 
-# Setting the ENTRYPOINT to docker-init.sh will configure non-root access 
-# to the Docker socket. The script will also execute CMD as needed.
-ENTRYPOINT [ "/usr/local/share/docker-init.sh" ]
 CMD [ "sleep", "infinity" ]

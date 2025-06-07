@@ -11,6 +11,7 @@
   },
 
   "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
     "ghcr.io/devcontainers/features/common-utils": {
       "installZsh": true,
       "installOhMyZsh": true,
@@ -48,6 +49,7 @@
    // Use 'postCreateCommand' to map 192.168.111.11:5016 locally.
    // pcudp11 is an .ssh configuration the host machine
    "postCreateCommand": ".devcontainer/extras/postinstall.sh",
+   "postStartCommand": "sudo chown root:docker /var/run/docker.sock",
 
    // Comment out to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
    "remoteUser": "vscode"

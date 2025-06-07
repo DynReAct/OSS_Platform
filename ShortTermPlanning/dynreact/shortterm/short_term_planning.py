@@ -303,6 +303,8 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
             payload = json.loads(message['payload']) if (type(message["payload"]) is str) else message['payload']
             if payload["is_auction_started"]:
                 return
+            elif payload["total_num_agents"] < payload["present_agents"]:
+                raise Exception(f"More agents responded than expected. Expected {payload["total_num_agents"]} got {payload["present_agents"]}")
 
     raise Exception("Failed to start/run auction, timeout exceeded")
 

@@ -110,7 +110,7 @@ class Equipment(Agent):
             equipment = payload['id']
             snapshot = payload['snapshot']
             counterbid_wait = payload['counterbid_wait']
-            agent = f"EQUIPMENT:{topic}:{equipment}:0"
+            agent = f"EQUIPMENT:{topic}:{equipment}"
             status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)
             self.equipment = equipment
 

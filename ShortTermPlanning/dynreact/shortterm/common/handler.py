@@ -55,7 +55,6 @@ class DockerManager:
                       "TOPIC_GEN": KeySearch.search_for_value("TOPIC_GEN"),
                       "TOPIC_CALLBACK": KeySearch.search_for_value("TOPIC_CALLBACK")
                     },
-                    network="default-dy-1b538_kafka-net",
                     volumes={
                         "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
                         "/var/log/dynreact-logs": {

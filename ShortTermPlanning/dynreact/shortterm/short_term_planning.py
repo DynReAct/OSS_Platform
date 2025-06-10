@@ -194,25 +194,32 @@ def create_auction(
     # Instruct the general MATERIAL to clone itself for the auction,
     # for as many materials associated to each equipment
     all_materials = []
-    for equipment in equipments:
-        # Get the list of materials of the equipment
-        equipment_ids = re.findall(r'\d+', str(equipment))
 
-        if len(equipment_ids) == 1:
-            equipment_materials = data_setup.get_equipment_materials(int(equipment_ids[0]))
-            if verbose > 1:
-                msg = f"Obtained list of materials from equipment {equipment}: {equipment_materials}"
-                sendmsgtopic(
-                    producer=producer, tsend=topic_gen, topic=act, source="UX", dest="LOG:" + topic_gen, action="WRITE",
-                    payload=dict(msg=msg), vb=verbose
-                )
-        else:
-            raise Exception(f"No equipment ID found in equipment {equipment}")
+    if materials is None:
+        for equipment in equipments:
+            # Get the list of materials of the equipment
+            equipment_ids = re.findall(r'\d+', str(equipment))
 
-        if materials is None and nmaterials is not None:
-            all_materials.extend(equipment_materials[:nmaterials])
-        else:
-            all_materials.extend(equipment_materials)
+            if len(equipment_ids) == 1:
+                equipment_materials = data_setup.get_equipment_materials(int(equipment_ids[0]))
+                if verbose > 1:
+                    msg = f"Obtained list of materials from equipment {equipment}: {equipment_materials}"
+                    print(msg)
+                    sendmsgtopic(
+                        producer=producer, tsend=topic_gen, topic=act, source="UX", dest="LOG:" + topic_gen, action="WRITE",
+                        payload=dict(msg=msg), vb=verbose
+                    )
+            else:
+                raise Exception(f"No equipment ID found in equipment {equipment}")
+
+            if materials is None and nmaterials is not None:
+                all_materials.extend(equipment_materials[:nmaterials])
+            else:
+                all_materials.extend(equipment_materials)
+
+            print("Current material list size is {}".format(len(all_materials)))
+    else:
+        all_materials = materials
 
     # # If the user provided the materials make sure all are part of at least one equipment
     # if materials is not None:
@@ -223,6 +230,7 @@ def create_auction(
     #         raise Exception(f"Provided materials {unwanted} are not part of the selected equipment")
 
     all_materials = list(set(all_materials))
+    print("Final material list size is {}".format(len(all_materials)))
 
     # Clone the master MATERIAL for each material ID
     for material in all_materials:

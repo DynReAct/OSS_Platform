@@ -212,23 +212,22 @@ def create_auction(
             else:
                 raise Exception(f"No equipment ID found in equipment {equipment}")
 
-        if materials is None and nmaterials is not None:
-            all_materials.extend(equipment_materials[:nmaterials])
-        else:
-            all_materials.extend(equipment_materials)
+            if materials is None and nmaterials is not None:
+                all_materials.extend(equipment_materials[:nmaterials])
+            else:
+                all_materials.extend(equipment_materials)
 
-    #
-    # Change from JOM 2025-05-28
-    # If the user provided the materials make sure all are part of at least one equipment
-    # Now, since other materials coming from different plants can be conveyed to the new
-    # equipment auction, origin checks are meaningless
-    #
+            print("Current material list size is {}".format(len(all_materials)))
+    else:
+        all_materials = materials
+
+    # # If the user provided the materials make sure all are part of at least one equipment
     # if materials is not None:
     #     if all(item in all_materials for item in materials):
     #         all_materials = materials
     #     else:
-    #         raise Exception("Provided materials are not part of the selected equipment")
-    all_materials = materials
+    #         unwanted = [item for item in materials if item not in all_materials]
+    #         raise Exception(f"Provided materials {unwanted} are not part of the selected equipment")
 
     all_materials = list(set(all_materials))
     print("Final material list size is {}".format(len(all_materials)))

@@ -1,6 +1,6 @@
 results/
 /data/config/
-data/
+# data/
 data_*/
 requirements_ras.txt
-data/stp_context.json
+# data/stp_context.json

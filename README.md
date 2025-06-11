@@ -1,4 +1,4 @@
-<table>
+ <table>
   <tr>
     <td align="left"><img src="images/logo.png" width="200" alt="Project Logo"></td>
     <td align="center"><img src="images/empty.png" width="100" hspace="100"></td>

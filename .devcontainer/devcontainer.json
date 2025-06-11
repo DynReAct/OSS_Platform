@@ -6,11 +6,16 @@
   
   // Use this environment variable if you need to bind mount your local source code into a new container.
   "remoteEnv": {
-     "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}",
-     "PYTHONPATH": "/usr/local/python/bin/python"
+    "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}",
+    "PYTHONPATH": "/usr/local/python/bin/python",
+    "TEST_BASE": "../../dynreact/shortterm"
   },
 
   "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "privileged": true
+    },
     "ghcr.io/devcontainers/features/common-utils": {
       "installZsh": true,
       "installOhMyZsh": true,

@@ -194,20 +194,23 @@ def create_auction(
     # Instruct the general MATERIAL to clone itself for the auction,
     # for as many materials associated to each equipment
     all_materials = []
-    for equipment in equipments:
-        # Get the list of materials of the equipment
-        equipment_ids = re.findall(r'\d+', str(equipment))
 
-        if len(equipment_ids) == 1:
-            equipment_materials = data_setup.get_equipment_materials(int(equipment_ids[0]))
-            if verbose > 1:
-                msg = f"Obtained list of materials from equipment {equipment}: {equipment_materials}"
-                sendmsgtopic(
-                    producer=producer, tsend=topic_gen, topic=act, source="UX", dest="LOG:" + topic_gen, action="WRITE",
-                    payload=dict(msg=msg), vb=verbose
-                )
-        else:
-            raise Exception(f"No equipment ID found in equipment {equipment}")
+    if materials is None:
+        for equipment in equipments:
+            # Get the list of materials of the equipment
+            equipment_ids = re.findall(r'\d+', str(equipment))
+
+            if len(equipment_ids) == 1:
+                equipment_materials = data_setup.get_equipment_materials(int(equipment_ids[0]))
+                if verbose > 1:
+                    msg = f"Obtained list of materials from equipment {equipment}: {equipment_materials}"
+                    print(msg)
+                    sendmsgtopic(
+                        producer=producer, tsend=topic_gen, topic=act, source="UX", dest="LOG:" + topic_gen, action="WRITE",
+                        payload=dict(msg=msg), vb=verbose
+                    )
+            else:
+                raise Exception(f"No equipment ID found in equipment {equipment}")
 
         if materials is None and nmaterials is not None:
             all_materials.extend(equipment_materials[:nmaterials])
@@ -228,6 +231,7 @@ def create_auction(
     all_materials = materials
 
     all_materials = list(set(all_materials))
+    print("Final material list size is {}".format(len(all_materials)))
 
     # Clone the master MATERIAL for each material ID
     for material in all_materials:
@@ -308,6 +312,8 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
             payload = json.loads(message['payload']) if (type(message["payload"]) is str) else message['payload']
             if payload["is_auction_started"]:
                 return
+            elif payload["total_num_agents"] < payload["present_agents"]:
+                raise Exception(f"More agents responded than expected. Expected {payload["total_num_agents"]} got {payload["present_agents"]}")
 
     raise Exception("Failed to start/run auction, timeout exceeded")
 

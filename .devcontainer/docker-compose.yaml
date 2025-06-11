@@ -13,11 +13,15 @@ services:
 
     volumes:
       # Forwards the local Docker socket to the container.
-      - /var/run/docker.sock:/var/run/docker-host.sock
+      - /var/run/docker.sock:/var/run/docker.sock
       # Update this to wherever you want VS Code to mount the folder of your project
       - ..:/workspace:cached
 
     network_mode: service:kafkaUi
+
+    depends_on:
+      - kafka
+      - kafkaUi
       
     # Overrides default command so things don't shut down after the process ends.
     entrypoint: /usr/local/share/docker-init.sh
@@ -32,3 +36,41 @@ services:
       DYNAMIC_CONFIG_ENABLED: 'true'
     volumes:
       - ./kafka/config.yml:/etc/kafkaui/dynamic_config.yaml
+
+    ports:
+      - "8080:8080" # This is needed for forwardPorts to work
+
+    networks:
+      - kafka-net
+    depends_on:
+      - kafka
+
+  kafka:
+    image: apache/kafka:latest
+    container_name: kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://kafka:9092,CONTROLLER://kafka:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+      JMX_PORT: 9999
+      KAFKA_JMX_PORT: 9999
+      KAFKA_JMX_HOSTNAME: kafka
+
+    ports:
+      - "9092:9092"
+      - "9999:9999"
+
+    networks:
+      - kafka-net
+
+networks:
+  kafka-net:

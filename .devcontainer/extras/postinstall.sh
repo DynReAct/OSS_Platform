@@ -4,6 +4,7 @@
 # Basic Config
 #######
 
+sudo chown root:docker /var/run/docker.sock
 sudo service socat-forwarding reload 
 cd /workspace
 

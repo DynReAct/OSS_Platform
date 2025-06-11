@@ -301,7 +301,7 @@ class Log(Agent):
             tsend=topic,
             topic=topic,
             source=self.agent,
-            dest=".*",
+            dest=rf"(MATERIAL|EQUIPMENT|LOG):{topic}:?(\w*)(:\d)?",
             action="PING",
             vb=self.verbose
         )

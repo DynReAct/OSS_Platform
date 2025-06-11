@@ -591,7 +591,7 @@ def ltp_table_opened(_, snapshot: str, process: str, horizon_hours: int):
     if snapshot is None or horizon_hours is None:
         return []
     persistence: ResultsPersistence = state.get_results_persistence()
-    all_start_times: list[datetime] = persistence.start_times_ltp(snapshot - timedelta(days=32), snapshot)
+    all_start_times: list[datetime] = persistence.start_times_ltp(snapshot - timedelta(days=32), snapshot + timedelta(minutes=1) )
     starttimes_solutions: dict[datetime, list[str]] = {starttime: persistence.solutions_ltp(starttime) for starttime in all_start_times}
     solutions: list[MidTermTargets] = []
     solution_ids: list[str] = []

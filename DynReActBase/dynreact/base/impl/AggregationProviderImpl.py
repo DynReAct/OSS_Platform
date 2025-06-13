@@ -274,9 +274,11 @@ class AggregationProviderImpl(AggregationProvider):
                                                 aggregation_interval=(t, t)) for p, values in agg_by_process0.items()}
         return AggregatedStorageContent(content_by_storage=agg_by_storage, content_by_process=agg_by_process, content_by_equipment=agg_by_plants)
 
+    # annotations incompatible with Python 3.11
+    #def _total_weight[T: int | str](agg_by_unit: dict[T, dict[str, dict[str, float]]]) -> dict[T, float]:
     @staticmethod
-    def _total_weight[T: int|str](agg_by_unit: dict[T, dict[str, dict[str, float]]]) -> dict[T, float]:
-        total_weights: dict[T, list[float]] = {p: [sum(values[cat].values()) for cat in values.keys()] for p, values in agg_by_unit.items()}
+    def _total_weight(agg_by_unit: dict) -> dict:
+        total_weights = {p: [sum(values[cat].values()) for cat in values.keys()] for p, values in agg_by_unit.items()}  # : dict[T, list[float]]
         return {t: max(values) if len(values) > 0 else 0 for t, values in total_weights.items()}
 
     @staticmethod

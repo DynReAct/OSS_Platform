@@ -260,14 +260,15 @@ class _ModIterator(Iterator):   # returns loaded modules
     def __init__(self, module: str):
         # Note: this works if there are duplicates in editable installations,
         # but not if there are duplicate modules in separate wheels
-        self._importers = iter(sys.meta_path)
+        self._importers = iter(sys.meta_path + [importlib.util])
+        # self._importers = iter([importlib.util]) # TODO maybe we do not need this sys.meta_path voodoo at all?
         self._module = module
 
     def __next__(self):
         while True:
             importer = next(self._importers)
             try:
-                spec_res = importer.find_spec(self._module, path=None)
+                spec_res = importer.find_spec(self._module)
                 if spec_res is not None:
                     mod = importlib.util.module_from_spec(spec_res)
                     # sys.modules[module] = mod  # we'll check first if this is the correct module

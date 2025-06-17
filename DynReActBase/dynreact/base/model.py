@@ -202,6 +202,7 @@ class Lot(Model):
     status: int  # ?
     orders: list[str]
     processing_status: Literal["PENDING", "STARTED", "FINISHED"]|None = None
+    comment: str|None = None
 
 
 class MaterialOrderData(Model):

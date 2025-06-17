@@ -11,7 +11,7 @@ version = "0.0.1"
 #]
 description = "The DynReAct service and GUI"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -22,6 +22,13 @@ dynamic = ["dependencies"]
 [project.urls]
 Homepage = "https://github.com/DynReAct/OSS_Platform"
 Issues = "https://github.com/DynReAct/OSS_Platform/issues"
+
+[project.scripts]
+analyze-lots = "dynreact.cli:analyze_lots"
+analyze-site = "dynreact.cli:analyze_site"
+analyze-snapshot = "dynreact.cli:analyze_snapshot"
+create-lots = "dynreact.cli:create-lots"
+evaluate-lot = "dynreact.cli:evaluate-lot"
 
 # See https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#setuptools-specific-configuration
 [tool.setuptools]

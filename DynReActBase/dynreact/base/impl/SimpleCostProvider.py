@@ -137,7 +137,7 @@ class SimpleCostProvider(CostProvider):
         weight_diff_costs = self._weight_deviation_costs(weight_diff)
         total_costs = transition_costs + (num_lots-1) * self._new_lot_costs + weight_diff_costs
         return EquipmentStatus(targets=equipment_targets, snapshot_id=snapshot.timestamp, planning_period=planning_period,
-                               current_order=previous_order.id if previous_order is not None else None, previous_order=prev_prev_oder.id if prev_prev_oder is not None else None,
+                               current_order=previous_order_obj.id if previous_order_obj is not None else None, previous_order=prev_prev_oder.id if prev_prev_oder is not None else None,
                                planning=PlanningData(target_fct=total_costs, transition_costs=transition_costs, lots_count=num_lots, orders_count=num_assignments,
                                                      current_material=[c.id for c in current_material] if current_material is not None else None,
                                                      delta_weight=weight_diff, min_due_date=min_due_date, assigned_priority=sum_prio))

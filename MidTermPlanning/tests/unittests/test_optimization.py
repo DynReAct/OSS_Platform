@@ -220,7 +220,7 @@ class OptimizationTest(unittest.TestCase):
             OptimizationTest._create_order("c", range(num_plants), 10)]
         # a->b has high transition costs, and c->b is slightly more expensive than b->c, so without the start cond. the order b->c would be preferred
         transition_costs = {"a": {"b": 10, "c": 1}, "b": {"a": 10, "c": 1}, "c": {"a": 1, "b": 2}}
-        costs = SimpleCostProvider("simple:costs", test_site, transition_costs, minimum_possible_costs=1)
+        costs = SimpleCostProvider("simple:costs", test_site, transition_costs, minimum_possible_costs=1, missing_weight_costs=1)
         p_id = plants[0].id
         # we create an existing lot for order "a"
         existing_lots: dict[int, list[Lot]] = {p_id: [Lot(id="TestLot1", equipment=p_id, active=True, status=4, orders=[orders[0].id])]}
@@ -240,6 +240,7 @@ class OptimizationTest(unittest.TestCase):
         # optimization.add_listener(TestListener())  # for debugging
         optimization_state: LotsOptimizationState = optimization.run(max_iterations=10)
         solution: ProductionPlanning = optimization_state.best_solution
+
         all_lots = solution.get_lots()
         assert len(all_lots) > 0, "No lots generated"
         lots: list[Lot] = all_lots.get(p_id)

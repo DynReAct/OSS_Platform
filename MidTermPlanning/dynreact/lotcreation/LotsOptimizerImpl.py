@@ -308,20 +308,14 @@ class TabuSearch(LotsOptimizer):
             G = nx.DiGraph(sTM) if len(sTM) > 0 else nx.DiGraph()
 
             # TODO connection order consideration
-            """
             sT0 = None
-            oc = None
-            if OCt is not None:
-                if plant_id in OCt:
-                    oc = OCt[plant_id]
-                    if oc is None or oc.Attributes is None:
-                        continue
-                    sT0 = np.array([costs.TCostVA(oc.Attributes, i.Order.Attributes, p) for i in sl.values()])
-                    sT0[np.isnan(sT0)] = CostNaN
-            """
-
-            spath = lcor.path_converingOR(sTM) #, sT0)
-
+            if self._previous_orders is not None:
+                prev_order: str = self._previous_orders.get(plant_id)
+                if prev_order is not None:
+                    prev_obj = self._orders[prev_order] if self._orders is not None else self._snapshot.get_order(prev_order, do_raise=True)
+                    sT0 = np.array([self._costs.transition_costs(plant, prev_obj, order) for order in orders])
+                    sT0[np.isnan(sT0)] = 50   # FIXME
+            spath = lcor.path_converingOR(sTM, sT0)
             dict_subgraph = {}
             pos = 0
             sc = 0

@@ -118,6 +118,10 @@ class LotsOptimizer(Generic[P]):
         self._state: LotsOptimizationState[P] = LotsOptimizationState(current_solution=initial_solution, best_solution=best_solution,
                                         current_objective_value=initial_costs, best_objective_value=best_costs_value, history=history, parameters=parameters)
         self._previous_orders: dict[int, str]|None = best_solution.previous_orders if best_solution is not None else None
+        if self._previous_orders is not None and self._orders is not None:
+            for order_id in self._previous_orders.values():
+                if order_id not in self._orders:
+                    self._orders[order_id] = snapshot.get_order(order_id)
 
     def parameters(self) -> dict[str, any]|None:
         return self._state.parameters

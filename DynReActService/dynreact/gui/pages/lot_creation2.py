@@ -1648,15 +1648,24 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                 perf_models = performance_models_from_elements(process, perf_model_components)
                 snapshot_serialized: str = DatetimeUtils.format(snapshot)
                 orders: list[str] = [row["id"] if isinstance(row, dict) else row for row in selected_order_rows]
+                predecessor_orders = {} if predecessor_lots is not None else None
+                if predecessor_lots is not None:
+                    for plant, lot_id in predecessor_lots.items():
+                        lot_obj = next((lot for lot in snapshot_obj.lots.get(plant, []) if lot.id == lot_id), None)
+                        if lot_obj is None:
+                            raise Exception(f"Lot {lot_id} not found for plant {plant}")
+                        if len(lot_obj.orders) > 0:
+                            predecessor_orders[plant] = lot_obj.orders[-1]   # last order of the lot
                 if selected_init_method == "duedate":
                     initial_solution, targets = optimization_algo.due_dates_solution(process, snapshot_obj, horizon, state.get_cost_provider(),
-                                                    targets=targets, orders=orders)
+                                                    targets=targets, orders=orders, previous_orders=predecessor_orders)
                 elif selected_init_method == "snapshot":
                     initial_solution, targets = optimization_algo.snapshot_solution(process, snapshot_obj, horizon, state.get_cost_provider(),
-                                             targets=targets, orders=orders)
+                                             targets=targets, orders=orders, previous_orders=predecessor_orders)
                 else:  # init = heuristic
                     initial_solution, targets = optimization_algo.heuristic_solution(process, snapshot_obj, horizon, state.get_cost_provider(),
-                                state.get_snapshot_provider(), targets, orders, start_orders=None, orders_custom_priority=orders_custom_priority)  # TODO start orders
+                                state.get_snapshot_provider(), targets, orders, start_orders=None,  # TODO start orders
+                                orders_custom_priority=orders_custom_priority, previous_orders=predecessor_orders)
                 parameters = {
                     "targets": "snapshot" if not targets_customized else "custom",
                     "horizon_hours": horizon_hours,
@@ -1817,19 +1826,19 @@ def structure_update(_, components: list[Component]|None, process: str|None, set
     return total_weight  #f"{total_weight:.2f}"
 
 
-def target_values_from_settings(process: str, period: tuple[datetime, datetime], plants: list[int], use_lot_range: bool, components: list[Component]|None) -> tuple[ProductionTargets|None, bool, dict[str, str], str|None]:
+def target_values_from_settings(process: str, period: tuple[datetime, datetime], plants: list[int], use_lot_range: bool, components: list[Component]|None) -> tuple[ProductionTargets|None, bool, dict[int, str], str|None]:
     """
     :return: targets, indicator if default values have been changed, selected predecessor lot by plant , message
     """
     message = None
     if components is None:
-        return None, False, None
+        return None, False, None, None
 
     #all components for this plant
     components_by_plant = {plant: [c for c in components if c.get("props").get("data-plant") == str(plant)] for plant in plants}
     component_by_plant = {plant: cmps[0] if len(cmps) > 0 else None for plant, cmps in components_by_plant.items()}
     if None in component_by_plant.values():  # Need a component for every process plant # why?
-        return None, False, None
+        return None, False, None, None
 
     def plant_included(plant0: int) -> bool:
         # the structure per plant is something like this: <checkbox/><div (plant_element)/><div data-plant=plant.id><input tons></div>,
@@ -1862,7 +1871,7 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
                                          if plant_active[plant]}
         except TypeError:
             message = "Target production: enter a value"
-            return None, False, message
+            return None, False, None, message
         #for target_value in target_values.values():
         #    if target_value == 0:
         #        message = "Target production has to be > 0"
@@ -1884,7 +1893,7 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
                 if not has_min:
                     for_removal.append(plant)
             if message is not None:
-                return None, False, message
+                return None, False, None, message
             else:
                 for plant in for_removal:
                     plant_lot_ranges.pop(plant)
@@ -1898,11 +1907,11 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
                           c.get("props").get("children").get("props").get("value") != c.get("props").get("data-default")
                           and plant_active[plant]]
         predecessor_components = {plant: next(c for c in components if c.get("props").get("className") == "lots2-order-lots-prevlot") for plant, components in components_by_plant.items()}
-        predecessor_lots = {p: lot for p, lot  in {p: _selected_dropdown_value(c) for p, c in predecessor_components.items()}.items() if lot is not None}
+        predecessor_lots: dict[int, str] = {p: lot for p, lot  in {p: _selected_dropdown_value(c) for p, c in predecessor_components.items()}.items() if lot is not None}
         return ProductionTargets(process=process, target_weight=targets, period=period), len(changed_plants) > 0, predecessor_lots, message
     except ValueError as e:
         traceback.print_exc()
-        return None, False, str(e)
+        return None, False, None, str(e)
 
 def _selected_dropdown_value(c: dict) -> str | None:
     if c is None or "props" not in c:

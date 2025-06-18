@@ -117,6 +117,7 @@ class LotsOptimizer(Generic[P]):
         # state
         self._state: LotsOptimizationState[P] = LotsOptimizationState(current_solution=initial_solution, best_solution=best_solution,
                                         current_objective_value=initial_costs, best_objective_value=best_costs_value, history=history, parameters=parameters)
+        self._previous_orders: dict[int, str]|None = best_solution.previous_orders if best_solution is not None else None
 
     def parameters(self) -> dict[str, any]|None:
         return self._state.parameters
@@ -160,7 +161,8 @@ class LotsOptimizationAlgo:
     def snapshot_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider,
                                 targets: ProductionTargets|None = None,
                                 orders: list[str] | None = None,
-                                include_inactive_lots: bool=False) -> tuple[ProductionPlanning, ProductionTargets]:
+                                include_inactive_lots: bool=False,
+                                previous_orders: dict[int, str]|None=None) -> tuple[ProductionPlanning, ProductionTargets]:
         assignments: dict[str, OrderAssignment] = {}
         target_weights_by_plant: dict[int, float] = {}
         order_objs = snapshot.orders
@@ -186,7 +188,7 @@ class LotsOptimizationAlgo:
         targets: ProductionTargets = targets if targets is not None else \
             ProductionTargets(process=process, target_weight={p: EquipmentProduction(equipment=p, total_weight=weight) for p, weight in target_weights_by_plant.items()},
                               period=(snapshot.timestamp, snapshot.timestamp + planning_horizon))
-        planning = costs.evaluate_order_assignments(process, assignments, targets=targets, snapshot=snapshot) if costs is not None else None
+        planning = costs.evaluate_order_assignments(process, assignments, targets=targets, snapshot=snapshot, previous_orders=previous_orders) if costs is not None else None
         return planning, targets
 
     def _random_start_orders(self, plants: dict[int, Equipment], targets: ProductionTargets, orders: dict[str, Order],
@@ -233,7 +235,8 @@ class LotsOptimizationAlgo:
         return start_orders
 
     def heuristic_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider, snapshot_provider: SnapshotProvider,
-                           targets: ProductionTargets, orders: list[str], start_orders: dict[int, str]|None=None, orders_custom_priority: dict[str, int]|None=None) -> tuple[ProductionPlanning, ProductionTargets]:
+                           targets: ProductionTargets, orders: list[str], start_orders: dict[int, str]|None=None, orders_custom_priority: dict[str, int]|None=None,
+                           previous_orders: dict[int, str]|None=None) -> tuple[ProductionPlanning, ProductionTargets]:
         """
         If orders is not specified, this method will only consider as many orders for scheduling as are required to
         fulfill the targets per plant. Otherwise unassigned orders may occur.
@@ -327,13 +330,13 @@ class LotsOptimizationAlgo:
             order_assignments.update(
                 {order: OrderAssignment(order=order, equipment=-1, lot="", lot_idx=-1) for order in unassigned})
         planning = costs.evaluate_order_assignments(process, order_assignments, targets=targets, snapshot=snapshot,
-                                                    orders_custom_priority=orders_custom_priority)
+                                                    orders_custom_priority=orders_custom_priority, previous_orders=previous_orders)
         return planning, targets
 
 
     def due_dates_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider,
                            targets: ProductionTargets|None = None, orders: list[str] | None = None,
-                           include_inactive_lots: bool=False) -> tuple[ProductionPlanning, ProductionTargets]:
+                           include_inactive_lots: bool=False, previous_orders: dict[int, str]|None=None) -> tuple[ProductionPlanning, ProductionTargets]:
         """
         If orders is not specified, this method will only consider as many orders for scheduling as are required to
         fulfill the targets per plant. Otherwise unassigned orders may occur.
@@ -378,7 +381,7 @@ class LotsOptimizationAlgo:
         if orders is not None:
             unassigned: Sequence[str] = (order for order in orders if order not in assignments)
             order_assignments.update({order: OrderAssignment(order=order, equipment=-1, lot="", lot_idx=-1) for order in unassigned})
-        planning = costs.evaluate_order_assignments(process, order_assignments, targets=targets, snapshot=snapshot)
+        planning = costs.evaluate_order_assignments(process, order_assignments, targets=targets, snapshot=snapshot, previous_orders=previous_orders)
         return planning, targets
 
     def create_instance(self, process: str, snapshot: Snapshot, cost_provider: CostProvider,

@@ -389,6 +389,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
     last_plant: int|None = None
     last_order: Order|None = None
     plant_obj: Equipment|None = None
+    predecessor_orders: dict[int, str]|None = best_result.previous_orders
 
     def order_to_json(o: Order, lot: str|None):
         nonlocal last_plant
@@ -410,6 +411,12 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
             as_dict["costs"] = tr_costs
         else:
             plant_obj = plants[plant]
+            if predecessor_orders is not None and plant in predecessor_orders:
+                start_order_id = predecessor_orders[plant]
+                start_order = snap_obj.get_order(start_order_id) if start_order_id is not None else None
+                if start_order is not None:
+                    tr_costs = costs.transition_costs(plant_obj, start_order, o)
+                    as_dict["costs"] = tr_costs
         last_plant = plant
         last_order = o
         return as_dict

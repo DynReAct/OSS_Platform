@@ -39,7 +39,8 @@ class CostProvider:
         return 0
 
     def evaluate_order_assignments(self, process: str, assignments: dict[str, OrderAssignment], targets: ProductionTargets,
-                                   snapshot: Snapshot, total_priority: int|None = None, orders_custom_priority: dict[str, int]|None=None) -> ProductionPlanning:
+                                   snapshot: Snapshot, total_priority: int|None = None, orders_custom_priority: dict[str, int]|None=None,
+                                   previous_orders: dict[int, str]|None = None) -> ProductionPlanning:
         """
         :param process:
         :param assignments:
@@ -55,7 +56,8 @@ class CostProvider:
             {plant.id: self.evaluate_equipment_assignments(targets.target_weight.get(plant.id, EquipmentProduction(equipment=plant.id, total_weight=0.0)),
                                                 process, assignments, snapshot, targets.period, track_structure=track_structure,
                                                 main_category=main_category.id if main_category is not None else None,
-                                                orders_custom_priority=orders_custom_priority) for plant in plants}
+                                                orders_custom_priority=orders_custom_priority,
+                                                previous_order=previous_orders.get(plant.id) if previous_orders is not None else None) for plant in plants}
         order_assignments = {o: ass for o, ass in assignments.items() if ass.equipment in plant_ids}
         unassigned = {o: ass for o, ass in assignments.items() if ass.equipment < 0}
         order_assignments.update(unassigned)
@@ -71,13 +73,14 @@ class CostProvider:
             else:
                 total_priority = sum(snapshot.get_order(order_id, do_raise=True).priority for order_id in order_assignments)
         return ProductionPlanning(process=process, order_assignments=order_assignments, equipment_status=status,
-                                  target_structure=target_structure, total_priority=total_priority)
+                                  target_structure=target_structure, total_priority=total_priority, previous_orders=previous_orders)
 
     def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
                                        planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None,
                                        current_material: list[Material] | None=None,
                                        track_structure: bool=False, main_category: str|None=None,
-                                       orders_custom_priority: dict[str, int]|None=None) -> EquipmentStatus:
+                                       orders_custom_priority: dict[str, int]|None=None,
+                                       previous_order: str|None = None) -> EquipmentStatus:
         """
         Main function to be implemented in derived class taking into account global status.
         Note that this must set the PlantStatus.planning.target_fct value.
@@ -88,6 +91,8 @@ class CostProvider:
         :param current_coils: should only be present if the last order is not assumed to be processed entirely
         :param track_structure:
         :param main_category: only relevant if track_structure is true; used for nested structure targets
+        :param orders_custom_priority:
+        :param previous_order:
         :return:
         """
         raise Exception("Not implemented")

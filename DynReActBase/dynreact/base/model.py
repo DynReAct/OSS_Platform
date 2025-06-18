@@ -349,6 +349,8 @@ class ProductionPlanning(Model, Generic[P]):
     "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed. Special key \"_sum\" represents the total/aggregated value."
     total_priority: int = 0
     "Sum priority orders"
+    previous_orders: dict[int, str] | None = None
+    "Initial conditions for the optimization"
 
     # TODO cache results?
     def get_lots(self) -> dict[int, list[Lot]]:

@@ -33,7 +33,7 @@ poetry lock && poetry install
 cd ..
 
 cd DynReActService
-poetry lock && poetry install
+poetry lock && poetry install --without ras
 cd /workspace
 
 #######

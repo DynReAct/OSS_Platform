@@ -61,8 +61,8 @@ dynreact-shortterm = { path = "../ShortTermPlanning", develop = true }
 
 dynreact_ltp_ras = { path = "./LongTermPlanning", optional = true }
 dynreact_plugin_ras = { path = "./LotCreationRas", optional = true }
-dynreact_stp_ras = { path = "./ShortTermRAS", optional = true }
+dynreact_stp_gui_ras = { path = "./ShortTermRAS", optional = true }
 
 # Optional extras
 [tool.poetry.extras]
-ras = ["dynreact_ltp_ras", "dynreact_plugin_ras", "dynreact_stp_ras"]
+ras = ["dynreact_ltp_ras", "dynreact_plugin_ras", "dynreact_stp_gui_ras"]

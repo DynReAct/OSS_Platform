@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/zsh
 
 WORKSPACE="/workspace"
 git config --global --add safe.directory "$WORKSPACE"

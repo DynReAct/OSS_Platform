@@ -26,13 +26,19 @@ cd ShortTermRAS
 poetry lock && poetry install
 cd ..
 
+git config --global --add safe.directory "$SCRIPT_DIR/DynReActService/ShortTermRAS"
+
 cd LotCreationRas
 poetry lock && poetry install
 cd ..
 
+git config --global --add safe.directory "$SCRIPT_DIR/DynReActService/LotCreationRas"
+
 cd LongTermPlanning
 poetry lock && poetry install
 cd ..
+
+git config --global --add safe.directory "$SCRIPT_DIR/DynReActService/LongTermPlanning"
 
 cat <<EOF > .env
 # Environment Variables

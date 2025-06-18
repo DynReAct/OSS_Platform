@@ -1,5 +1,7 @@
 import threading
 import traceback
+import types
+import typing
 from datetime import datetime, timedelta, date
 from typing import Literal, Any
 import json
@@ -263,6 +265,14 @@ def orders_tab():
             ]) #, id="lots2-orders-backlog-settings")
         ], className="lots2-orders-grouped-menu"),
         html.Br(),
+
+        html.Div([
+            html.Div(dcc.Checklist(id="lots2-check-hide-released-lots",
+                            options=[{"value": "hide_released", "label": "Hide released lots"},
+                                     {"value": "hide_next_procs", "label": "Hide orders at later processes"}],
+                            value=["hide_released", "hide_next_procs"],
+                            className="lots2-checkbox"))
+        ], className="lots2-use-range-checkbox"),
         dash_ag.AgGrid(
             id="lots2-orders-table",
             columnDefs=[{"field": "id", "pinned": True}],
@@ -275,7 +285,7 @@ def orders_tab():
             # tooltipField is not used, but it must match an existing field for the tooltip to be shown
             defaultColDef={"tooltipComponent": "CoilsTooltip", "tooltipField": "id"},
             dashGridOptions={"rowSelection": "multiple", "suppressRowClickSelection": True, "animateRows": False,
-                             "tooltipShowDelay": 100, "tooltipInteraction": True,
+                             "tooltipShowDelay": 2_000, "tooltipInteraction": True,
                              "popupParent": {"function": "setCoilPopupParent()"}},
             # "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
         ),
@@ -898,6 +908,7 @@ def lot_buttons_disabled_check(selected_lots: list[str]|None, selected_rows: lis
 
             Input("selected-snapshot", "data"),
             Input("lots2-process-selector", "value"),
+Input("lots2-check-hide-released-lots", "value"),
             Input("lots2-orders-backlog-init", "n_clicks"),
             Input("lots2-orders-backlog-clear", "n_clicks"),
             Input("lots2-orders-select-visible", "n_clicks"),
@@ -918,7 +929,8 @@ def lot_buttons_disabled_check(selected_lots: list[str]|None, selected_rows: lis
             State("lots2-init-prev-proc-selector_lot", "value"),
             State("lots2-init-prev-proc-selector_all", "value"),
 )
-def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7,
+def update_orders(snapshot: str, process: str, check_hide_list: list[Literal["hide_released", "hide_next_procs"]],
+                  _1, _2, _3, _4, _5, _6, _7,
                   orders_data: dict[str, str]|None, selected_lots: list[str],
                   selected_rows: list[dict[str, any]]|None, filtered_rows: list[dict[str, any]]|None, horizon_hours: int,
                   init_method: Literal["active_process", "active_plant", "inactive_lots", "active_lots", "current_planning"]|None,
@@ -938,10 +950,23 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7,
                              or orders_data.get("snapshot") != snapshot_serialized
     if update_selection:
         orders_data = {"process": process, "snapshot": snapshot_serialized}
+    hide_released_lots: bool = "hide_released" in check_hide_list
+    hide_next_procs: bool = "hide_next_procs" in check_hide_list
     site = state.get_site()
+    _none_type = type(None)
+
+    def _is_numeric(tp: type|None):
+        if tp == float or tp == int:
+            return True
+        if tp == str or tp == bool or tp == _none_type:
+            return False
+        if isinstance(tp, types.UnionType):
+            args: tuple[Any, ...] = typing.get_args(tp)
+            return float in args or int in args
+        return False
 
     def column_def_for_field(field: str, info: FieldInfo):
-        filter_id = "agNumberColumnFilter" if info.annotation == float or info.annotation == int else \
+        filter_id = "agNumberColumnFilter" if _is_numeric(info.annotation) else \
             "agDateColumnFilter" if info.annotation == datetime or info.annotation == date else \
                 "agTextColumnFilter"
         col_def = {"field": field, "filter": filter_id, "filterParams": {"buttons": ["reset"]}}
@@ -959,8 +984,11 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7,
             field["checkboxSelection"] = True
             field["headerCheckboxSelection"] = True
         if field["field"] in ["lots", "lot_positions", "active_processes", "coil_status", "follow_up_processes", "material_status",
-                             "actual_weight", ]:
+                             "actual_weight", "material_classes"]:
             field["valueFormatter"] = value_formatter_object
+        if field["field"] == "current_equipment":
+            field["headerName"]  = "Equipment"
+    fields.append({"field": "lot_info", "headerName": "Lot", "tooltipField": "lot_info"})
 
     def order_to_json(o: Order):
         as_dict = o.model_dump(exclude_none=True, exclude_unset=True)
@@ -975,6 +1003,13 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7,
             as_dict.update(o.material_properties.model_dump(exclude_none=True, exclude_unset=True))
         elif isinstance(o.material_properties, dict):
             as_dict.update(o.material_properties)
+        lot = snapshot_obj.get_order_lot(site, o.id, process)
+        if lot is not None:
+            lot_info = f"{lot.id}[status={lot.status}, active={lot.active}"
+            if lot.comment is not None:
+                lot_info += f", comment={lot.comment}"
+            lot_info += "]"
+            as_dict["lot_info"] = lot_info
         return as_dict
 
     current_process_index = next((idx for idx, proc in enumerate(site.processes) if proc.name_short == process), None)
@@ -1065,6 +1100,27 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7,
     orders_data["orders_selected_cnt"] = len(selected_ids)
     orders_data["orders_selected_weight"] = weight
     #orders_data["orders"] = selected_ids
+    if hide_next_procs or hide_released_lots:
+        all_procs = site.processes
+        procs_by_id: dict[int, Process] = {}
+        for proc in all_procs:
+            for p_id in proc.process_ids:
+                procs_by_id[p_id] = proc
+        current_process_idx: int = all_procs.index(site.get_process(process, do_raise=True))
+
+        def _filter_order(o: Order) -> bool:
+            if hide_next_procs:
+                process_ids = o.current_processes
+                order_processes = [procs_by_id.get(p_id) for p_id in process_ids if p_id in procs_by_id]
+                is_at_follow_up_proc: bool = any(all_procs.index(p) > current_process_idx for p in order_processes)
+                if is_at_follow_up_proc:
+                    return False
+            if hide_released_lots:
+                lot = snapshot_obj.get_order_lot(site, o.id, process)
+                if lot is not None and lot.status > 2:
+                    return False
+            return True
+        orders_sorted = [o for o in orders_sorted if _filter_order(o)]
     sorted_orders = [order_to_json(order) for order in orders_sorted]
     first_orders = sorted_orders[0:min(5, len(sorted_orders))]
     try:
@@ -1081,6 +1137,10 @@ def update_orders(snapshot: str, process: str, _1, _2, _3, _4, _5, _6, _7,
                 field_id = mat_id if is_material_prop else _id
                 if field_id in relevant_fields and next((o for o in first_orders if o.get(_id) is not None), None) is not None:
                     return relevant_fields.index(field_id)
+                if field_id == "current_equipment":
+                    return -2
+                if field_id == "lot_info":
+                    return -1
                 return 1000
             fields.sort(key=field_sort_id)
     except:

@@ -194,12 +194,13 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
     priority: int = 0
     "Order priority"
 
+
 class Lot(Model):
     id: str
     equipment: int
     active: bool
-    # TODO documentation
-    status: int  # ?
+    status: int
+    "1: created; 2: blocked; 3: released; 4: in progress; 5: completed"
     orders: list[str]
     processing_status: Literal["PENDING", "STARTED", "FINISHED"]|None = None
     comment: str|None = None

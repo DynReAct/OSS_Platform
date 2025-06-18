@@ -153,7 +153,7 @@ def targets_tab(horizon: int):
                                            options=checklist_dict, value=[], className="lots2-checkbox")),
                     html.Div("Use lot weight range ?"),
                 ], className="lots2-use-range-checkbox"),
-                html.Div(id="lots2-details-plants", className="lots2-plants-targets3"),
+                html.Div(id="lots2-details-plants", className="lots2-plants-targets4"),
                 html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
                 html.Div(dcc.Textarea(id='lots2-structure-logging', value='', className="lots2-textarea")),
                 # html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "hidden"}))
@@ -269,7 +269,7 @@ def orders_tab():
         html.Div([
             html.Div(dcc.Checklist(id="lots2-check-hide-released-lots",
                             options=[{"value": "hide_released", "label": "Hide released lots"},
-                                     {"value": "hide_next_procs", "label": "Hide orders at later processes"}],
+                                     {"value": "hide_next_procs", "label": "Hide orders at later process steps"}],
                             value=["hide_released", "hide_next_procs"],
                             className="lots2-checkbox"))
         ], className="lots2-use-range-checkbox"),
@@ -660,21 +660,21 @@ def update_plants(snapshot: str,
                   ) -> tuple[list[Component], list[any]]:
     use_lot_range: bool = len(use_lot_range0) > 0
     if use_lot_range:
-        my_parent_classname = "lots2-plants-targets5"
+        my_parent_classname = "lots2-plants-targets6"
     else:
-        my_parent_classname = "lots2-plants-targets3"
-
-    if not dash_authenticated(config) or process is None or snapshot is None:
-        return None, my_parent_classname
-    if active_tab != "targets":
+        my_parent_classname = "lots2-plants-targets4"
+    snapshot = DatetimeUtils.parse_date(snapshot)
+    snapshot_obj = state.get_snapshot(snapshot)
+    if not dash_authenticated(config) or process is None or snapshot_obj is None or active_tab != "targets":
         return no_update, my_parent_classname
     changed = GuiUtils.changed_ids()
     is_ltp_init = "lots2-ltp-table" in changed and len(selected_rows) > 0
     re_init: bool = "lots2-targets-init-lots" in changed or is_ltp_init
     toggle_lot_range: bool = "lots2-check-use-lot-range" in changed
-    snapshot = DatetimeUtils.parse_date(snapshot)
     plants: list[Equipment] = state.get_site().get_process_equipment(process)
-    elements = []
+    elements = [html.Div(), html.Div("Equipment"), html.Div("Production / t"), html.Div("Previous lot", title="The previous lot defines the starting point for the lot creation.")]
+    if use_lot_range:
+        elements.extend([html.Div("Min lot size / t"), html.Div("Max lot size / t")])
     # TODO alternatively, we could use targets from the long term planning, or based on the plant capacity and duration
     # FIXME why does this fail regularly?
     if not is_ltp_init:
@@ -682,6 +682,7 @@ def update_plants(snapshot: str,
     else:
         targets = _targets_from_ltp(selected_rows[0], process, snapshot, horizon_hours)
     target_weights: dict[int, float] = {plant: t.total_weight for plant, t in targets.target_weight.items()}
+    lots: dict[int, list[Lot]] = snapshot_obj.lots
     for plant in plants:
         if components is not None and not re_init:
             # get vals from components
@@ -691,6 +692,7 @@ def update_plants(snapshot: str,
                 elements.append(components[existing_index - 2])
                 elements.append(components[existing_index - 1])
                 elements.append(existing)
+                elements.append(components[existing_index + 1])
                 if use_lot_range:
                     div2 = html.Div(
                         dcc.Input(type="number", min="0", value=str(0), placeholder="Lot size minimum in t"),
@@ -725,6 +727,24 @@ def update_plants(snapshot: str,
         div = html.Div(dcc.Input(type="number", min="0", value=str(target), placeholder="Target production in t"),
                        title="Target production in t", className="create-plant-input", **{"data-plant": str(plant.id), "data-default": str(target) })
         elements.append(div)
+        # TODO find lots for plant
+        current_lots = lots.get(plant.id)
+        if current_lots is not None and len(current_lots) > 0:
+            prev_lot = html.Div(
+                dcc.Dropdown(placeholder="Select a lot",
+                             options=[{"value": "", "label": "", "title": "No predecessor defined."}]+[{"value": lot.id, "label": lot.id, "title": _lot_info(lot)} for lot in current_lots]
+                ),
+                title="The previous lot defines the starting point for the lot creation.",
+                className="lots2-order-lots-prevlot",
+                **{"data-plant": str(plant.id)}
+                #  => Select does not even support value retrieval, and does not preserve selection upon re-attachement
+                #html.Select(className="lots2-order-lots-prevlot",
+                #    children=[html.Option(value="", label="", title="No predecessor defined.")]+[html.Option(value=lot.id, label=lot.id, title=lot.id) for lot in current_lots],
+                #    title="The previous lot defines the starting point for the lot creation.")
+            )
+            elements.append(prev_lot)
+        else:
+            elements.append(html.Div())
         if use_lot_range:   # visible
             div2 = html.Div(dcc.Input(type="number", min="0", value=str(0), placeholder="Lot size minimum in t"),
                             title="Lot size minimum in t", className="lot2-size-min",
@@ -844,11 +864,13 @@ def _find_predecessor_processes(process: str|None, skip_self: bool=False) -> lis
     Input("lots2-oders-lots-processes", "value"),
     Input("lots2-orders-data", "data"),
     Input("lots2-active-tab", "data"),
+Input("lots2-check-hide-released-lots", "value"),
     # Input("create-details-trigger", "n_clicks"), # => TODO replace maybe by tab state?
     State("lots2-process-selector", "value"),
     State("selected-snapshot", "data")
 )
-def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] | None, active_tab: Literal["targets", "orders", "settings"]|None, process: str, snapshot: str):
+def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] | None, active_tab: Literal["targets", "orders", "settings"]|None,
+                                 check_hide_list: list[Literal["hide_released"]], process: str, snapshot: str):
     snapshot = DatetimeUtils.parse_date(snapshot)
     if not dash_authenticated(config) or process is None or snapshot is None:
         return {}, None, {}  # must not return None for dropdown options
@@ -862,12 +884,15 @@ def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] 
                              or order_data.get("snapshot") != snapshot_serialized
     if update_selection:
         selected_processes = [process]
+    hide_released_lots: bool = "hide_released" in check_hide_list
     site = state.get_site()
     predecessors = _find_predecessor_processes(process)
     processes_options = [{"label": p.name_short, "value": p.name_short, "title": p.name} for p in predecessors]
     selected_plants = [plant.id for proc in selected_processes for plant in site.get_process_equipment(proc)]
     existing_lots = [lot for plant, lots in snapshot_obj.lots.items() if plant in selected_plants for lot in lots]
-    lots_options = sorted([{"label": lot.id, "value": lot.id, "title": lot.id} for lot in existing_lots], key=lambda d: d["label"] )
+    if hide_released_lots:  # FIXME this is only relevant for the current process step, not previous ones!
+        existing_lots = [lot for lot in existing_lots if lot.status <= 2 or site.get_equipment(lot.equipment, do_raise=True).process != process]
+    lots_options = sorted([{"label": lot.id, "value": lot.id, "title": _lot_info(lot)} for lot in existing_lots], key=lambda d: d["label"] )
     return processes_options, selected_processes, lots_options
 
 
@@ -1005,11 +1030,7 @@ def update_orders(snapshot: str, process: str, check_hide_list: list[Literal["hi
             as_dict.update(o.material_properties)
         lot = snapshot_obj.get_order_lot(site, o.id, process)
         if lot is not None:
-            lot_info = f"{lot.id}[status={lot.status}, active={lot.active}"
-            if lot.comment is not None:
-                lot_info += f", comment={lot.comment}"
-            lot_info += "]"
-            as_dict["lot_info"] = lot_info
+            as_dict["lot_info"] = _lot_info(lot)
         return as_dict
 
     current_process_index = next((idx for idx, proc in enumerate(site.processes) if proc.name_short == process), None)
@@ -1619,7 +1640,7 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
             else:
                 plants = state.get_site().get_process_equipment(process)
 
-                targets, targets_customized, info_msg = target_values_from_settings(process, period, [p.id for p in plants], use_lot_range, plant_target_components)
+                targets, targets_customized, predecessor_lots, info_msg = target_values_from_settings(process, period, [p.id for p in plants], use_lot_range, plant_target_components)
                 if info_msg is not None:
                     return lot_creation_thread is not None, error_msg, info_msg
                 if material_structure is not None and len(material_structure) > 0:
@@ -1796,9 +1817,9 @@ def structure_update(_, components: list[Component]|None, process: str|None, set
     return total_weight  #f"{total_weight:.2f}"
 
 
-def target_values_from_settings(process: str, period: tuple[datetime, datetime], plants: list[int], use_lot_range: bool, components: list[Component]|None) -> tuple[ProductionTargets|None, bool, str|None]:
+def target_values_from_settings(process: str, period: tuple[datetime, datetime], plants: list[int], use_lot_range: bool, components: list[Component]|None) -> tuple[ProductionTargets|None, bool, dict[str, str], str|None]:
     """
-    :return: targets, indicator if default values have been changed, message
+    :return: targets, indicator if default values have been changed, selected predecessor lot by plant , message
     """
     message = None
     if components is None:
@@ -1876,11 +1897,21 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
         changed_plants = [plant for plant, c in component_by_plant.items() if
                           c.get("props").get("children").get("props").get("value") != c.get("props").get("data-default")
                           and plant_active[plant]]
-
-        return ProductionTargets(process=process, target_weight=targets, period=period), len(changed_plants) > 0, message
+        predecessor_components = {plant: next(c for c in components if c.get("props").get("className") == "lots2-order-lots-prevlot") for plant, components in components_by_plant.items()}
+        predecessor_lots = {p: lot for p, lot  in {p: _selected_dropdown_value(c) for p, c in predecessor_components.items()}.items() if lot is not None}
+        return ProductionTargets(process=process, target_weight=targets, period=period), len(changed_plants) > 0, predecessor_lots, message
     except ValueError as e:
         traceback.print_exc()
         return None, False, str(e)
+
+def _selected_dropdown_value(c: dict) -> str | None:
+    if c is None or "props" not in c:
+        return None
+    props = c.get("props").get("children").get("props")
+    result = props.get("value", None)
+    if result == "":
+        result = None
+    return result
 
 
 def target_values_from_settings_short(process: str, plants: list[int], components: list[Component]|None) -> tuple[list[float]|None, bool, str|None]:
@@ -1943,6 +1974,12 @@ def performance_models_from_elements(process: str, components: list[Component]|N
     active_model_ids: list[str] = [model for model, element in model_components.items() if is_active(element)]
     return [model for model in models if model.id() in active_model_ids]
 
+def _lot_info(lot: Lot) -> str:
+    result = f"{lot.id} [status={lot.status}, active={lot.active}"
+    if lot.comment is not None:
+        result += f", comment={lot.comment}"
+    result += "]"
+    return result
 
 class KillableOptimizationThread(threading.Thread):
 

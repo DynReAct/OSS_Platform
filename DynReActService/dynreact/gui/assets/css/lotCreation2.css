@@ -124,20 +124,22 @@
     margin-top: 1.5em;
 }
 
-.lots2-plants-targets3 {
+.lots2-plants-targets4 {
     display: grid;
-    grid-template-columns: auto auto auto;
+    grid-template-columns: repeat(4, auto);
     column-gap: 1em;
     row-gap: 0.5em;
     justify-content: start;
+    align-items: center;
 }
 
-.lots2-plants-targets5 {
+.lots2-plants-targets6 {
     display: grid;
-    grid-template-columns: auto auto auto auto auto;
+    grid-template-columns: repeat(6, auto);
     column-gap: 1em;
     row-gap: 0.5em;
     justify-content: start;
+    align-items: center;
 }
 
 .lots2-lot-range-hidden {
@@ -151,6 +153,10 @@
     row-gap: 0.5em;
     justify-content: start;
     padding-bottom: 1.5em;
+}
+
+.lots2-order-lots-prevlot {
+    width: 8em;
 }
 
 .lots2-use-structure-checkbox {

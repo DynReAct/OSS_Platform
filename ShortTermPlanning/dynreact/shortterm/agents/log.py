@@ -269,7 +269,7 @@ class Log(Agent):
                 "log-file": log_file
             }
 
-            self.handler.launch_container(name=topic, agent="log", mode="replica", params=init_kwargs)
+            self.handler.launch_container(name=topic, agent="log", mode="replica", params=init_kwargs, auto_remove=True)
 
             if self.verbose > 1:
                 self.write_log(f"Creating log with configuration {init_kwargs}...", "be68d495-4b5b-4a06-b5bf-eff1151d7c6b")

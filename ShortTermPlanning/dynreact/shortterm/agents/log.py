@@ -241,7 +241,7 @@ class Log(Agent):
         self.results = {}
 
         # Force auction to crash due to error
-        end_auction(topic=self.topic, producer=self.producer, verbose=self.verbose)
+        end_auction(topic=self.topic, producer=self.producer, verbose=self.verbose, wait_time=KeySearch.search_for_value("SMALL_WAIT"))
 
         return 'CONTINUE'
 

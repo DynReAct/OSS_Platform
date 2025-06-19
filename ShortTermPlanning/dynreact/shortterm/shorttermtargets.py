@@ -2,19 +2,10 @@ from pydantic import BaseModel, Field
 
 from dynreact.shortterm.timedelay import TimeDelay
 
-default_table_mappings = [
-    {"key": "Job ID", "value": "id", "pinned": True},
-    {"key": "Round", "value": "round"},
-    {"key": "Due Date", "value": "due_date"},
-    {"key": "Target Weight", "value": "target_weight"},
-    {"key": "Actual Weight", "value": "actual_weight"},
-    {"key": "Steel Grade", "value": "mat_props.steelgrade"},
-    {"key": "Temper", "value": "mat_props.temper"},
-    {"key": "Final Thickness", "value": "mat_props.final_thickness"},
-    {"key": "Transition Cost", "value": "cost_props.transition_costs"},
-    {"key": "Logistic Cost", "value": "cost_props.logistic_costs"},
-]
-
+class ColumnDefinitions(BaseModel):
+    headerName: str | None = Field(None, description="Name of the field")
+    path: str | None = Field(None, description="Path to the resulting JSON")
+    pinned: bool | None = Field(False, description="Whether the field is pinned in the Table")
 
 class ShortTermTargets(BaseModel):
     """_summary_
@@ -39,7 +30,7 @@ class ShortTermTargets(BaseModel):
     TOPIC_GEN: str | None = Field("DynReact-Gen", description="General Kafka topic for comm.")
     TOPIC_CALLBACK: str | None = Field("DynReact-Callback", description="General Kafka topic for callbacks.")
     LOG_FILE_PATH: str | None = Field(None, description="Log file path.")
-    TABLE_MAPPINGS: list[dict] | None = Field(default_table_mappings, description="Column description recordset for RAS Auction")
+    TABLE_MAPPINGS: list[ColumnDefinitions] | None = Field(None, description="Column description recordset for RAS Auction")
     REST_URL: str | None = Field(None, description="REST API URL.")
     PERF_URL: str | None = Field(None, description="REST API PERF URL.")
     VB: int | None = Field(None, description="Verbosity Levels [0=> Nothing ... ]")

@@ -166,4 +166,4 @@ out/
 # config.cnf
 ShortTermPlanning/dynreact/shortterm/config.cnf
 poetry.lock
-pyproject.toml
+/pyproject.toml

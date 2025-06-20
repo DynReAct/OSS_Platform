@@ -3,4 +3,5 @@ results/
 # data/
 data_*/
 requirements_ras.txt
+poetry.lock
 # data/stp_context.json

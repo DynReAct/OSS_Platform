@@ -445,11 +445,18 @@ class LotCreationOrderBacklogSettings(Model):
     "A list of process steps at which all orders (scheduled or not) are usually included in the order backlog for lot creation"
 
 
+class TargetLotSize(Model):
+    min: float
+    max: float
+
+
 class ProcessLotCreationSettings(Model):
     plannable: bool|None = None
     "Default: true"
     structure: LotCreationStructureSettings|None=None
     order_backlog: LotCreationOrderBacklogSettings|None=None
+    lot_sizes: dict[int, TargetLotSize]|TargetLotSize|None = None
+    "The target lot size can be specified either per equipment, or globally for all resources of the process"
 
 
 class LotCreationSettings(Model):

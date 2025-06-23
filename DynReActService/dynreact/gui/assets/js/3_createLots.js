@@ -88,7 +88,6 @@
         const dynreact = globalThis.dynreact;
         const currentOrder = props.data.id;
         const snap = dynreact.getSnapshot();
-        // console.log("  snapshot", snap?.timestamp, "current order", currentOrder)
         if (!currentOrder || !snap)
             return undefined;
         let inlineCoils = undefined;  // TODO display inline coils
@@ -112,9 +111,12 @@
             React.createElement("div", {className: "create-order-coil-header"}, "In line?"),
         ]);
 
-        return React.createElement("div", {className: "create-order-backlog-popup"}, [
-            React.createElement("h3", {className: "header"}, "Coils for order " + currentOrder),
-            React.createElement("div", {className: "grid"}, gridEntries)
+        return React.createElement("div", {className: "create-order-popup-parent"}, [
+            React.createElement("div", {className: "create-order-popup-filler"}),
+            React.createElement("div", {className: "create-order-backlog-popup"}, [
+                React.createElement("h3", {className: "header"}, "Coils for order " + currentOrder),
+                React.createElement("div", {className: "grid"}, gridEntries)
+            ])
         ])
     };
 

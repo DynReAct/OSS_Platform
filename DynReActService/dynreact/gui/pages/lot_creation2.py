@@ -22,7 +22,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Equipment, Order, Lot, ProductionPlanning, ProductionTargets, EquipmentProduction, \
-    MidTermTargets, ObjectiveFunction, Process
+    MidTermTargets, ObjectiveFunction, Process, TargetLotSize
 from pydantic.fields import FieldInfo
 
 from dynreact.app import state, config
@@ -39,13 +39,11 @@ lot_creation_thread_name = "lot-creation"
 lot_creation_thread: threading.Thread|None = None
 lot_creation_listener: FrontendOptimizationListener|None = None
 
-# TODO proper handling of start lots/orders
+
 # TODO option to record optimizaiton history including lots information and possibility to replay/step to specific optimization steps
 # TODO option to initialize optimization from existing result
 # TODO swimlane visualization
-# TODO backlog lots operations: highlight if lots are active or not, show comment maybe?
 # TODO init method existing solution
-# TODO: use LongTermPlanning and MidTermPlanning classes for targets
 def layout(*args, **kwargs):
     process: str|None = kwargs.get("process")  # TODO use store from main layout instead?
     iterations: int = int(kwargs.get("iterations", 10))
@@ -639,6 +637,7 @@ def clear_setpoints(n_click_clear, process: str|None) -> bool:
 @callback(
     Output("lots2-details-plants", "children"),
     Output("lots2-details-plants", "className"),
+    Output("lots2-check-use-lot-range", "value"),
     State("selected-snapshot", "data"),
     State("lots2-horizon-hours", "value"),
     State("lots2-details-plants", "children"),
@@ -657,8 +656,15 @@ def update_plants(snapshot: str,
                   # TODO row in ltp popup selected
                   selected_rows: list[dict[str, any]]|None,
                   use_lot_range0: list[Literal[""]]
-                  ) -> tuple[list[Component], list[any]]:
-    use_lot_range: bool = len(use_lot_range0) > 0
+                  ) -> tuple[list[Component], list[any], list[Literal[""]]]:
+    changed = GuiUtils.changed_ids()
+    process_changed = "lots2-process-selector" in changed
+    use_lot_range: bool = len(use_lot_range0) > 0 and not process_changed
+    init_lot_size_from_settings: bool = False
+    site = state.get_site()
+    if process_changed and site.lot_creation is not None and process in site.lot_creation.processes and site.lot_creation.processes[process].lot_sizes is not None:
+        use_lot_range = True
+        init_lot_size_from_settings = True
     if use_lot_range:
         my_parent_classname = "lots2-plants-targets6"
     else:
@@ -666,8 +672,7 @@ def update_plants(snapshot: str,
     snapshot = DatetimeUtils.parse_date(snapshot)
     snapshot_obj = state.get_snapshot(snapshot)
     if not dash_authenticated(config) or process is None or snapshot_obj is None or active_tab != "targets":
-        return no_update, my_parent_classname
-    changed = GuiUtils.changed_ids()
+        return no_update, my_parent_classname, no_update
     is_ltp_init = "lots2-ltp-table" in changed and len(selected_rows) > 0
     re_init: bool = "lots2-targets-init-lots" in changed or is_ltp_init
     toggle_lot_range: bool = "lots2-check-use-lot-range" in changed
@@ -694,14 +699,17 @@ def update_plants(snapshot: str,
                 elements.append(existing)
                 elements.append(components[existing_index + 1])
                 if use_lot_range:
+                    settings = site.lot_creation.processes[process].lot_sizes if site.lot_creation is not None and process in site.lot_creation.processes else None
+                    min_val = 0 if settings is None else settings.min if isinstance(settings, TargetLotSize) else settings.get(plant.id, TargetLotSize(min=0, max=0)).min
+                    max_val = 0 if settings is None else settings.max if isinstance(settings, TargetLotSize) else settings.get(plant.id, TargetLotSize(min=0, max=0)).max
                     div2 = html.Div(
-                        dcc.Input(type="number", min="0", value=str(0), placeholder="Lot size minimum in t"),
+                        dcc.Input(type="number", min="0", value=str(min_val), placeholder="Lot size minimum in t"),
                         title="Lot size minimum in t", className="lot2-size-min",
                         style={'display': 'block'},
                         **{"data-plant": str(plant.id), "data-default": str(0)})
 
                     div3 = html.Div(
-                        dcc.Input(type="number", min="0", value=str(0), placeholder="Lot size maximum in t"),
+                        dcc.Input(type="number", min="0", value=str(max_val), placeholder="Lot size maximum in t"),
                         title="Lot size maximum in t", className="lot2-size-max",
                         style={'display': 'block'},
                         **{"data-plant": str(plant.id), "data-default": str(0)})
@@ -746,12 +754,15 @@ def update_plants(snapshot: str,
         else:
             elements.append(html.Div())
         if use_lot_range:   # visible
-            div2 = html.Div(dcc.Input(type="number", min="0", value=str(0), placeholder="Lot size minimum in t"),
+            settings = site.lot_creation.processes[process].lot_sizes if site.lot_creation is not None and process in site.lot_creation.processes else None
+            min_val = 0 if settings is None else settings.min if isinstance(settings, TargetLotSize) else settings.get(plant.id, TargetLotSize(min=0, max=0)).min
+            max_val = 0 if settings is None else settings.max if isinstance(settings, TargetLotSize) else settings.get(plant.id, TargetLotSize(min=0, max=0)).max
+            div2 = html.Div(dcc.Input(type="number", min="0", value=str(min_val), placeholder="Lot size minimum in t"),
                             title="Lot size minimum in t", className="lot2-size-min",
                             style={'display': 'block'},
                             **{"data-plant": str(plant.id), "data-default": str(target)})
 
-            div3 = html.Div(dcc.Input(type="number", min="0", value=str(0), placeholder="Lot size maximum in t"),
+            div3 = html.Div(dcc.Input(type="number", min="0", value=str(max_val), placeholder="Lot size maximum in t"),
                             title="Lot size maximum in t", className="lot2-size-max",
                             style={'display': 'block'},
                             **{"data-plant": str(plant.id), "data-default": str(target)})
@@ -761,8 +772,7 @@ def update_plants(snapshot: str,
     # TODO display total tonnes
     # my_parent_classname for formatting purpose
     # todo if input-selector HAS CHANGED ??
-
-    return elements, my_parent_classname
+    return elements, my_parent_classname, ([""] if use_lot_range else []) if process_changed else no_update
 
 
 def _targets_from_ltp(selected_row: dict[str, any], process: str, start_time: datetime, horizon_hours: int) -> ProductionTargets:
@@ -821,7 +831,7 @@ def init_method_changed(method: Literal["active_process", "active_plant", "inact
 )
 def set_predecessor_procs_for_backlog_init(process: str|None):
     if not process or not dash_authenticated(config):
-        return [], []
+        return [], [], [], []
     predecessors = _find_predecessor_processes(process, skip_self=True)
     options = [{"value": p.name_short, "label": p.name_short, "title": p.name or p.name_short} for p in predecessors]
     settings = state.get_site().lot_creation

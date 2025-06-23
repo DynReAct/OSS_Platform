@@ -93,7 +93,7 @@ class TabuSearch(LotsOptimizer):
     def run(self, max_iterations: int|None = None, debug: bool=False) -> LotsOptimizationState:
         initial_plant_assignments: dict[str, int] = {order: ass.equipment for order, ass in self._state.current_solution.order_assignments.items()}
         initial_plant_assignments = self._init_performance_models(initial_plant_assignments)
-        TabuList = set()
+        TabuList: set[TabuSwap] = set()
         ntotal: int = max_iterations if max_iterations is not None else self._params.ntotal
         ilots = np.zeros(ntotal)
         idelta = np.zeros(ntotal)
@@ -140,14 +140,12 @@ class TabuSearch(LotsOptimizer):
                     self._state.history.append(target_vbest0)
                 # optimal solution found
                 break
-
             next_step: tuple[TabuSwap, ProductionPlanning, ObjectiveFunction] = self.FindNextStep(self._state.current_solution, TabuList, pool)
             if next_step is None or next_step[0] is None:
                 # continue  # TODO what's the point of continuing... nothing will change in the next iteration?
                 break
             swp: TabuSwap = next_step[0]
             next_solution: ProductionPlanning = next_step[1]
-            #
             #swp: TabuSwap = next_step[0]
             #ssol: ProductionPlanning = next_step[1]
             #sval: float = next_step[1]
@@ -284,9 +282,48 @@ class TabuSearch(LotsOptimizer):
                 new_planning.order_assignments[order] = OrderAssignment(equipment=-1, order=order, lot="", lot_idx=-1)
         return new_planning
 
+    @staticmethod
+    def _adapt_lot_sizes(lots: list[Lot], orders: list[Order], min_lot: float, max_lot: float, plant_id: int, lot_prefix: str):
+        """Changes lots list in place"""
+        lot_replacements: dict[int, list[Lot]] = {}
+        for idx, lot in enumerate(lots):
+            lot_orders = [o for o in orders if o.id in lot.orders]
+            total_weight = sum(o.actual_weight for o in lot_orders)
+            if total_weight > max_lot and abs(total_weight - max_lot) / max_lot > 0.02 and total_weight / 2 >= min_lot:
+                new_sub_lots = []
+                remaining_weight = total_weight
+                sub_lot_weight = 0
+                current_lot = []
+                sub_lot_idx = 0
+                for order_idx, order in enumerate(lot_orders):
+                    current_weight = order.actual_weight
+                    if sub_lot_weight + current_weight > max_lot and sub_lot_weight >= min_lot and sub_lot_weight > 0:
+                        new_sub_lots.append(Lot(id=lot_prefix + "." + f"{idx + sub_lot_idx:02d}", orders=[o.id for o in current_lot],
+                                equipment=plant_id, active=True, status=0))
+                        sub_lot_idx += 1
+                        current_lot = [order]
+                        sub_lot_weight = current_weight
+                    else:
+                        sub_lot_weight += current_weight
+                        current_lot.append(order)
+                if len(current_lot) > 0:
+                    new_sub_lots.append(
+                        Lot(id=lot_prefix + "." + f"{idx + sub_lot_idx:02d}", orders=[o.id for o in current_lot],
+                            equipment=plant_id, active=True, status=0))
+                if len(new_sub_lots) > 1:
+                    for l_idx in range(idx + 1, len(lots)):  # rename remaining lots
+                        other_lot = lots[l_idx]
+                        other_lot.id = lot_prefix + "." + f"{l_idx + len(new_sub_lots) - 1:02d}"
+                    lot_replacements[idx] = new_sub_lots
+        if len(lot_replacements) > 0:
+            for idx in reversed(list(lot_replacements.keys())):
+                new_lots = lot_replacements[idx]
+                lots.pop(idx)
+                for l_idx, lot in enumerate(new_lots):
+                    lots.insert(idx + l_idx, lot)
+
     # previously: CalcSolution (although it also determined the PlantStatus objects)
     def assign_lots(self, order_plant_assignments: dict[str, int]) -> dict[int, list[Lot]]:
-        # FIXME what if a plant does not currently have any assigned orders? Then it drops out here. Better
         # remember the plants involved here
         plant_ids: set[int] = set(order_plant_assignments.values())
         result: dict[int, list[Lot]] = {}
@@ -294,27 +331,23 @@ class TabuSearch(LotsOptimizer):
             if plant_id < 0:
                 continue
             plant: Equipment = next(p for p in self._plants if p.id == plant_id)
-            # sl = dict(filter(lambda s: s[1].AssignedPlant == p.ID, sol.items()))
             order_ids: list[str] = [o for o, plant in order_plant_assignments.items() if plant == plant_id]
             orders: list[Order] = [self._orders[o] if self._orders is not None else self._snapshot.get_order(o, do_raise=True) for o in order_ids]
-            #sz = len(sl);  # sTM = np.zeros((sz, sz))
             sz: int = len(order_ids)
-            #sTM = np.array(
-            #    [[costs.TCostVA(i.Order.Attributes, j.Order.Attributes, p) for j in sl.values()] for i in sl.values()])
+
             sTM = np.array(
                 [[self._costs.transition_costs(plant, o1, o2) for o2 in orders] for o1 in orders]
             )
             sTM[np.isnan(sTM)] = self._params.CostNaN
             G = nx.DiGraph(sTM) if len(sTM) > 0 else nx.DiGraph()
-
-            # TODO connection order consideration
+            # connection order consideration
             sT0 = None
             if self._previous_orders is not None:
                 prev_order: str = self._previous_orders.get(plant_id)
                 if prev_order is not None:
                     prev_obj = self._orders[prev_order] if self._orders is not None else self._snapshot.get_order(prev_order, do_raise=True)
                     sT0 = np.array([self._costs.transition_costs(plant, prev_obj, order) for order in orders])
-                    sT0[np.isnan(sT0)] = 50   # FIXME
+                    sT0[np.isnan(sT0)] = 50
             spath = lcor.path_converingOR(sTM, sT0)
             dict_subgraph = {}
             pos = 0
@@ -343,6 +376,12 @@ class TabuSearch(LotsOptimizer):
                 # prepend LC_ to distinguish generated lots from pre-existing ones
                 lot: Lot = Lot(id="LC_" + plant.name_short + "." + f"{idx:02d}", equipment=plant_id, active=True, status=0, orders=g[1])
                 lots.append(lot)
+            # if target lot sizes are prescribed and we end up above the limit, then we try to split lots
+            targets = self._targets.target_weight.get(plant_id)
+            if targets is not None and targets.lot_weight_range is not None:
+                min_lot, max_lot = targets.lot_weight_range
+                if max_lot is not None and max_lot > 0:
+                    TabuSearch._adapt_lot_sizes(lots, orders, min_lot, max_lot, plant_id, "LC" + plant.name_short)
             result[plant_id] = lots
             #due_dates = [o.due_date for o in orders if o.due_date is not None]
             #mdate = datetime(1, 1, 1) if len(due_dates) == 0 else min(due_dates)
@@ -366,7 +405,6 @@ class TabuSearch(LotsOptimizer):
             #PSDict[plant_id] = sval
             #delta += sval.DeltaW
             #nlots += sval.NLots
-
         return result
 
     def FindNextStep(self, planning: ProductionPlanning, TabuList: set[Any], pool: multiprocessing.pool.Pool|None) -> tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]:

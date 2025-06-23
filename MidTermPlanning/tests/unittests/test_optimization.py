@@ -249,6 +249,46 @@ class OptimizationTest(unittest.TestCase):
         assert len(lot.orders) == 2, f"Unexpected number of orders in lot: {len(lot.orders)}: {lot.orders}"
         assert lot.orders[0] == orders[-1].id and lot.orders[1] == orders[-2].id, f"Unexpected lot order: expected: {[orders[-1].id, orders[-2].id]}, got: {lot.orders}"
 
+    def test_lot_creation_with_lot_weight_range(self):
+        process = "testProcess"
+        process_id = 0
+        num_plants = 1
+        num_orders = 50
+        plants = [Equipment(id=p, name_short="Plant" + str(p), process=process) for p in range(num_plants)]
+        test_site = Site(processes=[Process(name_short=process, process_ids=[process_id])], equipment=plants, storages=[], material_categories=[])
+        orders = [OptimizationTest._create_order("order" + str(o), range(num_plants), 10) for o in range(num_orders)]  # each order weighs 10t here
+        # a->b has high transition costs, and c->b is slightly more expensive than b->c, so without the start cond. the order b->c would be preferred
+        transition_costs = {o1.id: {o2.id: 1 for o2 in orders if o2.id != o1.id} for o1 in orders}  # all transition costs = 1
+        costs = SimpleCostProvider("simple:costs", test_site, transition_costs, minimum_possible_costs=1, missing_weight_costs=100, surplus_weight_costs=100)
+        p_id = plants[0].id
+        snapshot = Snapshot(timestamp=datetime(2025, 6, 18), orders=orders,material=OptimizationTest._create_coils_for_orders(orders, process_id),inline_material={}, lots={})
+        planning_period = (snapshot.timestamp, snapshot.timestamp + timedelta(days=1))
+        target_weight = 200  # aim to include 20 orders
+        lot_weight_range = (45, 55)  # aim for lots of 5 orders
+        targets: ProductionTargets = ProductionTargets(process=process, target_weight={p.id: EquipmentProduction(equipment=p.id, total_weight=target_weight, lot_weight_range=lot_weight_range) for p in plants},period=planning_period)
+        start_assignments: dict[str, OrderAssignment] = { o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for o in orders}
+        initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments,
+                                                       snapshot, planning_period, previous_order=orders[0].id) for p in plants}
+        initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,equipment_status=initial_status)
+        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
+        # optimization.add_listener(TestListener())  # for debugging
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=20)
+        solution: ProductionPlanning = optimization_state.best_solution
+
+        all_lots = solution.get_lots()
+        assert len(all_lots) > 0, "No lots generated"
+        lots: list[Lot] = all_lots.get(p_id)
+        assert len(lots) > 0, f"No lots generated 2"
+        order_ids_included = [o for lot in lots for o in lot.orders]
+        orders_included = [o for o in orders if o.id in order_ids_included]
+        total_weight = sum(o.actual_weight for o in orders_included)
+        assert abs(total_weight-target_weight)/target_weight < 0.1, f"Specified target weight was {target_weight}, but {total_weight} has been assigned"
+        for lot in lots:
+            lot_size = sum(o.actual_weight for o in orders_included if o.id in lot.orders)
+            assert lot_weight_range[0] <= lot_size <= lot_weight_range[1], f"Lot size {lot_size} of lot {lot.id} outside bound {lot_weight_range}"
+
+
     @staticmethod
     def _create_order(id: str, plants: list[int], weight: float, due_date: datetime|None=None, priority: int=0):
         return Order(id=id, allowed_equipment=plants, target_weight=weight, actual_weight=weight, due_date=due_date, material_properties=TestMaterial(material_id="test"),

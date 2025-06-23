@@ -215,6 +215,9 @@ def orders_tab():
                     # The two below should only be visible if method is active_process or active_plant
                     html.Div("Exclude active lots:", title="Exclude orders that are currently assigned to an active lot?", id="lots2-init-submenu-activelots-label"),
                     html.Div(dcc.Checklist(options=[""], value=[""], id="lots2-init-submenu-activelots-value"), title="Exclude orders that are currently assigned to an active lot?",  id="lots2-init-submenu-activelots"),
+                    html.Div("Exclude released lots:", title="Exclude orders from lots that have been released for production?", id="lots2-init-submenu-releasedlots-label"),
+                    html.Div(dcc.Checklist(options=[""], value=[""], id="lots2-init-submenu-releasedlots-value"), title="Exclude orders from lots that have been released for production?",
+                             id="lots2-init-submenu-releasedlots"),
                     html.Div("Exclude all lots:", title="Exclude orders that are currently assigned to any lot?", id="lots2-init-submenu-alllots-label"),
                     html.Div(dcc.Checklist(options=[""], value=[], id="lots2-init-submenu-alllots-value"), title="Exclude orders that are currently assigned to any lot?",  id="lots2-init-submenu-alllots")
                 ], className="lots2-orders-init-submenu1"),  # visible if and only if a main method is selected
@@ -791,6 +794,8 @@ def _targets_from_ltp(selected_row: dict[str, any], process: str, start_time: da
           # These are only visible for certain init methods
             Output("lots2-init-submenu-activelots-label", "hidden"),
             Output("lots2-init-submenu-activelots", "hidden"),
+            Output("lots2-init-submenu-releasedlots-label", "hidden"),
+            Output("lots2-init-submenu-releasedlots", "hidden"),
             Output("lots2-init-submenu-alllots-label", "hidden"),
             Output("lots2-init-submenu-alllots", "hidden"),
 
@@ -803,11 +808,12 @@ def _targets_from_ltp(selected_row: dict[str, any], process: str, start_time: da
         # Input("lots2-init-submenu-processedorders-value", "value"),
           Input("lots2-init-submenu-alllots-value", "value"),
           Input("lots2-init-submenu-activelots-value", "value"),
+          Input("lots2-init-submenu-releasedlots-value", "value"),
 )
 def init_method_changed(method: Literal["active_process", "active_plant", "inactive_lots", "active_lots", "current_planning"]|None,
-                      processed_lots: list[Literal[""]], all_lots_value: list[Literal[""]], active_lots_value: list[Literal[""]]):
+                      processed_lots: list[Literal[""]], all_lots_value: list[Literal[""]], active_lots_value: list[Literal[""]], released_lots_value: list[Literal[""]]):
     if method is None or method == "":
-        return True, "Select an initialization method first.", True, True, True, True, True, [], [], []
+        return True, "Select an initialization method first.", True, True, True, True, True, True, True, [], [], []
     hide_lots_submenu: bool = method != "active_process" and method != "active_plant"
     changed_ids = GuiUtils.changed_ids()
     method_changed = "lots2-orders-init-method" in changed_ids
@@ -818,8 +824,9 @@ def init_method_changed(method: Literal["active_process", "active_plant", "inact
         #processed_orders = [""]
     # TODO!
 
-    return False, "Initialize orders using the " + str(method) + " method.", False, hide_lots_submenu, hide_lots_submenu, hide_lots_submenu, hide_lots_submenu, \
-        processed_lots, all_lots_value, active_lots_value
+    return False, "Initialize orders using the " + str(method) + " method.", False, \
+            hide_lots_submenu, hide_lots_submenu,hide_lots_submenu,hide_lots_submenu, hide_lots_submenu, hide_lots_submenu, \
+            processed_lots, all_lots_value, active_lots_value
 
 
 @callback(
@@ -961,6 +968,7 @@ Input("lots2-check-hide-released-lots", "value"),
             #State("lots2-init-submenu-processedorders-value", "value"),
             State("lots2-init-submenu-alllots-value", "value"),
             State("lots2-init-submenu-activelots-value", "value"),
+            State("lots2-init-submenu-releasedlots-value", "value"),
             State("lots2-init-prev-proc-selector_lot", "value"),
             State("lots2-init-prev-proc-selector_all", "value"),
 )
@@ -969,7 +977,7 @@ def update_orders(snapshot: str, process: str, check_hide_list: list[Literal["hi
                   orders_data: dict[str, str]|None, selected_lots: list[str],
                   selected_rows: list[dict[str, any]]|None, filtered_rows: list[dict[str, any]]|None, horizon_hours: int,
                   init_method: Literal["active_process", "active_plant", "inactive_lots", "active_lots", "current_planning"]|None,
-                  processed_lots: list[Literal[""]], all_lots_value: list[Literal[""]], active_lots_value: list[Literal[""]],
+                  processed_lots: list[Literal[""]], all_lots_value: list[Literal[""]], active_lots_value: list[Literal[""]], released_lots_value: list[Literal[""]],
                   selected_prev_steps_lot: list[str], selected_prev_steps_all: list[str]):
     if not dash_authenticated(config):
         return None, None, None, None
@@ -1096,6 +1104,8 @@ def update_orders(snapshot: str, process: str, check_hide_list: list[Literal["hi
             method.append(OrderInitMethod.OMIT_INACTIVE_LOTS)
         if init_method != "current_planning" and method != "active_lots" and len(active_lots_value) > 0:
             method.append(OrderInitMethod.OMIT_ACTIVE_LOTS)
+        if init_method != "current_planning" and len(released_lots_value) > 0:
+            method.append(OrderInitMethod.OMIT_RELEASED_LOTS)
         eligible_orders: list[str] = state.get_snapshot_provider().eligible_orders(snapshot_obj, process, (snapshot, snapshot + timedelta(hours=horizon_hours)),
                                             method=method, include_previous_processes_all=selected_prev_steps_all, include_previous_processes_planned=selected_prev_steps_lot)
         # maintain old selection, if appropriate

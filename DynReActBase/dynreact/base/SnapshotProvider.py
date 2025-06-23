@@ -57,6 +57,10 @@ class OrderInitMethod(enum.StrEnum):
     The opposite of INACTIVE_LOTS: ensure orders from current inactive lots are not added to the order backlog.
     Incompatible with INACTIVE_LOTS; if INACTIVE_LOTS and OMIT_INACTIVE_LOTS are both active an error is thrown.
     """
+    OMIT_RELEASED_LOTS = "omit_released_lots"
+    """
+    Omit lots with status >= 3.
+    """
 
     ACTIVE_PROCESS = "active_process"
     """
@@ -257,12 +261,13 @@ class SnapshotProvider:
                         snapshot: Snapshot,
                         process: str,
                         planning_horizon: tuple[datetime, datetime],
-                        method: OrderInitMethod|Iterable[OrderInitMethod]=[
+                        method: OrderInitMethod|Iterable[OrderInitMethod]=(
                             OrderInitMethod.ACTIVE_PROCESS, 
                             OrderInitMethod.CURRENT_PLANNING,
                             OrderInitMethod.INACTIVE_LOTS,
-                            OrderInitMethod.OMIT_CURRENT_LOT
-                        ],
+                            OrderInitMethod.OMIT_CURRENT_LOT,
+                            OrderInitMethod.OMIT_RELEASED_LOTS
+                        ),
                         include_previous_processes_planned: list[str]|None = None,
                         include_previous_processes_all: list[str] | None = None,
                         ) -> list[str]:
@@ -300,10 +305,10 @@ class SnapshotProvider:
             # TODO not implemented
             omit_next = omit_first and OrderInitMethod.OMIT_SUBSEQUENT_LOT in method
             eligible_lots: Iterator[list[Lot]] = (lots for plant, lots in snapshot.lots.items() if plant in eligible_plants)
-            all_lots: Iterator[Lot] = (lot for lots in eligible_lots for lot in lots if (current_and_inactive or lot.active == current_planning_included))
+            lots_for_removal: Iterator[Lot] = (lot for lots in eligible_lots for lot in lots if (current_and_inactive or lot.active == current_planning_included))
             if omit_first:
-                all_lots = (lot for lot in all_lots if lot.processing_status is None or lot.processing_status == "PENDING")
-            applicable_orders0.update(order for lot in all_lots for order in lot.orders)
+                lots_for_removal = (lot for lot in lots_for_removal if lot.processing_status is None or lot.processing_status == "PENDING")
+            applicable_orders0.update(order for lot in lots_for_removal for order in lot.orders)
         if OrderInitMethod.ACTIVE_PLANT in method:
             # TODO filter out coils in process?
             applicable_coils: list[Material] = [coil for coil in snapshot.material if coil.current_equipment is not None and coil.current_equipment in eligible_plants]
@@ -352,11 +357,15 @@ class SnapshotProvider:
 
         omit_active_lots: bool = OrderInitMethod.OMIT_ACTIVE_LOTS in method
         omit_inactive_lots: bool = OrderInitMethod.OMIT_INACTIVE_LOTS in method
-        if omit_active_lots or omit_inactive_lots:
-            omit_all_lots: bool = omit_active_lots and omit_inactive_lots
+        omit_released_lots: bool = OrderInitMethod.OMIT_RELEASED_LOTS in method
+        do_adapt: bool = omit_active_lots or omit_inactive_lots or omit_released_lots
+        if do_adapt:
             eligible_lots: Iterator[list[Lot]] = (lots for plant, lots in snapshot.lots.items() if plant in eligible_plants)
-            all_lots: Iterator[Lot] = (lot for lots in eligible_lots for lot in lots if (omit_all_lots or lot.active == omit_active_lots))
-            orders: Iterator[str] = (order for lot in all_lots for order in lot.orders)
+            lots_for_removal: Iterator[Lot] = (lot for lots in eligible_lots for lot in lots)
+            omit_all_lots: bool = omit_active_lots and omit_inactive_lots
+            if not omit_all_lots:
+                lots_for_removal = (lot for lot in lots_for_removal if ((omit_active_lots and lot.active) or (omit_inactive_lots and not lot.active) or (omit_released_lots and lot.status > 1)))
+            orders: Iterator[str] = (order for lot in lots_for_removal for order in lot.orders)
             for order in orders:
                 if order in applicable_orders0:
                     applicable_orders0.remove(order)

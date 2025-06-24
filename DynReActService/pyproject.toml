@@ -24,6 +24,7 @@ Homepage = "https://github.com/DynReAct/OSS_Platform"
 Issues = "https://github.com/DynReAct/OSS_Platform/issues"
 
 [project.scripts]
+aggregate-production = "dynreact.cli:aggregate_production"
 analyze-lots = "dynreact.cli:analyze_lots"
 analyze-site = "dynreact.cli:analyze_site"
 analyze-snapshot = "dynreact.cli:analyze_snapshot"

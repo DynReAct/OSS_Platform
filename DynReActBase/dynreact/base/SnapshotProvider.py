@@ -135,7 +135,7 @@ class SnapshotProvider:
             snapshot id
         """
         try:
-            return next(self.snapshots(start_time=time, end_time=datetime.fromtimestamp(999_999_999, tz=timezone.utc), order="asc"))
+            return next(self.snapshots(start_time=time, end_time=datetime(year=3000, month=1, day=1, tzinfo=timezone.utc), order="asc"))
         except StopIteration:
             return None
 

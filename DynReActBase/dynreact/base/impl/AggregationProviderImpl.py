@@ -23,8 +23,8 @@ class AggregationProviderImpl(AggregationProvider):
                  snapshot_provider: SnapshotProvider,
                  persistence_provider: AggregationPersistence,
                  aggregation_levels: list[AggregationLevel] = default_aggregation_levels,
-                 interval: timedelta = timedelta(minutes=5),
-                 interval_start: timedelta = timedelta(minutes=1)):
+                 interval: timedelta|None = timedelta(minutes=5),
+                 interval_start: timedelta|None = timedelta(minutes=1)):
         super().__init__(site)
         self._aggregation_levels = list(aggregation_levels)
         self._snapshot_provider = snapshot_provider
@@ -47,6 +47,8 @@ class AggregationProviderImpl(AggregationProvider):
         Must be called once to start the aggregation
         :return:
         """
+        if self._interval is None:
+            raise Exception("Interval is None")
         self._stopped.clear()
         threading.Thread(target=self._run).start()
 
@@ -72,6 +74,8 @@ class AggregationProviderImpl(AggregationProvider):
             self._stopped.wait(self._interval.total_seconds())
 
     def _init_from_persistence(self):
+        if self._persistence is None:
+            return
         start = datetime.fromtimestamp(0, tz=timezone.utc)
         now = datetime.now(tz=timezone.utc)
         try:

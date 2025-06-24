@@ -2,6 +2,7 @@
 
 WORKSPACE="/workspace"
 git config --global --add safe.directory "$WORKSPACE"
+sudo chown root:docker /var/run/docker.sock
 
 LongTermPlanning="$WORKSPACE/DynReActService/LongTermPlanning"
 if [ "$(ls -A $LongTermPlanning)" ]; then

@@ -33,23 +33,24 @@ class Auction:
     """
 
 
-    def __init__(self, CodeId:str):
+    def __init__(self, code_id: str):
         """ 
         Constructor function for the Auction class
 
-        :param str CodeId: Auction Identification String.
+        :param str code_id: Auction Identification String.
 
         :returns: None
 
         """
         self.auction_status = JobStatus.I
-        self.code          = CodeId
+        self.code          = code_id
         self.matype        = 'Orders'
-        self._equip       = []
-        self._all_equip   = []
+        self._equip        = []
+        self._all_equip    = []
         self._all_objs     = []
         self._smats        = []
-        self._lmats        = self._omats = []
+        self._lmats        = []
+        self._omats        = []
         self._mat_ass_type = ''
         self._amats        = []
         self._ass_mats     = []
@@ -66,7 +67,7 @@ class Auction:
 
         return(self.code)
 
-    def set_materials(self,matype:str, plants:list):
+    def set_materials(self, matype:str, plants:list):
         """ 
         Function establishing the Auction parameters of
         materials and equipments.

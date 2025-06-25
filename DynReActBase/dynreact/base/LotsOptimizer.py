@@ -73,7 +73,8 @@ class LotsOptimizer(Generic[P]):
                  history: list[ObjectiveFunction] | None = None,
                  parameters: dict[str, any]|None = None,
                  performance_models: list[PlantPerformanceModel]|None = None,
-                 orders_custom_priority: dict[str, int]|None = None
+                 orders_custom_priority: dict[str, int]|None = None,
+                 forced_orders: list[str] | None = None
                  ):
         self._listeners: list[OptimizationListener] = []
         self._site: Site = site
@@ -122,6 +123,12 @@ class LotsOptimizer(Generic[P]):
             for order_id in self._previous_orders.values():
                 if order_id not in self._orders:
                     self._orders[order_id] = snapshot.get_order(order_id)
+        if min_due_date is not None and self._orders is not None:
+            forced_orders = forced_orders if forced_orders is not None else []
+            forced_orders = forced_orders + [o.id for o in self._orders.values() if o.due_date is not None and o.due_date <= min_due_date]
+        if forced_orders is not None and len(forced_orders) == 0:
+            forced_orders = None
+        self._forced_orders: list[str]|None = forced_orders
 
     def parameters(self) -> dict[str, any]|None:
         return self._state.parameters
@@ -400,7 +407,8 @@ class LotsOptimizationAlgo:
                         performance_models: list[PlantPerformanceModel] | None = None,
                         parameters: dict[str, any] | None = None,
                         include_inactive_lots: bool = False,
-                        orders_custom_priority: dict[str, int] | None = None
+                        orders_custom_priority: dict[str, int] | None = None,
+                        forced_orders: list[str] | None = None
                         ) -> LotsOptimizer:
         if initial_solution is None or targets is None:
             planning_horizon = targets.period[1] - targets.period[0] if targets is not None else timedelta(hours=8)  # XXX?
@@ -412,7 +420,7 @@ class LotsOptimizationAlgo:
                 targets = targets0
         return self._create_instance_internal(process, snapshot, targets, cost_provider, initial_solution, min_due_date=min_due_date,
                                               best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
-                                              orders_custom_priority=orders_custom_priority)
+                                              orders_custom_priority=orders_custom_priority, forced_orders=forced_orders)
 
     def _create_instance_internal(self, process: str, snapshot: Snapshot, targets: ProductionTargets,
                                   cost_provider: CostProvider, initial_solution: ProductionPlanning, min_due_date: datetime|None = None,
@@ -420,6 +428,7 @@ class LotsOptimizationAlgo:
                                   best_solution: ProductionPlanning[P] | None = None, history: list[ObjectiveFunction] | None = None,
                                   performance_models: list[PlantPerformanceModel] | None = None,
                                   parameters: dict[str, any] | None = None,
-                                  orders_custom_priority: dict[str, int] | None = None
+                                  orders_custom_priority: dict[str, int] | None = None,
+                                  forced_orders: list[str] | None = None
                                   ) -> LotsOptimizer:
         raise Exception("not implemented")

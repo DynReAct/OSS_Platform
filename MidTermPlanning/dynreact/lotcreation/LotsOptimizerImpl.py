@@ -44,11 +44,12 @@ class TabuSearch(LotsOptimizer):
                  best_solution: ProductionPlanning|None = None, history: list[ObjectiveFunction] | None = None,
                  parameters: dict[str, any] | None = None,
                  performance_models: list[PlantPerformanceModel] | None = None,
-                 orders_custom_priority: dict[str, int] | None = None
+                 orders_custom_priority: dict[str, int] | None = None,
+                 forced_orders:  list[str]|None = None
                  ):
         super().__init__(site, process, costs, snapshot, targets, initial_solution, min_due_date=min_due_date,
                          best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
-                         orders_custom_priority=orders_custom_priority)
+                         orders_custom_priority=orders_custom_priority, forced_orders=forced_orders)
         self._params: TabuParams = TabuParams()
         self._performance_restrictions: list[PerformanceEstimation]|None = None
         self._forbidden_assignments: dict[str, list[int]] = {}
@@ -196,9 +197,6 @@ class TabuSearch(LotsOptimizer):
                         swap_probability = swap_probability / (self._order_priorities[order.id] + 0.5)
                     if swap_probability < rdswap:
                         continue
-                    if self._min_due_date is not None:
-                        if order is not None and order.due_date is not None and order.due_date <= self._min_due_date:
-                            continue
                     pto = -1
                     TabuList.add(TabuSwap(assignment.order, assignment.equipment, pto, self._params.Expiration))  # add shuffle to tabu list to enable new solutions
                     order_plant_assignment[assignment.order] = pto
@@ -413,7 +411,7 @@ class TabuSearch(LotsOptimizer):
         slp: list[list[OrderAssignment]] = [[sl1[i] for i in range(len(sl1)) if (i % self._params.NParallel) == r] for r in range(self._params.NParallel)]
         plants = {plant.id: plant for plant in self._plants}
         items = [CTabuWorker(self._costs, sl, TabuList, self._params, self, plants, self._snapshot,
-                             self._targets, planning, self._min_due_date, self._main_category, self._orders_custom_priority) for sl in slp]
+                             self._targets, planning, self._forced_orders, self._main_category, self._orders_custom_priority) for sl in slp]
         solutions: list[tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]] = []
 
         # parallel tabu search loop
@@ -457,18 +455,19 @@ class TabuAlgorithm(LotsOptimizationAlgo):
                                   best_solution: ProductionPlanning | None = None, history: list[ObjectiveFunction] | None = None,
                                   performance_models: list[PlantPerformanceModel] | None = None,
                                   parameters: dict[str, any] | None = None,
-                                  orders_custom_priority: dict[str, int] | None = None
+                                  orders_custom_priority: dict[str, int] | None = None,
+                                  forced_orders: list[str] | None = None
                                   ) -> TabuSearch:
         return TabuSearch(self._site, process, costs, snapshot, targets, initial_solution=initial_solution, min_due_date=min_due_date,
                           best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
-                          orders_custom_priority=orders_custom_priority)
+                          orders_custom_priority=orders_custom_priority, forced_orders=forced_orders)
 
 
 class CTabuWorker:
 
     def __init__(self, costs: CostProvider, slist: list[OrderAssignment], TabuList: set[Any], params: TabuParams, tabuSearch,
                  plants: dict[int, Equipment], snapshot: Snapshot, targets: ProductionTargets, planning: ProductionPlanning,
-                 min_due_date: datetime|None, main_category: str|None, orders_custom_priority: dict[str, int]|None = None):
+                 forced_orders: list[str]|None, main_category: str|None, orders_custom_priority: dict[str, int]|None = None):
         self.slist: list[OrderAssignment] = slist
         order_ids = [ass.order for ass in slist]
         self.orders: dict[int, Order] = {oid: tabuSearch._orders[oid] for oid in order_ids}
@@ -482,7 +481,7 @@ class CTabuWorker:
         self.planning: ProductionPlanning = planning
         self.costs = costs
         self.snapshot = snapshot
-        self._min_due_date: datetime|None = min_due_date
+        self._forced_orders = forced_orders
         self._main_category: str|None = main_category
         self._orders_custom_priority = orders_custom_priority
         self._previous_orders: dict[int, str]|None = planning.previous_orders
@@ -500,7 +499,7 @@ class CTabuWorker:
             # sl2 = list(map(lambda x: x[0], filter(lambda x: x[1], self.PM[swp1.Order.ID].items())))
 
             allowed_plants: list[int] = [p for p in order.allowed_equipment if p in self.plants and p not in forbidden_plants]
-            if assignment.equipment >= 0 and (self._min_due_date is None or order.due_date is None or order.due_date > self._min_due_date):
+            if assignment.equipment >= 0 and (self._forced_orders is None or assignment.order not in self._forced_orders):
                 allowed_plants.append(-1)
             if len(allowed_plants) == 0:
                 continue

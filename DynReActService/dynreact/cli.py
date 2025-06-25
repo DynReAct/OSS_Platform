@@ -224,6 +224,7 @@ def create_lots():
     parser.add_argument("-it", "--iterations", help="Specify number of optimization iterations. Default: 100.", type=int, default=100)
     parser.add_argument("-se", "--start-existing", help="If the flag is set and an existing lot is specified via \"--lot\", then the algorithm will start from the configuration of the existing lot, otherwise it will start from an empty configuration", action="store_true")
     parser.add_argument("-s", "--snapshot", help="Snapshot timestamp", type=str, default=None)
+    parser.add_argument("-fao", "--force-all-orders", help="Enforce that all orders are assigned to a lot", action="store_true")
     parser = _trafo_args(parser=parser)
     args = parser.parse_args()
     config = DynReActSrvConfig(config_provider=args.config_provider, snapshot_provider=args.snapshot_provider, cost_provider=args.cost_provider)
@@ -252,14 +253,18 @@ def create_lots():
         tons = sum(o.actual_weight for o in orders.values())
     equipment = site.get_equipment(equipment_id, do_raise=True) if isinstance(equipment_id, int) else site.get_equipment_by_name(equipment_id, do_raise=True)
     equipment_id = equipment.id
-    order_assignments = {o: OrderAssignment(equipment=-1, order=o, lot="", lot_idx=-1) for o in orders.keys()} if not args.start_existing or args.lot is None else \
-        {o: OrderAssignment(equipment=equipment_id, order=o, lot=lot.id, lot_idx=idx+1) for idx, o in enumerate(orders.keys())}
+    do_force: bool = args.force_all_orders
+    start_existing = args.lot is not None and (do_force or args.start_existing)
+    order_assignments = {o: OrderAssignment(equipment=-1, order=o, lot="", lot_idx=-1) for o in orders.keys()} if not start_existing else \
+        {o: OrderAssignment(equipment=equipment_id, order=o, lot=lot.id, lot_idx=idx+1) for idx, o in enumerate(orders.keys())} if args.start_existing else \
+        {o: OrderAssignment(equipment=equipment_id, order=o, lot="TestLot" + str(idx), lot_idx=1) for idx, o in enumerate(orders.keys())}
     period = (snapshot.timestamp, snapshot.timestamp + timedelta(days=1))
     targets = ProductionTargets(process=equipment.process, period=period, target_weight={equipment_id: EquipmentProduction(equipment=equipment_id, total_weight=tons)})
     # initial solution
     empty_start = costs.evaluate_order_assignments(equipment.process, order_assignments, targets, snapshot)
     algo = plugins.get_lots_optimization()
-    optimization = algo.create_instance(equipment.process, snapshot, costs, targets, initial_solution=empty_start)
+    forced_orders = list(orders.keys()) if do_force else None
+    optimization = algo.create_instance(equipment.process, snapshot, costs, targets, initial_solution=empty_start, forced_orders=forced_orders)
     # TODO in separate thread, interruptable?
     state: LotsOptimizationState = optimization.run(max_iterations=args.iterations)
     sol = state.best_solution

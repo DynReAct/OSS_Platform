@@ -93,6 +93,15 @@ class TabuSearch(LotsOptimizer):
 
     def run(self, max_iterations: int|None = None, debug: bool=False) -> LotsOptimizationState:
         initial_plant_assignments: dict[str, int] = {order: ass.equipment for order, ass in self._state.current_solution.order_assignments.items()}
+        has_missing_forced_orders = False
+        if self._forced_orders is not None:
+            missing = [o for o in self._forced_orders if initial_plant_assignments.get(o, -1) < 0]
+            has_missing_forced_orders = len(missing) > 0
+            for o in missing:
+                order = self._orders.get(o)
+                equipment = [e for e in order.allowed_equipment if e in self._plant_ids]
+                if len(equipment) > 0:
+                    initial_plant_assignments[o] = equipment[0]
         initial_plant_assignments = self._init_performance_models(initial_plant_assignments)
         TabuList: set[TabuSwap] = set()
         ntotal: int = max_iterations if max_iterations is not None else self._params.ntotal
@@ -118,7 +127,7 @@ class TabuSearch(LotsOptimizer):
             self._state.history.append(target_vbest0)
         vbest_global: ProductionPlanning = self._state.best_solution
         target_vbest_global: float = self._state.best_objective_value.total_value
-        if target_vbest < target_vbest_global:
+        if target_vbest < target_vbest_global or has_missing_forced_orders:
             vbest_global = vbest
             target_vbest_global = target_vbest
             self._state.best_solution = vbest

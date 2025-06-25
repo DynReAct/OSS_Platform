@@ -288,6 +288,77 @@ class OptimizationTest(unittest.TestCase):
             lot_size = sum(o.actual_weight for o in orders_included if o.id in lot.orders)
             assert lot_weight_range[0] <= lot_size <= lot_weight_range[1], f"Lot size {lot_size} of lot {lot.id} outside bound {lot_weight_range}"
 
+    def test_lot_creation_with_min_due_date(self):
+        process = "testProcess"
+        process_id = 0
+        num_plants = 1
+        num_orders = 3
+        plants = [Equipment(id=p, name_short="Plant" + str(p), process=process) for p in range(num_plants)]
+        test_site = Site(processes=[Process(name_short=process, process_ids=[process_id])], equipment=plants, storages=[], material_categories=[])
+        orders = [OptimizationTest._create_order("order" + str(o), range(num_plants), 10) for o in range(num_orders)]  # each order weighs 10t here
+        special_order = "order" + str(num_orders)
+        min_due_date = datetime(year=2025, month=6, day=28)
+        orders.append(OptimizationTest._create_order(special_order, range(num_plants), 10, due_date=min_due_date - timedelta(days=1)))
+        snapshot = Snapshot(timestamp=min_due_date - timedelta(days=7), orders=orders, material=OptimizationTest._create_coils_for_orders(orders, process_id),inline_material={}, lots={})
+        planning_period = (snapshot.timestamp, snapshot.timestamp + timedelta(days=1))
+        # a->b has high transition costs, and c->b is slightly more expensive than b->c, so without the start cond. the order b->c would be preferred
+        transition_costs = {o1.id: {o2.id: 1 if o2.id != special_order and o1.id != special_order else 3 for o2 in orders if o2.id != o1.id} for o1 in orders}  # all transition costs = 1
+        costs = SimpleCostProvider("simple:costs", test_site, transition_costs, minimum_possible_costs=1, missing_weight_costs=100, surplus_weight_costs=100)
+        p_id = plants[0].id
+        target_weight = orders[0].actual_weight * (len(orders) - 2)  # do not schedule all orders
+        targets: ProductionTargets = ProductionTargets(process=process, target_weight={p.id: EquipmentProduction(equipment=p.id, total_weight=target_weight) for p in plants},period=planning_period)
+        start_assignments: dict[str, OrderAssignment] = { o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for idx, o in enumerate(orders)}
+        initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments,
+                                                       snapshot, planning_period, previous_order=orders[0].id) for p in plants}
+        initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,equipment_status=initial_status)
+        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, min_due_date=min_due_date)
+        # optimization.add_listener(TestListener())  # for debugging
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=20)
+        solution: ProductionPlanning = optimization_state.best_solution
+
+        all_lots = solution.get_lots()
+        assert len(all_lots) > 0, "No lots generated"
+        lots: list[Lot] = all_lots.get(p_id)
+        assert len(lots) > 0, f"No lots generated 2"
+        order_ids_included = [o for lot in lots for o in lot.orders]
+        assert special_order in order_ids_included, f"Forced order not scheduled: {order_ids_included}, looking for {special_order}"
+
+    def test_lot_creation_with_forced_orders(self):
+        process = "testProcess"
+        process_id = 0
+        num_plants = 1
+        num_orders = 3
+        plants = [Equipment(id=p, name_short="Plant" + str(p), process=process) for p in range(num_plants)]
+        test_site = Site(processes=[Process(name_short=process, process_ids=[process_id])], equipment=plants, storages=[], material_categories=[])
+        orders = [OptimizationTest._create_order("order" + str(o), range(num_plants), 10) for o in range(num_orders)]  # each order weighs 10t here
+        special_order = "order" + str(num_orders)
+        orders.append(OptimizationTest._create_order(special_order, range(num_plants), 10))
+        snapshot = Snapshot(timestamp=datetime(year=2025, month=6, day=25), orders=orders, material=OptimizationTest._create_coils_for_orders(orders, process_id),inline_material={}, lots={})
+        planning_period = (snapshot.timestamp, snapshot.timestamp + timedelta(days=1))
+        # a->b has high transition costs, and c->b is slightly more expensive than b->c, so without the start cond. the order b->c would be preferred
+        transition_costs = {o1.id: {o2.id: 1 if o2.id != special_order and o1.id != special_order else 3 for o2 in orders if o2.id != o1.id} for o1 in orders}  # all transition costs = 1
+        costs = SimpleCostProvider("simple:costs", test_site, transition_costs, minimum_possible_costs=1, missing_weight_costs=100, surplus_weight_costs=100)
+        p_id = plants[0].id
+        target_weight = orders[0].actual_weight * (len(orders) - 2)  # do not schedule all orders
+        targets: ProductionTargets = ProductionTargets(process=process, target_weight={p.id: EquipmentProduction(equipment=p.id, total_weight=target_weight) for p in plants},period=planning_period)
+        start_assignments: dict[str, OrderAssignment] = { o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for idx, o in enumerate(orders)}
+        initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments,
+                                                       snapshot, planning_period, previous_order=orders[0].id) for p in plants}
+        initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,equipment_status=initial_status)
+        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, forced_orders=[special_order])
+        # optimization.add_listener(TestListener())  # for debugging
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=20)
+        solution: ProductionPlanning = optimization_state.best_solution
+
+        all_lots = solution.get_lots()
+        assert len(all_lots) > 0, "No lots generated"
+        lots: list[Lot] = all_lots.get(p_id)
+        assert len(lots) > 0, f"No lots generated 2"
+        order_ids_included = [o for lot in lots for o in lot.orders]
+        assert special_order in order_ids_included, f"Forced order not scheduled: {order_ids_included}, looking for {special_order}"
+
 
     @staticmethod
     def _create_order(id: str, plants: list[int], weight: float, due_date: datetime|None=None, priority: int=0):

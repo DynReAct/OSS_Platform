@@ -221,7 +221,7 @@ def create_lots():
     parser.add_argument("-o", "--order", help="Specify orders to include in the backlog, separated by \",\"", type=str)
     parser.add_argument("-t", "--tons", help="Target weight to be scheduled. If not specified but the \"--lot\" parameter is set, then the size of the lot it used instead. Otherwise it is set to the overall size of the order backlog.", type=float, default=None)
     parser.add_argument("-e", "--equipment", help="Specify the equipment for which the lot will be created. Can be skipped if the \"--lot\" parameter is set.", type=str, default=None)
-    parser.add_argument("-it", "--iterations", help="Specify number of optimization iterations", type=int, default=100)
+    parser.add_argument("-it", "--iterations", help="Specify number of optimization iterations. Default: 100.", type=int, default=100)
     parser.add_argument("-se", "--start-existing", help="If the flag is set and an existing lot is specified via \"--lot\", then the algorithm will start from the configuration of the existing lot, otherwise it will start from an empty configuration", action="store_true")
     parser.add_argument("-s", "--snapshot", help="Snapshot timestamp", type=str, default=None)
     parser = _trafo_args(parser=parser)

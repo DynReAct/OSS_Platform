@@ -457,11 +457,17 @@ class ProcessLotCreationSettings(Model):
     order_backlog: LotCreationOrderBacklogSettings|None=None
     lot_sizes: dict[int, TargetLotSize]|TargetLotSize|None = None
     "The target lot size can be specified either per equipment, or globally for all resources of the process"
+    total_size: float|dict[int, float]|None = None
+    "The preselected target size in tons for the lot creation. It can be adapted by the user. Either a global setting for the process step, or individual settings per equipment."
+    default_iterations: int|None=None
+    "Default number of iterations for the process step"
 
 
 class LotCreationSettings(Model):
     processes: dict[str, ProcessLotCreationSettings]
     "Settings per process step"
+    default_iterations: int | None = None
+    "Default number of iterations if no process-specific number is specified"
 
 
 class Site(LabeledItem):

@@ -22,7 +22,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Equipment, Order, Lot, ProductionPlanning, ProductionTargets, EquipmentProduction, \
-    MidTermTargets, ObjectiveFunction, Process, TargetLotSize
+    MidTermTargets, ObjectiveFunction, Process, TargetLotSize, ProcessLotCreationSettings
 from pydantic.fields import FieldInfo
 
 from dynreact.app import state, config
@@ -46,7 +46,7 @@ lot_creation_listener: FrontendOptimizationListener|None = None
 # TODO init method existing solution
 def layout(*args, **kwargs):
     process: str|None = kwargs.get("process")  # TODO use store from main layout instead?
-    iterations: int = int(kwargs.get("iterations", 10))
+    iterations: int = int(kwargs.get("iterations", 100))  # TODO configurable default per process step?
     horizon: int = int(kwargs.get("horizon", 24))  # planning horizon in hours
     init_method: Literal["heuristic", "duedate"] = kwargs.get("init")
     if init_method is None:
@@ -679,17 +679,24 @@ def update_plants(snapshot: str,
     is_ltp_init = "lots2-ltp-table" in changed and len(selected_rows) > 0
     re_init: bool = "lots2-targets-init-lots" in changed or is_ltp_init
     toggle_lot_range: bool = "lots2-check-use-lot-range" in changed
-    plants: list[Equipment] = state.get_site().get_process_equipment(process)
+    site = state.get_site()
+    plants: list[Equipment] = site.get_process_equipment(process)
     elements = [html.Div(), html.Div("Equipment"), html.Div("Production / t"), html.Div("Previous lot", title="The previous lot defines the starting point for the lot creation.")]
     if use_lot_range:
         elements.extend([html.Div("Min lot size / t"), html.Div("Max lot size / t")])
-    # TODO alternatively, we could use targets from the long term planning, or based on the plant capacity and duration
-    # FIXME why does this fail regularly?
+    # TODO alternatively, we could determine targets based on the plant capacity and planning duration
+    targets: ProductionTargets|None = None
+    targets0 = None
     if not is_ltp_init:
-        _, targets = state.get_snapshot_solution(process, snapshot, timedelta(hours=horizon_hours))
+        has_targets: bool = site.lot_creation is not None and process in site.lot_creation.processes and site.lot_creation.processes[process].total_size is not None
+        if has_targets:
+            targets0 = site.lot_creation.processes[process].total_size
+        else:
+            _, targets = state.get_snapshot_solution(process, snapshot, timedelta(hours=horizon_hours))
     else:
         targets = _targets_from_ltp(selected_rows[0], process, snapshot, horizon_hours)
-    target_weights: dict[int, float] = {plant: t.total_weight for plant, t in targets.target_weight.items()}
+    target_weights: dict[int, float] = {plant: t.total_weight for plant, t in targets.target_weight.items()} if targets is not None else \
+                targets0 if isinstance(targets0, typing.Mapping) else {plant.id: targets0 for plant in plants}
     lots: dict[int, list[Lot]] = snapshot_obj.lots
     for plant in plants:
         if components is not None and not re_init:
@@ -1137,9 +1144,6 @@ def update_orders(snapshot: str, process: str, check_hide_list: list[Literal["hi
     #if is_init_command:
     #    # TODO1
     selected_ids: list[str] = new_selected_rows["ids"]
-    weight = sum(o.actual_weight for o in orders_sorted if o.id in selected_ids)
-    orders_data["orders_selected_cnt"] = len(selected_ids)
-    orders_data["orders_selected_weight"] = weight
     #orders_data["orders"] = selected_ids
     if hide_next_procs or hide_released_lots:
         all_procs = site.processes
@@ -1163,6 +1167,10 @@ def update_orders(snapshot: str, process: str, check_hide_list: list[Literal["hi
             return True
         orders_sorted = [o for o in orders_sorted if _filter_order(o)]
     sorted_orders = [order_to_json(order) for order in orders_sorted]
+    order_ids = [o.id for o in orders_sorted]
+    weight = sum(o.actual_weight for o in orders_sorted if o.id in selected_ids)
+    orders_data["orders_selected_cnt"] = len([o for o in selected_ids if o in order_ids])
+    orders_data["orders_selected_weight"] = weight
     first_orders = sorted_orders[0:min(5, len(sorted_orders))]
     try:
         relevant_fields: list[str]|None = state.get_cost_provider().relevant_fields(site.get_equipment(current_process_plants[0]))
@@ -1498,9 +1506,9 @@ def process_changed(snapshot: datetime|None,
                 existing_solution, True, "Not authenticated", interval, True, warning_message)
     store_results: bool = len(store_results0) > 0
     changed_ids: list[str] = GuiUtils.changed_ids()
-    # TODO if running, then use configured iterations from run
+    # if running, then use configured iterations from run
     used_iterations = iterations if "lots2-num-iterations" in changed_ids else iterations_stored
-    iterations = int(float(used_iterations)) if used_iterations is not None else 10
+    iterations = int(float(used_iterations)) if used_iterations is not None else 100
 
     snapshot = DatetimeUtils.parse_date(snapshot)
     is_running, proc_running = check_running_optimization()
@@ -1509,9 +1517,16 @@ def process_changed(snapshot: datetime|None,
         process = proc_running
         if process != process_in:
             process_out = process
-    elif "process-selector" in changed_ids:  # ensure graph output is removed
+    elif "lots2-process-selector" in changed_ids:  # ensure graph output is removed
         lot_creation_listener = None
         existing_solution = None
+        # update iterations
+        lc = site.lot_creation
+        if lc is not None:
+            iterations0 = lc.processes[process].default_iterations if process in lc.processes and lc.processes[process].default_iterations is not None else lc.default_iterations
+            if iterations0 is not None:
+                iterations = iterations0
+
     selection_disabled: bool = False
     results = []
     existing_solutions: list[str]|dash._callback.NoUpdate = state.get_results_persistence().solutions(snapshot, process) if \

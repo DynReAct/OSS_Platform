@@ -281,9 +281,10 @@ def create_lots():
 
 
 def show_orders():
-    argparse.ArgumentParser(description="The fields to be shown can selected either by means of the -f/--field parameter (supports initial or final wildcard '*'), or the "+
-                            "-ef/--equipment-fields parameter. In the latter case, the cost-relevant fields for the specified equipment are shown")
-    parser = _trafo_args()
+    parser = argparse.ArgumentParser(description="The fields to be shown can be selected either by means of the -f/--field parameter (supports initial or final wildcard '*'), or the "+
+                            "-ef/--equipment-fields parameter. In the latter case, the cost-relevant fields for the specified equipment are shown. \n" +
+                            "Orders can be selected either directly via the -o/--order field, via -p/--process, via -e/--equipment, or via -lt/--lot.")
+    parser = _trafo_args(parser=parser)
     parser.add_argument("-o", "--order", help="Select order(s) to be displayed. Separate multiple fields by \",\"", type=str, default=None)
     parser.add_argument("-f", "--field", help="Select field(s) to be displayed. Separate multiple fields by \",\"", type=str, default=None)
     parser.add_argument("-ef", "--equipment-fields", help="Select fields to be displayed based on the cost-relevant fields for the specified equipment", type=str, default=None)
@@ -311,7 +312,7 @@ def show_orders():
         plant_ids = [p for p in (p.strip() for p in args.equipment.split(",")) if p != ""]
         plants = [_plant_for_id(site.equipment, p) for p in plant_ids]
         plant_codes = [p.id for p in plants]
-        orders = [o for o in orders if o.current_equipment in plant_codes]
+        orders = [o for o in orders if o.current_equipment is not None and any(e in plant_codes for e in o.current_equipment)]
     if args.lot:
         lot_ids = [l.strip().upper() for l in args.lot.split(",")]
         lots = [lot for lots in snapshot.lots.values() for lot in lots if lot.id.upper() in lot_ids]
@@ -331,7 +332,7 @@ def show_orders():
         relevant_fields: list[str]|None = plugins.get_cost_provider().relevant_fields(plant)
         if relevant_fields is not None:
             fields = fields if fields is not None else []
-            fields = fields + relevant_fields
+            fields = fields + [f for f in relevant_fields if f not in fields]
     if fields is not None and len(fields) == 0:
         print("No matching field found for ", args.field)
         return
@@ -341,10 +342,70 @@ def show_orders():
     _print_orders(orders, fields, wide=wide, filter_existent_properties=filter_existing, equipment=equipment)
 
 
-def _field_for_order(o: Order, field: str) -> typing.Sequence[str]:
+def show_material():
+    parser = _trafo_args()
+    parser.add_argument("-m", "--material", help="Specify material ids to be displayed. Separate multiple entries by \",\"",type=str, default=None)
+    parser.add_argument("-o", "--order", help="Select order(s) to be displayed. Separate multiple orders by \",\"", type=str, default=None)
+    parser.add_argument("-p", "--process", help="Filter orders by current process stage", type=str, default=None)
+    parser.add_argument("-lt", "--lot", help="Filter orders by lot(s)", type=str, default=None)
+    parser.add_argument("-e", "--equipment", help="Filter orders by current equipment", type=str, default=None)
+    parser.add_argument("-f", "--field", help="Select field(s) to be displayed. Separate multiple fields by \",\"", type=str, default=None)
+    parser.add_argument("-w", "--wide", help="Show wide cells, do not crop content", action="store_true")
+    # parser.add_argument("-sen", "--skip-equipment-name", help="Show only equipment ids, no names, for fields involving equipment references", action="store_true")
+    args = parser.parse_args()
+    config = DynReActSrvConfig(config_provider=args.config_provider)
+    plugins = Plugins(config)
+    site = plugins.get_config_provider().site_config()
+    snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
+    snapshot: Snapshot = plugins.get_snapshot_provider().load(time=snap)
+    material = snapshot.material
+    orders = snapshot.orders
+    if args.order:
+        order_ids = [o.strip() for o in args.order.split(",")]
+        orders = [o for o in orders if o.id in order_ids]
+    if args.process:
+        process_ids = [p for p in (p.strip() for p in args.process.split(",")) if p != ""]
+        processes = [_process_for_id(site.processes, p) for p in process_ids]
+        process_codes: list[int] = [code for p in processes for code in p.process_ids]
+        orders = [o for o in orders if any(p in process_codes for p in o.current_processes)]
+    if args.equipment:
+        plant_ids = [p for p in (p.strip() for p in args.equipment.split(",")) if p != ""]
+        plants = [_plant_for_id(site.equipment, p) for p in plant_ids]
+        plant_codes = [p.id for p in plants]
+        orders = [o for o in orders if o.current_equipment is not None and any(e in plant_codes for e in o.current_equipment)]
+    if args.lot:
+        lot_ids = [l.strip().upper() for l in args.lot.split(",")]
+        lots = [lot for lots in snapshot.lots.values() for lot in lots if lot.id.upper() in lot_ids]
+        if len(lots) == 0:
+            print(f"No matching lot found for {args.lot}")
+            return
+        order_ids = [o for lot in lots for o in lot.orders]
+        orders = [o for o in orders if o.id in order_ids]
+    if len(orders) == 0:
+        print("No matching orders found")
+        return
+    if args.material is not None:
+        mat_ids = [m.strip() for m in args.material.split(",")]
+        material = [m for m in material if m.id in mat_ids]
+    material = {o.id: [m for m in material if m.order == o.id] for o in orders}
+    if len(material) == 0 or sum(len(m) for m in material.values()) == 0:
+        print("No matching material found")
+        return
+    first: Material = next(iter(material.values()))[0]
+    fields = (f.strip() for f in args.field.split(",")) if args.field is not None else None
+    fields = [f for flds in (_field_for_order(first, f) for f in fields) for f in flds] if fields is not None else None
+    wide=args.wide
+    eq = site.equipment
+    for o_id, mat in material.items():
+        all_mats = [m for m in snapshot.material if m.order == o_id]
+        print(f"Order {o_id} has {len(all_mats)} materials and actual weight {sum(m.weight for m in all_mats):.2f}t.")
+        _print_orders(mat, fields, wide=wide, equipment=eq)
+
+
+def _field_for_order(o: Order|Material, field: str) -> typing.Sequence[str]:
     if hasattr(o, field):
         return (field, )
-    if hasattr(o.material_properties, field):
+    if isinstance(o, Order) and hasattr(o.material_properties, field):
         return ("material_properties." + field, )
     if "*" in field:
         start_wildcard: bool = field.startswith("*")
@@ -356,7 +417,7 @@ def _field_for_order(o: Order, field: str) -> typing.Sequence[str]:
             new_field = new_field[:-1]
         fields = [key for key, info in o.model_fields.items() if new_field in key.upper() and (start_wildcard or key.upper().startswith(new_field)) and (end_wildcard or key.upper().endswith(new_field))] + \
                  (["material_properties." + key for key, info in o.material_properties.model_fields.items() if new_field in key.upper() and (start_wildcard or key.upper().startswith(new_field)) and
-                                (end_wildcard or key.upper().endswith(new_field))] if o.material_properties is not None and isinstance(o.material_properties, BaseModel) else [])
+                                (end_wildcard or key.upper().endswith(new_field))] if isinstance(o, Order) and o.material_properties is not None and isinstance(o.material_properties, BaseModel) else [])
         return fields
     return ()
 
@@ -405,7 +466,7 @@ def _value_for_col(order: Order, f: str, equipment: list[Equipment]|None=None) -
         f = f[idx+1:]
         obj = getattr(obj, first, None)
     obj = getattr(obj, f, None) if obj is not None else None
-    if equipment is not None and (f == "current_equipment" or f == "allowed_equipment") and obj is not None:
+    if equipment is not None and (f == "current_equipment" or f == "allowed_equipment") and isinstance(obj, typing.Sequence):
         obj = [next((f"{e.name_short} ({e.id})" for e in equipment if e.id == p and e.name_short is not None), str(p)) for p in obj]
     return obj
 
@@ -461,11 +522,11 @@ def _print_planning(sol: ProductionPlanning, snapshot: Snapshot, site: Site, cos
     print()
 
 
-def _print_orders(orders: list[Order], fields: list[str]|None, filter_existent_properties: bool=True, wide: bool=False, equipment: list[Equipment]|None=None):
+def _print_orders(orders: list[Order]|list[Material], fields: list[str]|None, filter_existent_properties: bool=True, wide: bool=False, equipment: list[Equipment]|None=None):
     if fields is None:
         o1 = orders[0]
-        fields = [key for key, info in o1.model_fields.items() if (key not in ["material_properties", "material_status", "lot", "lot_position", "id", "material_classes"])] + \
-                 (["material_properties." + key for key, info in o1.material_properties.model_fields.items()] if o1.material_properties is not None and isinstance(o1.material_properties, BaseModel) else [])
+        fields = [key for key, info in o1.model_fields.items() if (key not in ["material_properties", "material_status", "lot", "lot_position", "id", "material_classes", "order"])] + \
+                 (["material_properties." + key for key, info in o1.material_properties.model_fields.items()] if isinstance(o1, Order) and o1.material_properties is not None and isinstance(o1.material_properties, BaseModel) else [])
     order_values = [[_value_for_col(o, f, equipment=equipment) for f in fields] for o in orders]
     cols_included: list[int] = [idx for idx in range(len(fields)) if any(
         ov[idx] is not None for ov in order_values)] if filter_existent_properties else list(range(len(fields)))
@@ -474,7 +535,8 @@ def _print_orders(orders: list[Order], fields: list[str]|None, filter_existent_p
     field_names = [_print_field_name(f, wide=wide, values=[ov[field_idx] for ov in order_values]) for field_idx, f in enumerate(fields)]
     field_str = "|".join([f" {f} " for f in field_names]) + "|"
     #print(f"| {'Order':9s} | {'Lot':11s} | {'Weight/t':7s} | {'Costs':6s} |" + fields)
-    print(f"| {'Order':9s} |" + field_str)
+    base_header = "Order" if isinstance(orders[0], Order) else "Material"
+    print(f"| {base_header:9s} |" + field_str)
     att = "|".join(_separator_for_field(f) for f in field_names) + "|"
     separator = "|-----------|" + att
     print(separator)

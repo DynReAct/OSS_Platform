@@ -281,9 +281,12 @@ def create_lots():
 
 
 def show_orders():
+    argparse.ArgumentParser(description="The fields to be shown can selected either by means of the -f/--field parameter (supports initial or final wildcard '*'), or the "+
+                            "-ef/--equipment-fields parameter. In the latter case, the cost-relevant fields for the specified equipment are shown")
     parser = _trafo_args()
     parser.add_argument("-o", "--order", help="Select order(s) to be displayed. Separate multiple fields by \",\"", type=str, default=None)
     parser.add_argument("-f", "--field", help="Select field(s) to be displayed. Separate multiple fields by \",\"", type=str, default=None)
+    parser.add_argument("-ef", "--equipment-fields", help="Select fields to be displayed based on the cost-relevant fields for the specified equipment", type=str, default=None)
     parser.add_argument("-p", "--process", help="Filter orders by current process stage", type=str, default=None)
     parser.add_argument("-lt", "--lot", help="Filter orders by lot(s)", type=str, default=None)
     parser.add_argument("-e", "--equipment", help="Filter orders by current equipment", type=str, default=None)
@@ -323,6 +326,12 @@ def show_orders():
     fields = (f.strip() for f in args.field.split(",")) if args.field is not None else None
     first = orders[0]
     fields = [f for flds in (_field_for_order(first, f) for f in fields) for f in flds] if fields is not None else None
+    if args.equipment_fields:
+        plant = _plant_for_id(site.equipment, args.equipment_fields)
+        relevant_fields: list[str]|None = plugins.get_cost_provider().relevant_fields(plant)
+        if relevant_fields is not None:
+            fields = fields if fields is not None else []
+            fields = fields + relevant_fields
     if fields is not None and len(fields) == 0:
         print("No matching field found for ", args.field)
         return
@@ -409,7 +418,7 @@ def _format_value(v: float|int|str|None, l: int, wide: bool=False) -> str:
         return (" {:" + str(l) + "." + str(l) + "s} ").format(v) if not wide else (" {:" + str(l) + "s} ").format(v)
     if isinstance(v, int):
         return (" {:" + str(l) + "d} ").format(v)
-    return (" {:" + str(l) + ".2f} ").format(v) if not wide else (" {:" + str(l) + "f} ").format(v)
+    return (" {:" + str(l) + ".2f} ").format(v)  # if not wide else (" {:" + str(l) + "f} ").format(v)
 
 def _print_planning(sol: ProductionPlanning, snapshot: Snapshot, site: Site, costs: CostProvider, filter_existent_properties: bool = True):
     equipment = next(iter(sol.equipment_status.keys()))
@@ -464,7 +473,6 @@ def _print_orders(orders: list[Order], fields: list[str]|None, filter_existent_p
     order_values = [[v for idx, v in enumerate(ov) if idx in cols_included] for ov in order_values]
     field_names = [_print_field_name(f, wide=wide, values=[ov[field_idx] for ov in order_values]) for field_idx, f in enumerate(fields)]
     field_str = "|".join([f" {f} " for f in field_names]) + "|"
-    # TODO option to print lots for specific process?
     #print(f"| {'Order':9s} | {'Lot':11s} | {'Weight/t':7s} | {'Costs':6s} |" + fields)
     print(f"| {'Order':9s} |" + field_str)
     att = "|".join(_separator_for_field(f) for f in field_names) + "|"
@@ -494,6 +502,69 @@ def _print_obj(obj: LabeledItem|str|int|None=None) -> str:
     if hasattr(obj, "id"):
         return getattr(obj, "id")
     return str(obj)
+
+
+def transition_costs():
+    parser = argparse.ArgumentParser(description="Orders can be filtered by explicitly specifying them (-o/--orders), filtering by process (-p/--process), " +
+                                "by lot(s) (-lt/--lot), or by choosing all orders available at the equipment (default)")
+    parser.add_argument("equipment", help="Id or name of the targeted equipment", type=str)
+    parser.add_argument("-o", "--order", help="Select orders to be included. Separate multiple fields by \",\"", type=str, default=None)
+    parser.add_argument("-p", "--process", help="Filter orders by current process stage", type=str, default=None)
+    parser.add_argument("-lt", "--lot", help="Filter orders by lot(s)", type=str, default=None)
+    parser.add_argument("-w", "--wide", help="Show wide cells, do not crop content", action="store_true")
+    parser = _trafo_args(parser=parser)
+    args = parser.parse_args()
+    config = DynReActSrvConfig(config_provider=args.config_provider)
+    plugins = Plugins(config)
+    site = plugins.get_config_provider().site_config()
+    plant_id = args.equipment.upper()
+    plant = next(e for e in site.equipment if str(e.id) == plant_id or (e.name_short is not None and e.name_short.upper() == plant_id))
+    snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
+    snapshot: Snapshot = plugins.get_snapshot_provider().load(time=snap)
+    orders = snapshot.orders
+    orders_filtered: bool = False
+    if args.order:
+        order_ids = [o.strip() for o in args.order.split(",")]
+        orders = [o for o in orders if o.id in order_ids]
+        orders_filtered = True
+    if args.process:
+        process_ids = [p for p in (p.strip() for p in args.process.split(",")) if p != ""]
+        processes = [_process_for_id(site.processes, p) for p in process_ids]
+        process_codes: list[int] = [code for p in processes for code in p.process_ids]
+        orders = [o for o in orders if any(p in process_codes for p in o.current_processes)]
+        orders_filtered = True
+    if args.lot:
+        lot_ids = [l.strip().upper() for l in args.lot.split(",")]
+        lots = [lot for lots in snapshot.lots.values() for lot in lots if lot.id.upper() in lot_ids]
+        if len(lots) == 0:
+            print(f"No matching lot found for {args.lot}")
+            return
+        order_ids = [o for lot in lots for o in lot.orders]
+        orders = [o for o in orders if o.id in order_ids]
+        orders_filtered = True
+    if not orders_filtered:
+        p_id = plant.id
+        orders = [o for o in orders if o.current_equipment is not None and p_id in o.current_equipment]
+    if len(orders) < 2:
+        print("No matching orders found" if len(orders) == 0 else f"Only a single order found: {orders[0].id}")
+        return
+    costs = plugins.get_cost_provider()
+    print("========================")
+    print(f"Transition costs {plant.name_short or plant.name or plant.id}")
+    print("========================")
+    header_row = "|          |"
+    separator  = "|----------|"
+    order_separator = separator[2:]
+    for order in orders:
+        header_row += " {:7s} |".format(order.id)
+        separator  += order_separator
+    print(header_row)
+    print(separator)
+    for order in orders:
+        row = "|  {:7s} |".format(order.id)
+        row += "|".join(["{:8.1f} ".format(costs.transition_costs(plant, order, other)) for other in orders]) + "|"
+        print(row)
+    print(separator)
 
 
 def aggregate_production():

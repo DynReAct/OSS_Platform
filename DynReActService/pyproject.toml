@@ -30,6 +30,7 @@ analyze-site = "dynreact.cli:analyze_site"
 analyze-snapshot = "dynreact.cli:analyze_snapshot"
 create-lots = "dynreact.cli:create-lots"
 evaluate-lot = "dynreact.cli:evaluate-lot"
+show-orders = "dynreact.cli:show-orders"
 
 # See https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#setuptools-specific-configuration
 [tool.setuptools]

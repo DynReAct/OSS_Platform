@@ -1,6 +1,9 @@
 import argparse
+import typing
 from datetime import timedelta, datetime, timezone
 from enum import Enum
+
+from pydantic import BaseModel
 
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.base.AggregationProvider import AggregationLevel
@@ -12,7 +15,7 @@ from dynreact.base.impl.AggregationProviderImpl import AggregationProviderImpl
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.model import Snapshot, Material, OrderAssignment, Order, EquipmentProduction, ProductionTargets, \
-    ProductionPlanning, ObjectiveFunction, Site, LabeledItem, Lot
+    ProductionPlanning, ObjectiveFunction, Site, LabeledItem, Lot, Process, Equipment
 from dynreact.plugins import Plugins
 
 
@@ -21,10 +24,12 @@ class Boolean(str, Enum):
     false = "false"
 
 
-def _trafo_args(parser: argparse.ArgumentParser|None=None) -> argparse.ArgumentParser:
+def _trafo_args(parser: argparse.ArgumentParser|None=None, include_snapshot: bool=True) -> argparse.ArgumentParser:
     parser = parser if parser is not None else argparse.ArgumentParser()
     parser.add_argument("-cp", "--config-provider", help="Config provider id, such as", type=str, default=None)
     parser.add_argument("-snp", "--snapshot-provider", help="Snapshot provider id, such as", type=str, default=None)
+    if include_snapshot:
+        parser.add_argument("-s", "--snapshot", help="Snapshot timestamp", type=str, default=None)
     parser.add_argument("-cost", "--cost-provider", help="Cost provider id, such as", type=str, default=None)
     parser.add_argument("-d", "--details", help="Show details", action="store_true")
     return parser
@@ -36,7 +41,6 @@ def analyze_snapshot():
     parser.add_argument("-e", "--equipment", help="Optional equipment id, only relevant if --details flag is set", type=str, default=None)
     parser.add_argument("-p", "--process", help="Optional process id, only relevant if --details flag is set", type=str, default=None)
     parser.add_argument("-cat", "--category", help="Optional material category, only relevant if --details flag is set", type=str, default=None)
-    parser.add_argument("-s", "--snapshot", help="Snapshot timestamp", type=str, default=None)
     args = parser.parse_args()
     config = DynReActSrvConfig(config_provider=args.config_provider, snapshot_provider=args.snapshot_provider)
     plugins = Plugins(config)
@@ -93,10 +97,10 @@ def analyze_lots():
     parser.add_argument("-e", "--equipment", help="Plant name or plant id", type=str, default=None)
     parser.add_argument("-p", "--process", help="Process(es), separated by \",\"", type=str, default=None)
     parser.add_argument("-so", "--skip-orders", help="Skip orders", action="store_true")
+    parser.add_argument("-lt", "--lot", help="Filter by lot id; separate multiple by \",\"", type=str, default=None)
     parser.add_argument("-ls", "--lot-status", help="Filter by lot status", type=int, default=None)  # TODO can we allow for a list as well?
     parser.add_argument("-la", "--lot-active", help="Filter by lot active status", type=Boolean, default=None, choices=[b.value for b in Boolean])
     parser.add_argument("-sc", "--skip-comment", help="Hide lot comment", action="store_true")
-    parser.add_argument("-s", "--snapshot", help="Snapshot timestamp", type=str, default=None)
     args = parser.parse_args()
     config = DynReActSrvConfig(config_provider=args.config_provider, snapshot_provider=args.snapshot_provider)
     equipment = args.equipment
@@ -118,6 +122,7 @@ def analyze_lots():
     plants.sort(key=lambda p: (processes.index(p.process) if p.process in processes else -1, p.id))
     orders = {o.id: o for o in snapshot.orders}
     material: dict[str, list[Material]] = {}  # keys: order ids
+    lot_filter = [l.strip().upper() for l in args.lot.split(",")] if args.lot is not None else None
     for m in snapshot.material:
         if m.order not in material:
             material[m.order] = []
@@ -135,6 +140,8 @@ def analyze_lots():
         lines = []
         aggregated_tons = 0
         for lot in lots:
+            if lot_filter is not None and lot.id.upper() not in lot_filter:
+                continue
             lot_orders = [orders.get(o) for o in lot.orders]
             total_weight = sum(o.actual_weight for o in lot_orders)
             if lot.active:
@@ -143,6 +150,7 @@ def analyze_lots():
                 continue
             if active is not None and str(lot.active).lower() != active:
                 continue
+            has_any = True
             materials = [mat for order in lot_orders for mat in material.get(order.id)]
             lot_line = f"    Lot {lot.id}, active={lot.active}, status={lot.status}, weight={total_weight:7.2f}t, order cnt={len(lot.orders):2}, material cnt={len(materials):2}"
             if hasattr(lot, "priority"):
@@ -152,6 +160,8 @@ def analyze_lots():
             if not args.skip_orders:
                 lot_line += f", orders= {lot.orders}"
             lines.append(lot_line)
+        if lot_filter is not None and len(lines) == 0:
+            continue
         print(f"  Plant {plant.name_short} [id={plant.id}, process={plant.process}, active lots weight={aggregated_tons:7.1f}t]:")
         for lot_line in lines:
             print(lot_line)
@@ -223,7 +233,6 @@ def create_lots():
     parser.add_argument("-e", "--equipment", help="Specify the equipment for which the lot will be created. Can be skipped if the \"--lot\" parameter is set.", type=str, default=None)
     parser.add_argument("-it", "--iterations", help="Specify number of optimization iterations. Default: 100.", type=int, default=100)
     parser.add_argument("-se", "--start-existing", help="If the flag is set and an existing lot is specified via \"--lot\", then the algorithm will start from the configuration of the existing lot, otherwise it will start from an empty configuration", action="store_true")
-    parser.add_argument("-s", "--snapshot", help="Snapshot timestamp", type=str, default=None)
     parser.add_argument("-fao", "--force-all-orders", help="Enforce that all orders are assigned to a lot", action="store_true")
     parser.add_argument("-fo", "--force-orders", help="Enforce that specific orders are assigned to a lot", type=str)
     parser = _trafo_args(parser=parser)
@@ -271,34 +280,136 @@ def create_lots():
     _print_planning(sol, snapshot, site, costs)
 
 
-def _print_field_name(f: str) -> str:
+def show_orders():
+    parser = _trafo_args()
+    parser.add_argument("-o", "--order", help="Select order(s) to be displayed. Separate multiple fields by \",\"", type=str, default=None)
+    parser.add_argument("-f", "--field", help="Select field(s) to be displayed. Separate multiple fields by \",\"", type=str, default=None)
+    parser.add_argument("-p", "--process", help="Filter orders by current process stage", type=str, default=None)
+    parser.add_argument("-lt", "--lot", help="Filter orders by lot(s)", type=str, default=None)
+    parser.add_argument("-e", "--equipment", help="Filter orders by current equipment", type=str, default=None)
+    parser.add_argument("-w", "--wide", help="Show wide cells, do not crop content", action="store_true")
+    parser.add_argument("-sen", "--skip-equipment-name", help="Show only equipment ids, no names, for fields involving equipment references", action="store_true")
+    args = parser.parse_args()
+    config = DynReActSrvConfig(config_provider=args.config_provider)
+    plugins = Plugins(config)
+    site = plugins.get_config_provider().site_config()
+    snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
+    snapshot: Snapshot = plugins.get_snapshot_provider().load(time=snap)
+    orders = snapshot.orders
+    if args.order:
+        order_ids = [o.strip() for o in args.order.split(",")]
+        orders = [o for o in orders if o.id in order_ids]
+    if args.process:
+        process_ids = [p for p in (p.strip() for p in args.process.split(",")) if p != ""]
+        processes = [_process_for_id(site.processes, p) for p in process_ids]
+        process_codes: list[int] = [code for p in processes for code in p.process_ids]
+        orders = [o for o in orders if any(p in process_codes for p in o.current_processes)]
+    if args.equipment:
+        plant_ids = [p for p in (p.strip() for p in args.equipment.split(",")) if p != ""]
+        plants = [_plant_for_id(site.equipment, p) for p in plant_ids]
+        plant_codes = [p.id for p in plants]
+        orders = [o for o in orders if o.current_equipment in plant_codes]
+    if args.lot:
+        lot_ids = [l.strip().upper() for l in args.lot.split(",")]
+        lots = [lot for lots in snapshot.lots.values() for lot in lots if lot.id.upper() in lot_ids]
+        if len(lots) == 0:
+            print(f"No matching lot found for {args.lot}")
+            return
+        order_ids = [o for lot in lots for o in lot.orders]
+        orders = [o for o in orders if o.id in order_ids]
+    if len(orders) == 0:
+        print("No matching orders found")
+        return
+    fields = (f.strip() for f in args.field.split(",")) if args.field is not None else None
+    first = orders[0]
+    fields = [f for flds in (_field_for_order(first, f) for f in fields) for f in flds] if fields is not None else None
+    if fields is not None and len(fields) == 0:
+        print("No matching field found for ", args.field)
+        return
+    filter_existing = args.field is None
+    equipment = None if args.skip_equipment_name else site.equipment
+    wide: bool = args.wide or fields is not None and len(fields) < 3
+    _print_orders(orders, fields, wide=wide, filter_existent_properties=filter_existing, equipment=equipment)
+
+
+def _field_for_order(o: Order, field: str) -> typing.Sequence[str]:
+    if hasattr(o, field):
+        return (field, )
+    if hasattr(o.material_properties, field):
+        return ("material_properties." + field, )
+    if "*" in field:
+        start_wildcard: bool = field.startswith("*")
+        end_wildcard: bool = field.endswith("*")
+        new_field = field.upper()
+        if start_wildcard:
+            new_field = new_field[1:]
+        if end_wildcard:
+            new_field = new_field[:-1]
+        fields = [key for key, info in o.model_fields.items() if new_field in key.upper() and (start_wildcard or key.upper().startswith(new_field)) and (end_wildcard or key.upper().endswith(new_field))] + \
+                 (["material_properties." + key for key, info in o.material_properties.model_fields.items() if new_field in key.upper() and (start_wildcard or key.upper().startswith(new_field)) and
+                                (end_wildcard or key.upper().endswith(new_field))] if o.material_properties is not None and isinstance(o.material_properties, BaseModel) else [])
+        return fields
+    return ()
+
+
+def _process_for_id(processes: list[Process], process_id0: str) -> Process:
+    process_id = process_id0.upper()
+    proc = next((p for p in processes if p.name_short.upper() == process_id), None)
+    if proc is not None:
+        return proc
+    proc = next((p for p in processes if process_id in [s.upper() for s in p.synonyms]), None)
+    if proc is None:
+        raise Exception(f"Process not found: {process_id0}")
+    return proc
+
+
+def _plant_for_id(plants: list[Equipment], plant_id0: str) -> Equipment:
+    plant = next((p for p in plants if str(p.id) == plant_id0), None)
+    if plant is not None:
+        return plant
+    plant_id = plant_id0.upper()
+    plant = next((p for p in plants if (p.name_short is not None and p.name_short.upper() == plant_id) or (p.name is not None and p.name.upper() == plant_id)), None)
+    if plant is None:
+        raise Exception(f"Plant not found: {plant_id0}")
+    return plant
+
+
+def _print_field_name(f: str, wide:bool=False, values: list[typing.Any] | None=None) -> str:
     if "." in f:
         dot = f.rindex(".")
         f = f[dot+1:]
-    if len(f) > 17:
+    if wide and values is not None:
+        max_length = max(len(str(v)) for v in values)
+        f = ("{:" + str(max_length) + "s}").format(f)
+    elif len(f) > 17:
         f = f[:15] + ".."
     return f
 
 def _separator_for_field(f: str) -> str:
     return "".join(["-" for _ in f]) + "--"
 
-def _value_for_col(order: Order, f: str) -> str|float|None:
+def _value_for_col(order: Order, f: str, equipment: list[Equipment]|None=None) -> str|float|None:
     obj = order
     while "." in f and obj is not None:
         idx = f.index(".")
         first = f[:idx]
         f = f[idx+1:]
         obj = getattr(obj, first, None)
-    return getattr(obj, f, None) if obj is not None else None
+    obj = getattr(obj, f, None) if obj is not None else None
+    if equipment is not None and (f == "current_equipment" or f == "allowed_equipment") and obj is not None:
+        obj = [next((f"{e.name_short} ({e.id})" for e in equipment if e.id == p and e.name_short is not None), str(p)) for p in obj]
+    return obj
 
-def _format_value(v: float|int|str|None, l: int) -> str:
+def _format_value(v: float|int|str|None, l: int, wide: bool=False) -> str:
     if v is None:
         return "".join([" " for _ in range(l+2)])
+    if isinstance(v, typing.Mapping) or isinstance(v, typing.Sequence):
+        v = str(v)
     if isinstance(v, str):
-        return (" {:" + str(l) + "s} ").format(v)
+        return (" {:" + str(l) + "." + str(l) + "s} ").format(v) if not wide else (" {:" + str(l) + "s} ").format(v)
     if isinstance(v, int):
         return (" {:" + str(l) + "d} ").format(v)
-    return (" {:" + str(l) + ".2f} ").format(v)
+    return (" {:" + str(l) + ".2f} ").format(v) if not wide else (" {:" + str(l) + "f} ").format(v)
 
 def _print_planning(sol: ProductionPlanning, snapshot: Snapshot, site: Site, costs: CostProvider, filter_existent_properties: bool = True):
     equipment = next(iter(sol.equipment_status.keys()))
@@ -341,6 +452,38 @@ def _print_planning(sol: ProductionPlanning, snapshot: Snapshot, site: Site, cos
     print()
 
 
+def _print_orders(orders: list[Order], fields: list[str]|None, filter_existent_properties: bool=True, wide: bool=False, equipment: list[Equipment]|None=None):
+    if fields is None:
+        o1 = orders[0]
+        fields = [key for key, info in o1.model_fields.items() if (key not in ["material_properties", "material_status", "lot", "lot_position", "id", "material_classes"])] + \
+                 (["material_properties." + key for key, info in o1.material_properties.model_fields.items()] if o1.material_properties is not None and isinstance(o1.material_properties, BaseModel) else [])
+    order_values = [[_value_for_col(o, f, equipment=equipment) for f in fields] for o in orders]
+    cols_included: list[int] = [idx for idx in range(len(fields)) if any(
+        ov[idx] is not None for ov in order_values)] if filter_existent_properties else list(range(len(fields)))
+    fields = [f for idx, f in enumerate(fields) if idx in cols_included]
+    order_values = [[v for idx, v in enumerate(ov) if idx in cols_included] for ov in order_values]
+    field_names = [_print_field_name(f, wide=wide, values=[ov[field_idx] for ov in order_values]) for field_idx, f in enumerate(fields)]
+    field_str = "|".join([f" {f} " for f in field_names]) + "|"
+    # TODO option to print lots for specific process?
+    #print(f"| {'Order':9s} | {'Lot':11s} | {'Weight/t':7s} | {'Costs':6s} |" + fields)
+    print(f"| {'Order':9s} |" + field_str)
+    att = "|".join(_separator_for_field(f) for f in field_names) + "|"
+    separator = "|-----------|" + att
+    print(separator)
+    previous_lot = ""
+    previous_order = None
+    for idx, order in enumerate(orders):
+        cols = [_format_value(order_values[idx][field_idx], len(field_names[field_idx]), wide=wide) for field_idx, f in enumerate(fields)]
+        #trans_costs = costs.transition_costs(plant, previous_order, order) if previous_order is not None else 0
+        #if idx > 0 and previous_lot != assign.lot:
+        #    print(separator)
+        print(f"| {order.id[:9]:9s} |" + "|".join(cols) + "|")
+        #previous_lot = assign.lot
+        previous_order = order
+    print(separator)
+    print()
+
+
 def _print_obj(obj: LabeledItem|str|int|None=None) -> str:
     if isinstance(obj, str|int|float|None):
         return str(obj)
@@ -357,7 +500,7 @@ def aggregate_production():
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--start", help="Start time", type=str, default=None)
     parser.add_argument("-e", "--end", help="End time", type=str, default=None)
-    parser = _trafo_args(parser=parser)
+    parser = _trafo_args(parser=parser, include_snapshot=False)
     args = parser.parse_args()
     start: datetime|None = DatetimeUtils.parse_date(args.start)
     end: datetime | None = DatetimeUtils.parse_date(args.end)

@@ -7,6 +7,24 @@ from confluent_kafka import Producer, Consumer, KafkaError
 from dynreact.shortterm.common import sendmsgtopic, KeySearch
 import traceback
 
+current_partitions = 0
+
+def on_assign(consumer, partitions):
+    global current_partitions
+    print("Partitions assigned:", partitions)
+    current_partitions = len(partitions)
+    consumer.assign(partitions)
+
+def on_revoke(consumer, partitions):
+    global current_partitions
+    print("Partitions revoked:", partitions)
+
+    if len(partitions) == current_partitions:
+        print("ERROR: Change on topic partition, shutting down", BaseException("No partitions left"))
+        sys.exit(1)
+    else:
+        consumer.unassign()
+
 class Agent:
     """
     Class Generic Agent. supporting the basic concepts.
@@ -53,7 +71,7 @@ class Agent:
                 'error_cb': self.kafka_error_callback
             }
         )
-        self.consumer.subscribe([self.topic])
+        self.consumer.subscribe([self.topic], on_assign=on_assign, on_revoke=on_revoke)
 
     def write_log(self, msg: str, identifier: str, to_stdout: bool = False):
         """

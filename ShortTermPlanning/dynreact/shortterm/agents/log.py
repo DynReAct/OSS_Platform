@@ -278,7 +278,8 @@ class Log(Agent):
             return 'CONTINUE'
         else:
             self.write_log(f"Refuse to create log replica from another replica instance.", "99848564-684c-4eef-b3fa-efce3a667d25")
-            raise Exception("Replicas can't create new instances. Only managers can")
+            dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+            raise Exception(f"{dt} | ERROR: Replicas can't create new instances. Only managers can")
 
     def handle_check_action(self, dctmsg: dict) -> str:
         """
@@ -332,6 +333,14 @@ class Log(Agent):
         return 'CONTINUE'
 
     def count_agents(self, agent_type: str):
+        """
+        Count the number of a specific present agent
+
+        :param dict agent_type: Agent to count
+
+        :returns: Number of present agents
+        :rtype:  int
+        """
         pattern = re.compile(rf'^{re.escape(agent_type)}\b')
         return len({item for item in self.present_agents if pattern.match(item)})
 

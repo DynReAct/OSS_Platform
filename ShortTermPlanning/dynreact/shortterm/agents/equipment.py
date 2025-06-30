@@ -9,6 +9,7 @@ Version History:
 """
 
 import time
+from datetime import datetime
 from dynreact.shortterm.common import sendmsgtopic, KeySearch
 from dynreact.shortterm.common.data.data_functions import get_equipment_status
 from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
@@ -131,7 +132,8 @@ class Equipment(Agent):
             return 'CONTINUE'
         else:
             self.write_log(f"Refuse to create equipment replica from another replica instance.", "fe2dbc33-7dcb-486a-af35-9e485674fff2")
-            raise Exception("Replicas can't create new instances. Only managers can")
+            dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+            raise Exception(f"{dt} | ERROR: Replicas can't create new instances. Only managers can")
 
     def handle_start_action(self, dctmsg: dict) -> str:
         """

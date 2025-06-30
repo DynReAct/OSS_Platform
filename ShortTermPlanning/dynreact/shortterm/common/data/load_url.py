@@ -3,6 +3,8 @@ load_url.py
 This module contains the URLs with relevant data and the functions used to load their data.
 """
 import configparser
+from datetime import datetime
+
 import requests
 import os
 
@@ -34,7 +36,8 @@ def load_url_json_get(url: str, verbose: int = 1) -> dict:
     if response.ok:
         data = response.json()
     else:
-        error_msg = f"ERROR: Failed to retrieve data from {url}: {response.status_code} {response.text}"
+        dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+        error_msg = f"{dt} | ERROR: Failed to retrieve data from {url}: {response.status_code} {response.text}"
         if verbose > 0:
             print(error_msg)
         raise requests.exceptions.HTTPError(error_msg)
@@ -56,7 +59,9 @@ def load_url_json_post(url: str, payload: dict, verbose: int = 1) -> dict:
     if response.ok:
         data = response.json()
     else:
-        error_msg = f"ERROR: Failed to retrieve data from {url}: {response.status_code} {response.text}"
+        # Getting the current date and time
+        dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+        error_msg = f"{dt} | ERROR: Failed to retrieve data from {url}: {response.status_code} {response.text}"
         if verbose > 0:
             print(error_msg)
         raise requests.exceptions.HTTPError(error_msg)

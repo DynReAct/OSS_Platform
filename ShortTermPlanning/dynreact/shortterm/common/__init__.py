@@ -1,5 +1,5 @@
 import json
-import argparse
+from datetime import datetime
 import os
 import traceback
 
@@ -49,7 +49,8 @@ def purge_topics(topics: list):
         try:
             f.result()  # Raises exception if delete failed
         except Exception as e:
-            raise Exception(f"Failed: {tp} with error {e}")
+            dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+            raise Exception(f"{dt} | ERROR: Failed: {tp} with error {e}")
 
 def delete_topics(topics: list, silent=False):
     """
@@ -73,7 +74,8 @@ def delete_topics(topics: list, silent=False):
             f.result()  # Raises exception if delete failed
         except Exception as e:
             if not silent:
-                raise Exception(f"Failed: {tp} with error {e}")
+                dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+                raise Exception(f"{dt} | ERROR: Failed: {tp} with error {e}")
 
 class KeySearch:
     _global_config: ShortTermTargets = None

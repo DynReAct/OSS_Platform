@@ -2,6 +2,7 @@ import json
 import os
 import shlex
 import docker
+from datetime import datetime
 
 from dynreact.shortterm.common import KeySearch
 
@@ -73,7 +74,8 @@ class DockerManager:
             else:
                 print("Unable to provision container, container limit reached!")
         except Exception as e:
-            raise Exception(f"Error launching container: {e}")
+            dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+            raise Exception(f"{dt} | ERROR: Error launching container: {e}")
 
     def stop_tracked_containers(self):
         """

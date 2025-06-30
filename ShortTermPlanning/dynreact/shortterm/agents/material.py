@@ -7,6 +7,7 @@ Version History:
 - 1.0 (2024-03-09): Initial version developed by Rodrigo Castro Freibott.
 """
 
+from datetime import datetime
 from dynreact.shortterm.common import sendmsgtopic
 from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
 from dynreact.shortterm.common.functions import calculate_bidding_price
@@ -84,7 +85,8 @@ class Material(Agent):
 
         else:
             self.write_log(f"Refuse to create material replica from another replica instance.", "c891fe14-041f-48b7-8de9-aa0d201e7083")
-            raise Exception("Replicas can't create new instances. Only managers can")
+            dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+            raise Exception(f"{dt} | ERROR: Replicas can't create new instances. Only managers can")
 
     def handle_bid_action(self, dctmsg: dict) -> str:
         """

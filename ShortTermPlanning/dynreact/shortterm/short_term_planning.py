@@ -27,6 +27,7 @@ import random
 import string
 import argparse
 from typing import Generator, Optional
+from datetime import datetime
 
 from confluent_kafka import Producer, Consumer, Message
 from confluent_kafka.admin import AdminClient
@@ -141,7 +142,8 @@ def create_auction(
     topic_gen = KeySearch.search_for_value("TOPIC_GEN")
 
     if nmaterials is not None and materials is not None:
-        raise Exception("Cannot specify both nmaterials and materials")
+        dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+        raise Exception(f"{dt} | ERROR: Cannot specify both nmaterials and materials")
 
     # Initialize search of latest snapshot
     data_setup = DataSetup(verbose=verbose, snapshot_time=snapshot)
@@ -210,7 +212,8 @@ def create_auction(
                         payload=dict(msg=msg), vb=verbose
                     )
             else:
-                raise Exception(f"No equipment ID found in equipment {equipment}")
+                dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+                raise Exception(f"{dt} | ERROR: No equipment ID found in equipment {equipment}")
 
             if materials is None and nmaterials is not None:
                 all_materials.extend(equipment_materials[:nmaterials])
@@ -227,7 +230,8 @@ def create_auction(
     #         all_materials = materials
     #     else:
     #         unwanted = [item for item in materials if item not in all_materials]
-    #         raise Exception(f"Provided materials {unwanted} are not part of the selected equipment")
+    #         dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+    #         raise Exception(f"{dt} | ERROR: Provided materials {unwanted} are not part of the selected equipment")
 
     all_materials = list(set(all_materials))
     print("Final material list size is {}".format(len(all_materials)))
@@ -312,9 +316,11 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
             if payload["is_auction_started"]:
                 return
             elif payload["total_num_agents"] < payload["present_agents"]["total"]:
-                raise Exception(f"More agents responded than expected. Expected {payload["total_num_agents"]["total"]} got {payload["present_agents"]}")
+                dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+                raise Exception(f"{dt} | ERROR: More agents responded than expected. Expected {payload["total_num_agents"]["total"]} got {payload["present_agents"]}")
 
-    raise Exception("Failed to start/run auction, timeout exceeded")
+    dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+    raise Exception(f"{dt} | ERROR: Failed to start/run auction, timeout exceeded")
 
 
 def wait_for_callback(topic: str, expected_action: str, consumer: Consumer, verbose: int, sleep_timeout: int = 1, max_iters: int = 10) -> Generator[Optional[Message], None, None]:

@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Configuration
-LOCAL_PORT=5016
+LOCAL_PORT=5026
 REMOTE_HOST=192.168.111.11
-REMOTE_PORT=5016
+REMOTE_PORT=5026
 PID_FILE="/var/run/socat-forwarding.pid"
 LOG_FILE="/var/log/socat-forwarding.log"
 

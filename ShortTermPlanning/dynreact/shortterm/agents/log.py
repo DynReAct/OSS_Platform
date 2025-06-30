@@ -16,6 +16,7 @@ import json
 
 import multiprocessing
 import logging
+import re
 
 from confluent_kafka.admin import AdminClient, NewTopic
 from datetime import datetime
@@ -330,6 +331,10 @@ class Log(Agent):
                 )
         return 'CONTINUE'
 
+    def count_agents(self, agent_type: str):
+        pattern = re.compile(rf'^{re.escape(agent_type)}\b')
+        return len({item for item in self.present_agents if pattern.match(item)})
+
     def handle_is_auction_started_action(self, dctmsg: dict) -> str:
         """
         Check if the auction has started
@@ -346,42 +351,31 @@ class Log(Agent):
         self.write_log(f"Checking if auction has already started...", "ce438bc1-37ee-4e87-a5d4-7b17b10acbf7")
 
         start_conditions = [self.total_num_agents is not None, self.auction_start]
+        has_started = all(start_conditions) and len(self.present_agents) == self.total_num_agents
 
-        if all(start_conditions) and len(self.present_agents) == self.total_num_agents:
-
-            sendmsgtopic(
-                producer=self.producer,
-                tsend=self.topic_callback,
-                topic=self.topic_callback,
-                source=self.agent,
-                dest=sender,
-                action="AUCTIONSTARTED",
-                payload={
-                    "present_agents": len(self.present_agents),
-                    "total_num_agents": self.total_num_agents or 0,
-                    "is_auction_started": True
+        sendmsgtopic(
+            producer=self.producer,
+            tsend=self.topic_callback,
+            topic=self.topic_callback,
+            source=self.agent,
+            dest=sender,
+            action="AUCTIONSTARTED",
+            payload={
+                "total_num_agents": self.total_num_agents or 0,
+                "present_agents": {
+                    "log": self.count_agents("LOG"),
+                    "material": self.count_agents("MATERIAL"),
+                    "equipment": self.count_agents("EQUIPMENT"),
+                    "total": len(self.present_agents)
                 },
-                vb=self.verbose
-            )
+                "is_auction_started": has_started
+            },
+            vb=self.verbose
+        )
 
-            if self.verbose > 1:
-                self.write_log(f"Answered {sender} with the current status of the auction.", "d7f95814-1932-4d89-ace6-618f50a725bd")
+        if self.verbose > 1:
+            self.write_log(f"Answered {sender} with the current status of the auction.", "d7f95814-1932-4d89-ace6-618f50a725bd")
 
-        else:
-            sendmsgtopic(
-                producer=self.producer,
-                tsend=self.topic_callback,
-                topic=self.topic_callback,
-                source=self.agent,
-                dest=sender,
-                action="AUCTIONSTARTED",
-                payload={
-                    "present_agents": len(self.present_agents),
-                    "total_num_agents": self.total_num_agents or 0,
-                    "is_auction_started": False
-                },
-                vb=self.verbose
-            )
 
         return 'CONTINUE'
 

@@ -1,11 +1,11 @@
 from datetime import datetime, timedelta
+from typing import Any
 
 from dynreact.base.AggregationProvider import AggregationProvider
 from dynreact.base.ConfigurationProvider import ConfigurationProvider
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.DowntimeProvider import DowntimeProvider
 from dynreact.base.LongTermPlanning import LongTermPlanning
-from dynreact.base.ShortTermPlanning import ShortTermPlanning
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
@@ -18,7 +18,6 @@ from dynreact.base.model import Snapshot, Site, ProductionPlanning, ProductionTa
 
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.plugins import Plugins
-from dynreact.auction import auction
 
 
 class DynReActSrvState:
@@ -35,13 +34,9 @@ class DynReActSrvState:
         self._ltp: LongTermPlanning | None = None
         self._results_persistence: ResultsPersistence | None = None
         self._availability_persistence: PlantAvailabilityPersistence|None = None
-#
-# Added by JOM 20241005
-#
-        self._auction_obj : auction.Auction | None = None
-        self._stp: ShortTermPlanning | None = None
-#
-#
+        self._auction_obj : Any|None=None  # auction.Auction | None = None
+        self._stp: Any|None=None #ShortTermPlanning | None = None
+
         self._max_snapshot_caches: int = config.max_snapshot_caches
         self._max_snapshot_solutions_cache: int = config.max_snapshot_solutions_caches
         self._snapshots_cache: dict[datetime, Snapshot] = {}

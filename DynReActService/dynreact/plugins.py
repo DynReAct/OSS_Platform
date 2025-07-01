@@ -8,7 +8,6 @@ from dynreact.base.CostProvider import CostProvider
 from dynreact.base.DowntimeProvider import DowntimeProvider
 from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.NotApplicableException import NotApplicableException
-from dynreact.base.ShortTermPlanning import ShortTermPlanning
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
@@ -41,7 +40,7 @@ class Plugins:
         self._cost_provider: CostProvider|None = None
         self._lots_optimizer: LotsOptimizationAlgo|None = None
         self._long_term_planning: LongTermPlanning|None = None
-        self._short_term_planning: ShortTermPlanning| None = None
+        self._short_term_planning: Any| None = None
         self._results_persistence: ResultsPersistence|None = None
         self._availability_persistence: PlantAvailabilityPersistence|None = None
         self._plant_performance_models: list[PlantPerformanceModel]|None = None
@@ -106,8 +105,9 @@ class Plugins:
                 raise Exception("Long term planning not found: " + str(self._config.long_term_provider))
         return self._long_term_planning
 
-    def get_stp_config_params(self) -> ShortTermPlanning:
+    def get_stp_config_params(self): # -> ShortTermPlanning:
         if self._short_term_planning is None:
+            from dynreact.base.ShortTermPlanning import ShortTermPlanning
             if self._config.short_term_planning.startswith("default+file:"):
                 self._short_term_planning = ShortTermPlanning(self._config.short_term_planning)
             else:

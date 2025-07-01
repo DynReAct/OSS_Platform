@@ -86,7 +86,7 @@
         // can we move the snapshot data clientside once only to make the retrieval of coil data more efficient?
         // maybe to have a Store in the main layout which will be filled by the snapshot selector?
         const dynreact = globalThis.dynreact;
-        const currentOrder = props.data.id;
+        const currentOrder = props.data?.id;
         const snap = dynreact.getSnapshot();
         if (!currentOrder || !snap)
             return undefined;

@@ -236,9 +236,8 @@ def orders_tab():
 
         # TODO hideable?, use icon (https://wiki.selfhtml.org/wiki/SVG/Tutorials/Icons)
         html.Fieldset([
-            html.Legend("Edit orders"),
+            html.Legend("Lot-based selection"),
             html.Div([
-
                 html.Div([
                     html.Div("Processes:"),
                     dcc.Dropdown(id="lots2-oders-lots-processes", className="lots2-order-lots-selector", multi=True),
@@ -249,31 +248,40 @@ def orders_tab():
                              className="dynreact-button dynreact-button-small", disabled=True), title="Add orders from selected lots to backlog"),
                     html.Div(html.Button("Deselect orders", id="lots2-orders-backlog-rm-logs",
                              className="dynreact-button dynreact-button-small", disabled=True), title="Remove orders from selected lots from backlog"),
-                ], className="lots2-orders-lots-editor"),
-                html.Br(),
+                ], className="lots2-orders-lots-editor")
+            ]) #, id="lots2-orders-backlog-settings")
+        ], className="lots2-orders-grouped-menu"),
+        html.Fieldset([
+            html.Legend("Table operations"),
+            html.Div([
                 html.Div([
                     html.Div("Backlog operations: "),
-                    #html.Div(html.Button("Clear", id="lots2-orders-backlog-clear", className="dynreact-button dynreact-button-small"),
+                    # html.Div(html.Button("Clear", id="lots2-orders-backlog-clear", className="dynreact-button dynreact-button-small"),
                     #         title="Clear order backlog"),
-                    html.Div(html.Button("Select visible", id="lots2-orders-select-visible", className="dynreact-button dynreact-button-small"),
+                    html.Div(html.Button("Select visible", id="lots2-orders-select-visible",
+                                         className="dynreact-button dynreact-button-small"),
                              title="Select all orders currently visible in the table. Set a column filter to restrict the visible orders/rows first."),
-                    html.Div(html.Button("Deselect visible", id="lots2-orders-deselect-visible", className="dynreact-button dynreact-button-small"),
+                    html.Div(html.Button("Deselect visible", id="lots2-orders-deselect-visible",
+                                         className="dynreact-button dynreact-button-small"),
                              title="Deselect all orders currently visible in the table. Set a column filter to restrict the visible orders/rows first."),
-                    #html.Div(html.Button("Reset", id="lots2-orders-backlog-reset", className="dynreact-button dynreact-button-small"),
+                    html.Div(html.Button("Clear table filters", id="lots2-orders-clear-table-filters",
+                                         className="dynreact-button dynreact-button-small"),  title="Clear table filters and show all rows."),
+                    # html.Div(html.Button("Reset", id="lots2-orders-backlog-reset", className="dynreact-button dynreact-button-small"),
                     #         title="Reset order backlog to default selection"),
                     # TODO html.Div(html.Button("Undo", id="create-orders-backlog-undo", className="dynreact-button"))
                 ], className="lots2-orders-backlog-settings-buttons"),
-            ]) #, id="lots2-orders-backlog-settings")
+                html.Br(),
+                html.Div([
+                    html.Div(dcc.Checklist(id="lots2-check-hide-released-lots",
+                                           options=[{"value": "hide_released", "label": "Hide released lots"},
+                                                    {"value": "hide_next_procs",
+                                                     "label": "Hide orders at later process steps"}],
+                                           value=["hide_released", "hide_next_procs"],
+                                           className="lots2-checkbox"))
+                ], className="lots2-use-range-checkbox"),
+            ])  # , id="lots2-orders-backlog-settings")
         ], className="lots2-orders-grouped-menu"),
         html.Br(),
-
-        html.Div([
-            html.Div(dcc.Checklist(id="lots2-check-hide-released-lots",
-                            options=[{"value": "hide_released", "label": "Hide released lots"},
-                                     {"value": "hide_next_procs", "label": "Hide orders at later process steps"}],
-                            value=["hide_released", "hide_next_procs"],
-                            className="lots2-checkbox"))
-        ], className="lots2-use-range-checkbox"),
         dash_ag.AgGrid(
             id="lots2-orders-table",
             columnDefs=[{"field": "id", "pinned": True}],
@@ -987,10 +995,10 @@ def update_orders(snapshot: str, process: str, check_hide_list: list[Literal["hi
                   processed_lots: list[Literal[""]], all_lots_value: list[Literal[""]], active_lots_value: list[Literal[""]], released_lots_value: list[Literal[""]],
                   selected_prev_steps_lot: list[str], selected_prev_steps_all: list[str]):
     if not dash_authenticated(config):
-        return None, None, None, None
+        return None, None, None, None, None
     snapshot = DatetimeUtils.parse_date(snapshot)
     if snapshot is None or process is None:
-        return None, None, None, None
+        return None, None, None, None, None
     snapshot_serialized: str = DatetimeUtils.format(snapshot)
     snapshot_obj = state.get_snapshot(snapshot)
     changed_ids: list[str] = GuiUtils.changed_ids()
@@ -1003,6 +1011,10 @@ def update_orders(snapshot: str, process: str, check_hide_list: list[Literal["hi
     hide_released_lots: bool = "hide_released" in check_hide_list
     hide_next_procs: bool = "hide_next_procs" in check_hide_list
     site = state.get_site()
+    all_processes = [p.name_short for p in site.processes]
+    proc_idx = all_processes.index(process)
+    previous_processes = all_processes[:proc_idx]
+    previous_processes.reverse()
     _none_type = type(None)
 
     def _is_numeric(tp: type|None):
@@ -1038,7 +1050,9 @@ def update_orders(snapshot: str, process: str, check_hide_list: list[Literal["hi
             field["valueFormatter"] = value_formatter_object
         if field["field"] == "current_equipment":
             field["headerName"]  = "Equipment"
-    fields.append({"field": "lot_info", "headerName": "Lot", "tooltipField": "lot_info"})
+    # FIXME tooltipField not working?
+    fields.append({"field": "lot_info", "headerName": "Lot", "tooltipField": "lot_info", "headerTooltip": "Lot of the selected processing stage", "filter":  "agTextColumnFilter"})
+    fields.append({"field": "prev_lot_info", "headerName": "Lot: previous", "tooltipField": "prev_lot_info", "headerTooltip": "Lot of the previous processing stage", "filter": "agTextColumnFilter"})
 
     def order_to_json(o: Order):
         as_dict = o.model_dump(exclude_none=True, exclude_unset=True)
@@ -1056,6 +1070,11 @@ def update_orders(snapshot: str, process: str, check_hide_list: list[Literal["hi
         lot = snapshot_obj.get_order_lot(site, o.id, process)
         if lot is not None:
             as_dict["lot_info"] = _lot_info(lot)
+        for proc in previous_processes:
+            prev_lot = snapshot_obj.get_order_lot(site, o.id, proc)
+            if prev_lot is not None:
+                as_dict["prev_lot_info"] = _lot_info(prev_lot)
+                break
         return as_dict
 
     current_process_index = next((idx for idx, proc in enumerate(site.processes) if proc.name_short == process), None)
@@ -1187,14 +1206,43 @@ def update_orders(snapshot: str, process: str, check_hide_list: list[Literal["hi
                 if field_id in relevant_fields and next((o for o in first_orders if o.get(_id) is not None), None) is not None:
                     return relevant_fields.index(field_id)
                 if field_id == "current_equipment":
-                    return -2
+                    return -3
                 if field_id == "lot_info":
+                    return -2
+                if field_id == "prev_lot_info":
                     return -1
                 return 1000
             fields.sort(key=field_sort_id)
     except:
         pass
     return fields, sorted_orders, new_selected_rows, orders_data
+
+# Old filter has the form {}, or {"lots": {'filterType': 'text', 'type': 'contains', 'filter': '"DGL04.81"'}}
+@callback(
+    Output("lots2-orders-table", "filterModel"),
+    Output("lots2-oders-lots-lots", "value"),
+    Output("lots2-orders-clear-table-filters", "disabled"),
+    Input("lots2-orders-clear-table-filters", "n_clicks"),
+    Input("lots2-oders-lots-lots", "value"),
+    Input("lots2-orders-table", "filterModel"),
+)
+def update_table_filters(_, selected_lots: list[str]|None, old_filter):
+    if not dash_authenticated(config):
+        return dash.no_update, dash.no_update, dash.no_update
+    changed_ids: list[str] = GuiUtils.changed_ids()
+    if "lots2-orders-clear-table-filters" in changed_ids:
+        return {"model": {}}, [], True
+    old_filter = old_filter if old_filter is not None else {}
+    if "lots2-oders-lots-lots" in changed_ids:
+        old_filter.pop("lots", None)
+        if selected_lots is not None and len(selected_lots) > 0:
+            if len(selected_lots) == 1:
+                old_filter["lots"] = {"filterType": "text", "type": "contains", "filter": "\"" + selected_lots[0] + "\""}
+            else:
+                old_filter["lots"] = {"filterType": "text", "operator": "OR", "conditions":
+                        [{"filterType": "text", "type": "contains", "filter": "\"" + lot + "\""} for lot in selected_lots]}
+        return old_filter, dash.no_update, len(old_filter) == 0
+    return dash.no_update, dash.no_update, len(old_filter) == 0
 
 
 @callback(

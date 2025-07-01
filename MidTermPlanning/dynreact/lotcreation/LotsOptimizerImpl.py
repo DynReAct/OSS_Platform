@@ -245,6 +245,8 @@ class TabuSearch(LotsOptimizer):
 
         if pool is not None:
             pool.close()
+            pool.join()
+            pool.terminate()
 
         if target_vbest < target_vbest_global:
             self._state.current_solution = vbest

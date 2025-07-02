@@ -159,7 +159,7 @@ def main():
 
     if args.agent == "log":
         if args.type == "base":
-            agent = log_base(verbose=args.verbose, kafka_KAFKA_IP=args.kafka_ip)
+            agent = log_base(verbose=args.verbose, kafka_ip=args.kafka_ip)
         elif args.type == "replica":
 
             variables = json.loads(args.variables)
@@ -174,7 +174,7 @@ def main():
 
     elif args.agent == "equipment":
         if args.type == "base":
-            agent = equipment_base(verbose=args.verbose, kafka_KAFKA_IP=args.kafka_ip)
+            agent = equipment_base(verbose=args.verbose, kafka_ip=args.kafka_ip)
         elif args.type == "replica":
 
             variables = json.loads(args.variables)
@@ -189,7 +189,7 @@ def main():
 
     elif args.agent == "material":
         if args.type == "base":
-            agent = material_base(verbose=args.verbose, kafka_KAFKA_IP=args.kafka_ip)
+            agent = material_base(verbose=args.verbose, kafka_ip=args.kafka_ip)
         elif args.type == "replica":
 
             variables = json.loads(args.variables)

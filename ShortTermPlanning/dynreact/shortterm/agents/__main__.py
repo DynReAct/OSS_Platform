@@ -163,7 +163,8 @@ def main():
         elif args.type == "replica":
 
             variables = json.loads(args.variables)
-            KeySearch.set_global(config_provider=ShortTermTargets(**variables))
+            short_term_targets = ShortTermTargets().model_copy(update=variables)
+            KeySearch.set_global(config_provider=short_term_targets)
 
             agent = Log(
                 topic=args.topic,
@@ -178,7 +179,8 @@ def main():
         elif args.type == "replica":
 
             variables = json.loads(args.variables)
-            KeySearch.set_global(config_provider=ShortTermTargets(**variables))
+            short_term_targets = ShortTermTargets().model_copy(update=variables)
+            KeySearch.set_global(config_provider=short_term_targets)
 
             agent = Equipment(
                 topic=args.topic,
@@ -193,7 +195,8 @@ def main():
         elif args.type == "replica":
 
             variables = json.loads(args.variables)
-            KeySearch.set_global(config_provider=ShortTermTargets(**variables))
+            short_term_targets = ShortTermTargets().model_copy(update=variables)
+            KeySearch.set_global(config_provider=short_term_targets)
 
             agent = Material(
                 topic=args.topic,

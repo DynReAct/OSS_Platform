@@ -102,7 +102,7 @@ def run_general_agents(producer: Producer, gagents: str, verbose: int):
         log_handler.launch_container(name="Base", agent="log", mode="base", params={
             "verbose": verbose,
             "kafka-ip": KeySearch.search_for_value("KAFKA_IP")
-        }, envs={"KAFKA_IP": KeySearch.search_for_value("KAFKA_IP")}, auto_remove=False)
+        }, auto_remove=False)
         sleep(small_wait, producer=producer, verbose=verbose)
     if str(gagents)[1] == '1':
         equipment_handler = DockerManager(tag=f"equipment{DOCKER_MANAGER}", max_allowed=1)
@@ -110,7 +110,7 @@ def run_general_agents(producer: Producer, gagents: str, verbose: int):
         equipment_handler.launch_container(name="Base", agent="equipment", mode="base", params={
             "verbose": verbose,
             "kafka-ip": KeySearch.search_for_value("KAFKA_IP")
-        }, envs={"KAFKA_IP": KeySearch.search_for_value("KAFKA_IP")}, auto_remove=False)
+        }, auto_remove=False)
         sleep(small_wait, producer=producer, verbose=verbose)
     if str(gagents)[2] == '1':
         material_handler = DockerManager(tag=f"material{DOCKER_MANAGER}", max_allowed=1)

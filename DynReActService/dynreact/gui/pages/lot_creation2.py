@@ -965,6 +965,7 @@ def lot_buttons_disabled_check(selected_lots: list[str]|None, selected_rows: lis
 
             Input("selected-snapshot", "data"),
             Input("lots2-process-selector", "value"),
+            Input("lots2-active-tab", "data"),
 Input("lots2-check-hide-released-lots", "value"),
             Input("lots2-orders-backlog-init", "n_clicks"),
             Input("lots2-orders-backlog-clear", "n_clicks"),
@@ -986,22 +987,26 @@ Input("lots2-check-hide-released-lots", "value"),
             State("lots2-init-submenu-releasedlots-value", "value"),
             State("lots2-init-prev-proc-selector_lot", "value"),
             State("lots2-init-prev-proc-selector_all", "value"),
+            State("lots2-details-plants", "children"),
 )
-def update_orders(snapshot: str, process: str, check_hide_list: list[Literal["hide_released", "hide_next_procs"]],
+def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: list[Literal["hide_released", "hide_next_procs"]],
                   _1, _2, _3, _4, _5, _6, _7,
                   orders_data: dict[str, str]|None, selected_lots: list[str],
                   selected_rows: list[dict[str, any]]|None, filtered_rows: list[dict[str, any]]|None, horizon_hours: int,
                   init_method: Literal["active_process", "active_plant", "inactive_lots", "active_lots", "current_planning"]|None,
                   processed_lots: list[Literal[""]], all_lots_value: list[Literal[""]], active_lots_value: list[Literal[""]], released_lots_value: list[Literal[""]],
-                  selected_prev_steps_lot: list[str], selected_prev_steps_all: list[str]):
+                  selected_prev_steps_lot: list[str], selected_prev_steps_all: list[str], plants_components: list[Component]|None):
     if not dash_authenticated(config):
-        return None, None, None, None, None
+        return None, None, None, None
     snapshot = DatetimeUtils.parse_date(snapshot)
     if snapshot is None or process is None:
-        return None, None, None, None, None
+        return None, None, None, None
     snapshot_serialized: str = DatetimeUtils.format(snapshot)
     snapshot_obj = state.get_snapshot(snapshot)
     changed_ids: list[str] = GuiUtils.changed_ids()
+    tab_changed = "lots2-active-tab" in changed_ids
+    if tab_changed and tab != "orders":
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update
     is_clear_command: bool = "lots2-orders-backlog-clear" in changed_ids
     is_init_command: bool = "lots2-orders-backlog-init" in changed_ids
     update_selection: bool = orders_data is None or orders_data.get("process") != process \
@@ -1106,6 +1111,13 @@ def update_orders(snapshot: str, process: str, check_hide_list: list[Literal["hi
         return plant_idx
 
     current_process_plants: list[int] = process_plants[current_process_index]
+
+    period: tuple[datetime, datetime] = (snapshot_obj.timestamp, snapshot_obj.timestamp + timedelta(hours=horizon_hours))
+    plant_targets, _1, _2, _3 = target_values_from_settings(process, period, current_process_plants, False, plants_components)
+    current_process_plants = [p for p in plant_targets.target_weight.keys()] if plant_targets is not None else []
+    if len(current_process_plants) == 0:
+        return None, None, None, None
+
     orders_filtered = [order for order in snapshot_obj.orders if any(plant in current_process_plants for plant in order.allowed_equipment)]
     orders_sorted = sorted(orders_filtered, key=process_index_for_order)
     order_ids = [o.id for o in orders_sorted]
@@ -1510,12 +1522,7 @@ def process_changed(snapshot: datetime|None,
     # check structure_sum vs details_sum
     def _structure_calc_sum( components: list[Component] | None, process: str | None):
         plants = state.get_site().get_process_equipment(process)
-        target_list, flag, message = target_values_from_settings_short(process=process, plants=[p.id for p in plants],
-                                                                      components=components)
-        try:
-            total_weight = sum(target_list)
-        except:
-            total_weight = 0
+        total_weight, message = target_values_sum(process=process, plants=[p.id for p in plants], components=components)
         return total_weight
     details_sum = _structure_calc_sum(components, process)
     if structure_sum is not None and structure_sum > 0 and details_sum > 0:
@@ -1901,11 +1908,7 @@ def structure_update(_, components: list[Component]|None, process: str|None, set
     #first OUT is sum in grid, lots2-weight-total used as IN for other fcts
     #second OUT is sum hidden
     plants = state.get_site().get_process_equipment(process)
-    target_list, flag, message = target_values_from_settings_short(process=process, plants=[p.id for p in plants], components=components )
-    try:
-        total_weight = sum(target_list)
-    except:
-        total_weight = 0
+    total_weight, message = target_values_sum(process=process, plants=[p.id for p in plants], components=components)
     return total_weight  #f"{total_weight:.2f}"
 
 
@@ -2006,7 +2009,7 @@ def _selected_dropdown_value(c: dict) -> str | None:
     return result
 
 
-def target_values_from_settings_short(process: str, plants: list[int], components: list[Component]|None) -> tuple[list[float]|None, bool, str|None]:
+def target_values_sum(process: str, plants: list[int], components: list[Component] | None) -> tuple[float | None, str | None]:
     """
     :return: targets, indicator if default values have been changed, message
     """
@@ -2014,7 +2017,7 @@ def target_values_from_settings_short(process: str, plants: list[int], component
 
     message = None
     if components is None:
-        return None, False, None
+        return None, None
 
     #target_values: dict[int, float] = {plant: 0 for plant in plants}
 
@@ -2022,7 +2025,7 @@ def target_values_from_settings_short(process: str, plants: list[int], component
     components_by_plant = {plant: [c for c in components if c.get("props").get("data-plant") == str(plant)] for plant in plants}
     component_by_plant = {plant: cmps[0] if len(cmps) > 0 else None for plant, cmps in components_by_plant.items()}
     if None in component_by_plant.values():  # Need a component for every process plant # why?
-        return None, False, None
+        return None,  None
 
     def plant_included(plant0: int) -> bool:
         # the structure per plant is something like this: <checkbox/><div (plant_element)/><div data-plant=plant.id><input tons></div>,
@@ -2038,19 +2041,11 @@ def target_values_from_settings_short(process: str, plants: list[int], component
             target_list = list(target_values.values())
         except TypeError:
             message = "Target production: enter a value"
-            return None, False, message
-
-        # targets: dict[int, EquipmentProduction] = {plant: EquipmentProduction(equipment=plant, total_weight=value,
-        #                                             lot_weight_range=None) for plant, value in target_values.items()}
-
-        changed_plants = [plant for plant, c in component_by_plant.items() if
-                          c.get("props").get("children").get("props").get("value") != c.get("props").get("data-default")
-                          and plant_active[plant]]
-
-        return target_list, len(changed_plants) > 0, message
-    except ValueError as e:
+            return None, message
+        return sum(target_list), message
+    except Exception as e:
         traceback.print_exc()
-        return None, False, str(e)
+        return 0, str(e)
 
 
 def performance_models_from_elements(process: str, components: list[Component]|None) -> list[PlantPerformanceModel]:

@@ -1,8 +1,10 @@
 {
   "KAFKA_IP": "192.168.111.173:9092",
   "LOG_FILE_PATH": "/var/log/dynreact-logs/",
-  "REST_URL": "http://192.168.111.11:5016",
+  "REST_URL": "http://192.168.111.11:5026",
   "TOPIC_GEN": "DynReact-Gen",
+  "TOPIC_CALLBACK": "DynReact-Callback",
+  "PERF_URL": "http://192.168.111.11:50276",
   "VB": 1,
   "TimeDelays": {
      "AUCTION_WAIT": 7,

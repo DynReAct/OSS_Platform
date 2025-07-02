@@ -26,10 +26,9 @@ class Equipment(Agent):
         topic     (str): Topic driving the relevant converstaion.
         agent     (str): Name of the agent creating the object.
         status   (dict): Status of the equipment
-        counterbid_wait (float): Number of seconds granted for waiting confirmation.
 
     """
-    def __init__(self, topic: str, agent: str, status: dict, counterbid_wait: float, manager=True):
+    def __init__(self, topic: str, agent: str, status: dict, manager=True):
 
         super().__init__(topic=topic, agent=agent)
         """
@@ -38,7 +37,6 @@ class Equipment(Agent):
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
         :param dict status: Status of the equipment
-        :param float counterbid_wait: Number of seconds granted for waiting confirmation.
         :param str manager: Is this instance a base.
         """
         self.action_methods.update({
@@ -52,7 +50,6 @@ class Equipment(Agent):
 
         self.round_number = 0
         self.status = status
-        self.counterbid_wait = counterbid_wait
         self.equipment = 0
         self.iter_post_bid = 0
         self.bids = []
@@ -310,7 +307,7 @@ class Equipment(Agent):
 
         # Do not proceed if not enough time has passed since the last bid or
         # the equipment is waiting for a material to confirm
-        if time_after_bid < self.counterbid_wait or self.bid_to_confirm:
+        if time_after_bid <  KeySearch.search_for_value("COUNTERBID_WAIT") or self.bid_to_confirm:
             return 'CONTINUE'
 
         # Kill this equipment child if there are no more materials to ask

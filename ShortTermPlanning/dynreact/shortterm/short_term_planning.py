@@ -100,22 +100,25 @@ def run_general_agents(producer: Producer, gagents: str, verbose: int):
         log_handler = DockerManager(tag=f"log{DOCKER_MANAGER}", max_allowed=1)
         log_handler.clean_containers()
         log_handler.launch_container(name="Base", agent="log", mode="base", params={
-            "verbose": verbose
+            "verbose": verbose,
+            "kafka-ip": KeySearch.search_for_value("KAFKA_IP")
         }, envs={"KAFKA_IP": KeySearch.search_for_value("KAFKA_IP")}, auto_remove=False)
         sleep(small_wait, producer=producer, verbose=verbose)
     if str(gagents)[1] == '1':
         equipment_handler = DockerManager(tag=f"equipment{DOCKER_MANAGER}", max_allowed=1)
         equipment_handler.clean_containers()
         equipment_handler.launch_container(name="Base", agent="equipment", mode="base", params={
-            "verbose": verbose
+            "verbose": verbose,
+            "kafka-ip": KeySearch.search_for_value("KAFKA_IP")
         }, envs={"KAFKA_IP": KeySearch.search_for_value("KAFKA_IP")}, auto_remove=False)
         sleep(small_wait, producer=producer, verbose=verbose)
     if str(gagents)[2] == '1':
         material_handler = DockerManager(tag=f"material{DOCKER_MANAGER}", max_allowed=1)
         material_handler.clean_containers()
         material_handler.launch_container(name="Base", agent="material", mode="base", params={
-            "verbose": verbose
-        }, envs={"KAFKA_IP": KeySearch.search_for_value("KAFKA_IP")}, auto_remove=False)
+            "verbose": verbose,
+            "kafka-ip": KeySearch.search_for_value("KAFKA_IP")
+        }, auto_remove=False)
         sleep(small_wait, producer=producer, verbose=verbose)
 
     return log_handler, equipment_handler, material_handler

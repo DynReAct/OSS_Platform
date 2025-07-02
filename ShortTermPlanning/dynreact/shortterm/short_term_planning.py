@@ -122,7 +122,7 @@ def run_general_agents(producer: Producer, gagents: str, verbose: int):
 
 
 def create_auction(
-        equipments: list[str], producer: Producer, verbose: int, counterbid_wait: float,
+        equipments: list[str], producer: Producer, verbose: int,
         snapshot: str = None, act: str = None, nmaterials: int = None, materials: list[str] = None
 ) -> tuple[str, int]:
     """
@@ -131,7 +131,6 @@ def create_auction(
     :param list equipments: List of equipments IDs that will participate in the auction
     :param object producer: A Kafka Producer instance
     :param int verbose: Verbosity level
-    :param float counterbid_wait: Number of seconds to wait for the materials to counterbid
     :param str snapshot: Snapshot time in ISO8601 format, otherwise use the latest available
     :param str act: Preferred auction name, otherwise a random name will be assigned
     :param int nmaterials: Maximum number of cloned used for each equipment (default is to clone all). Can't be used along materials param
@@ -493,7 +492,7 @@ def main():
         help="Number of seconds that each equipment waits for all materials to counterbid"
     )
     ap.add_argument(
-        "-sw", "--sleepWait", type=str, required=True, default="5",
+        "-sw", "--smallWait", type=str, required=True, default="5",
         help="Number of seconds to sleep for small waiting times"
     )
     ap.add_argument(
@@ -537,15 +536,15 @@ def execute_short_term_planning(args: dict):
     auction_wait = int(args["auctionWait"])
     exit_wait = int(args["exitWait"])
     counterbid_wait = int(args["counterbidWait"])
-    sleep_wait = int(args["sleepWait"])
+    small_wait = int(args["smallWait"])
 
     rungagnts = str(args['rungagents'])
     equipments = args["equipments"]
     snapshot = args["snapshot"]
     nmaterials = args["nmaterials"]
 
-    time_delay = TimeDelay(AW=auction_wait, BW=counterbid_wait,
-                           EW=exit_wait, CW=cloning_wait, RW=running_wait, SMALL_WAIT=sleep_wait)
+    time_delay = TimeDelay(AUCTION_WAIT=auction_wait, COUNTERBID_WAIT=counterbid_wait,
+                           EXIT_WAIT=exit_wait, CLONING_WAIT=cloning_wait, RUNNING_WAIT=running_wait, SMALL_WAIT=small_wait)
 
     # Other arguments will be retrieved from env variables
     short_term_config = ShortTermTargets(VB=verbose, TimeDelays=time_delay)
@@ -561,8 +560,8 @@ def execute_short_term_planning(args: dict):
 
     if verbose > 0:
         print(
-            f"Running program with {verbose=}, {running_wait=}, {cloning_wait=}, {auction_wait=}, "
-            f"{counterbid_wait=} {exit_wait=}, {equipments=}, {nmaterials=}, {snapshot=}, {rungagnts=}."
+            f"Running program with {verbose=}, RW={KeySearch.search_for_value("RUNNING_WAIT")}, CW={KeySearch.search_for_value("CLONING_WAIT")}, AW={KeySearch.search_for_value("AUCTION_WAIT")}, "
+            f"BW={KeySearch.search_for_value("COUNTERBID_WAIT")} EW={KeySearch.search_for_value("EXIT_WAIT")}, SW={KeySearch.search_for_value("SLEEP_WAIT")}, {equipments=}, {nmaterials=}, {snapshot=}, {rungagnts=}."
         )
 
     producer_config = {
@@ -590,7 +589,7 @@ def execute_short_term_planning(args: dict):
             gagents=rungagnts,
             verbose=verbose
         )
-        sleep(running_wait, producer=producer, verbose=verbose)
+        sleep(KeySearch.search_for_value("RUNNING_WAIT"), producer=producer, verbose=verbose)
 
         if str(rungagnts)[0] == '1':
             log_tracked  = len(list(filter(lambda x: x["status"] == "running", log_handler.list_tracked_containers())))
@@ -619,18 +618,18 @@ def execute_short_term_planning(args: dict):
 
     try:
         act, n_agents = create_auction(
-            equipments=equipments, producer=producer, verbose=verbose, counterbid_wait=counterbid_wait,
+            equipments=equipments, producer=producer, verbose=verbose,
             nmaterials=nmaterials, snapshot=snapshot
         )
 
         print(f"Creating auction for topic {act}")
 
         consumer.subscribe([act, KeySearch.search_for_value("TOPIC_CALLBACK")])
-        sleep(cloning_wait, producer=producer, verbose=verbose)
+        sleep(KeySearch.search_for_value("CLONING_WAIT"), producer=producer, verbose=verbose)
 
         if n_agents > 1:
             start_auction(topic=act, consumer=consumer, producer=producer, verbose=verbose, num_agents=n_agents)
-            sleep(auction_wait, producer=producer, verbose=verbose)
+            sleep(KeySearch.search_for_value("AUCTION_WAIT"), producer=producer, verbose=verbose)
             results = ask_results(topic=act, producer=producer, consumer=consumer, verbose=verbose)
             if verbose > 0:
                 print("---- RESULTS ----")
@@ -639,7 +638,7 @@ def execute_short_term_planning(args: dict):
             sleep(KeySearch.search_for_value("SMALL_WAIT"), producer=producer, verbose=verbose)
     finally:
         end_auction(topic=act, producer=producer, verbose=verbose, wait_time=KeySearch.search_for_value("SMALL_WAIT"))
-        sleep(exit_wait, producer=producer, verbose=verbose)
+        sleep(KeySearch.search_for_value("EXIT_WAIT"), producer=producer, verbose=verbose)
 
         # Remove all main agents
         clean_agents(producer, verbose, rungagnts)

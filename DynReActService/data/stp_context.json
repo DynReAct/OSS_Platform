@@ -5,10 +5,11 @@
   "TOPIC_GEN": "DynReact-Gen",
   "VB": 1,
   "TimeDelays": {
-     "AW": 7,
-     "BW": 5,
-     "CW": 3,
-     "EW": 2,
+     "AUCTION_WAIT": 7,
+     "COUNTERBID_WAIT": 5,
+     "CLONING_WAIT": 3,
+     "EXIT_WAIT": 2,
+     "RUNNING_WAIT": 10,
      "SMALL_WAIT": 5
   }
 }

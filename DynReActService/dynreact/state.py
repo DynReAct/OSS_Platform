@@ -81,7 +81,7 @@ class DynReActSrvState:
 
     def get_stp_context_params(self):
         self.set_stp_config()
-        return (KeySearch.search_for_value("IP"),KeySearch.search_for_value("TOPIC_GEN"),
+        return (KeySearch.search_for_value("KAFKA_IP"),KeySearch.search_for_value("TOPIC_GEN"),
                 KeySearch.search_for_value("TOPIC_CALLBACK"), KeySearch.search_for_value("VB"))
 
     def get_stp_context_timing(self):

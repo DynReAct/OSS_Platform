@@ -108,9 +108,12 @@ class Equipment(Agent):
 
             topic = dctmsg['topic']
             payload = dctmsg['payload']
+            variables = payload['variables']
+
+            KeySearch.assign_values(new_values=variables)
+
             equipment = payload['id']
             snapshot = payload['snapshot']
-            counterbid_wait = payload['counterbid_wait']
             agent = f"EQUIPMENT:{topic}:{equipment}:0"
             status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)
             self.equipment = equipment
@@ -119,9 +122,7 @@ class Equipment(Agent):
                 "topic": topic,
                 "agent": agent,
                 "status": status,
-                "kafka-ip": self.kafka_ip,
-                "counter-wait": int(counterbid_wait),
-                "verbose": self.verbose
+                "variables": KeySearch.dump_model(),
             }
 
             self.handler.launch_container(name=f"{topic}_{equipment}", agent="equipment", mode="replica", params=init_kwargs, auto_remove=True)

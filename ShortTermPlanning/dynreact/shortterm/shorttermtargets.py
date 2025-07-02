@@ -25,11 +25,17 @@ class ShortTermTargets(BaseModel):
         PERF_URL: REST API PERF URL  (http://192.168.110.68:5017)
     """
 
-    IP: str | None = Field(None, description="Kafka broker address.")
+    model_config = {
+        "extra": "forbid",
+        "validate_assignment": True,
+        "frozen": False
+    }
+
+    KAFKA_IP: str | None = Field(None, description="Kafka broker address.")
     TimeDelays: TimeDelay | None = Field(TimeDelay(), description="Delay recordset for Auction")
     TOPIC_GEN: str | None = Field("DynReact-Gen", description="General Kafka topic for comm.")
     TOPIC_CALLBACK: str | None = Field("DynReact-Callback", description="General Kafka topic for callbacks.")
-    LOG_FILE_PATH: str | None = Field(None, description="Log file path.")
+    LOG_FILE_PATH: str | None = Field("/var/log/dynreact-logs/", description="Log file path.")
     TABLE_MAPPINGS: list[ColumnDefinitions] | None = Field(None, description="Column description recordset for RAS Auction")
     REST_URL: str | None = Field(None, description="REST API URL.")
     PERF_URL: str | None = Field(None, description="REST API PERF URL.")

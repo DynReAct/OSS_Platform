@@ -5,7 +5,8 @@ class TimeDelay(BaseModel):
     Defines the different time delays which could be needed for Auction operation.
 
     Args:
-        AW: auction wait
+        AW: Auction wait
+        RW: Running wait
         BW: Counterbid wait
         CW: Cloning wait
         EW: Exit wait
@@ -15,4 +16,5 @@ class TimeDelay(BaseModel):
     BW: int | None = Field(None, description="Counterbid Wait to decide in seconds")
     CW: int | None = Field(None, description="Agent cloninig Wait in seconds")
     EW: int | None = Field(None, description="Auction Wait to exit in seconds")
+    RW: int | None = Field(None, description="Running wait in seconds")
     SMALL_WAIT: int | None = Field(5, description="Small Wait to accomodate processes in seconds")

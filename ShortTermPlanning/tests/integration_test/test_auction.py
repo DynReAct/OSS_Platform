@@ -1,5 +1,4 @@
 ﻿import os
-from configparser import ConfigParser
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -9,13 +8,7 @@ from dynreact.shortterm.common.handler import DockerManager
 from dynreact.shortterm.short_term_planning import execute_short_term_planning
 from dynreact.shortterm.shorttermtargets import ShortTermTargets
 
-config = ConfigParser()
-config.optionxform = str
-base = os.environ.get("TEST_BASE", "../../shortterm")
-config.read(base + '/config.cnf')
-short_term_config = ShortTermTargets().model_copy(update=dict(config["DEFAULT"].items()))
-
-KeySearch.set_global(config_provider=short_term_config)
+KeySearch.set_global(config_provider=ShortTermTargets())
 topic_gen = KeySearch.search_for_value("TOPIC_GEN")
 topic_callback = KeySearch.search_for_value("TOPIC_CALLBACK")
 
@@ -51,7 +44,6 @@ def test_scenario_00(run_agents_handler_spy):
 
     args = {
         "verbose": 3,
-        "base": base,
         "runningWait": "0",
         "cloningWait": "0",
         "auctionWait": "0",
@@ -84,7 +76,6 @@ def test_scenario_01(run_agents_handler_spy):
 
     args = {
         "verbose": 3,
-        "base": base,
         "runningWait": "0",
         "cloningWait": "0",
         "auctionWait": "0",
@@ -124,7 +115,6 @@ def test_scenario_02(run_agents_handler_spy):
 
     args = {
         "verbose": 3,
-        "base": base,
         "runningWait": "0",
         "cloningWait": "0",
         "auctionWait": "0",
@@ -148,7 +138,6 @@ def test_scenario_03(run_agents_handler_spy):
 
     args = {
         "verbose": 3,
-        "base": base,
         "runningWait": "10",
         "cloningWait": "30",
         "auctionWait": "0",
@@ -176,7 +165,6 @@ def test_scenario_04():
 
     args = {
         "verbose": 3,
-        "base": base,
         "runningWait": "10",
         "cloningWait": "30",
         "auctionWait": "50",
@@ -205,7 +193,6 @@ def test_scenario_05():
 
     args = {
         "verbose": 3,
-        "base": base,
         "runningWait": "10",
         "cloningWait": "30",
         "auctionWait": "50",
@@ -234,7 +221,6 @@ def test_scenario_06():
 
     args = {
         "verbose": 3,
-        "base": base,
         "runningWait": "10",
         "cloningWait": "30",
         "auctionWait": "50",
@@ -265,7 +251,6 @@ def test_scenario_07():
 
     args = {
         "verbose": 3,
-        "base": base,
         "runningWait": "10",
         "cloningWait": "30",
         "auctionWait": "200",
@@ -296,7 +281,6 @@ def test_scenario_08():
 
     args = {
         "verbose": 3,
-        "base": base,
         "runningWait": "10",
         "cloningWait": "30",
         "auctionWait": "200",

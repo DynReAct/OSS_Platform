@@ -41,6 +41,8 @@ import os, re, json
 from dynreact.shortterm.common.data.load_url import DOCKER_MANAGER
 from dynreact.shortterm.common.handler import DockerManager
 from dynreact.shortterm.shorttermtargets import ShortTermTargets
+from dynreact.shortterm.timedelay import TimeDelay
+
 
 def delete_all_topics(admin_client: AdminClient, verbose: int):
     """
@@ -160,7 +162,7 @@ def create_auction(
         source="UX",
         dest="LOG:" + topic_gen,
         action="CREATE",
-        payload=dict(msg=f"Created Topic {act}"),
+        payload=dict(msg=f"Created Topic {act}", variables=KeySearch.dump_model()),
         vb=verbose
     )
     num_agents += 1
@@ -188,7 +190,7 @@ def create_auction(
             source="UX",
             dest="EQUIPMENT:" + topic_gen,
             action="CREATE",
-            payload=dict(id=equipment, counterbid_wait=counterbid_wait, snapshot=data_setup.last_snapshot),
+            payload=dict(id=equipment, snapshot=data_setup.last_snapshot, variables=KeySearch.dump_model()),
             vb=verbose
         )
         num_agents += 1
@@ -245,7 +247,7 @@ def create_auction(
             source="UX",
             dest="MATERIAL:" + topic_gen,
             action="CREATE",
-            payload=dict(id=str(material), params=data_setup.get_material_params(material)),
+            payload=dict(id=str(material), params=data_setup.get_material_params(material), variables=KeySearch.dump_model()),
             vb=verbose
         )
         num_agents += 1
@@ -459,7 +461,6 @@ def main():
     Main module to capture arguments from command line
     params are provided as external arguments in command line.
 
-    :param str base: Path to the config file.
     :param int verbose: Verbosity level.
     :param str runningWait: Number of seconds to wait for the general agents to start running.
     :param str cloningWait: Number of seconds to wait for the agents to clone themselves.
@@ -476,10 +477,6 @@ def main():
         dest='verbose', help="Option for detailed information"
     )
     ap.add_argument(
-        "-b", "--base", type=str, dest="base", required=True,
-        help="Path from current place to find config.cnf file"
-    )
-    ap.add_argument(
         "-rw", "--runningWait", type=str, required=True,
         help="Number of seconds to wait for the general agents to start running"
     )
@@ -494,6 +491,10 @@ def main():
     ap.add_argument(
         "-bw", "--counterbidWait", type=str, required=True,
         help="Number of seconds that each equipment waits for all materials to counterbid"
+    )
+    ap.add_argument(
+        "-sw", "--sleepWait", type=str, required=True, default="5",
+        help="Number of seconds to sleep for small waiting times"
     )
     ap.add_argument(
         "-ew", "--exitWait", type=str, required=True,
@@ -531,21 +532,23 @@ def execute_short_term_planning(args: dict):
     verbose = args["verbose"]
     if verbose is None:
         verbose = 0
-    base = args["base"]
     running_wait = int(args["runningWait"])
     cloning_wait = int(args["cloningWait"])
     auction_wait = int(args["auctionWait"])
-    rungagnts = str(args['rungagents'])
-    counterbid_wait = float(args["counterbidWait"])
     exit_wait = int(args["exitWait"])
+    counterbid_wait = int(args["counterbidWait"])
+    sleep_wait = int(args["sleepWait"])
+
+    rungagnts = str(args['rungagents'])
     equipments = args["equipments"]
     snapshot = args["snapshot"]
     nmaterials = args["nmaterials"]
 
-    config = configparser.ConfigParser()
-    config.optionxform = str
-    config.read(base + '/config.cnf')
-    short_term_config = ShortTermTargets(VB=verbose).model_copy(update=dict(config["DEFAULT"].items()))
+    time_delay = TimeDelay(AW=auction_wait, BW=counterbid_wait,
+                           EW=exit_wait, CW=cloning_wait, RW=running_wait, SMALL_WAIT=sleep_wait)
+
+    # Other arguments will be retrieved from env variables
+    short_term_config = ShortTermTargets(VB=verbose, TimeDelays=time_delay)
 
     # Class method
     KeySearch.set_global(config_provider=short_term_config)
@@ -554,11 +557,11 @@ def execute_short_term_planning(args: dict):
         # Mock REST_URL for Sphinx Documentation
         ip = '127.0.0.1:9092'
     else:
-        ip = KeySearch.search_for_value("IP")
+        ip = KeySearch.search_for_value("KAFKA_IP")
 
     if verbose > 0:
         print(
-            f"Running program with {verbose=}, {base=}, {running_wait=}, {cloning_wait=}, {auction_wait=}, "
+            f"Running program with {verbose=}, {running_wait=}, {cloning_wait=}, {auction_wait=}, "
             f"{counterbid_wait=} {exit_wait=}, {equipments=}, {nmaterials=}, {snapshot=}, {rungagnts=}."
         )
 

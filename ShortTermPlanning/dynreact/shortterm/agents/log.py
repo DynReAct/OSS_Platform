@@ -37,21 +37,19 @@ class Log(Agent):
     Attributes:
         topic     (str): Topic driving the relevant converstaion.
         agent     (str): Name of the agent creating the object.
-        left_path (str): Path to place the log file.
         log_file  (str): Name of the log file.
 
     .. _Google Python Style Guide:
        https://google.github.io/styleguide/pyguide.html
     """
 
-    def __init__(self, topic: str, agent: str, left_path: str, log_file: str, manager=True):
+    def __init__(self, topic: str, agent: str, log_file: str, manager=True):
         super().__init__(topic=topic, agent=agent)
         """
         Constructor function for the Log Class
 
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
-        :param str left_path: Path to place the log file.
         :param str log_file: Name of the log file.
         :param str manager: Is this instance a base.
         """
@@ -74,7 +72,6 @@ class Log(Agent):
         self.results = dict()
 
         # Log file
-        self.left_path = left_path
         self.log_file = log_file
         self.formatter = logging.Formatter('%(asctime)s;%(levelname)s;%(name)s;%(message)s')
         self.logger = self.setup_logger()
@@ -258,16 +255,19 @@ class Log(Agent):
 
         if self.handler:
             topic = dctmsg['topic']
+            payload = dctmsg['payload']
+            variables = payload['variables']
+
+            KeySearch.assign_values(new_values=variables)
+
             agent = f"LOG:{topic}"
-            log_file = f"{self.left_path}{topic}.log"
+            log_file = f"{KeySearch.search_for_value("LOG_FILE_PATH")}{topic}.log"
 
             init_kwargs = {
                 "topic": topic, 
                 "agent-name": agent,
-                "kafka-ip": self.kafka_ip,
-                "verbose": self.verbose,
-                "left-path": self.left_path,
-                "log-file": log_file
+                "log-file": log_file,
+                "variables": KeySearch.dump_model()
             }
 
             self.handler.launch_container(name=topic, agent="log", mode="replica", params=init_kwargs, auto_remove=True)

@@ -52,7 +52,7 @@ class Agent:
         self.topic_callback = KeySearch.search_for_value("TOPIC_CALLBACK")
         self.topic_gen = KeySearch.search_for_value("TOPIC_GEN")
         self.verbose = KeySearch.search_for_value("VB", 1)
-        self.kafka_ip = KeySearch.search_for_value("IP")
+        self.kafka_ip = KeySearch.search_for_value("KAFKA_IP")
 
         self.iter_no_msg = 0
         self.min_verbose = 1

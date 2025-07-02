@@ -34,6 +34,7 @@ requests = ">=2.32.4,<3"
 confluent-kafka = ">=2.9.0,<3.0"
 pydantic = ">=2.10.6,<2.11.0"
 tzdata = ">=2024.2,<2025.11"
+flatdict = "4.0.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3"

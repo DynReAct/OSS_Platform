@@ -8,7 +8,7 @@ Version History:
 """
 
 from datetime import datetime
-from dynreact.shortterm.common import sendmsgtopic
+from dynreact.shortterm.common import sendmsgtopic, KeySearch
 from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
 from dynreact.shortterm.common.functions import calculate_bidding_price
 from dynreact.shortterm.agents.agent import Agent
@@ -67,13 +67,15 @@ class Material(Agent):
             material = payload['id']
             agent = f"MATERIAL:{topic}:{material}"
             params = payload['params']
+            variables = payload['variables']
+
+            KeySearch.assign_values(new_values=variables)
     
             init_kwargs = {
                 "topic": topic, 
                 "agent": agent,
                 "params": params,
-                "kafka-ip": self.kafka_ip,
-                "verbose": self.verbose
+                "variables": KeySearch.dump_model()
             }
 
             self.handler.launch_container(name=f"{topic}_{material}", agent="material", mode="replica", params=init_kwargs, auto_remove=True)

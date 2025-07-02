@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from dynreact.base.LotsOptimizer import LotsOptimizer, LotsOptimizationAlgo, LotsOptimizationState
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.ResultsPersistence import ResultsPersistence
-from dynreact.base.SnapshotProvider import OrderInitMethod
+from dynreact.base.SnapshotProvider import OrderInitMethod, SnapshotProvider
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.impl.ModelUtils import ModelUtils
@@ -916,6 +916,7 @@ def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] 
                              or order_data.get("snapshot") != snapshot_serialized
     if update_selection:
         selected_processes = [process]
+    snapshot_provider: SnapshotProvider = state.get_snapshot_provider()
     hide_released_lots: bool = "hide_released" in check_hide_list
     site = state.get_site()
     predecessors = _find_predecessor_processes(process)
@@ -923,7 +924,7 @@ def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] 
     selected_plants = [plant.id for proc in selected_processes for plant in site.get_process_equipment(proc)]
     existing_lots = [lot for plant, lots in snapshot_obj.lots.items() if plant in selected_plants for lot in lots]
     if hide_released_lots:  # FIXME this is only relevant for the current process step, not previous ones!
-        existing_lots = [lot for lot in existing_lots if lot.status <= 2 or site.get_equipment(lot.equipment, do_raise=True).process != process]
+        existing_lots = [lot for lot in existing_lots if site.get_equipment(lot.equipment, do_raise=True).process != process or snapshot_provider.is_lot_reschedulable(lot)]
     lots_options = sorted([{"label": lot.id, "value": lot.id, "title": _lot_info(lot)} for lot in existing_lots], key=lambda d: d["label"] )
     return processes_options, selected_processes, lots_options
 
@@ -1184,6 +1185,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
                 procs_by_id[p_id] = proc
         current_process_idx: int = all_procs.index(site.get_process(process, do_raise=True))
 
+        snapshot_provider = state.get_snapshot_provider()
         def _filter_order(o: Order) -> bool:
             if hide_next_procs:
                 process_ids = o.current_processes
@@ -1193,7 +1195,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
                     return False
             if hide_released_lots:
                 lot = snapshot_obj.get_order_lot(site, o.id, process)
-                if lot is not None and lot.status > 2:
+                if lot is not None and not snapshot_provider.is_lot_reschedulable(lot):
                     return False
             return True
         orders_sorted = [o for o in orders_sorted if _filter_order(o)]

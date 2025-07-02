@@ -155,6 +155,15 @@ class SnapshotProvider:
     def current_snapshot_id(self) -> datetime:
         return self.previous()
 
+    def is_lot_reschedulable(self, lot: Lot) -> bool:
+        """
+        This method is used to check if orders assigned to some lot may be rescheduled.
+        It can be overwritten by subclasses; by default, lots with status <= 1 are considered reschedulable.
+        :param lot:
+        :return:
+        """
+        return lot.status <= 1
+
     def material_class_for_order(self, order: Order, category: MaterialCategory) -> MaterialClass|None:
         """
         Overwrite this method in derived class to provide a custom material class mapping

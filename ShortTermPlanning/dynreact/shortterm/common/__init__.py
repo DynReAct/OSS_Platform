@@ -104,9 +104,7 @@ class KeySearch:
 
         for field_name in dump_model.model_fields.keys():
 
-
-
-            current_val = cls._has_value(field_name)
+            current_val = cls._get_value(field_name)
 
             if current_val is None and field_name in os.environ:
                 raw_val = os.environ[field_name]

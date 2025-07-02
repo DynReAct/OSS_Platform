@@ -65,7 +65,7 @@ def test_scenario_00(run_agents_handler_spy):
 
     run_agents_handler_spy[0].launch_container.assert_called_once_with(name="Base", agent="log", mode="base", params={
         "verbose": args["verbose"]
-    }, auto_remove=False)
+    }, envs={'KAFKA_IP': KeySearch.search_for_value("KAFKA_IP")}, auto_remove=False)
 
     # Only 1 was added
     assert len(run_agents_handler_spy[0].client.containers.list(filters={"label": f"owner=logTEST"}, all=True)) == 1
@@ -99,15 +99,15 @@ def test_scenario_01(run_agents_handler_spy):
 
     run_agents_handler_spy[0].launch_container.assert_called_once_with(name="Base", agent="log", mode="base", params={
         "verbose": args["verbose"]
-    }, auto_remove=False)
+    }, envs={'KAFKA_IP': KeySearch.search_for_value("KAFKA_IP")}, auto_remove=False)
 
     run_agents_handler_spy[1].launch_container.assert_called_once_with(name="Base", agent="equipment", mode="base", params={
         "verbose": args["verbose"]
-    }, auto_remove=False)
+    }, envs={'KAFKA_IP': KeySearch.search_for_value("KAFKA_IP")}, auto_remove=False)
 
     run_agents_handler_spy[2].launch_container.assert_called_once_with(name="Base", agent="material", mode="base", params={
         "verbose": args["verbose"]
-    }, auto_remove=False)
+    }, envs={'KAFKA_IP': KeySearch.search_for_value("KAFKA_IP")}, auto_remove=False)
 
     assert len(run_agents_handler_spy[0].client.containers.list(filters={"label": f"owner=logTEST"}, all=True)) == 1
     assert len(run_agents_handler_spy[1].client.containers.list(filters={"label": f"owner=equipmentTEST"}, all=True)) == 1

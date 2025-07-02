@@ -20,7 +20,7 @@ packages = [
 [tool.poetry.dependencies]
 python = ">=3.12"
 networkx = ">=3.4.1,<4"
-numpy = ">=2.1.2,<3"
+numpy = ">=1.26,<2.0"
 # openpyxl = ">=3.1.2,<4"  # Optional Excel support
 ortools = ">=9.11.4210,<10"
 pandas = ">=2.2.3,<3"

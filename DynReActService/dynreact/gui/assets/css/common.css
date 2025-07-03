@@ -111,6 +111,21 @@
     background-color: #c41f13;   /* Slight shrink effect on click */
 }
 
+.restart-button {
+    background-color: #63798E; /* Bright red like DAQ stop button */
+    color: white;
+    border: 2px solid #63798E;
+    font-weight: bold;
+}
+
+.restart-button:hover {
+    background-color: #63798E;
+}
+
+.restart-button:active {
+    background-color: #435E77;   /* Slight shrink effect on click */
+}
+
 .flex {
     display: flex;
 }

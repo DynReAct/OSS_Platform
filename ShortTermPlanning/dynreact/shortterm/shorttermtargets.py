@@ -36,7 +36,7 @@ class ShortTermTargets(BaseModel):
     TOPIC_GEN: str | None = Field("DynReact-Gen", description="General Kafka topic for comm.")
     TOPIC_CALLBACK: str | None = Field("DynReact-Callback", description="General Kafka topic for callbacks.")
     LOG_FILE_PATH: str | None = Field("/var/log/dynreact-logs/", description="Log file path.")
-    TABLE_MAPPINGS: list[ColumnDefinitions] | None = Field(None, description="Column description recordset for RAS Auction")
+    TableMappings: list[ColumnDefinitions] | None = Field(None, description="Column description recordset for RAS Auction")
     REST_URL: str | None = Field(None, description="REST API URL.")
     PERF_URL: str | None = Field(None, description="REST API PERF URL.")
     VB: int | None = Field(None, description="Verbosity Levels [0=> Nothing ... ]")

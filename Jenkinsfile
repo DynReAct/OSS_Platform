@@ -43,14 +43,14 @@ node {
         }
 
         stage('Build Docker Image') {
-        sh '''
+        sh """
             cd ShortTermPlanning
             docker build \\
                 --build-arg DOCKER_REGISTRY="$REGISTRY" \\
                 --build-arg BUILD_DATE="\$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \\
                 --build-arg JENKINS_BUILD_ID="$BUILD_ID" \\
                 -t ${IMAGE_NAME}:${IMAGE_TAG} .
-        '''
+        """
     }
 
         stage('Tag & Push Image') {

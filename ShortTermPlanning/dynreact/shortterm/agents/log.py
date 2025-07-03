@@ -28,6 +28,61 @@ from dynreact.shortterm.common.data.data_functions import end_auction
 from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
 from dynreact.shortterm.common.handler import DockerManager
 
+import os
+from logging.handlers import TimedRotatingFileHandler
+
+class LogWithExtensionHandler(TimedRotatingFileHandler):
+    """
+    Class holding the methods relevant for the operation of the Log agent,
+    which is in charge of storing all the messages exchanged between the
+    different agents through a Kafka brokering system.
+
+    This class extends Python's TimedRotatingFileHandler to allow log
+    rotation every day with the `.log` extension at the end of rotated
+    files (e.g., <<PREFIX>>.2025-07-03.log).
+
+    .. _Google Python Style Guide:
+       https://google.github.io/styleguide/pyguide.html
+    """
+
+    def __init__(self, filename, *args, **kwargs):
+        """
+        Constructor function for the LogWithExtensionHandler Class
+        """
+        # Remove .log for internal handling to avoid double extensions
+        base, ext = os.path.splitext(filename)
+        self._real_base_filename = base
+        self._log_extension = ext or ".log"
+        super().__init__(filename, when="midnight", interval=1, *args, **kwargs)
+        self.suffix = "%Y-%m-%d" + self._log_extension  # e.g., .2025-07-03.log
+
+
+    def rotation_filename(self, default_name: str):
+        """
+        Function to rotate the filename
+
+        :param str default_name: Default file name.
+
+        :returns: New log file
+        :rtype:  str
+        """
+        # Custom filename format with extension at the end
+        base_filename = self._real_base_filename
+        time_tuple = self.rolloverAt - self.interval
+        dfn = base_filename + "." + self.rotation_time_format(time_tuple) + self._log_extension
+        return dfn
+
+    def rotation_time_format(self, timestamp: float):
+        """
+        Compute file time format
+
+        :param float timestamp: Current timestamp
+
+        :returns: New timestamp
+        :rtype:  str
+        """
+        return time.strftime(self.suffix[:-len(self._log_extension)], time.gmtime(timestamp))
+
 class Log(Agent):
     """
         Class holding the methods relevant for the operation of the Log agent,
@@ -173,7 +228,12 @@ class Log(Agent):
         :rtype:  Logger object
         """
 
-        handler = logging.FileHandler(self.log_file, mode="a")
+        handler = LogWithExtensionHandler(
+            filename=self.log_file,  # Required: base log file
+            encoding="utf-8",  # Optional: file encoding
+            utc=True  # Optional: rotate based on UTC time (set to False for local time)
+        )
+
         handler.setFormatter(self.formatter)
 
         logger = logging.getLogger(self.topic)

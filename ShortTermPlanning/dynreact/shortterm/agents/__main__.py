@@ -32,8 +32,7 @@ def log_base(verbose: int, kafka_ip: str):
         folder_path.mkdir(parents=True)
 
     # Creation of the main log file
-    now = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
-    log_file = f"{topic_gen}-{now}.log"
+    log_file = f"{topic_gen}"
     if platform.system() == 'Windows':
         log_file = log_file.replace(":", "_")
     log_file = os.path.join(left_path, log_file)

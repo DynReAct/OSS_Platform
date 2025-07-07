@@ -22,7 +22,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Equipment, Order, Lot, ProductionPlanning, ProductionTargets, EquipmentProduction, \
-    MidTermTargets, ObjectiveFunction, Process, TargetLotSize, ProcessLotCreationSettings
+    MidTermTargets, ObjectiveFunction, Process, TargetLotSize, ProcessLotCreationSettings, OrderAssignment
 from pydantic.fields import FieldInfo
 
 from dynreact.app import state, config
@@ -147,11 +147,14 @@ def targets_tab(horizon: int):
                     html.Button("Initialize: lots", id="lots2-targets-init-lots", className="dynreact-button dynreact-button-small", title="Derive from currently planned lots."),
                 ], className="lots2-target-buttons"),
                 html.Div([
-                    html.Div(dcc.Checklist(id="lots2-check-use-lot-range",
-                                           options=checklist_dict, value=[], className="lots2-checkbox")),
-                    html.Div("Use lot weight range ?"),
+                    html.Div(dcc.Checklist(id="lots2-check-use-lot-range", options=checklist_dict, value=[], className="lots2-checkbox")),
+                    html.Div("Use lot weight range ?", title="Check to specify target weight ranges for the new lots to be created."),
                 ], className="lots2-use-range-checkbox"),
-                html.Div(id="lots2-details-plants", className="lots2-plants-targets4"),
+                html.Div([
+                    html.Div(dcc.Checklist(id="lots2-check-append_to_lot", options=checklist_dict, value=[],className="lots2-checkbox")),
+                    html.Div("Append to existing lots?", title="Instead of creating new lots, add orders to an existing lot (select via \"Previous lot\" column)"),
+                ], className="lots2-use-range-checkbox"),
+                html.Div(id="lots2-details-plants", className="lots2-plants-targets grid-items-4"),
                 html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
                 html.Div(dcc.Textarea(id='lots2-structure-logging', value='', className="lots2-textarea")),
                 # html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "hidden"}))
@@ -677,9 +680,9 @@ def update_plants(snapshot: str,
         use_lot_range = True
         init_lot_size_from_settings = True
     if use_lot_range:
-        my_parent_classname = "lots2-plants-targets6"
+        my_parent_classname = "lots2-plants-targets grid-items-6"
     else:
-        my_parent_classname = "lots2-plants-targets4"
+        my_parent_classname = "lots2-plants-targets grid-items-4"
     snapshot = DatetimeUtils.parse_date(snapshot)
     snapshot_obj = state.get_snapshot(snapshot)
     if not dash_authenticated(config) or process is None or snapshot_obj is None or active_tab != "targets":
@@ -1469,6 +1472,7 @@ def update_figure(history: list[float]|None):
 
           State("selected-snapshot", "data"),
           State("lots2-check-use-lot-range", "value"),
+          State("lots2-check-append_to_lot", "value"),
           State("lots2-details-plants", "children"),
           State("lots2-details-performance-models", "children"),
           #State("lots2-settings-popup-data", "data"),
@@ -1497,6 +1501,7 @@ def update_figure(history: list[float]|None):
           )
 def process_changed(snapshot: datetime|None,
                     use_lot_range0: list[Literal[""]],
+                    append_to_lots0: list[Literal[""]],
                     target_elements: list[Component]|None,
                     perf_model_elements: list[Component]|None,
                     selected_order_rows: list[dict[str, any]] | None,
@@ -1507,7 +1512,7 @@ def process_changed(snapshot: datetime|None,
                     material_structure: dict[str, any]|None,
                     orders_custom_priority_json: str|None,
                     components: list[Component]|None,
-                    _tab,
+                    _tab: Literal["targets", "orders", "settings"],
                     horizon_hours: int,
                     iterations: float|str,
                     iterations_stored: int|None,
@@ -1557,6 +1562,7 @@ def process_changed(snapshot: datetime|None,
     primary_category = _get_primary_category(process)
     primary_classes = _get_primary_classes(process)
     use_lot_range: bool = len(use_lot_range0) > 0
+    append_to_lots: bool = len(append_to_lots0) > 0
     interval = 3_600_000
     if not dash_authenticated(config):
         return (True, True, process_out, True, iterations, iterations, iterations, True, selected_init_method, [],
@@ -1620,13 +1626,10 @@ def process_changed(snapshot: datetime|None,
     result_selector_hidden = selected_init_method != "result"
     # here start optimization
     start_disabled, error_msg, info_msg = check_start_optimization(changed_ids, process, snapshot, iterations, horizon_hours, selected_init_method,
-                existing_solution if selected_init_method == "result" else None, use_lot_range, target_elements, perf_model_elements, material_structure,
-                orders_custom_priority, selected_order_rows, create_comment, store_results)
+                existing_solution if selected_init_method == "result" else None, use_lot_range, append_to_lots, target_elements, perf_model_elements, material_structure,
+                orders_custom_priority, selected_order_rows, create_comment, store_results, _tab)
     if len(warning_message) == 0 and info_msg is not None:
         warning_message = info_msg
-    if error_msg is not None:  # TODO display message!
-        print(error_msg)
-        pass
     if selected_init_method == "result" and existing_solution is None:
         if start_disabled or len(existing_solutions) == 0 or "create-existing-sols" in changed_ids:  # trying to start the optimization, or explicitly deselected solution id
             title = "Select an existing result" if len(results) > 0 else \
@@ -1683,6 +1686,7 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                              horizon_hours: int, selected_init_method: Literal["heuristic", "duedate", "snapshot", "result"],
                              existing_solution: str|None,
                              use_lot_range: bool,
+                             append_to_lots: bool,  # TODO
                              plant_target_components: list[Component]|None,
                              perf_model_components: list[Component]|None,
                              material_structure: dict[str, any]|None,
@@ -1690,7 +1694,7 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                              #order_data: dict[str, str] | None,
                              selected_order_rows: list[dict[str, any]]|None,
                              create_comment: str|None,
-                             store_results: bool) -> tuple[bool, str, str | None]:
+                             store_results: bool, tab: Literal["targets", "orders", "settings"]) -> tuple[bool, str|None, str | None]:
     """
     :return:
         - bool: whether the optimization is running
@@ -1701,9 +1705,29 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
     global lot_creation_listener
     if process is None or snapshot is None:
         return lot_creation_thread is not None, None, None
-    error_msg: str|None = None
-    info_msg: str | None = None
-    if "lots2-start" in changed_ids and lot_creation_thread is None:
+    snapshot_obj = state.get_snapshot(snapshot)
+    horizon = timedelta(hours=horizon_hours)
+    period: tuple[datetime, datetime] = (snapshot_obj.timestamp, snapshot_obj.timestamp + horizon)
+    is_start_command = "lots2-start" in changed_ids and lot_creation_thread is None
+    if append_to_lots and lot_creation_thread is None and tab == "settings":  # only if tab is settings to avoid too frequent updates
+        # fail if there is a plant without selected lot
+        plants = state.get_site().get_process_equipment(process)
+        targets, targets_customized, predecessor_lots, info_msg = target_values_from_settings(process, period,[p.id for p in plants],use_lot_range, plant_target_components)
+        if targets is not None:
+            plants_without_lot = [p for p in targets.target_weight.keys() if p not in predecessor_lots]
+            if len(plants_without_lot) > 0:
+                site = state.get_site()
+                return False, None, f"No lot selected for equipment(s) {[site.get_equipment(p).name_short for p in plants_without_lot]}"
+            for plant, weight in targets.target_weight.items():
+                lot_id: str = predecessor_lots[plant]
+                lot_obj = next((lot for lot in snapshot_obj.lots.get(plant, []) if lot.id == lot_id), None)
+                if lot_obj is None:
+                    error = f"Lot {lot_id} not found for plant {plant}"
+                    return False, error, error
+                if lot_obj.weight is not None and plant in targets.target_weight and targets.target_weight[plant].total_weight <= lot_obj.weight:
+                    return False, None, f"Scheduled target weight {targets.target_weight[plant].total_weight:.2f} t for equipment {plant} is " + \
+                            f"less than the existing lot size {lot_obj.weight:.2f} t for lot {lot_id}"
+    if is_start_command:
         try:
             snapshot_obj = state.get_snapshot(snapshot)
             horizon = timedelta(hours=horizon_hours)
@@ -1734,13 +1758,14 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
 
                 targets, targets_customized, predecessor_lots, info_msg = target_values_from_settings(process, period, [p.id for p in plants], use_lot_range, plant_target_components)
                 if info_msg is not None:
-                    return lot_creation_thread is not None, error_msg, info_msg
+                    return lot_creation_thread is not None, None, info_msg
                 if material_structure is not None and len(material_structure) > 0:
                     targets.material_weights = material_structure
                 perf_models = performance_models_from_elements(process, perf_model_components)
                 snapshot_serialized: str = DatetimeUtils.format(snapshot)
                 orders: list[str] = [row["id"] if isinstance(row, dict) else row for row in selected_order_rows]
                 predecessor_orders = {} if predecessor_lots is not None else None
+                assignments = None if not append_to_lots else {}
                 if predecessor_lots is not None:
                     for plant, lot_id in predecessor_lots.items():
                         lot_obj = next((lot for lot in snapshot_obj.lots.get(plant, []) if lot.id == lot_id), None)
@@ -1748,7 +1773,15 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                             raise Exception(f"Lot {lot_id} not found for plant {plant}")
                         if len(lot_obj.orders) > 0:
                             predecessor_orders[plant] = lot_obj.orders[-1]   # last order of the lot
-                if selected_init_method == "duedate":
+                            if append_to_lots:
+                                for idx, o in enumerate(lot_obj.orders):
+                                    assignments[o] = OrderAssignment(order=o, equipment=plant, lot=lot_id, lot_idx=idx+1)
+                if append_to_lots:   # use existing lots (one per equipment) and append orders to those
+                    for o in (o for o in orders if o not in assignments):
+                        assignments[o] = OrderAssignment(order=o, equipment=-1, lot="", lot_idx=-1)
+                    initial_solution = state.get_cost_provider().evaluate_order_assignments(process, assignments, targets, snapshot_obj,
+                                                            orders_custom_priority=orders_custom_priority, previous_orders=predecessor_orders)
+                elif selected_init_method == "duedate":
                     initial_solution, targets = optimization_algo.due_dates_solution(process, snapshot_obj, horizon, state.get_cost_provider(),
                                                     targets=targets, orders=orders, previous_orders=predecessor_orders)
                 elif selected_init_method == "snapshot":
@@ -1762,7 +1795,7 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                     "targets": "snapshot" if not targets_customized else "custom",
                     "horizon_hours": horizon_hours,
                     "target_production": sum(t.total_weight for t in targets.target_weight.values()),
-                    "initialization": selected_init_method,
+                    "initialization": selected_init_method if not append_to_lots else "append_to_lots",
                     "performance_models": [model.id() for model in perf_models]
                 }
             if len(targets.target_weight) == 0 or sum(t.total_weight for t in targets.target_weight.values()) <= 0:
@@ -1790,7 +1823,8 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
         except Exception as e:
             traceback.print_exc()
             error_msg = str(e)
-    return lot_creation_thread is not None, error_msg, info_msg
+            return lot_creation_thread is not None, error_msg, "Internal error: " + error_msg
+    return lot_creation_thread is not None, None, None
 
 
 # Swimlane related callbacks
@@ -2065,6 +2099,8 @@ def performance_models_from_elements(process: str, components: list[Component]|N
 
 def _lot_info(lot: Lot) -> str:
     result = f"{lot.id} [status={lot.status}, active={lot.active}"
+    if lot.weight is not None:
+        result += f", weight={lot.weight:.2f} t"
     if lot.comment is not None:
         result += f", comment={lot.comment}"
     result += "]"

@@ -45,11 +45,12 @@ class TabuSearch(LotsOptimizer):
                  parameters: dict[str, any] | None = None,
                  performance_models: list[PlantPerformanceModel] | None = None,
                  orders_custom_priority: dict[str, int] | None = None,
-                 forced_orders:  list[str]|None = None
+                 forced_orders:  list[str]|None = None,
+                 base_lots: list[Lot]|None = None
                  ):
         super().__init__(site, process, costs, snapshot, targets, initial_solution, min_due_date=min_due_date,
                          best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
-                         orders_custom_priority=orders_custom_priority, forced_orders=forced_orders)
+                         orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots)
         self._params: TabuParams = TabuParams()
         self._performance_restrictions: list[PerformanceEstimation]|None = None
         self._forbidden_assignments: dict[str, list[int]] = {}
@@ -413,7 +414,32 @@ class TabuSearch(LotsOptimizer):
             #PSDict[plant_id] = sval
             #delta += sval.DeltaW
             #nlots += sval.NLots
+        if self._base_lots is not None:   # in this case we only want to extend the existing lots
+            addon = {p: lots[0] for p, lots in result.items()}
+            result = {p: [self._adapt_base_lots(lot, addon.get(p, None))] for p, lot in self._base_lots.items()}
         return result
+
+    def _adapt_base_lots(self, base_lot: Lot, addition: Lot|None):
+        if addition is None:
+            return base_lot
+        trans_costs = self.create_new_lot_costs_based(self._costs.transition_costs(next(p for p in self._plants if p.id == base_lot.equipment),
+                                                                    self._orders[base_lot.orders[-1]], self._orders[addition.orders[0]]))
+        if self.create_new_lot_costs_based(trans_costs):
+            return base_lot
+        max_lot = None
+        targets = self._targets.target_weight.get(base_lot.equipment)
+        if targets is not None and targets.lot_weight_range is not None:
+            max_lot = targets.lot_weight_range[1]
+        new_lot = base_lot.model_copy(update={"id": base_lot.id + "_v2"})
+        weight: float = self._base_lot_weights[base_lot.equipment]
+        for order in addition.orders:
+            if max_lot is not None:
+                order_obj = self._orders[order]
+                if weight + order_obj.actual_weight > max_lot:
+                    break
+                weight += order_obj.actual_weight
+            new_lot.orders.append(order)
+        return new_lot
 
     def FindNextStep(self, planning: ProductionPlanning, TabuList: set[Any], pool: multiprocessing.pool.Pool|None) -> tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]:
         # sl1 = list(sol.values())  # order plant assignments
@@ -467,11 +493,12 @@ class TabuAlgorithm(LotsOptimizationAlgo):
                                   performance_models: list[PlantPerformanceModel] | None = None,
                                   parameters: dict[str, any] | None = None,
                                   orders_custom_priority: dict[str, int] | None = None,
-                                  forced_orders: list[str] | None = None
+                                  forced_orders: list[str] | None = None,
+                                  base_lots: dict[int, Lot] | None = None
                                   ) -> TabuSearch:
         return TabuSearch(self._site, process, costs, snapshot, targets, initial_solution=initial_solution, min_due_date=min_due_date,
                           best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
-                          orders_custom_priority=orders_custom_priority, forced_orders=forced_orders)
+                          orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots)
 
 
 class CTabuWorker:

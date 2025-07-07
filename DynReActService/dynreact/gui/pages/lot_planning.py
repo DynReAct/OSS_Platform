@@ -380,6 +380,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
                       if relevant_fields is not None else props.model_fields
 
     fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True},
+                {"field": "equipment", "headerTooltip": "Current equipment location of the order"},
                 {"field": "costs", "headerTooltip": "Transition costs from previous order."},
                 {"field": "weight", "headerTooltip": "Order weight in tons." },
                 {"field": "due_date", "headerTooltip": "Order due date." },
@@ -402,6 +403,8 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         as_dict["weight"] = o.actual_weight
         as_dict["due_date"] = o.due_date
         as_dict["priority"] = o.priority
+        if o.current_equipment is not None:
+            as_dict["equipment"] = ", ".join([plants[p].name_short or str(plants[p]) for p in o.current_equipment])
         if lot is None:
             return as_dict
         lot_obj = next(l for l in lots if l.id == lot)

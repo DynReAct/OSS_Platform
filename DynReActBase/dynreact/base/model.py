@@ -204,6 +204,8 @@ class Lot(Model):
     orders: list[str]
     processing_status: Literal["PENDING", "STARTED", "FINISHED"]|None = None
     comment: str|None = None
+    weight: float|None = None
+    "Convenience field for storing the total lot weight. Must be equal to the sum of the order weights. In tons."
 
 
 class MaterialOrderData(Model):

@@ -123,7 +123,7 @@ class LotsOptimizer(Generic[P]):
         best_costs_value = best_costs
         history = [initial_costs] if history is None and initial_costs is not None else history if history is not None else []
         if base_lots is not None:
-            self._previous_orders = {p: lot.oders[-1] for p, lot in base_lots.items() if len(lot.orders) > 0}
+            self._previous_orders = {p: lot.orders[-1] for p, lot in base_lots.items() if len(lot.orders) > 0}
             initial_is_best = initial_solution is best_solution
             if best_solution is not None:
                 best_solution = best_solution.model_copy(deep=True)
@@ -150,12 +150,14 @@ class LotsOptimizer(Generic[P]):
             forced_orders = forced_orders + [o.id for o in self._orders.values() if o.due_date is not None and o.due_date <= min_due_date]
         if base_lots is not None and self._orders is not None:
             forced_orders = forced_orders if forced_orders is not None else []
-            forced_orders = forced_orders + [o for lot in base_lots for o in lot.orders if o not in forced_orders]
+            forced_orders = forced_orders + [o for lot in base_lots.values() for o in lot.orders if o not in forced_orders]
         if forced_orders is not None and len(forced_orders) == 0:
             forced_orders = None
         self._forced_orders: list[str]|None = forced_orders
         self._base_lots: dict[int, Lot]|None = base_lots
         self._base_lot_weights: dict[int, float]|None = {p: sum(self._orders[o].actual_weight for o in lot.orders) for p, lot in base_lots.items()} if base_lots is not None else None
+        self._base_assignments: dict[str, OrderAssignment] = {o: OrderAssignment(order=o, equipment=lot.equipment, lot=lot.id, lot_idx=idx+1)
+                                                            for lot in base_lots.values() for idx, o in enumerate(lot.orders)} if base_lots is not None else None
 
     def parameters(self) -> dict[str, any]|None:
         return self._state.parameters

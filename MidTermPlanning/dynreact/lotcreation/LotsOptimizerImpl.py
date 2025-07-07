@@ -36,6 +36,7 @@ class TabuSwap:
         return "Order " + str(self.Order) + ": " + str(self.PlantFrom) + " -> " + str(self.PlantTo)
 
 
+# TODO populate lot weight field
 class TabuSearch(LotsOptimizer):
 
     def __init__(self, site: Site, process: str, costs: CostProvider, snapshot: Snapshot, targets: ProductionTargets,
@@ -118,6 +119,8 @@ class TabuSearch(LotsOptimizer):
 
         #vbest: ProductionPlanning = self._state.current_solution
         #target_vbest: float = self._state.current_object_value
+        if self._base_lots is not None:  # append to existing lots
+            initial_plant_assignments = {orders: plant for orders, plant in initial_plant_assignments.items() if orders not in self._base_assignments}
         vbest: ProductionPlanning = self.optimize_lots(initial_plant_assignments)
         total_priority = vbest.total_priority
         target_vbest0: ObjectiveFunction = self._costs.process_objective_function(vbest)
@@ -395,7 +398,7 @@ class TabuSearch(LotsOptimizer):
             #due_dates = [o.due_date for o in orders if o.due_date is not None]
             #mdate = datetime(1, 1, 1) if len(due_dates) == 0 else min(due_dates)
             #cclottot = sum([sTM[spath[i]][spath[i + 1]] for i in range(sz - 1)])
-            # TODO handle setup coils
+            # handle setup coils
             #if sz > 0 and sT0 is not None: cclottot += sT0[spath[0]]
 
             #sval = SolutionValue(
@@ -417,6 +420,7 @@ class TabuSearch(LotsOptimizer):
         if self._base_lots is not None:   # in this case we only want to extend the existing lots
             addon = {p: lots[0] for p, lots in result.items()}
             result = {p: [self._adapt_base_lots(lot, addon.get(p, None))] for p, lot in self._base_lots.items()}
+
         return result
 
     def _adapt_base_lots(self, base_lot: Lot, addition: Lot|None):
@@ -444,6 +448,8 @@ class TabuSearch(LotsOptimizer):
     def FindNextStep(self, planning: ProductionPlanning, TabuList: set[Any], pool: multiprocessing.pool.Pool|None) -> tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]:
         # sl1 = list(sol.values())  # order plant assignments
         sl1: list[OrderAssignment] = [ass for ass in planning.order_assignments.values()]
+        if self._base_lots is not None:  # do not optimize the fixed orders
+            sl1 = [ass for ass in sl1 if ass.order not in self._base_assignments]
         # slp = [[sl1[i] for i in range(len(sl1)) if (i % self.params.NParallel) == r] for r in range(self.params.NParallel)]
         slp: list[list[OrderAssignment]] = [[sl1[i] for i in range(len(sl1)) if (i % self._params.NParallel) == r] for r in range(self._params.NParallel)]
         plants = {plant.id: plant for plant in self._plants}
@@ -478,6 +484,12 @@ class TabuSearch(LotsOptimizer):
         TabuList.add(TabuSwap(swpbest.Order, swpbest.PlantFrom, swpbest.PlantTo, self._params.Expiration))  # add also swap to prevent cycles
         TabuList.add(TabuSwap(swpbest.Order, swpbest.PlantTo, swpbest.PlantFrom, self._params.Expiration))
 
+        #if self._base_lots is not None:  # might not be necessary => to be checked
+        #    new_assignments = self._base_assignments.copy()
+        #    new_assignments.update(best_solution.order_assignments)
+        #    best_solution = self._costs.evaluate_order_assignments(self._process, new_assignments, self._targets, self._snapshot,
+        #                                            orders_custom_priority=self._orders_custom_priority)  # total priority  ?
+        #    objective_value = self._costs.process_objective_function(best_solution)
         return swpbest, best_solution, objective_value
 
 
@@ -566,7 +578,7 @@ class CTabuWorker:
                     for lot in assigned_lots:
                         for idx, order_id in enumerate(lot.orders):
                             new_assignments[order_id] = OrderAssignment(equipment=swp.PlantFrom, order=order_id, lot=lot.id, lot_idx=idx+1)
-                            if order_id != swp.Order:
+                            if order_id != swp.Order and order_id in affected_orders:
                                 affected_orders.remove(order_id)
                     equipment_targets = self.targets.target_weight.get(swp.PlantFrom, EquipmentProduction(equipment=swp.PlantFrom, total_weight=0.0))
                     start_order = self._previous_orders.get(swp.PlantFrom) if self._previous_orders is not None else None
@@ -582,7 +594,7 @@ class CTabuWorker:
                     for lot in assigned_lots:
                         for idx, order_id in enumerate(lot.orders):
                             new_assignments[order_id] = OrderAssignment(equipment=swp.PlantTo, order=order_id, lot=lot.id, lot_idx=idx + 1)
-                            if order_id != swp.Order:
+                            if order_id != swp.Order and order_id in affected_orders:
                                 affected_orders.remove(order_id)
                     equipment_targets = self.targets.target_weight.get(swp.PlantTo, EquipmentProduction(equipment=swp.PlantTo, total_weight=0.0))
                     start_order = self._previous_orders.get(swp.PlantTo) if self._previous_orders is not None else None

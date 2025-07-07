@@ -359,6 +359,57 @@ class OptimizationTest(unittest.TestCase):
         order_ids_included = [o for lot in lots for o in lot.orders]
         assert special_order in order_ids_included, f"Forced order not scheduled: {order_ids_included}, looking for {special_order}"
 
+    def test_append_to_lots(self):
+        process = "testProcess"
+        process_id = 0
+        num_plants = 2
+        num_orders_p1 = 3
+        num_orders_p2 = 5
+        num_orders_unassigned = 25
+        plants = [Equipment(id=p, name_short="Plant" + str(p), process=process) for p in range(num_plants)]
+        test_site = Site(processes=[Process(name_short=process, process_ids=[process_id])], equipment=plants, storages=[], material_categories=[])
+        orders_p1 = [OptimizationTest._create_order("order_p1_" + str(o), list(range(num_plants)), 10) for o in range(num_orders_p1)]  # each order weighs 10t here
+        orders_p2 = [OptimizationTest._create_order("order_p2_" + str(o), list(range(num_plants)), 10) for o in range(num_orders_p2)]  # each order weighs 10t here
+        orders_un = [OptimizationTest._create_order("order_un_" + str(o), list(range(num_plants)), 10) for o in range(num_orders_unassigned)]  # each order weighs 10t here
+        orders = orders_p1 + orders_p2 + orders_un
+        snapshot = Snapshot(timestamp=datetime(year=2025, month=6, day=25), orders=orders, material=OptimizationTest._create_coils_for_orders(orders, process_id),inline_material={}, lots={})
+        planning_period = (snapshot.timestamp, snapshot.timestamp + timedelta(days=1))
+        # groups p1, p2 and un each have low internal transition costs but between groups costs are costs
+        transition_costs = {o1.id: {o2.id: 0 if o1.id == o2.id else 10 if o1.id[6:8] != o2.id[6:8] else 1 for o2 in orders} for o1 in orders}  #
+        costs = SimpleCostProvider("simple:costs", test_site, transition_costs, minimum_possible_costs=1, missing_weight_costs=100, surplus_weight_costs=100)
+        p1 = plants[0]
+        p2 = plants[1]
+        initial_lots: dict[int, Lot] = {
+            p1.id: Lot(id=f"Lot_{p1.id}.1", equipment=p1.id, active=True, status=4, orders=[o.id for o in orders_p1[:2]]),
+            p2.id: Lot(id=f"Lot_{p2.id}.1", equipment=p2.id, active=True, status=4,orders=[o.id for o in orders_p2[:2]])
+        }
+        orders_in_lots: list[str] = [o for lot in initial_lots.values() for o in lot.orders]
+        target_weight: int = 100   # aim for 10 orders
+        targets: ProductionTargets = ProductionTargets(process=process, target_weight={p.id: EquipmentProduction(equipment=p.id, total_weight=target_weight) for p in plants},period=planning_period)
+        start_assignments: dict[str, OrderAssignment] = {o: OrderAssignment(order=o, lot=lot.id, equipment=lot.equipment, lot_idx=idx+1) for lot in initial_lots.values() for idx, o in enumerate(lot.orders)}
+        start_assignments.update({o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for idx, o in enumerate(orders) if o not in orders_in_lots})
+        initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
+        initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,equipment_status=initial_status, previous_orders={p: lot.orders[-1] for p, lot in initial_lots.items()})
+        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, base_lots=initial_lots)
+        # optimization.add_listener(TestListener())  # for debugging
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=20)
+        solution: ProductionPlanning = optimization_state.best_solution
+
+        all_lots = solution.get_lots()
+        assert len(all_lots) == 2, f"Expected updated lots for two plants, got {len(all_lots)}"
+        lots_flat = [lot for lots in all_lots.values() for lot in lots]
+        assert len(all_lots) == 2, f"Expected two updated lots, got {len(lots_flat)}"
+        for lot in lots_flat:
+            initial_lot = initial_lots.get(lot.equipment)
+            for idx, order in enumerate(initial_lot.orders):
+                assert order in lot.orders, f"Order {order} should have been preserved in lot {lot.id}"
+                assert lot.orders.index(order) == idx, f"Order {order} expected at position {idx} in lot {lot.id}, found it at position {lot.orders.index(order)}"
+            assert len(lot.orders) > len(initial_lot.orders), f"Expected to append orders to lot"
+            expected_orders = num_orders_p1 if lot.equipment == p1.id else num_orders_p2
+            assert len(lot.orders) == expected_orders, f"Unexpected number of orders in lot {lot.id}: {len(lot.orders)}, expected: {expected_orders}"
+
+
 
     @staticmethod
     def _create_order(id: str, plants: list[int], weight: float, due_date: datetime|None=None, priority: int=0):

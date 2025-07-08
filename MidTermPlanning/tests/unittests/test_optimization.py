@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime, timedelta
+from typing import Callable
 
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo, LotsOptimizer, LotsOptimizationState, OptimizationListener
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
@@ -359,6 +360,7 @@ class OptimizationTest(unittest.TestCase):
         order_ids_included = [o for lot in lots for o in lot.orders]
         assert special_order in order_ids_included, f"Forced order not scheduled: {order_ids_included}, looking for {special_order}"
 
+    # TODO not working yet
     def test_append_to_lots(self):
         process = "testProcess"
         process_id = 0
@@ -387,12 +389,12 @@ class OptimizationTest(unittest.TestCase):
         target_weight: int = 100   # aim for 10 orders
         targets: ProductionTargets = ProductionTargets(process=process, target_weight={p.id: EquipmentProduction(equipment=p.id, total_weight=target_weight) for p in plants},period=planning_period)
         start_assignments: dict[str, OrderAssignment] = {o: OrderAssignment(order=o, lot=lot.id, equipment=lot.equipment, lot_idx=idx+1) for lot in initial_lots.values() for idx, o in enumerate(lot.orders)}
-        start_assignments.update({o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for idx, o in enumerate(orders) if o not in orders_in_lots})
+        start_assignments.update({o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for idx, o in enumerate(orders) if o.id not in orders_in_lots})
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,equipment_status=initial_status, previous_orders={p: lot.orders[-1] for p, lot in initial_lots.items()})
         algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, base_lots=initial_lots)
-        # optimization.add_listener(TestListener())  # for debugging
+
         optimization_state: LotsOptimizationState = optimization.run(max_iterations=20)
         solution: ProductionPlanning = optimization_state.best_solution
 
@@ -410,7 +412,6 @@ class OptimizationTest(unittest.TestCase):
             assert len(lot.orders) == expected_orders, f"Unexpected number of orders in lot {lot.id}: {len(lot.orders)}, expected: {expected_orders}"
 
 
-
     @staticmethod
     def _create_order(id: str, plants: list[int], weight: float, due_date: datetime|None=None, priority: int=0):
         return Order(id=id, allowed_equipment=plants, target_weight=weight, actual_weight=weight, due_date=due_date, material_properties=TestMaterial(material_id="test"),
@@ -424,6 +425,30 @@ class OptimizationTest(unittest.TestCase):
 class TestMaterial(Model):
 
     material_id: str
+
+
+class InterruptionTestListener(OptimizationListener):  # FIXME this does not work because local functions cannot be pickled => we need to avoid passing the listener to the optimization processses
+
+    def __init__(self, test_function: Callable[[ProductionPlanning, float], None]):
+        super().__init__()
+        self._test_function = test_function
+        self._success: bool = False
+        self._assertion_error = AssertionError("Test listener not executed")
+
+    def update_solution(self, planning: ProductionPlanning, objective_value: float):
+        try:
+            self._test_function(planning, objective_value)
+            self._success = True
+        except AssertionError as e:
+            self._assertion_error = e
+
+    def update_iteration(self, iteration_cnt: int, lots_cnt: int, objective_value: float) -> bool:
+        return not self._success
+
+    def check(self):
+        if not self._success:
+            raise self._assertion_error
+
 
 
 class TestListener(OptimizationListener):

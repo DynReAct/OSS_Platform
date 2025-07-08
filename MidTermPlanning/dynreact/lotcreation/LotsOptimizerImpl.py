@@ -61,8 +61,7 @@ class TabuSearch(LotsOptimizer):
             self._order_priorities.update(orders_custom_priority)
         self._allocator: LotsAllocator = LotsAllocator(process, {p.id: p for p in self._plants}, self._orders, self._snapshot, self._costs,
                                               self._targets, self._params, self._total_priority, self._forbidden_assignments, self._forced_orders, self._previous_orders,
-                                              self._base_lots, self._base_lot_weights,  self._base_assignments, self._main_category,
-                                              self._orders_custom_priority) if self._orders is not None else None
+                                              self._base_lots, self._base_lot_weights,  self._base_assignments, self._main_category,self._orders_custom_priority)
 
     def _init_performance_models(self, initial_plant_assignments: dict[str, int]) -> dict[str, int]:
         if self._performance_models is None or len(self._performance_models) == 0 or self._orders is None:
@@ -326,6 +325,16 @@ class TabuSearch(LotsOptimizer):
         #    objective_value = self._costs.process_objective_function(best_solution)
         return swpbest, best_solution, objective_value
 
+    def assign_lots(self, order_plant_assignments: dict[str, int]) -> dict[int, list[Lot]]:
+        return self._allocator.assign_lots(order_plant_assignments)
+
+    def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot,
+                                current_material: Any | None = None, next_material: Any | None = None,
+                                orders_custom_priority: dict[str, int] | None = None) -> tuple[EquipmentStatus, ObjectiveFunction]:
+        new_lot: bool = self._allocator.create_new_lot(plant, current, next, current_material=current_material, next_material=next_material)
+        return self._costs.update_transition_costs(plant, current, next, status, snapshot, new_lot, current_material=current_material,
+                                                   next_material=next_material, orders_custom_priority=orders_custom_priority)
+
 
 class LotsAllocator:
     """
@@ -333,7 +342,7 @@ class LotsAllocator:
     of the full optimizer instance. In particular, this avoids having to pickle the user-defined listeners, which often fails.
     """
 
-    def __init__(self, process: str, plants: dict[int, Equipment], orders: dict[str, Order], snapshot: Snapshot, costs: CostProvider,
+    def __init__(self, process: str, plants: dict[int, Equipment], orders: dict[str, Order]|None, snapshot: Snapshot, costs: CostProvider,
                     targets: ProductionTargets, params: TabuParams, total_priority: int|None, forbidden_assignments: dict[str, list[int]],
                     forced_orders: list[str]|None, previous_orders: dict[int, str]|None, base_lots: dict[int, Lot]|None, base_lot_weights: dict[int, float]|None,
                     base_assignments: dict[str, OrderAssignment]|None, main_category: str|None, orders_custom_priority: dict[str, int] | None):

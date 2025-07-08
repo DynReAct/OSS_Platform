@@ -360,7 +360,6 @@ class OptimizationTest(unittest.TestCase):
         order_ids_included = [o for lot in lots for o in lot.orders]
         assert special_order in order_ids_included, f"Forced order not scheduled: {order_ids_included}, looking for {special_order}"
 
-    # TODO not working yet
     def test_append_to_lots(self):
         process = "testProcess"
         process_id = 0
@@ -395,21 +394,24 @@ class OptimizationTest(unittest.TestCase):
         algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, base_lots=initial_lots)
 
-        optimization_state: LotsOptimizationState = optimization.run(max_iterations=20)
-        solution: ProductionPlanning = optimization_state.best_solution
+        def check_expected_lots(solution: ProductionPlanning, objective: float):
+            all_lots = solution.get_lots()
+            assert len(all_lots) == 2, f"Expected updated lots for two plants, got {len(all_lots)}"
+            lots_flat = [lot for lots in all_lots.values() for lot in lots]
+            assert len(all_lots) == 2, f"Expected two updated lots, got {len(lots_flat)}"
+            for lot in lots_flat:
+                initial_lot = initial_lots.get(lot.equipment)
+                for idx, order in enumerate(initial_lot.orders):
+                    assert order in lot.orders, f"Order {order} should have been preserved in lot {lot.id}"
+                    assert lot.orders.index(order) == idx, f"Order {order} expected at position {idx} in lot {lot.id}, found it at position {lot.orders.index(order)}"
+                assert len(lot.orders) > len(initial_lot.orders), f"Expected to append orders to lot"
+                expected_orders = num_orders_p1 if lot.equipment == p1.id else num_orders_p2
+                assert len(lot.orders) == expected_orders, f"Unexpected number of orders in lot {lot.id}: {len(lot.orders)}, expected: {expected_orders}"
 
-        all_lots = solution.get_lots()
-        assert len(all_lots) == 2, f"Expected updated lots for two plants, got {len(all_lots)}"
-        lots_flat = [lot for lots in all_lots.values() for lot in lots]
-        assert len(all_lots) == 2, f"Expected two updated lots, got {len(lots_flat)}"
-        for lot in lots_flat:
-            initial_lot = initial_lots.get(lot.equipment)
-            for idx, order in enumerate(initial_lot.orders):
-                assert order in lot.orders, f"Order {order} should have been preserved in lot {lot.id}"
-                assert lot.orders.index(order) == idx, f"Order {order} expected at position {idx} in lot {lot.id}, found it at position {lot.orders.index(order)}"
-            assert len(lot.orders) > len(initial_lot.orders), f"Expected to append orders to lot"
-            expected_orders = num_orders_p1 if lot.equipment == p1.id else num_orders_p2
-            assert len(lot.orders) == expected_orders, f"Unexpected number of orders in lot {lot.id}: {len(lot.orders)}, expected: {expected_orders}"
+        listener = InterruptionTestListener(check_expected_lots)
+        optimization.add_listener(listener)
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=25)   # will stop earlier when the target has been reached
+        listener.check()
 
 
     @staticmethod

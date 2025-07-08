@@ -156,7 +156,7 @@ class LotsOptimizer(Generic[P]):
         self._forced_orders: list[str]|None = forced_orders
         self._base_lots: dict[int, Lot]|None = {p: lot.model_copy(deep=True) for p, lot in base_lots.items()} if base_lots is not None else None
         self._base_lot_weights: dict[int, float]|None = {p: sum(self._orders[o].actual_weight for o in lot.orders) for p, lot in base_lots.items()} if base_lots is not None else None
-        self._base_assignments: dict[str, OrderAssignment] = {o: OrderAssignment(order=o, equipment=lot.equipment, lot=lot.id, lot_idx=idx+1)
+        self._base_assignments: dict[str, OrderAssignment]|None = {o: OrderAssignment(order=o, equipment=lot.equipment, lot=lot.id, lot_idx=idx+1)
                                                             for lot in base_lots.values() for idx, o in enumerate(lot.orders)} if base_lots is not None else None
 
     def parameters(self) -> dict[str, any]|None:

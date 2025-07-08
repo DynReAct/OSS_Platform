@@ -233,6 +233,7 @@ class Plugins:
         Returns:
             An instance of the found class, or None.
         """
+        imported_module_for_path = None
         module_name_to_load: str = module_spec_arg
         final_constructor_args: tuple = args_to_pass
         final_constructor_kwargs: dict = dict(kwargs_to_pass) # Mutable copy

@@ -130,7 +130,8 @@ and in the container shell, execute
 ldapsearch -H ldap://localhost:1389 -x -b dc=example,dc=org objectclass=*
 ```
 
-## Usage
+## Usage - GUI
+
 ### Snapshot
 In the tab "Snapshot" the user can select the current snapshot.
 In the detailed area there are two views possible:  list of orders or list of material.
@@ -156,4 +157,30 @@ With the button "Start" you can start the optimization.
 You will see the optimization running and as result a figure of used iterations.
 
 ![lot creation](../images/doc/lot_creation_04.png)
+
+## Usage - Command line
+
+The project comes with a set of Python scripts for analyzing the data and executing some of the planning components. For instance
+
+```commandline
+python evaluate_lot.py FIN01.17
+```
+
+prints some details about the lot with id `FIN01.17`. The following scripts are available:
+
+* *analyze_lots.py*: Shows available lots from a given snapshot.
+* *analyze_site.py*: Shows information about the configured site, such as processes, equipment and storage.
+* *analyze_snapshot.py*: Shows information about a given snapshot.
+* *create_lots.py*: Executes the *mid-term planning* (or *lot creation*) algorithm.
+* *evaluate_lot.py*: Shows information about a specific lot from a snapshot.
+
+Each of these scripts takes a set of arguments, which can be found out be running them with the `-h` parameter, for instance:
+
+```commandline
+python evaluate_lot.py -h
+```
+
+The two last scripts, *evaluate_lot.py* and *create_lots.py* allow for convenient benchmarking of the lot creation algorithm. The *create_lots.py* script
+can take an existing lot id as argument (e.g. `python create_lots.py -l FIN01.17`) and then assigns the orders available in this lot to one or many new lots.
+The objective value of the newly created solution should normally be at least as good (low) as the objective value of the existing snapshot lot. 
 

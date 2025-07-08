@@ -149,7 +149,7 @@ def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["order
     for field in fields:
         if field["field"] == "id":
             field["pinned"] = True
-        if field["field"] in ["lots", "lot_positions", "active_processes", "coil_status", "follow_up_processes", "target_weight", "actual_weight"]:
+        if field["field"] in ["lots", "lot_positions", "active_processes", "coil_status", "follow_up_processes", "target_weight", "actual_weight", "material_classes"]:
             field["valueFormatter"] = value_formatter_object
 
     def order_to_json(o: Order):

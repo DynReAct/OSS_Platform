@@ -179,7 +179,7 @@ def _start_times_to_dates(lst: list[datetime]) -> list[date]:
 def find_solutions(starttime: str|None):
     parsed = DatetimeUtils.parse_date(starttime)
     if parsed is None:
-        return []
+        return [], []
     #parsed_date = parsed.date()
     persistence: ResultsPersistence = state.get_results_persistence()
     solutions: list[str] = persistence.solutions_ltp(parsed)  # TODO is this exact? Or could we specify a range?
@@ -211,25 +211,25 @@ def solution_selected(selected_rows: list[dict[str, any]]|None, solutions: list[
     return sol_id, sol
 
 
-@callback(
-    Output("ltp_res-date-ctrl", "max"),
-    Output("ltp_res-date-ctrl", "marks"),
-    Input("ltp_res-selected-solution", "data"),
-    State("ltp_res-starttime-selector", "value")
-)
-def solution_changed(solution: dict[str, any]|None, starttime: str|None):
-    parsed: datetime = DatetimeUtils.parse_date(starttime)
-    if solution is None or parsed is None:
-        return 1, None
-    days = solution.get("time_horizon", 0)
-    marker_indices = range(days)
-    if days > 8:
-        num_marks = 8
-        marker_indices = [round(0 + idx * (days-1)/(num_marks-1)) for idx in range(num_marks)]
-        if (days-1) not in marker_indices:
-            marker_indices.append(days-1)
-    marks = {day: (parsed + timedelta(days=day)).strftime("%y-%m-%d") for day in marker_indices}
-    return days, marks
+#@callback(
+#    Output("ltp_res-date-ctrl", "max"),
+#    Output("ltp_res-date-ctrl", "marks"),
+#    Input("ltp_res-selected-solution", "data"),
+#    State("ltp_res-starttime-selector", "value")
+#)
+#def solution_changed(solution: dict[str, any]|None, starttime: str|None):
+#    parsed: datetime = DatetimeUtils.parse_date(starttime)
+#    if solution is None or parsed is None:
+#        return 1, None
+#    days = solution.get("time_horizon", 0)
+#    marker_indices = range(days)
+#    if days > 8:
+#        num_marks = 8
+#        marker_indices = [round(0 + idx * (days-1)/(num_marks-1)) for idx in range(num_marks)]
+#        if (days-1) not in marker_indices:
+#            marker_indices.append(days-1)
+#    marks = {day: (parsed + timedelta(days=day)).strftime("%y-%m-%d") for day in marker_indices}
+#    return days, marks
 
 
 @callback(

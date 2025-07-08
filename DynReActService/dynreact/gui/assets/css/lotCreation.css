@@ -120,6 +120,17 @@ dialog#create-details-modal {
     justify-content: start;
 }
 
+.create-order-popup-parent {
+    display: flex;
+    align-items: flex-start;
+}
+
+.create-order-popup-filler {
+    width: 10em;
+    height: 0;
+    z-index: -2;
+}
+
 .create-order-backlog-popup {
     background: white;
     z-index: 2;

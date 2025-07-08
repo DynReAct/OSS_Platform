@@ -64,11 +64,17 @@ class Equipment(LabeledItem, ProcessInformation):
     storage_out: str = None
     "Default storage locations of material processed by this equipment"
 
-    def get_equipment_name(self):
+    def get_equipment_name(self, idp: int):
         return self.name_short
 
     def get_equipment_id(self):
         return self.id
+
+
+class MaterialConstraint(Model):
+
+    excluded: list[str]
+    "Material class ids"
 
 
 # TODO how to deal with shared storages (common capacity, individual target levels)?
@@ -87,6 +93,8 @@ class Storage(LabeledItem):
     target_filling_level: float|None = None  # TODO rather need a range
     "A number between 0 and 1"
     #target_filling_range: tuple[float, float]|None = Field(None, description="Numbers between 0 and 1")
+    material_constraints: MaterialConstraint|None=None
+    "Constraints on the type of material supported by this storage."
 
 
 class EquipmentDowntime(Model):
@@ -186,14 +194,18 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
     priority: int = 0
     "Order priority"
 
+
 class Lot(Model):
     id: str
     equipment: int
     active: bool
-    # TODO documentation
-    status: int  # ?
+    status: int
+    "1: created; 2: blocked; 3: released; 4: in progress; 5: completed"
     orders: list[str]
     processing_status: Literal["PENDING", "STARTED", "FINISHED"]|None = None
+    comment: str|None = None
+    weight: float|None = None
+    "Convenience field for storing the total lot weight. Must be equal to the sum of the order weights. In tons."
 
 
 class MaterialOrderData(Model):
@@ -339,6 +351,8 @@ class ProductionPlanning(Model, Generic[P]):
     "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed. Special key \"_sum\" represents the total/aggregated value."
     total_priority: int = 0
     "Sum priority orders"
+    previous_orders: dict[int, str] | None = None
+    "Initial conditions for the optimization"
 
     # TODO cache results?
     def get_lots(self) -> dict[int, list[Lot]]:
@@ -433,16 +447,29 @@ class LotCreationOrderBacklogSettings(Model):
     "A list of process steps at which all orders (scheduled or not) are usually included in the order backlog for lot creation"
 
 
+class TargetLotSize(Model):
+    min: float
+    max: float
+
+
 class ProcessLotCreationSettings(Model):
     plannable: bool|None = None
     "Default: true"
     structure: LotCreationStructureSettings|None=None
     order_backlog: LotCreationOrderBacklogSettings|None=None
+    lot_sizes: dict[int, TargetLotSize]|TargetLotSize|None = None
+    "The target lot size can be specified either per equipment, or globally for all resources of the process"
+    total_size: float|dict[int, float]|None = None
+    "The preselected target size in tons for the lot creation. It can be adapted by the user. Either a global setting for the process step, or individual settings per equipment."
+    default_iterations: int|None=None
+    "Default number of iterations for the process step"
 
 
 class LotCreationSettings(Model):
     processes: dict[str, ProcessLotCreationSettings]
     "Settings per process step"
+    default_iterations: int | None = None
+    "Default number of iterations if no process-specific number is specified"
 
 
 class Site(LabeledItem):
@@ -657,6 +684,28 @@ class MidTermTargets(LongTermTargets):
     production_sub_targets: dict[str, list[ProductionTargets]]
     "Production targets for the planning sub periods. Keys: process ids, values: list of production targets, covering all planning sub periods chronologically."
 
+
+class AggregatedMaterial(Model):
+    total_weight: float
+    material_weights: dict[str, float] | None = None
+
+
+class AggregatedProduction(AggregatedMaterial):
+    """
+    total_weight refers to the total production in the time interval (finished material), and
+    material_weights to finished material by material class id in the time interval
+    """
+    aggregation_interval: tuple[datetime, datetime]
+    "The aggregation interval"
+    closed: bool = True
+    "Indicated whether the aggregation result is final or still subject to change in the future (interval in the past or still ongoing)"
+
+
+class AggregatedStorageContent(Model):
+
+    content_by_storage: dict[str, AggregatedMaterial]
+    content_by_process: dict[str, AggregatedMaterial]
+    content_by_equipment: dict[int, AggregatedMaterial]
 
 
 class ServiceHealth(Model):

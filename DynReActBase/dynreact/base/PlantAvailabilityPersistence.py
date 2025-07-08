@@ -75,7 +75,8 @@ class PlantAvailabilityPersistence:
                         end1 = start_cr + one_day
                         all_deltas[start_cr] = delta_base
                         start_cr = end1
-                all_deltas.update(deltas)
+                if deltas is not None:
+                    all_deltas.update(deltas)
                 start_cr = av.period[1]
             if start_cr < end and default_daily_baseline != daily_baseline:  # gap at the end
                 delta_base = default_daily_baseline - daily_baseline

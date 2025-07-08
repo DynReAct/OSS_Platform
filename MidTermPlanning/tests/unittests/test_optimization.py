@@ -8,7 +8,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.TestPerformanceModel import TestPerformanceModel, TestPerformanceConfig, PlantPerformanceBasic, \
     Concatenation, BaseCondition
 from dynreact.base.model import Site, Process, Equipment, ProductionTargets, ProductionPlanning, Snapshot, Order, \
-    Material, OrderAssignment, EquipmentStatus, Model, EquipmentProduction, Lot
+    Material, OrderAssignment, EquipmentStatus, Model, EquipmentProduction, Lot, ObjectiveFunction
 
 from dynreact.lotcreation.LotsOptimizerImpl import TabuAlgorithm
 from dynreact.base.impl.SimpleCostProvider import SimpleCostProvider
@@ -39,18 +39,25 @@ class OptimizationTest(unittest.TestCase):
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
         algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
-        # optimization.add_listener(TestListener())  # for debugging
-        optimization_state: LotsOptimizationState = optimization.run(max_iterations=10)
-        objective_value = optimization_state.best_objective_value.total_value
-        assert objective_value == 1, "Unexpected objective value " + str(objective_value)
-        solution: ProductionPlanning = optimization_state.best_solution
-        all_lots = solution.get_lots()
-        assert len(all_lots) > 0 and sum(len(plant_lots) for plant_lots in all_lots.values()) > 0, "No lots generated"
-        assert orders[0].id in solution.order_assignments and orders[1].id in solution.order_assignments, "Unexpectedly unassigned order found"
-        ass1 = solution.order_assignments[orders[0].id]
-        ass2 = solution.order_assignments[orders[1].id]
-        assert ass1.lot == ass2.lot, "Orders unexpectedly assigned to different lots"
-        assert ass1.lot_idx < ass2.lot_idx, "Unexpeced production order for two orders"
+
+        def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
+            objective_value = objective.total_value
+            assert objective_value == 1, "Unexpected objective value " + str(objective_value)
+            all_lots = solution.get_lots()
+            assert len(all_lots) > 0 and sum(
+                len(plant_lots) for plant_lots in all_lots.values()) > 0, "No lots generated"
+            assert orders[0].id in solution.order_assignments and orders[
+                1].id in solution.order_assignments, "Unexpectedly unassigned order found"
+            ass1 = solution.order_assignments[orders[0].id]
+            ass2 = solution.order_assignments[orders[1].id]
+            assert ass1.lot == ass2.lot, "Orders unexpectedly assigned to different lots"
+            assert ass1.lot_idx < ass2.lot_idx, "Unexpeced production order for two orders"
+
+        listener = InterruptionTestListener(check_expected_lots)
+        optimization.add_listener(listener)
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=25)
+        listener.check()
+
 
     def test_2_orders_1_plant_initial_swapped(self):
         process = "testProcess"
@@ -79,16 +86,21 @@ class OptimizationTest(unittest.TestCase):
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
         algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
-        # optimization.add_listener(TestListener())  # for debugging
-        optimization_state: LotsOptimizationState = optimization.run(max_iterations=10)
-        objective_value = optimization_state.best_objective_value.total_value
-        assert objective_value == 1, "Unexpected objective value " + str(objective_value)  # TODO parameters
-        solution: ProductionPlanning = optimization_state.best_solution
-        assert orders[0].id in solution.order_assignments and orders[1].id in solution.order_assignments, "Unexpectedly unassigned order found"
-        ass1 = solution.order_assignments[orders[0].id]
-        ass2 = solution.order_assignments[orders[1].id]
-        assert ass1.lot == ass2.lot, "Orders unexpectedly assigned to different lots"
-        assert ass1.lot_idx < ass2.lot_idx, "Unexpected production order for two orders"
+
+        def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
+            objective_value = objective.total_value
+            assert objective_value == 1, "Unexpected objective value " + str(objective_value)  # TODO parameters
+            assert orders[0].id in solution.order_assignments and orders[
+                1].id in solution.order_assignments, "Unexpectedly unassigned order found"
+            ass1 = solution.order_assignments[orders[0].id]
+            ass2 = solution.order_assignments[orders[1].id]
+            assert ass1.lot == ass2.lot, "Orders unexpectedly assigned to different lots"
+            assert ass1.lot_idx < ass2.lot_idx, "Unexpected production order for two orders"
+        listener = InterruptionTestListener(check_expected_lots)
+        optimization.add_listener(listener)
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=25)
+        listener.check()
+
 
     def test_optimization_respects_plant_performance_model_results(self):
         process = "testProcess"
@@ -160,13 +172,17 @@ class OptimizationTest(unittest.TestCase):
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
         algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
-        # optimization.add_listener(TestListener())  # for debugging
-        optimization_state: LotsOptimizationState = optimization.run(max_iterations=10)
-        solution: ProductionPlanning = optimization_state.best_solution
-        all_lots = solution.get_lots()
-        assert len(all_lots) > 0 and sum(len(plant_lots) for plant_lots in all_lots.values()) > 0, "No lots generated"
-        assert orders[-1].id in solution.order_assignments, "Priority order not in lot"
-        assert solution.order_assignments[orders[-1].id].equipment == plants[0].id, "Priority order not in lot"
+
+        def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
+            all_lots = solution.get_lots()
+            assert len(all_lots) > 0 and sum(len(plant_lots) for plant_lots in all_lots.values()) > 0, "No lots generated"
+            assert orders[-1].id in solution.order_assignments, "Priority order not in lot"
+            assert solution.order_assignments[orders[-1].id].equipment == plants[0].id, "Priority order not in lot"
+
+        listener = InterruptionTestListener(check_expected_lots)
+        optimization.add_listener(listener)
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=25)
+        listener.check()
 
     def test_2_orders_1_plant_with_custom_priority(self):
         """
@@ -198,13 +214,17 @@ class OptimizationTest(unittest.TestCase):
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
         algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, orders_custom_priority=custom_priorities)
-        # optimization.add_listener(TestListener())  # for debugging
-        optimization_state: LotsOptimizationState = optimization.run(max_iterations=10)
-        solution: ProductionPlanning = optimization_state.best_solution
-        all_lots = solution.get_lots()
-        assert len(all_lots) > 0 and sum(len(plant_lots) for plant_lots in all_lots.values()) > 0, "No lots generated"
-        assert orders[-1].id in solution.order_assignments, "Priority order not in lot"
-        assert solution.order_assignments[orders[-1].id].equipment == plants[0].id, "Priority order not in lot"
+
+        def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
+            all_lots = solution.get_lots()
+            assert len(all_lots) > 0 and sum(len(plant_lots) for plant_lots in all_lots.values()) > 0, "No lots generated"
+            assert orders[-1].id in solution.order_assignments, "Priority order not in lot"
+            assert solution.order_assignments[orders[-1].id].equipment == plants[0].id, "Priority order not in lot"
+
+        listener = InterruptionTestListener(check_expected_lots)
+        optimization.add_listener(listener)
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=25)
+        listener.check()
 
     def test_lot_creation_with_predecessor(self):
         process = "testProcess"
@@ -238,17 +258,22 @@ class OptimizationTest(unittest.TestCase):
                                                                   equipment_status=initial_status, previous_orders={p_id: orders[0].id})
         algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
-        # optimization.add_listener(TestListener())  # for debugging
-        optimization_state: LotsOptimizationState = optimization.run(max_iterations=10)
-        solution: ProductionPlanning = optimization_state.best_solution
 
-        all_lots = solution.get_lots()
-        assert len(all_lots) > 0, "No lots generated"
-        lots: list[Lot] = all_lots.get(p_id)
-        assert len(lots) == 1, f"Unexpected number of lots: {len(lots)}"
-        lot = lots[0]
-        assert len(lot.orders) == 2, f"Unexpected number of orders in lot: {len(lot.orders)}: {lot.orders}"
-        assert lot.orders[0] == orders[-1].id and lot.orders[1] == orders[-2].id, f"Unexpected lot order: expected: {[orders[-1].id, orders[-2].id]}, got: {lot.orders}"
+        def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
+            all_lots = solution.get_lots()
+            assert len(all_lots) > 0, "No lots generated"
+            lots: list[Lot] = all_lots.get(p_id)
+            assert len(lots) == 1, f"Unexpected number of lots: {len(lots)}"
+            lot = lots[0]
+            assert len(lot.orders) == 2, f"Unexpected number of orders in lot: {len(lot.orders)}: {lot.orders}"
+            assert lot.orders[0] == orders[-1].id and lot.orders[1] == orders[-2].id, f"Unexpected lot order: expected: {[orders[-1].id, orders[-2].id]}, got: {lot.orders}"
+
+        listener = InterruptionTestListener(check_expected_lots)
+        optimization.add_listener(listener)
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=25)
+        listener.check()
+
+
 
     def test_lot_creation_with_lot_weight_range(self):
         process = "testProcess"
@@ -273,21 +298,26 @@ class OptimizationTest(unittest.TestCase):
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,equipment_status=initial_status)
         algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
-        # optimization.add_listener(TestListener())  # for debugging
-        optimization_state: LotsOptimizationState = optimization.run(max_iterations=20)
-        solution: ProductionPlanning = optimization_state.best_solution
 
-        all_lots = solution.get_lots()
-        assert len(all_lots) > 0, "No lots generated"
-        lots: list[Lot] = all_lots.get(p_id)
-        assert len(lots) > 0, f"No lots generated 2"
-        order_ids_included = [o for lot in lots for o in lot.orders]
-        orders_included = [o for o in orders if o.id in order_ids_included]
-        total_weight = sum(o.actual_weight for o in orders_included)
-        assert abs(total_weight-target_weight)/target_weight < 0.1, f"Specified target weight was {target_weight}, but {total_weight} has been assigned"
-        for lot in lots:
-            lot_size = sum(o.actual_weight for o in orders_included if o.id in lot.orders)
-            assert lot_weight_range[0] <= lot_size <= lot_weight_range[1], f"Lot size {lot_size} of lot {lot.id} outside bound {lot_weight_range}"
+        def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
+            all_lots = solution.get_lots()
+            assert len(all_lots) > 0, "No lots generated"
+            lots: list[Lot] = all_lots.get(p_id)
+            assert len(lots) > 0, f"No lots generated 2"
+            order_ids_included = [o for lot in lots for o in lot.orders]
+            orders_included = [o for o in orders if o.id in order_ids_included]
+            total_weight = sum(o.actual_weight for o in orders_included)
+            assert abs(
+                total_weight - target_weight) / target_weight < 0.1, f"Specified target weight was {target_weight}, but {total_weight} has been assigned"
+            for lot in lots:
+                lot_size = sum(o.actual_weight for o in orders_included if o.id in lot.orders)
+                assert lot_weight_range[0] <= lot_size <= lot_weight_range[
+                    1], f"Lot size {lot_size} of lot {lot.id} outside bound {lot_weight_range}"
+
+        listener = InterruptionTestListener(check_expected_lots)
+        optimization.add_listener(listener)
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=25)
+        listener.check()
 
     def test_lot_creation_with_min_due_date(self):
         process = "testProcess"
@@ -314,16 +344,19 @@ class OptimizationTest(unittest.TestCase):
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,equipment_status=initial_status)
         algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, min_due_date=min_due_date)
-        # optimization.add_listener(TestListener())  # for debugging
-        optimization_state: LotsOptimizationState = optimization.run(max_iterations=20)
-        solution: ProductionPlanning = optimization_state.best_solution
 
-        all_lots = solution.get_lots()
-        assert len(all_lots) > 0, "No lots generated"
-        lots: list[Lot] = all_lots.get(p_id)
-        assert len(lots) > 0, f"No lots generated 2"
-        order_ids_included = [o for lot in lots for o in lot.orders]
-        assert special_order in order_ids_included, f"Forced order not scheduled: {order_ids_included}, looking for {special_order}"
+        def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
+            all_lots = solution.get_lots()
+            assert len(all_lots) > 0, "No lots generated"
+            lots: list[Lot] = all_lots.get(p_id)
+            assert len(lots) > 0, f"No lots generated 2"
+            order_ids_included = [o for lot in lots for o in lot.orders]
+            assert special_order in order_ids_included, f"Forced order not scheduled: {order_ids_included}, looking for {special_order}"
+
+        listener = InterruptionTestListener(check_expected_lots)
+        optimization.add_listener(listener)
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=25)
+        listener.check()
 
     def test_lot_creation_with_forced_orders(self):
         process = "testProcess"
@@ -349,16 +382,18 @@ class OptimizationTest(unittest.TestCase):
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,equipment_status=initial_status)
         algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, forced_orders=[special_order])
-        # optimization.add_listener(TestListener())  # for debugging
-        optimization_state: LotsOptimizationState = optimization.run(max_iterations=20)
-        solution: ProductionPlanning = optimization_state.best_solution
 
-        all_lots = solution.get_lots()
-        assert len(all_lots) > 0, "No lots generated"
-        lots: list[Lot] = all_lots.get(p_id)
-        assert len(lots) > 0, f"No lots generated 2"
-        order_ids_included = [o for lot in lots for o in lot.orders]
-        assert special_order in order_ids_included, f"Forced order not scheduled: {order_ids_included}, looking for {special_order}"
+        def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
+            all_lots = solution.get_lots()
+            assert len(all_lots) > 0, "No lots generated"
+            lots: list[Lot] = all_lots.get(p_id)
+            assert len(lots) > 0, f"No lots generated 2"
+            order_ids_included = [o for lot in lots for o in lot.orders]
+            assert special_order in order_ids_included, f"Forced order not scheduled: {order_ids_included}, looking for {special_order}"
+        listener = InterruptionTestListener(check_expected_lots)
+        optimization.add_listener(listener)
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=25)
+        listener.check()
 
     def test_append_to_lots(self):
         process = "testProcess"
@@ -394,7 +429,7 @@ class OptimizationTest(unittest.TestCase):
         algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, base_lots=initial_lots)
 
-        def check_expected_lots(solution: ProductionPlanning, objective: float):
+        def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
             all_lots = solution.get_lots()
             assert len(all_lots) == 2, f"Expected updated lots for two plants, got {len(all_lots)}"
             lots_flat = [lot for lots in all_lots.values() for lot in lots]
@@ -431,15 +466,19 @@ class TestMaterial(Model):
 
 class InterruptionTestListener(OptimizationListener):  # FIXME this does not work because local functions cannot be pickled => we need to avoid passing the listener to the optimization processses
 
-    def __init__(self, test_function: Callable[[ProductionPlanning, float], None]):
+    def __init__(self, test_function: Callable[[ProductionPlanning, ObjectiveFunction], None]):
         super().__init__()
         self._test_function = test_function
         self._success: bool = False
         self._assertion_error = AssertionError("Test listener not executed")
+        self._best_objective = float("inf")
 
-    def update_solution(self, planning: ProductionPlanning, objective_value: float):
+    def update_solution(self, planning: ProductionPlanning, objective: ObjectiveFunction):
+        if objective.total_value >= self._best_objective:
+            return
+        self._best_objective = objective.total_value
         try:
-            self._test_function(planning, objective_value)
+            self._test_function(planning, objective)
             self._success = True
         except AssertionError as e:
             self._assertion_error = e

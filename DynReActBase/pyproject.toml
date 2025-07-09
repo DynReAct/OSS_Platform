@@ -27,6 +27,7 @@ pandas = ">=2,<3"
 pydantic = ">=2.7,<3"
 python-dotenv = ">=1,<2"
 requests = ">=2.32.3,<3"
+urllib3 = ">1.26.0,<3"
 
 # Dependent local modules
 dynreact-shortterm = { path = "../ShortTermPlanning", develop = true }

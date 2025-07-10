@@ -292,13 +292,14 @@ def orders_tab():
             getRowId="params.data.id",
             className="ag-theme-alpine",  # ag-theme-alpine-dark
             style={"height": "70vh", "width": "80vw", "margin-bottom": "5em"},
-            columnSizeOptions={"defaultMinWidth": 125},
-            columnSize="responsiveSizeToFit",
+            columnSizeOptions={"defaultMinWidth": 125, "defaultMaxWidth": 150},  # important to set, since the sizeToFit is applied the first time when the grid is not visible yet
+            columnSize="sizeToFit",   # need to reset this whenever the column definitions change
+            #columnSize="responsiveSizeToFit",  # super annoying; but sizeToFit is not enough, since this is called already when the grid is still empty
             # tooltipField is not used, but it must match an existing field for the tooltip to be shown
             defaultColDef={"tooltipComponent": "CoilsTooltip", "tooltipField": "id"},
-            dashGridOptions={"rowSelection": "multiple", "suppressRowClickSelection": True, "animateRows": False,
-                             "tooltipShowDelay": 2_000, "tooltipInteraction": True,
-                             "popupParent": {"function": "setCoilPopupParent()"}},
+            dashGridOptions={"rowSelection": "multiple", "suppressRowClickSelection": True, "animateRows": False,}
+                             #"tooltipShowDelay": 2_000, "tooltipInteraction": True,
+                             #"popupParent": {"function": "setCoilPopupParent()"}},
             # "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
         ),
 
@@ -962,6 +963,7 @@ def lot_buttons_disabled_check(selected_lots: list[str]|None, selected_rows: lis
             Output("lots2-orders-table", "columnDefs"),
             Output("lots2-orders-table", "rowData"),
             Output("lots2-orders-table", "selectedRows"),
+            Output("lots2-orders-table", "columnSize"),
             Output("lots2-orders-data", "data"),
            # Output("lots2-orders-backlog-count", "children"),
            # Output("lots2-num-orders", "children"),
@@ -1001,16 +1003,16 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
                   processed_lots: list[Literal[""]], all_lots_value: list[Literal[""]], active_lots_value: list[Literal[""]], released_lots_value: list[Literal[""]],
                   selected_prev_steps_lot: list[str], selected_prev_steps_all: list[str], plants_components: list[Component]|None):
     if not dash_authenticated(config):
-        return None, None, None, None
+        return None, None, None, None, None
     snapshot = DatetimeUtils.parse_date(snapshot)
     if snapshot is None or process is None:
-        return None, None, None, None
+        return None, None, None, "sizeToFit", None
     snapshot_serialized: str = DatetimeUtils.format(snapshot)
     snapshot_obj = state.get_snapshot(snapshot)
     changed_ids: list[str] = GuiUtils.changed_ids()
     tab_changed = "lots2-active-tab" in changed_ids
     if tab_changed and tab != "orders":
-        return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update, "sizeToFit", dash.no_update
     is_clear_command: bool = "lots2-orders-backlog-clear" in changed_ids
     is_init_command: bool = "lots2-orders-backlog-init" in changed_ids
     update_selection: bool = orders_data is None or orders_data.get("process") != process \
@@ -1120,7 +1122,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     plant_targets, _1, _2, _3 = target_values_from_settings(process, period, current_process_plants, False, plants_components)
     current_process_plants = [p for p in plant_targets.target_weight.keys()] if plant_targets is not None else []
     if len(current_process_plants) == 0:
-        return None, None, None, None
+        return None, None, None, "sizeToFit", None
 
     orders_filtered = [order for order in snapshot_obj.orders if any(plant in current_process_plants for plant in order.allowed_equipment)]
     orders_sorted = sorted(orders_filtered, key=process_index_for_order)
@@ -1232,7 +1234,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
             fields.sort(key=field_sort_id)
     except:
         pass
-    return fields, sorted_orders, new_selected_rows, orders_data
+    return fields, sorted_orders, new_selected_rows, "sizeToFit", orders_data
 
 # Old filter has the form {}, or {"lots": {'filterType': 'text', 'type': 'contains', 'filter': '"DGL04.81"'}}
 @callback(

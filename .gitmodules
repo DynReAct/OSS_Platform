@@ -1,9 +1,9 @@
 [submodule "DynReActService/ShortTermRAS"]
 	path = DynReActService/ShortTermRAS
-	url = git@github.com:DynReAct/ShortTermRAS.git
+	url = https://github.com/DynReAct/ShortTermRAS
 [submodule "DynReActService/LotCreationRas"]
 	path = DynReActService/LotCreationRas
-	url = git@github.com:DynReAct/LotCreationRas.git
+	url = https://github.com/DynReAct/LotCreationRas
 [submodule "DynReActService/LongTermPlanning"]
 	path = DynReActService/LongTermPlanning
-	url = git@github.com:DynReAct/LongTermPlanning.git
+	url = https://github.com/DynReAct/LongTermPlanning

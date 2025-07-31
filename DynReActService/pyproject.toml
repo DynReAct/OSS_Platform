@@ -18,10 +18,7 @@ packages = [
     { include = "dynreact/auth"},
     { include = "dynreact/service" },
     { include = "dynreact/gui" },
-    { include = "dynreact/gui/pages" },
-    # { include = "dynreact/stp_gui_ras", from = "../../ShortTermRAS" },
-    # { include = "dynreact/plugin_ras", from = "../../LotCreationRas"},
-    # { include = "dynreact/ltp_ras", from = "../../LongTermPlanning"},
+    { include = "dynreact/gui/pages" }
 ]
 
 [tool.poetry.dependencies]
@@ -71,8 +68,8 @@ dynreact-stp_gui_ras = { path = "../../ShortTermRAS", optional = true }
 # Commented by JOM on 20250703
 # because it get hiddens some modules such as dynreact.stp_gui_ras
 # Optional extras
-# [tool.poetry.extras]
-# ras = ["dynreact-ltp_ras", "dynreact-plugin_ras", "dynreact-stp_gui_ras"]
+[tool.poetry.extras]
+ras = ["dynreact-ltp_ras", "dynreact-plugin_ras", "dynreact-stp_gui_ras"]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

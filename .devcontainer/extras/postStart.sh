@@ -1,8 +1,10 @@
 #!/bin/zsh
 
-WORKSPACE="/workspace"
-git config --global --add safe.directory "$WORKSPACE"
 sudo chown root:docker /var/run/docker.sock
+WORKSPACE="/workspace"
+sudo chown -R vscode:vscode "$WORKSPACE"
+
+git config --global --add safe.directory "$WORKSPACE"
 
 LongTermPlanning="$WORKSPACE/DynReActService/LongTermPlanning"
 if [ "$(ls -A $LongTermPlanning)" ]; then

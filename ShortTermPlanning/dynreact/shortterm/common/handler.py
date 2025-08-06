@@ -56,9 +56,15 @@ class DockerManager:
                 if envs:
                     environment_variables.update(envs)
 
+                name = f"{container_prefix + '_' if container_prefix else ''}{agent.upper()}_{name}"
+
+                if any((d['name'] == name and d['status'] == "exited") for d in list):
+                    print("Container with the same name found, auto removing")
+                    self.clean_container(name)
+
                 container = self.client.containers.run(
                     image=f"{os.environ.get("LOCAL_REGISTRY", "")}dynreact-shortterm:{os.environ.get("IMAGE_TAG", "latest")}",
-                    name=f"{container_prefix + '_' if container_prefix else ''}{agent.upper()}_{name}",
+                    name=name,
                     detach=True,
                     auto_remove=auto_remove,
                     command=command_str,
@@ -122,6 +128,27 @@ class DockerManager:
         except Exception as e:
             print(f"Error cleaning containers: {e}")
 
+    def clean_container(self, container_name: str):
+        """
+        Stop and remove all containers launched by this instance (using the tag).
+
+        :param container_name: Container name
+        :return: The container object.
+        """
+        try:
+            result  = self.client.containers.prune(filters={"name": container_name})
+            deleted_containers = result.get("ContainersDeleted", [])
+
+            if not deleted_containers:
+                print("No tracked containers found.")
+                return
+
+            for container_name in deleted_containers:
+                print(f"Container '{container_name}' removed.")
+
+        except Exception as e:
+            print(f"Error cleaning containers: {e}")
+
     def stop_tracked_container(self, container_id: str):
         """
         Stop and remove one container by container ID.
@@ -160,6 +187,7 @@ class DockerManager:
                 self.tracked_containers.append({
                     "id": container.id,
                     "status": container.status,
+                    "name": container.name
                 })
                 print(f"ID: {container.short_id} | Name: {container.name} | Status: {container.status}")
 

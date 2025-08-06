@@ -43,6 +43,37 @@ from dynreact.shortterm.common.handler import DockerManager
 from dynreact.shortterm.shorttermtargets import ShortTermTargets
 from dynreact.shortterm.timedelay import TimeDelay
 
+def list_all_topics(admin_client: AdminClient, verbose: int):
+    """
+    List all topics in the Kafka broker.
+
+    :param object admin_client: A Kafka AdminClient instance
+    :param int verbose: Verbosity level
+    """
+    topics_metadata = admin_client.list_topics(timeout=10)
+
+    if verbose > 0:
+        print("Finished listing all hanging topics.")
+
+    return topics_metadata.topics or []
+
+def topic_exist(admin_client: AdminClient, topic_name: str, verbose: int):
+    """
+    Check if a topic exist in the Kafka broker.
+    This is necessary when to check name duplicity.
+
+    :param object admin_client: A Kafka AdminClient instance
+    :param topic_name: Topic name
+    :param int verbose: Verbosity level
+
+    :return Boolean: True if topic exists, False otherwise
+    """
+    topics_metadata = list_all_topics(admin_client, verbose)
+    for topic_m_name in topics_metadata:
+        if topic_m_name.lower() == topic_name.lower():
+           return True
+
+    return False
 
 def delete_all_topics(admin_client: AdminClient, verbose: int):
     """
@@ -53,16 +84,15 @@ def delete_all_topics(admin_client: AdminClient, verbose: int):
     :param object admin_client: A Kafka AdminClient instance
     :param int verbose: Verbosity level
     """
-    topics_metadata = admin_client.list_topics(timeout=10)
-    if topics_metadata.topics:
-        for topic_name in topics_metadata.topics:
-            if topic_name.lower().startswith("dyn"):
-                if verbose > 0:
-                    print(f"Deleting topic {topic_name}...")
-                futures = admin_client.delete_topics([topic_name])
-                if verbose > 0:
-                    for topic, future in futures.items():
-                        print(f"Deleted topic {topic}.")
+    topics_metadata = list_all_topics(admin_client, verbose)
+    for topic_name in topics_metadata:
+        if topic_name.lower().startswith("dyn"):
+            if verbose > 0:
+                print(f"Deleting topic {topic_name}...")
+            futures = admin_client.delete_topics([topic_name])
+            if verbose > 0:
+                for topic, future in futures.items():
+                    print(f"Deleted topic {topic}.")
     if verbose > 0:
         print("Finished deleting all hanging topics.")
 
@@ -126,13 +156,14 @@ def run_general_agents(producer: Producer, gagents: str, verbose: int):
 
 def create_auction(
         equipments: list[str], producer: Producer, verbose: int,
-        snapshot: str = None, act: str = None, nmaterials: int = None, materials: list[str] = None
+        snapshot: str = None, act: str = None, nmaterials: int = None, materials: list[str] = None, admin_client: AdminClient = None
 ) -> tuple[str, int]:
     """
     Creates an auction by instructing the master LOG, EQUIPMENTS and MATERIAL to clone themselves to follow a new topic
 
     :param list equipments: List of equipments IDs that will participate in the auction
     :param object producer: A Kafka Producer instance
+    :param object admin_client: A Kafka Admin Client instance
     :param int verbose: Verbosity level
     :param str snapshot: Snapshot time in ISO8601 format, otherwise use the latest available
     :param str act: Preferred auction name, otherwise a random name will be assigned
@@ -157,6 +188,10 @@ def create_auction(
 
     # Instruct the general LOG to clone itself to create a new auction
     act = genauction(act)
+
+    if admin_client and topic_exist(admin_client=admin_client, topic_name=act, verbose=verbose):
+        raise Exception(f"Topic {act} already exists. Try with another name")
+
     sendmsgtopic(
         producer=producer,
         tsend=topic_gen,

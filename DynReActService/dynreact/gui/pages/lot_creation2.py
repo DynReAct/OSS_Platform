@@ -118,7 +118,7 @@ def layout(*args, **kwargs):
         dcc.Store(id="lots2-orders-backlog-structure-data"),  # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
         dcc.Store(id="lots2-lots-data"),    # rowData, list of dicts, one row per lot; input for swim lane
         dcc.Store(id="lots2-objectives-history"),     # optimization results, objective function
-        dcc.Interval(id="lots2-interval", n_intervals=3_600_000),  # for polling when optimization is running
+        dcc.Interval(id="lots2-interval", interval=3_600_000),  # for polling when optimization is running
         # ======== Popups  =========
         structure_portfolio_popup(111222),
         dcc.Store(id="lots2-material-setpoints", data=None),  # dictionary

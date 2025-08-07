@@ -3,9 +3,10 @@ Module snapshot_imports_page
 """
 import threading
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import dash
-from dash import html, callback, Output, Input, dcc
+from dash import html, callback, Output, Input, dcc, clientside_callback, ClientsideFunction
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
@@ -43,6 +44,7 @@ def layout(*args, **kwargs):
             html.Div("✖", id=translations_key + "-alert-close", role="button", title="Close", className="snapimp-close"),
         ], id=translations_key + "-alert-container", className="snapimp-infobox snapimp-hidden"),
         dcc.Interval(id=translations_key + "-interval", interval=30_000),
+
     ])
 
 
@@ -58,12 +60,13 @@ def layout(*args, **kwargs):
     Output("snapimp-interval", "interval"),
     Output("snapimp-alert", "children"),
     Output("snapimp-alert-container", "className"),
+    Input("client-tz", "data"),  # defined in dash_app.py
     Input("snapimp-interval", "n_intervals"),
     Input("snapimp-pause", "n_clicks"),
     Input("snapimp-trigger", "n_clicks"),
     Input("snapimp-alert-close", "n_clicks"),
 )
-def status(_, __, ___, ____):
+def status(tz: str|None, _, __, ___, ____):
     if not dash_authenticated(config):
         return None, None, None, None, None, None, True, True, dash.no_update, None, "snapimp-infobox snapimp-hidden"
     prov = state.get_snapshot_provider()
@@ -75,6 +78,15 @@ def status(_, __, ___, ____):
     next_scheduled_import: datetime | None = prov2.next_scheduled_import()
     is_paused: bool = prov2.is_paused()
     is_running: bool = prov2.import_running()
+    zi = None
+    try:
+        zi = ZoneInfo(tz)
+        if last_snap is not None:
+            last_snap = last_snap.astimezone(zi)
+        if next_scheduled_import is not None:
+            next_scheduled_import = next_scheduled_import.astimezone(zi)
+    except:
+        pass
     last_snap_str = DatetimeUtils.format(last_snap) if last_snap is not None else ""
     next_snap_str = DatetimeUtils.format(next_scheduled_import) if next_scheduled_import is not None else ""
     result: datetime|Exception|None = None
@@ -90,8 +102,9 @@ def status(_, __, ___, ____):
         if is_paused:
             prov2.resume()
             scheduled = prov2.next_scheduled_import()
-            msg = "Snapshot imports resumed. Next scheduled import: " + (
-                str(DatetimeUtils.format(scheduled)) if scheduled is not None else "None")
+            if zi is not None and scheduled is not None:
+                scheduled = scheduled.astimezone(zi)
+            msg = "Snapshot imports resumed. Next scheduled import: " + (DatetimeUtils.format(scheduled) if scheduled is not None else "None")
         else:
             prov2.pause()
             msg = "Snapshot imports paused."
@@ -108,6 +121,8 @@ def status(_, __, ___, ____):
     elif result is not None:
         success = isinstance(result, datetime)
         if success:
+            if zi is not None:
+                result = result.astimezone(zi)
             msg = f"New snapshot {DatetimeUtils.format(result)}"
             info_class = "snapimp-infobox"
         elif isinstance(result, Exception):

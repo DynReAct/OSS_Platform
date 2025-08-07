@@ -65,6 +65,7 @@ def layout(*args, **kwargs):
         language,
         #dcc.Store(id="lang2", storage_type="memory"),
         dcc.Store(id="lang3", storage_type="memory"),  # dummy output for client side callbacks?
+        dcc.Store(id="client-tz", storage_type="memory"),  # holds client timezone information
         site, selected_snapshot, selected_snapshot_obj, selected_process,
         #html.Div("DynReAct", className="dynreact-header"),
         html.Img(src=app.get_asset_url(DYNREACT_LOGO), className="menu-logo"),
@@ -188,6 +189,15 @@ clientside_callback(
     Output("menu-lang-select", "value"),
     Input("menu-lang-select", "value"),
     Input("menu-url", "href")   # problem: this triggers the callback before the new page is loaded
+)
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="dynreact",
+        function_name="getTimezoneOffset"
+    ),
+    Output("client-tz", "data"),
+    Input("client-tz", "storage_type")  # run once only
 )
 
 

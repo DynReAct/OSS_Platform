@@ -182,6 +182,7 @@ def plant_calendar_popup():
 
 
 def storage_init_popup():
+    # TODO handle timezone
     start_date, end_date, snap_options, selected_snap = get_date_range(selected_snapshot.data)  # : tuple[date, date, list[datetime], str]
     return html.Dialog(
         html.Div([

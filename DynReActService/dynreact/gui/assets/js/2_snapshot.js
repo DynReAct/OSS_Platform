@@ -27,6 +27,9 @@
                     snap.getCoilsByOrder = () => coilsByOrder;  // TODO sorted!
                 }
                 return "";
+            },
+            getTimezoneOffset: () => {
+                return Intl.DateTimeFormat().resolvedOptions().timeZone; // new Date().getTimezoneOffset();
             }
         }
     });

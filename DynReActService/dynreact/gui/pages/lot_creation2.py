@@ -5,6 +5,7 @@ import typing
 from datetime import datetime, timedelta, date
 from typing import Literal, Any
 import json
+from zoneinfo import ZoneInfo
 
 import dash
 import pandas as pd
@@ -458,11 +459,10 @@ def structure_portfolio_popup(initial_weight: float):
 
 
 @callback(Output("lots2-current_snapshot", "children"),
-          Input("selected-snapshot", "data"))  # selected-snapshot is a page-global store
-def snapshot_changed(snapshot: datetime|None) -> str:
-    if snapshot is None:
-        return ""
-    return str(snapshot)
+          Input("selected-snapshot", "data"), #     selected-snapshot is a page-global store
+          Input("client-tz", "data"))  # client timezone, global store
+def snapshot_changed(snapshot: datetime|None, tz: str|None) -> str:
+    return GuiUtils.format_snapshot(snapshot, tz)
 
 
 @callback(

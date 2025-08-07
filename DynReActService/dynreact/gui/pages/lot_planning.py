@@ -171,10 +171,11 @@ def transfer_popup():
 
 
 @callback(Output("current_snapshot_lotplanning", "children"),
-          Input("selected-snapshot", "data")
+          Input("selected-snapshot", "data"),
+          Input("client-tz", "data")  # client timezone, global store
 )
-def snapshot_changed(snapshot: datetime|None) -> str:
-    return str(snapshot)
+def snapshot_changed(snapshot: datetime|str|None, tz: str|None) -> str:
+    return GuiUtils.format_snapshot(snapshot, tz)
 
 @callback(
     Output("plan-link-create", "href"),

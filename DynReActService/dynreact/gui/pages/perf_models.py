@@ -174,10 +174,9 @@ if len(perf_models) > 0:
     def procs_changed(snapshot: str, procs: str|None, plants: str|None):
         if not dash_authenticated(config) or (not procs and not plants):
             return None, None
-        snapshot = DatetimeUtils.parse_date(snapshot)   # TODO
+        snapshot = DatetimeUtils.parse_date(snapshot)
         if snapshot is None:
             return None, None
-        snapshot_serialized: str = DatetimeUtils.format(snapshot)
         snapshot_obj = state.get_snapshot(snapshot)
         site = state.get_site()
         processes, plants = find_processes_and_plants(procs, plants)

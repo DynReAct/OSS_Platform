@@ -45,6 +45,7 @@ def get_date_range(current_snapshot: str|datetime|None, zi: ZoneInfo|None = None
         return None, None, [], None
     # 1) snapshot already selected
     current: datetime | None = DatetimeUtils.parse_date(current_snapshot)
+    current_initial = current
     if current is None:
         # 3) use current snapshot
         current = state.get_snapshot_provider().current_snapshot_id()
@@ -53,7 +54,7 @@ def get_date_range(current_snapshot: str|datetime|None, zi: ZoneInfo|None = None
         return (now - timedelta(days=30)).date(), (now + timedelta(days=1)).date(), [], None
     dates: list[datetime] = []
     cnt = 0
-    iterator = state.get_snapshot_provider().snapshots(start_time=current - timedelta(days=90), end_time=current + timedelta(minutes=1), order="desc") #if current_snapshot is None \
+    iterator = state.get_snapshot_provider().snapshots(start_time=current - timedelta(days=90), end_time=current + timedelta(days=3), order="desc") #if current_snapshot is None \
         #else state.get_snapshot_provider().snapshots(start_time=current - timedelta(hours=2), end_time=current + timedelta(days=90), order="asc")
     for dt in iterator:
         dates.append(dt)
@@ -63,6 +64,11 @@ def get_date_range(current_snapshot: str|datetime|None, zi: ZoneInfo|None = None
     dates = sorted(dates, reverse=True)
     if len(dates) == 0:
         return None, None, [], None
+    if current_initial is not None:
+        if dates[0] < current_initial - timedelta(minutes=1):
+            dates.insert(0, current_initial)
+        elif dates[-1] > current_initial + timedelta(minutes=1):
+            dates.append(current_initial)
     to_be_selected = dates[0]
     min_dist = abs(to_be_selected - current)
     for dt in dates:

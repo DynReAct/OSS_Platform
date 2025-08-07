@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 
 from dynreact.base.SnapshotProvider import SnapshotProvider
-from dynreact.base.model import Snapshot
 
 
 class SnapshotImporter(SnapshotProvider):
@@ -18,12 +17,15 @@ class SnapshotImporter(SnapshotProvider):
     def next_scheduled_import(self) -> datetime|None:
         raise Exception("not implemented")
 
-    def trigger_import(self) -> Snapshot:
+    def trigger_import(self) -> datetime:
         """
         The implementation may choose to raise a SnapshotImportError if the import is not currently possible,
         e.g., because a connection to the database could not be established, an import is already ongoing (in which case
         the currently retrieved snapshot should ideally be returned) or another import had been triggered too recently.
-        :return:
+        This is a blocking operation.
+
+        Returns:
+            the new snapshot timestamp
         """
         raise Exception("not implemented")
 

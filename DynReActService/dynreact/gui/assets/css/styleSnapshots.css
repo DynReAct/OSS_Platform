@@ -67,7 +67,9 @@
 }
 
 .snapimp-infobox {
-    display: block;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     padding: 1em;
     margin-top: 2em;
     background-color: lightblue;
@@ -76,4 +78,13 @@
 
 .snapimp-hidden {
     display: none;
+}
+
+.snapimp-alert {
+    background-color: red;
+    color: white;
+}
+
+.snapimp-close:hover {
+    cursor: pointer;
 }

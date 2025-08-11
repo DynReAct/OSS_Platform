@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.base.AggregationProvider import AggregationLevel
 from dynreact.base.CostProvider import CostProvider
+from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationState
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.AggregationPersistence import AggregationInternal
@@ -665,3 +666,46 @@ def aggregate_production():
         for cat in site.material_categories:
             clas = ", ".join([f"{_print_obj(cl)}: {agg.material_weights.get(cl.id, 0):.1f}t" for cl in cat.classes])
             print(f"  Material {_print_obj(cat)}: {clas}")
+
+def lot_sinks():
+    config = DynReActSrvConfig()
+    plugins = Plugins(config)
+    sinks = list(plugins.get_lot_sinks().keys())
+    print("Sinks:", sinks)
+
+def transfer_lot():
+    parser = argparse.ArgumentParser(description="Append a set of orders to a lot on the target system.")
+    parser.add_argument("order", help="Select orders to be included. Separate multiple fields by \",\"", type=str, default=None)
+    parser.add_argument("-l", "--lot", help="Select a lot to append to. A new one will be created if left empty", type=str, default=None)
+    parser.add_argument("-sn", "--sink", help="Select a lot sink", type=str, default=None)
+    parser.add_argument("-ln", "--lot-name", help="Select a new lot name; only relevant if the \"lot\" parameter is not set", type=str, default=None)
+    parser.add_argument("-e", "--equipment", help="Equipment name or id", type=str, default=None)
+    parser.add_argument("-c", "--comment", help="Optional comment for lot", type=str, default=None)
+    parser = _trafo_args(parser=parser, include_snapshot=True)
+    args = parser.parse_args()
+    if args.lot is None and args.equipment is None:
+        raise Exception("Must specify either \"equipment\" or \"lot\".")
+    orders = [o for o in (o.strip() for o in args.order.split(",")) if len(o) > 0]
+    config = DynReActSrvConfig(config_provider=args.config_provider, snapshot_provider=args.snapshot_provider, cost_provider=args.cost_provider)
+    plugins = Plugins(config)
+    site = plugins.get_config_provider().site_config()
+    snaps_provider: SnapshotProvider = plugins.get_snapshot_provider()
+    snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
+    snapshot: Snapshot = snaps_provider.load(time=snap)
+    existing_lot = next(l for lots in snapshot.lots.values() for l in lots if l.id == args.lot) if args.lot is not None else None
+    equipment = (args.equipment if args.equipment is not None else str(existing_lot.equipment)).upper()
+    plant = site.get_equipment(int(equipment)) if equipment.isnumeric() else next(e for e in site.equipment if e.name_short.upper() == equipment)
+    if existing_lot is not None and existing_lot.equipment != plant.id:
+        raise Exception(f"Plant id {plant.id} does not match lot equipment {existing_lot.equipment}")
+    sinks: dict[str, LotSink] = plugins.get_lot_sinks()
+    if len(sinks) == 0:
+        raise Exception("No lot sinks configured, cannot transfer")
+    selected_sink = args.sink if args.sink is not None else next(iter(sinks.keys()))
+    lot_sink = sinks[selected_sink]
+    name = args.lot if args.lot is not None else args.lot_name if args.lot_name is not None else "test"
+    lot = Lot(id=name, equipment=plant.id, active=False, status=1, orders=orders, comment=args.comment)
+    if existing_lot is not None:
+        return lot_sink.transfer_append(lot, orders[0], snapshot)
+    else:
+        return lot_sink.transfer_new(lot, snapshot, external_id=name)
+

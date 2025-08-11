@@ -732,7 +732,7 @@ class LotTransferThread(threading.Thread):
 
     def run(self):
         try:
-            result = self._sink.transfer(self._lot, self._snapshot, external_id=self._name)
+            result = self._sink.transfer_new(self._lot, self._snapshot, external_id=self._name)
             result = "Successfully transferred: " + str(result) if result is not None else "Lot " + (self._name if self._name is not None else self._lot.id) + " successfully transferred"
             self._result = result
         except Exception as e:

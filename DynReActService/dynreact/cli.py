@@ -692,7 +692,7 @@ def transfer_lot():
     snaps_provider: SnapshotProvider = plugins.get_snapshot_provider()
     snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
     snapshot: Snapshot = snaps_provider.load(time=snap)
-    existing_lot = next(l for lots in snapshot.lots.values() for l in lots if l.id == args.lot) if args.lot is not None else None
+    existing_lot = next((l for lots in snapshot.lots.values() for l in lots if l.id == args.lot), None) if args.lot is not None else None
     equipment = (args.equipment if args.equipment is not None else str(existing_lot.equipment)).upper()
     plant = site.get_equipment(int(equipment)) if equipment.isnumeric() else next(e for e in site.equipment if e.name_short.upper() == equipment)
     if existing_lot is not None and existing_lot.equipment != plant.id:
@@ -704,7 +704,7 @@ def transfer_lot():
     lot_sink = sinks[selected_sink]
     name = args.lot if args.lot is not None else args.lot_name if args.lot_name is not None else "test"
     lot = Lot(id=name, equipment=plant.id, active=False, status=1, orders=orders, comment=args.comment)
-    if existing_lot is not None:
+    if args.lot is not None:
         return lot_sink.transfer_append(lot, orders[0], snapshot)
     else:
         return lot_sink.transfer_new(lot, snapshot, external_id=name)

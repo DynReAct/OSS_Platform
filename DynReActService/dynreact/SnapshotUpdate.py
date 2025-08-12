@@ -40,7 +40,7 @@ class SnapshotUpdate(Mapping):
         return f"{self.__class__.__name__}"
 
     def update_snapshot(self, snapshot: Snapshot, lot: Lot) -> UpdatedSnapshot:
-        """Creates a new snapshot with orders and lots updated TODO update material fields order_positions"""
+        """Creates a new snapshot with orders, material and lots updated"""
         lot_plant = self._site.get_equipment(lot.equipment, do_raise=True)
         process = lot_plant.process
         affected_plants: list[int] = [e.id for e in self._site.get_process_equipment(process)]
@@ -49,6 +49,7 @@ class SnapshotUpdate(Mapping):
         orders: list[str] = lot.orders
         all_orders = list(snapshot.orders)
         order_objects: dict[str, Order] = {o.id: o for o in all_orders}
+        all_materials = list(snapshot.material)
         for other_lot in affected_lots:
             contains_order = any(o in orders for o in other_lot.orders)
             if not contains_order:
@@ -81,8 +82,24 @@ class SnapshotUpdate(Mapping):
             order = order.copy(update={"lot_positions": o_lot_positions, "lots": o_lots})
             all_orders.pop(o_idx)
             all_orders.insert(o_idx, order)
+        new_order_positions: dict[str, int] = {}  # if we do not have any clue about the ordering use random order (could maybe be improved)
+        for mat_idx, mat in enumerate(list(all_materials)):
+            # we retain the existing material order if it is specified
+            if mat.order not in orders or (mat.order_positions is not None and process in mat.order_positions):
+                continue
+            if mat.order in new_order_positions:
+                new_position = new_order_positions[mat.order]
+                new_order_positions[mat.order] += 1
+            else:
+                new_position = 1
+                new_order_positions[mat.order] = 2
+            mat_order_positions = dict(mat.order_positions) if mat.order_positions is not None else {}
+            mat_order_positions[process] = new_position
+            mat = mat.copy(update={"order_positions": mat_order_positions})
+            all_materials.pop(mat_idx)
+            all_materials.insert(mat_idx, mat)
         original = snapshot.original if isinstance(snapshot, UpdatedSnapshot) else snapshot
-        update = UpdatedSnapshot(timestamp=snapshot.timestamp, orders=all_orders, material=snapshot.material, lots=all_lots, inline_material=snapshot.inline_material, original=original)
+        update = UpdatedSnapshot(timestamp=snapshot.timestamp, orders=all_orders, material=all_materials, lots=all_lots, inline_material=snapshot.inline_material, original=original)
         refs = self._refs
         if len(refs) > 4:
             keys = sorted(list(refs.keys()))

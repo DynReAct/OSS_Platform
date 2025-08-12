@@ -1,7 +1,7 @@
 import threading
 import traceback
 from datetime import datetime, date
-from typing import Iterable, Any
+from typing import Iterable, Any, Literal
 import uuid
 
 import dash
@@ -160,6 +160,8 @@ def transfer_popup():
                 dcc.Dropdown(id="lotplanning-transfer-target", className="lotplanning-transfer-target",
                              options=[{"value": sink_id, "label": sink.label(), "title": sink.description()} for sink_id, sink in sinks.items()],
                              value=next((sink_id for sink_id in sinks.keys()), None)),
+                html.Div("Update snapshot:", title="Update the current snapshot (in memory only/until software restart)?"),
+                html.Div(dcc.Checklist(id="lotplanning-transfer-snapupdate", options= [{"value": ""}], value=[""], className="lots2-checkbox"), title="Update the current snapshot (in memory only/until software restart)?"),
             ], className="lotplanning-transfer-grid", id="lotplanning-transfer-grid"),
 
             html.Div([
@@ -614,10 +616,11 @@ def disable_transfer_button(lot: str, new_lotname: str, orders: list[str]|str, t
     State("process-selector-lotplanning", "value"),
     State("planning-selected-solution", "data"),
     State("lotplanning-transferred-lot", "data"),
+    State("lotplanning-transfer-snapupdate", "value"),
     config_prevent_initial_callbacks=True
 )
 def check_start_transfer(_, __, lot: str, new_lotname: str, orders: list[str] | str, transfer_target: str | None, snapshot: str | datetime | None, process: str | None,
-                         solution: str | None, last_transferred_lot: str|None):
+                         solution: str | None, last_transferred_lot: str|None, update_snap_check: list[Literal[""]]):
     snapshot = DatetimeUtils.parse_date(snapshot)
     if not dash_authenticated(config) or process is None or snapshot is None or solution is None or solution == "_SNAPSHOT_" or transfer_target is None:
         return 3_600_000, True, "", dash.no_update, None, None
@@ -637,7 +640,8 @@ def check_start_transfer(_, __, lot: str, new_lotname: str, orders: list[str] | 
     is_start_command = "lotplanning-transfer-start" in changed
     if is_start_command:
         orders = orders if not isinstance(orders, str) else [orders]
-        success: str|None = start_transfer0(lot, new_lotname, orders, snapshot, process, solution, transfer_target) if orders is not None and len(orders) > 0 else None
+        update_snap: bool = len(update_snap_check) > 0
+        success: str|None = start_transfer0(lot, new_lotname, orders, snapshot, process, solution, transfer_target, update_snap) if orders is not None and len(orders) > 0 else None
         if success is not None:
             return 1_000, True, "Transfer active", success, transfer_alert_msg, transfer_alert_type
         else:
@@ -645,7 +649,7 @@ def check_start_transfer(_, __, lot: str, new_lotname: str, orders: list[str] | 
     return 3_600_000, btn_disabled, btn_title, dash.no_update, transfer_alert_msg, transfer_alert_type
 
 
-def start_transfer0(lot_id: str, new_lotname: str, orders: list[str], snapshot: datetime, process: str, solution: str, transfer_target: str) -> str|None:
+def start_transfer0(lot_id: str, new_lotname: str, orders: list[str], snapshot: datetime, process: str, solution: str, transfer_target: str, update_snap: bool) -> str|None:
     best_result: ProductionPlanning
     result: LotsOptimizationState = state.get_results_persistence().load(snapshot, process, solution)
     if result is None or result.best_solution is None:  # TODO error msg
@@ -662,17 +666,17 @@ def start_transfer0(lot_id: str, new_lotname: str, orders: list[str], snapshot: 
         return None
     if len(orders) != len(lot_obj.orders):
         lot_obj = lot_obj.copy(update={"orders": orders})
-    return transfer_internal(lot_obj, snapshot_obj, new_lotname, sink)
+    return transfer_internal(lot_obj, snapshot_obj, new_lotname, sink, update_snap)
 
 
-def transfer_internal(lot: Lot, snapshot: Snapshot, name: str, sink: LotSink) -> str|None:
+def transfer_internal(lot: Lot, snapshot: Snapshot, name: str, sink: LotSink, update_snap: bool) -> str|None:
     global lottransfer_thread
     global lottransfer_result
     if lottransfer_thread is not None:
         return None
     lottransfer_result = None
     identifier = str(uuid.uuid4())
-    lottransfer_thread = LotTransferThread(lot, snapshot, name, sink, identifier)
+    lottransfer_thread = LotTransferThread(lot, snapshot, name, sink, identifier, update_snap)
     lottransfer_thread.start()
     return identifier
 
@@ -708,13 +712,14 @@ clientside_callback(
 
 class LotTransferThread(threading.Thread):
 
-    def __init__(self, lot: Lot, snapshot: Snapshot, name: str, sink: LotSink, identifier: str):
+    def __init__(self, lot: Lot, snapshot: Snapshot, name: str, sink: LotSink, identifier: str, update_snap: bool):
         super().__init__(name=lottransfer_thread_name)
         self._lot = lot
         self._snapshot = snapshot
         self._name = name
         self._sink = sink
         self._identifier = identifier
+        self._update_snap = update_snap
         self._result = None
         self._error = None
 
@@ -732,7 +737,7 @@ class LotTransferThread(threading.Thread):
 
     def run(self):
         try:
-            result = state.transfer_lot(self._snapshot, self._sink, self._lot, self._name, update_snapshot=True)
+            result = state.transfer_lot(self._snapshot, self._sink, self._lot, self._name, update_snapshot=self._update_snap)
             # result = self._sink.transfer_new(self._lot, self._snapshot, external_id=self._name)
             result = "Successfully transferred: " + str(result) if result is not None else "Lot " + (self._name if self._name is not None else self._lot.id) + " successfully transferred"
             self._result = result

@@ -416,8 +416,8 @@ class LotsAllocator:
                 # for oid in g[1]: sol[oid].Lot = g
                 # TODO status?
                 # prepend LC_ to distinguish generated lots from pre-existing ones
-                lot: Lot = Lot(id="LC_" + plant.name_short + "." + f"{idx:02d}", equipment=plant_id, active=True,
-                               status=0, orders=g[1])
+                lot: Lot = Lot(id="LC_" + plant.name_short + "." + f"{idx:02d}", equipment=plant_id, active=False,
+                               status=1, orders=g[1])
                 lots.append(lot)
             # if target lot sizes are prescribed and we end up above the limit, then we try to split lots
             targets = self._targets.target_weight.get(plant_id)
@@ -513,7 +513,7 @@ class LotsAllocator:
                     current_weight = order.actual_weight
                     if sub_lot_weight + current_weight > max_lot and sub_lot_weight >= min_lot and sub_lot_weight > 0:
                         new_sub_lots.append(Lot(id=lot_prefix + "." + f"{idx + sub_lot_idx:02d}", orders=[o.id for o in current_lot],
-                                equipment=plant_id, active=True, status=0))
+                                equipment=plant_id, active=False, status=1))
                         sub_lot_idx += 1
                         current_lot = [order]
                         sub_lot_weight = current_weight
@@ -522,7 +522,7 @@ class LotsAllocator:
                         current_lot.append(order)
                 if len(current_lot) > 0:
                     new_sub_lots.append(Lot(id=lot_prefix + "." + f"{idx + sub_lot_idx:02d}", orders=[o.id for o in current_lot],
-                            equipment=plant_id, active=True, status=0))
+                            equipment=plant_id, active=False, status=1))
                 if len(new_sub_lots) > 1:
                     for l_idx in range(idx + 1, len(lots)):  # rename remaining lots
                         other_lot = lots[l_idx]

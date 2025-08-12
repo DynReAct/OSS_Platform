@@ -36,6 +36,7 @@ class FileLotSink(LotSink):
         filepath = os.path.join(self._folder, filename + ".json")
         with open(filepath, mode="w") as file:
             file.write(json_str)
+        return id
 
     def transfer_append(self, lot: Lot,
                         start_order: str,
@@ -49,4 +50,5 @@ class FileLotSink(LotSink):
         json_str = existing_lot.model_dump_json(exclude_none=True, exclude_unset=True)
         with open(filepath, mode="w") as file:
             file.write(json_str)
+        return existing_lot.id or lot.id
 

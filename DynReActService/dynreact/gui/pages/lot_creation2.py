@@ -1045,6 +1045,8 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
         col_def = {"field": field, "filter": filter_id, "filterParams": {"buttons": ["reset"]}}
         if field == "lots":
             col_def["filterParams"]["maxNumConditions"] = 50
+            # Only necessary in productive system => ?
+            col_def["filterParams"]["valueGetter"] = {"function": "filterFormat(params.data.lots)"}
         return col_def
 
     fields = [column_def_for_field(key, info) for key, info in snapshot_obj.orders[0].model_fields.items() if (key not in ["material_properties", "lot", "lot_position" ])] + \

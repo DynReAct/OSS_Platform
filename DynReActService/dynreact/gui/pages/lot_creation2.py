@@ -2030,14 +2030,14 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
         changed_plants = [plant for plant, c in component_by_plant.items() if
                           c.get("props").get("children").get("props").get("value") != c.get("props").get("data-default")
                           and plant_active[plant]]
-        predecessor_components = {plant: next(c for c in components if c.get("props").get("className") == "lots2-order-lots-prevlot") for plant, components in components_by_plant.items()}
+        predecessor_components: dict[int, Component|None] = {plant: next((c for c in components if c.get("props").get("className") == "lots2-order-lots-prevlot"), None) for plant, components in components_by_plant.items()}
         predecessor_lots: dict[int, str] = {p: lot for p, lot  in {p: _selected_dropdown_value(c) for p, c in predecessor_components.items()}.items() if lot is not None}
         return ProductionTargets(process=process, target_weight=targets, period=period), len(changed_plants) > 0, predecessor_lots, message
     except ValueError as e:
         traceback.print_exc()
         return None, False, None, str(e)
 
-def _selected_dropdown_value(c: dict) -> str | None:
+def _selected_dropdown_value(c: dict|None) -> str | None:
     if c is None or "props" not in c:
         return None
     props = c.get("props").get("children").get("props")

@@ -65,7 +65,7 @@ def layout(*args, **kwargs):
                 columnSizeOptions={"defaultMinWidth": 125},
                 columnSize="responsiveSizeToFit",
                 dashGridOptions={"rowSelection": "single", "domLayout": "autoHeight"},
-                style={"height": None}
+                style={"height": None},
                 ## tooltipField is not used, but it must match an existing field for the tooltip to be shown
                 #defaultColDef={"tooltipComponent": "CoilsTooltip", "tooltipField": "id"},
                 #dashGridOptions={"rowSelection": "multiple", "suppressRowClickSelection": True, "animateRows": False,
@@ -116,7 +116,7 @@ def layout(*args, **kwargs):
                     columnDefs=[{"field": "order", "pinned": True},
                                 {"field": "lot"}],
                     # defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
-                    dashGridOptions={"tooltipShowDelay": 250, "rowSelection": "single"},
+                    dashGridOptions={"tooltipShowDelay": 250, }, #  "rowSelection": "single"},
                     rowData=[],
                     getRowId="params.data.order",
                     className="ag-theme-alpine",  # ag-theme-alpine-dark
@@ -124,6 +124,18 @@ def layout(*args, **kwargs):
                     style={"margin-bottom": "10em"},
                     columnSizeOptions={"defaultMinWidth": 125},
                     columnSize="responsiveSizeToFit",
+                    getRowStyle={
+                        "styleConditions": [{
+                            "condition": "params.data.predecessorLot",
+                            "style": {"backgroundColor": "sandybrown"},
+                        }, {
+                            "condition": "params.data.lotStart",
+                            "style": {"backgroundColor": "lightblue"},
+                        }, {
+                            "condition": "params.data.unassigned",
+                            "style": {"backgroundColor": "rgba(230, 230, 230)"},
+                        }]
+                    }
                 )
             )
         ], id="planning-lots-table-wrapper", hidden=True),
@@ -226,7 +238,7 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
     if snapshot is None or process is None:
         return col_defs, []
     persistence = state.get_results_persistence()
-    solutions: list[str] = persistence.solutions(snapshot, process)
+    solutions: list[str] = sorted(persistence.solutions(snapshot, process), reverse=True)
     sol_objects: dict[str, LotsOptimizationState] = {sol: persistence.load(snapshot, process, sol) for sol in solutions}
     snap_planning, snap_targets = state.get_snapshot_solution(process, snapshot)
     snap_objective: ObjectiveFunction = state.get_cost_provider().process_objective_function(snap_planning)
@@ -310,12 +322,15 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         if result is None or result.best_solution is None:
             return True, None, None, True, None, None, None, None, True
         best_result = result.best_solution
-    lots: list[Lot] = [lot for plant_lots in best_result.get_lots().values() for lot in plant_lots]
-    unassigned_order_ids: list[str] = [ass.order for ass in best_result.order_assignments.values() if ass.lot == ""]
     site = state.get_site()
     plants = {p.id: p for p in site.equipment}
+    lots: list[Lot] = sorted([lot for plant_lots in best_result.get_lots().values() for lot in plant_lots],
+                             key=lambda lot: (plants.get(lot.equipment).name_short if lot.equipment in plants else "ZZ", lot.id))
+    unassigned_order_ids: list[str] = [ass.order for ass in best_result.order_assignments.values() if ass.lot == ""]
     snap_obj = state.get_snapshot(snapshot)
     orders_by_lot: dict[str, list[Order|None]] = {}
+    predecessor_orders: dict[int, str]|None = best_result.previous_orders
+    last_plant: int | None = None
     for lot in lots:
         lot_orders = [None for order in lot.orders]
         for order in snap_obj.orders:
@@ -328,6 +343,13 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
                     break
             except ValueError:
                 continue
+        if lot.equipment != last_plant:   # if known, prepend the start order for the lot
+            last_plant = lot.equipment
+            if predecessor_orders is not None and last_plant in predecessor_orders:
+                start_order_id = predecessor_orders[last_plant]
+                start_order = snap_obj.get_order(start_order_id) if start_order_id is not None else None
+                if start_order is not None and start_order.lots is not None and process in start_order.lots:
+                    orders_by_lot[start_order.lots[process]] = [start_order]
         orders_by_lot[lot.id] = lot_orders
     unassigned_orders: dict[str, Order] = {}
     for order in snap_obj.orders:
@@ -390,10 +412,9 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
                 {"field": "priority", "headerTooltip": "Order priority."}] + \
              [column_def_for_field(key, info) for key, info in fields_0.items()]
 
-    last_plant: int|None = None
-    last_order: Order|None = None
+    last_plant = None
+    last_order: Order | None = None
     plant_obj: Equipment|None = None
-    predecessor_orders: dict[int, str]|None = best_result.previous_orders
 
     def order_to_json(o: Order, lot: str|None):
         nonlocal last_plant
@@ -409,21 +430,26 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         if o.current_equipment is not None:
             as_dict["equipment"] = ", ".join([plants[p].name_short or str(plants[p]) for p in o.current_equipment])
         if lot is None:
+            as_dict["unassigned"] = True
             return as_dict
-        lot_obj = next(l for l in lots if l.id == lot)
-        plant: int = lot_obj.equipment
-        if plant == last_plant:
-            tr_costs = costs.transition_costs(plant_obj, last_order, o)
-            as_dict["costs"] = tr_costs
+        lot_obj = next((l for l in lots if l.id == lot), None)
+        if lot_obj is not None:  # none for predecessor orders added above
+            plant: int = lot_obj.equipment
+            if plant == last_plant:
+                tr_costs = costs.transition_costs(plant_obj, last_order, o)
+                as_dict["costs"] = tr_costs
+            else:
+                as_dict["lotStart"] = True
+                plant_obj = plants[plant]
+                if predecessor_orders is not None and plant in predecessor_orders:
+                    start_order_id = predecessor_orders[plant]
+                    start_order = snap_obj.get_order(start_order_id) if start_order_id is not None else None
+                    if start_order is not None:
+                        tr_costs = costs.transition_costs(plant_obj, start_order, o)
+                        as_dict["costs"] = tr_costs
+            last_plant = plant
         else:
-            plant_obj = plants[plant]
-            if predecessor_orders is not None and plant in predecessor_orders:
-                start_order_id = predecessor_orders[plant]
-                start_order = snap_obj.get_order(start_order_id) if start_order_id is not None else None
-                if start_order is not None:
-                    tr_costs = costs.transition_costs(plant_obj, start_order, o)
-                    as_dict["costs"] = tr_costs
-        last_plant = plant
+            as_dict["predecessorLot"] = True
         last_order = o
         return as_dict
 

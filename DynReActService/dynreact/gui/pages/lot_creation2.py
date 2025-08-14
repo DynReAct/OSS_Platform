@@ -1043,6 +1043,8 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
             "agDateColumnFilter" if info.annotation == datetime or info.annotation == date else \
                 "agTextColumnFilter"
         col_def = {"field": field, "filter": filter_id, "filterParams": {"buttons": ["reset"]}}
+        if field == "lots":
+            col_def["filterParams"]["maxNumConditions"] = 50
         return col_def
 
     fields = [column_def_for_field(key, info) for key, info in snapshot_obj.orders[0].model_fields.items() if (key not in ["material_properties", "lot", "lot_position" ])] + \

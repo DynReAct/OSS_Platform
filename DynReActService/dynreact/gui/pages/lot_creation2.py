@@ -856,9 +856,10 @@ def init_method_changed(method: Literal["active_process", "active_plant", "inact
     Output("lots2-init-prev-proc-selector_lot", "value"),
     Output("lots2-init-prev-proc-selector_all", "options"),
     Output("lots2-init-prev-proc-selector_all", "value"),
-    Input("lots2-process-selector", "value")
+    Input("lots2-process-selector", "value"),
+    Input("lots2-orders-init-method", "value")  # this one is not really needed, but for some reason the initial callback does not work here
 )
-def set_predecessor_procs_for_backlog_init(process: str|None):
+def set_predecessor_procs_for_backlog_init(process: str|None, _):
     if not process or not dash_authenticated(config):
         return [], [], [], []
     predecessors = _find_predecessor_processes(process, skip_self=True)
@@ -875,7 +876,7 @@ def set_predecessor_procs_for_backlog_init(process: str|None):
     return options, selected_lot, list(options), selected_all
 
 
-def _find_predecessor_processes(process: str|None, skip_self: bool=False) -> list[Process]:
+def _find_predecessor_processes(process: str|None, recursive: bool = True, skip_self: bool=False) -> list[Process]:
     if not process:
         return []
     site = state.get_site()
@@ -891,6 +892,8 @@ def _find_predecessor_processes(process: str|None, skip_self: bool=False) -> lis
                             proc not in predecessors and
                             next((p for p in proc.next_steps if p in proc_names), None) is not None]
         predecessors.extend(new_predecessors)
+        if not recursive:
+            break
     if skip_self:
         predecessors.pop(0)
     return predecessors
@@ -922,7 +925,7 @@ def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] 
         return no_update, no_update, no_update
     update_selection: bool = selected_processes is None or process_changed or (order_data is not None and order_data.get("snapshot") != snapshot_serialized)
     if update_selection:
-        selected_processes = [process]
+        selected_processes = [p.name_short for p in _find_predecessor_processes(process, recursive=False, skip_self=False)]
     snapshot_provider: SnapshotProvider = state.get_snapshot_provider()
     hide_released_lots: bool = "hide_released" in check_hide_list
     site = state.get_site()

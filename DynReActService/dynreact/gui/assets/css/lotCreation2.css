@@ -240,14 +240,13 @@
 .lots2-orders-selection-overview {
     display: flex;
     flex-wrap: nowrap;
-    column-gap: 0.5em;
     align-items: center;
 }
 
 .lots2-orders-structure-flex {
     display: flex;
     column-gap: 4em;
-    align-items: center;
+    align-items: flex-start;
 }
 
 .lots2-orders-structure-subflex {

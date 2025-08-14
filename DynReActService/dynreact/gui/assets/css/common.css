@@ -22,6 +22,10 @@ gap-1 {
     column-gap: 1em;
 }
 
+.left-space {
+    margin-left: 0.5em;
+}
+
 /*
 * Control panel of the form
 * <div class=control-panel>

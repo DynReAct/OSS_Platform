@@ -7,10 +7,6 @@
         return JsUtils.format(obj, numDigits);
     }
 
-    aggrid_functions.filterFormat = function(obj) {
-        return obj ? JSON.stringify(obj) : "";
-    }
-
     globalThis.dynreact = Object.assign({}, globalThis.dynreact, {_site: undefined, _snapshot: undefined});
     const dynreact = globalThis.dynreact;
     dynreact.getSite = () => dynreact._site;

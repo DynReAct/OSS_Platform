@@ -488,14 +488,17 @@ def toggle_settings_tabs_visibility(snapshot: str|datetime|None, process: str|No
           Input("lots2-tabbutton-settings", "n_clicks"),
           Input("lots2-tabsnav-prev", "n_clicks"),
           Input("lots2-tabsnav-next", "n_clicks"),
+          Input("lots2-process-selector", "value"),
 )
-def select_settings_tab(active_tab: Literal["targets", "orders", "settings"]|None,  _, __, ___, ____, _v) -> Literal["targets", "orders", "settings"]:
+def select_settings_tab(active_tab: Literal["targets", "orders", "settings"]|None,  _, __, ___, ____, _v, v) -> Literal["targets", "orders", "settings"]:
     if not dash_authenticated(config):
         return None
     changed_ids: list[str] = GuiUtils.changed_ids(excluded_ids=[""])
     if len(changed_ids) == 0:  # initial callback
         return active_tab  # must not return no_update here, because it blocks dependent callbacks
     button_id = next((bid for bid in changed_ids if bid.startswith("lots2-tabbutton-")), None)
+    if button_id is None and "lots2-process-selector" in changed_ids:
+        button_id = "lots2-tabbutton-targets"
     new_active_tab: Literal["targets", "orders", "settings"] = "targets"
     if button_id is not None:
         new_active_tab = button_id[len("lots2-tabbutton-"):]
@@ -900,9 +903,9 @@ def _find_predecessor_processes(process: str|None, skip_self: bool=False) -> lis
     Input("lots2-oders-lots-processes", "value"),
     Input("lots2-orders-data", "data"),
     Input("lots2-active-tab", "data"),
-Input("lots2-check-hide-released-lots", "value"),
+    Input("lots2-check-hide-released-lots", "value"),
     # Input("create-details-trigger", "n_clicks"), # => TODO replace maybe by tab state?
-    State("lots2-process-selector", "value"),
+    Input("lots2-process-selector", "value"),
     State("selected-snapshot", "data")
 )
 def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] | None, active_tab: Literal["targets", "orders", "settings"]|None,
@@ -914,10 +917,10 @@ def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] 
     snapshot_obj = state.get_snapshot(snapshot)
     if snapshot_obj is None or len(snapshot_obj.orders) == 0:
         return {}, None, {}
-    if active_tab != "orders":
+    process_changed = "lots2-process-selector" in GuiUtils.changed_ids()
+    if active_tab != "orders" and not process_changed:
         return no_update, no_update, no_update
-    update_selection: bool = selected_processes is None or order_data is None or order_data.get("process") != process \
-                             or order_data.get("snapshot") != snapshot_serialized
+    update_selection: bool = selected_processes is None or process_changed or (order_data is not None and order_data.get("snapshot") != snapshot_serialized)
     if update_selection:
         selected_processes = [process]
     snapshot_provider: SnapshotProvider = state.get_snapshot_provider()
@@ -1045,8 +1048,6 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
         col_def = {"field": field, "filter": filter_id, "filterParams": {"buttons": ["reset"]}}
         if field == "lots":
             col_def["filterParams"]["maxNumConditions"] = 50
-            # Only necessary in productive system => ?
-            col_def["filterParams"]["valueGetter"] = {"function": "filterFormat(params.data.lots)"}
         return col_def
 
     fields = [column_def_for_field(key, info) for key, info in snapshot_obj.orders[0].model_fields.items() if (key not in ["material_properties", "lot", "lot_position" ])] + \
@@ -1060,7 +1061,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
             field["headerName"] = "Id"
             field["checkboxSelection"] = True
             # field["headerCheckboxSelection"] = True # This option is difficult to understand: it also selects rows which are currently hidden
-        if field["field"] in ["lots", "lot_positions", "active_processes", "coil_status", "follow_up_processes", "material_status",
+        if field["field"] in ["active_processes", "coil_status", "follow_up_processes", "material_status",
                              "actual_weight", "material_classes"]:
             field["valueFormatter"] = value_formatter_object
         if field["field"] == "current_equipment":
@@ -1071,9 +1072,9 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
 
     def order_to_json(o: Order):
         as_dict = o.model_dump(exclude_none=True, exclude_unset=True)
-        # for key in ["lots", "lot_positions"]:
-        #    if key in as_dict:
-        #        as_dict[key] = json.dumps(as_dict[key])
+        for key in ["lots", "lot_positions"]:
+            if key in as_dict:
+                as_dict[key] = json.dumps(as_dict[key])
         if o.allowed_equipment is not None:
             as_dict["allowed_equipment"] = [plants[p].name_short if p in plants else str(p) for p in o.allowed_equipment]
         if o.current_equipment is not None:

@@ -38,10 +38,6 @@ class CostProvider:
         """
         return 0
 
-    def start_costs(self, equipment: Equipment, order: Order, material: Material|None=None) -> float:
-        """Overwrite to define start costs for individual equipment"""
-        return 0
-
     def evaluate_order_assignments(self, process: str, assignments: dict[str, OrderAssignment], targets: ProductionTargets,
                                    snapshot: Snapshot, total_priority: int|None = None, orders_custom_priority: dict[str, int]|None=None,
                                    previous_orders: dict[int, str]|None = None) -> ProductionPlanning:

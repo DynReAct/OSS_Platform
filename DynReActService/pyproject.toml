@@ -61,9 +61,9 @@ dynreact_midtermplanning = { path = "../MidTermPlanning", develop = true }
 dynreact_plugin_sampleuc = { path = "../SampleUseCase", develop = true }
 dynreact-shortterm = { path = "../ShortTermPlanning", develop = true }
 
-dynreact-ltp_ras = { path = "../../LongTermPlanning", optional = true }
-dynreact-plugin_ras = { path = "../../LotCreationRas", optional = true }
-dynreact-stp_gui_ras = { path = "../../ShortTermRAS", optional = true }
+dynreact-ltp_ras = { path = "./LongTermPlanning", optional = true }
+dynreact-plugin_ras = { path = "./LotCreationRas", optional = true }
+dynreact-stp_gui_ras = { path = "./ShortTermRAS", optional = true }
 
 # Commented by JOM on 20250703
 # because it get hiddens some modules such as dynreact.stp_gui_ras
@@ -72,6 +72,6 @@ dynreact-stp_gui_ras = { path = "../../ShortTermRAS", optional = true }
 ras = ["dynreact-ltp_ras", "dynreact-plugin_ras", "dynreact-stp_gui_ras"]
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 

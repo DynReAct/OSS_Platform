@@ -11,7 +11,7 @@ cd /workspace
 # Poetry
 #######
 
-poetry init --no-interaction --name OSS_Plataform --python "^3.12"
+poetry init --package-mode false --no-interaction --name OSS_Plataform --python "^3.12"
 poetry install --no-root
 eval $(poetry env activate)
 

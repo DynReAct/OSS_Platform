@@ -464,7 +464,7 @@ class TestMaterial(Model):
     material_id: str
 
 
-class InterruptionTestListener(OptimizationListener):  # FIXME this does not work because local functions cannot be pickled => we need to avoid passing the listener to the optimization processses
+class InterruptionTestListener(OptimizationListener):
 
     def __init__(self, test_function: Callable[[ProductionPlanning, ObjectiveFunction], None]):
         super().__init__()

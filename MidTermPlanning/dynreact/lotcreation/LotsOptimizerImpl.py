@@ -325,9 +325,6 @@ class TabuSearch(LotsOptimizer):
         #    objective_value = self._costs.process_objective_function(best_solution)
         return swpbest, best_solution, objective_value
 
-    def assign_lots(self, order_plant_assignments: dict[str, int]) -> dict[int, list[Lot]]:
-        return self._allocator.assign_lots(order_plant_assignments)
-
     def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot,
                                 current_material: Any | None = None, next_material: Any | None = None,
                                 orders_custom_priority: dict[str, int] | None = None) -> tuple[EquipmentStatus, ObjectiveFunction]:
@@ -371,87 +368,135 @@ class LotsAllocator:
         for plant_id in plant_ids:
             if plant_id < 0:
                 continue
-            plant: Equipment = self._plants[plant_id]
             order_ids: list[str] = [o for o, plant in order_plant_assignments.items() if plant == plant_id]
             orders: list[Order] = [self._orders[o] if self._orders is not None else self._snapshot.get_order(o, do_raise=True) for o in order_ids]
-            sz: int = len(order_ids)
-
-            sTM = np.array(
-                [[self._costs.transition_costs(plant, o1, o2) for o2 in orders] for o1 in orders]
-            )
-            sTM[np.isnan(sTM)] = self._params.CostNaN
-            G = nx.DiGraph(sTM) if len(sTM) > 0 else nx.DiGraph()
-            # connection order consideration
-            sT0 = None
-            if self._previous_orders is not None:
-                prev_order: str = self._previous_orders.get(plant_id)
-                if prev_order is not None:
-                    prev_obj = self._orders[prev_order] if self._orders is not None else self._snapshot.get_order(
-                        prev_order, do_raise=True)
-                    sT0 = np.array([self._costs.transition_costs(plant, prev_obj, order) for order in orders])
-                    sT0[np.isnan(sT0)] = 50
-            spath = lcor.path_converingOR(sTM, sT0)
-            dict_subgraph = {}
-            pos = 0
-            sc = 0
-            for i in range(sz - 1):
-                if self.create_new_lot_costs_based(sTM[spath[i]][spath[i + 1]]):
-                    dict_subgraph[sc] = (nx.subgraph(G, spath[pos:i + 1]), spath[pos:i + 1])
-                    pos = i + 1
-                    sc += 1
-
-            # last subpath
-            dict_subgraph[sc] = (nx.subgraph(G, spath[pos:sz]), spath[pos:sz])
-
-            # relabel graph nodes to orderIDs
-            # sll = list(sl.keys()) # = order_ids
-            # rlb = {i: sll[i] for i in range(sz)}
-            rlb = {i: order_ids[i] for i in range(sz)}
-            dict_subgraph = {i: (nx.relabel_nodes(k[0], rlb), list(map(lambda x: rlb[x], k[1]))) for i, k in
-                             dict_subgraph.items()}
-            # assign solution element to lot
-            lots: list[Lot] = []
-
-            for idx, g in enumerate(dict_subgraph.values()):
-                # for oid in g[1]: sol[oid].Lot = g
-                # TODO status?
-                # prepend LC_ to distinguish generated lots from pre-existing ones
-                lot: Lot = Lot(id="LC_" + plant.name_short + "." + f"{idx:02d}", equipment=plant_id, active=False,
-                               status=1, orders=g[1])
-                lots.append(lot)
+            # TODO
+            #lots = self.assign_lots_googleor(plant_id, orders)
+            lots = self.assign_lots_2opt(plant_id, orders)
             # if target lot sizes are prescribed and we end up above the limit, then we try to split lots
             targets = self._targets.target_weight.get(plant_id)
             if targets is not None and targets.lot_weight_range is not None:
                 min_lot, max_lot = targets.lot_weight_range
                 if max_lot is not None and max_lot > 0:
-                    LotsAllocator._adapt_lot_sizes(lots, orders, min_lot, max_lot, plant_id, "LC" + plant.name_short)
+                    LotsAllocator._adapt_lot_sizes(lots, orders, min_lot, max_lot, plant_id, "LC" + self._plants[plant_id].name_short)
             result[plant_id] = lots
-            # due_dates = [o.due_date for o in orders if o.due_date is not None]
-            # mdate = datetime(1, 1, 1) if len(due_dates) == 0 else min(due_dates)
-            # cclottot = sum([sTM[spath[i]][spath[i + 1]] for i in range(sz - 1)])
-            # handle setup coils
-            # if sz > 0 and sT0 is not None: cclottot += sT0[spath[0]]
 
-            # sval = SolutionValue(
-            #    len(dict_subgraph),
-            #    abs(p.WTarget - sum(map(lambda s: s.Order.Weight, sl.values()))),
-            #    mdate,
-            #    len(sl),
-            #    dict_subgraph,
-            #    sum(map(lambda sli: min(map(lambda pi: LM[p.ID][pi], sli.Order.CPlants)) if len(
-            #        sli.Order.CPlants) > 0 else 0, sl.values())),
-            #    CTabuSearch.CountCaps(dict_subgraph, sl),
-            #    cclottot,
-            #    CTabuSearch.CountCDiam(dict_subgraph, sl)
-            # )
-
-            # PSDict[plant_id] = sval
-            # delta += sval.DeltaW
-            # nlots += sval.NLots
         if self._base_lots is not None:  # in this case we only want to extend the existing lots
             addon = {p: lots[0] for p, lots in result.items()}
             result = {p: [self._adapt_base_lots(lot, addon.get(p, None))] for p, lot in self._base_lots.items()}
         return result
+
+    def assign_lots_2opt(self, plant_id: int, orders: list[Order]) -> list[Lot]:
+        order_ids: list[str] = [o.id for o in orders]
+        orders_by_id = {o.id: o for o in orders}
+        plant_targets = self._targets.target_weight.get(plant_id, EquipmentProduction(equipment=plant_id, total_weight=0))
+        dummy_lot = "LotDummy"
+
+        # TODO memoize between iterations!
+        memoized_costs: dict[str, float] = {}
+
+        def distance_function(route: np.ndarray, order_ids2: list[str]) -> float:
+            route_id: str = "_".join(str(idx) for idx in route)
+            if route_id in memoized_costs:   # never hits
+                return memoized_costs[route_id]
+            # TODO determine lots first!?
+            assignments = {order_ids[idx]: OrderAssignment(equipment=plant_id, order=order_ids[idx], lot=dummy_lot, lot_idx=counter+1) for counter, idx in enumerate(route)}
+            # TODO consider keyword parameters
+            status: EquipmentStatus = self._costs.evaluate_equipment_assignments(plant_targets, self._process, assignments, self._snapshot, self._targets.period)
+            costs = self._costs.objective_function(status).total_value
+            memoized_costs[route_id] = costs
+            return costs
+
+        from dynreact.lotcreation.Tsp2Opt import find_shortest_distance_2_opt
+        result = find_shortest_distance_2_opt(order_ids, distance_function=distance_function, improvement_threshold=0.01)
+
+        # convert result to lots
+        plant = self._plants[plant_id]
+        lot_count = 0
+        lot_orders: list[Order] = []
+        lots: list[Lot] = []
+        last_order: Order|None = None
+        for idx in result:
+            order: Order = orders_by_id[order_ids[idx]]
+            costs = 0 if last_order is None else self._costs.transition_costs(plant, last_order, order)
+            if self.create_new_lot_costs_based(costs):
+                lot: Lot = Lot(id="LC_" + plant.name_short + "." + f"{lot_count:02d}", equipment=plant_id, active=False, status=1,
+                                    orders=[o.id for o in lot_orders], weight=sum(o.actual_weight for o in lot_orders))
+                lots.append(lot)
+                lot_count += 1
+                lot_orders = []
+            lot_orders.append(order)
+        if len(lot_orders) > 0:
+            lots.append(Lot(id="LC_" + plant.name_short + "." + f"{lot_count:02d}", equipment=plant_id, active=False, status=1,
+                                    orders=[o.id for o in lot_orders], weight=sum(o.actual_weight for o in lot_orders)))
+        return lots
+
+    def assign_lots_googleor(self, plant_id: int, orders: list[Order]) -> list[Lot]:
+        plant: Equipment = self._plants[plant_id]
+        sz: int = len(orders)
+        sTM = np.array(
+            [[self._costs.transition_costs(plant, o1, o2) for o2 in orders] for o1 in orders]
+        )
+        sTM[np.isnan(sTM)] = self._params.CostNaN
+        G = nx.DiGraph(sTM) if len(sTM) > 0 else nx.DiGraph()
+        # connection order consideration
+        sT0 = None
+        if self._previous_orders is not None:
+            prev_order: str = self._previous_orders.get(plant_id)
+            if prev_order is not None:
+                prev_obj = self._orders[prev_order] if self._orders is not None else self._snapshot.get_order(
+                    prev_order, do_raise=True)
+                sT0 = np.array([self._costs.transition_costs(plant, prev_obj, order) for order in orders])
+                sT0[np.isnan(sT0)] = 50
+        spath = lcor.path_converingOR(sTM, sT0)
+        dict_subgraph = {}
+        pos = 0
+        sc = 0
+        for i in range(sz - 1):
+            if self.create_new_lot_costs_based(sTM[spath[i]][spath[i + 1]]):
+                dict_subgraph[sc] = (nx.subgraph(G, spath[pos:i + 1]), spath[pos:i + 1])
+                pos = i + 1
+                sc += 1
+
+        # last subpath
+        dict_subgraph[sc] = (nx.subgraph(G, spath[pos:sz]), spath[pos:sz])
+
+        # relabel graph nodes to orderIDs
+        # sll = list(sl.keys()) # = order_ids
+        # rlb = {i: sll[i] for i in range(sz)}
+        rlb = {i: orders[i].id for i in range(sz)}
+        dict_subgraph = {i: (nx.relabel_nodes(k[0], rlb), list(map(lambda x: rlb[x], k[1]))) for i, k in
+                         dict_subgraph.items()}
+        # assign solution element to lot
+        lots: list[Lot] = []
+
+        for idx, g in enumerate(dict_subgraph.values()):
+            # for oid in g[1]: sol[oid].Lot = g
+            # TODO status?
+            # prepend LC_ to distinguish generated lots from pre-existing ones
+            lot: Lot = Lot(id="LC_" + plant.name_short + "." + f"{idx:02d}", equipment=plant_id, active=False,
+                           status=1, orders=g[1])
+            lots.append(lot)
+        return lots
+        # due_dates = [o.due_date for o in orders if o.due_date is not None]
+        # mdate = datetime(1, 1, 1) if len(due_dates) == 0 else min(due_dates)
+        # cclottot = sum([sTM[spath[i]][spath[i + 1]] for i in range(sz - 1)])
+        # handle setup coils
+        # if sz > 0 and sT0 is not None: cclottot += sT0[spath[0]]
+
+        # sval = SolutionValue(
+        #    len(dict_subgraph),
+        #    abs(p.WTarget - sum(map(lambda s: s.Order.Weight, sl.values()))),
+        #    mdate,
+        #    len(sl),
+        #    dict_subgraph,
+        #    sum(map(lambda sli: min(map(lambda pi: LM[p.ID][pi], sli.Order.CPlants)) if len(
+        #        sli.Order.CPlants) > 0 else 0, sl.values())),
+        #    CTabuSearch.CountCaps(dict_subgraph, sl),
+        #    cclottot,
+        #    CTabuSearch.CountCDiam(dict_subgraph, sl)
+        # )
+
 
     def _adapt_base_lots(self, base_lot: Lot, addition: Lot | None):
         if addition is None:

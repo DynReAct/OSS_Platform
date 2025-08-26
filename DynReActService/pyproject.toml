@@ -45,3 +45,4 @@ package-dir = {"" = "."}
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
+optional-dependencies = { file = ["requirements-dev.txt"]}

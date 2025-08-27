@@ -365,17 +365,19 @@ class LotsAllocator:
         # remember the plants involved here
         plant_ids: set[int] = set(order_plant_assignments.values())
         result: dict[int, list[Lot]] = {}
+        global_costs = self._costs.path_dependent_costs(self._process)
         for plant_id in plant_ids:
             if plant_id < 0:
                 continue
             order_ids: list[str] = [o for o, plant in order_plant_assignments.items() if plant == plant_id]
             orders: list[Order] = [self._orders[o] if self._orders is not None else self._snapshot.get_order(o, do_raise=True) for o in order_ids]
-            #lots: list[Lot] = self.assign_lots_googleor(plant_id, orders)
-            #new_order_ids: list[str] = [o for lot in lots for o in lot.orders]
-            #orders_by_id: dict[str, Order] = {o.id: o for o in orders}
-            #new_orders = [orders_by_id[o] for o in new_order_ids]
-            #lots = self.assign_lots_2opt(plant_id, new_orders)
-            lots = self.assign_lots_2opt(plant_id, orders)
+            lots: list[Lot] = self.assign_lots_googleor(plant_id, orders)
+            if global_costs and len(orders) < 25:
+                new_order_ids: list[str] = [o for lot in lots for o in lot.orders]
+                orders_by_id: dict[str, Order] = {o.id: o for o in orders}
+                orders = [orders_by_id[o] for o in new_order_ids]
+                # brute force ordering based on global costs;
+                lots = self.assign_lots_bf(plant_id, orders)
             # if target lot sizes are prescribed and we end up above the limit, then we try to split lots
             targets = self._targets.target_weight.get(plant_id)
             if targets is not None and targets.lot_weight_range is not None:
@@ -389,50 +391,46 @@ class LotsAllocator:
             result = {p: [self._adapt_base_lots(lot, addon.get(p, None))] for p, lot in self._base_lots.items()}
         return result
 
-    def assign_lots_2opt(self, plant_id: int, orders: list[Order]) -> list[Lot]:
-        order_ids: list[str] = [o.id for o in orders]
-
-        orders_by_id = {o.id: o for o in orders}
+    def assign_lots_bf(self, plant_id: int, orders: list[Order]) -> list[Lot]:
+        plant = self._plants[plant_id]
         plant_targets = self._targets.target_weight.get(plant_id, EquipmentProduction(equipment=plant_id, total_weight=0))
+        costs = self._costs
         dummy_lot = "LotDummy"
+        transition_costs = np.array([[self._costs.transition_costs(plant, o1, o2) for o2 in orders] for o1 in orders])
+        start_costs=None
+        if self._previous_orders is not None and plant_id in self._previous_orders:
+            prev_order: str = self._previous_orders.get(plant_id)
+            prev_obj = self._orders[prev_order] if self._orders is not None else self._snapshot.get_order(prev_order, do_raise=True)
+            start_costs = np.array([self._costs.transition_costs(plant, prev_obj, order) for order in orders])
+            start_costs[np.isnan(start_costs)] = 50
 
-        # TODO memoize between iterations!
-        memoized_costs: dict[str, float] = {}
-
-        def distance_function(route: np.ndarray, order_ids2: list[str]) -> float:
-            route_id: str = "_".join(str(idx) for idx in route)
-            if route_id in memoized_costs:
-                return memoized_costs[route_id]
-            assignments = {order_ids[idx]: OrderAssignment(equipment=plant_id, order=order_ids[idx], lot=dummy_lot, lot_idx=counter+1) for counter, idx in enumerate(route)}
+        def global_costs(route: tuple[int, ...], trans_costs: float) -> float:   # TODO avoid recalculating transition costs?
+            assignments = {orders[idx].id: OrderAssignment(equipment=plant_id, order=orders[idx].id, lot=dummy_lot, lot_idx=counter+1) for counter, idx in enumerate(route)}
             # TODO consider other keyword parameters
             status: EquipmentStatus = self._costs.evaluate_equipment_assignments(plant_targets, self._process, assignments, self._snapshot, self._targets.period,
-                                                                                 previous_order=self._previous_orders.get(plant_id) if self._previous_orders is not None else None)
-            costs = self._costs.objective_function(status).total_value
-            memoized_costs[route_id] = costs
-            return costs
+                                                                    previous_order=self._previous_orders.get(plant_id) if self._previous_orders is not None else None)
+            result = costs.objective_function(status).total_value
+            return result
 
-        from dynreact.lotcreation.Tsp2Opt import find_shortest_distance_2_opt
-        result = find_shortest_distance_2_opt(order_ids, distance_function=distance_function, improvement_threshold=0.01)
-
-        # convert result to lots
-        plant = self._plants[plant_id]
+        from dynreact.lotcreation.global_tsp_bf import solve
+        route, costs0 = solve(transition_costs, global_costs, start_costs=start_costs, time_limit=1)  # TODO time limit configurable?
         lot_count = 0
         lot_orders: list[Order] = []
         lots: list[Lot] = []
-        last_order: Order|None = None
-        for idx in result:
-            order: Order = orders_by_id[order_ids[idx]]
+        last_order: Order | None = None
+        for idx in route:
+            order: Order = orders[idx]
             costs = 0 if last_order is None else self._costs.transition_costs(plant, last_order, order)
             if self.create_new_lot_costs_based(costs):
-                lot: Lot = Lot(id="LC_" + plant.name_short + "." + f"{lot_count:02d}", equipment=plant_id, active=False, status=1,
-                                    orders=[o.id for o in lot_orders], weight=sum(o.actual_weight for o in lot_orders))
+                lot: Lot = Lot(id="LC_" + plant.name_short + "." + f"{lot_count:02d}", equipment=plant_id, active=False,
+                               status=1, orders=[o.id for o in lot_orders], weight=sum(o.actual_weight for o in lot_orders))
                 lots.append(lot)
                 lot_count += 1
                 lot_orders = []
             lot_orders.append(order)
         if len(lot_orders) > 0:
             lots.append(Lot(id="LC_" + plant.name_short + "." + f"{lot_count:02d}", equipment=plant_id, active=False, status=1,
-                                    orders=[o.id for o in lot_orders], weight=sum(o.actual_weight for o in lot_orders)))
+                    orders=[o.id for o in lot_orders], weight=sum(o.actual_weight for o in lot_orders)))
         return lots
 
     def assign_lots_googleor(self, plant_id: int, orders: list[Order]) -> list[Lot]:

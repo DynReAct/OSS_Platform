@@ -238,6 +238,12 @@ class CostProvider:
     def optimum_possible_costs(self, process: str, num_plants: int):
         return 0
 
+    def path_dependent_costs(self, process: str) -> bool:
+        """
+        Overwrite in subclass if the optimal sorting of orders depends on global/path-dependent costs.
+        """
+        return False
+
     def relevant_fields(self, equipment: Equipment) -> None|list[str]:
         """
         Optional method, for display purposes only. To be overridden in derived class.

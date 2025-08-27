@@ -273,8 +273,6 @@ class OptimizationTest(unittest.TestCase):
         optimization_state: LotsOptimizationState = optimization.run(max_iterations=25)
         listener.check()
 
-
-
     def test_lot_creation_with_lot_weight_range(self):
         process = "testProcess"
         process_id = 0
@@ -283,7 +281,6 @@ class OptimizationTest(unittest.TestCase):
         plants = [Equipment(id=p, name_short="Plant" + str(p), process=process) for p in range(num_plants)]
         test_site = Site(processes=[Process(name_short=process, process_ids=[process_id])], equipment=plants, storages=[], material_categories=[])
         orders = [OptimizationTest._create_order("order" + str(o), range(num_plants), 10) for o in range(num_orders)]  # each order weighs 10t here
-        # a->b has high transition costs, and c->b is slightly more expensive than b->c, so without the start cond. the order b->c would be preferred
         transition_costs = {o1.id: {o2.id: 1 for o2 in orders if o2.id != o1.id} for o1 in orders}  # all transition costs = 1
         costs = SimpleCostProvider("simple:costs", test_site, transition_costs, minimum_possible_costs=1, missing_weight_costs=100, surplus_weight_costs=100)
         p_id = plants[0].id

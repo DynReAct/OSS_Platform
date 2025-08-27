@@ -5,12 +5,10 @@ import numpy as np
 
 
 class _GlobalCostsTspSolver:
-    """
-    Note: this algorithm is most effective if a good starting position is provided
-    """
 
     def __init__(self, transition_costs: np.ndarray, global_costs: Callable[[tuple[int, ...], float], float], start_costs: np.ndarray|None=None,
                  initial_paths: tuple[tuple[int, ...], ...] | None = None, init_nearest_neighbours: bool = True,
+                 bound_factor_upcoming_costs: float = 0,
                  time_limit: float|None = None
                  ):
         self._transition_costs = transition_costs if isinstance(transition_costs, np.ndarray) else np.array(transition_costs)
@@ -24,6 +22,18 @@ class _GlobalCostsTspSolver:
         self._time_limit = time_limit
         self._iteration_cnt: int = 0
         self._start_time = None
+        self._lower_mean_transition = np.zeros(self._num)
+        self._bound_factor_upcoming_costs = bound_factor_upcoming_costs
+        self._use_bound_estimation: bool = bound_factor_upcoming_costs > 0
+        if self._num > 2 and self._use_bound_estimation:
+            half = int(np.round(self._num/2))
+            for i in range(self._num):
+                tc = transition_costs[[idx for idx in range(self._num) if idx != i], i]
+                med = np.median(tc)
+                sorted_tcs = np.sort([c for c in tc if c <= med])
+                sorted_tcs = sorted_tcs[:half]
+                mn = np.mean(sorted_tcs)
+                self._lower_mean_transition[i] = mn
 
     def find_shortest_path(self) -> tuple[tuple[int, ...], float]:
         """
@@ -40,13 +50,18 @@ class _GlobalCostsTspSolver:
                 if costs < self._best_costs:
                     self._best_costs = costs
                     self._best_path = path
-        if self._init_nearest_neighbors:  #  a heuristic initialization aimed at eliminating a lot of worse paths quickly
+        if self._init_nearest_neighbors:  #  a heuristic initialization
             self._evaluate_nearest_neighbor_route()
         for idx in range(self._num):
             transition_costs: float = self._start_costs[idx]
             start_route = (idx, )
             if transition_costs >= self._best_costs:
                 continue
+            if self._use_bound_estimation:
+                other_costs = sum(self._lower_mean_transition[j] for j in range(self._num) if j != idx)
+                estimated_costs = transition_costs + self._bound_factor_upcoming_costs * other_costs
+                if estimated_costs >= self._best_costs:
+                    continue
             self.find_shortest_subpath(start_route, transition_costs)
         return self._best_path, self._best_costs
 
@@ -69,6 +84,11 @@ class _GlobalCostsTspSolver:
                     self._best_costs = global_costs
                     self._best_path = new_route
             else:
+                if self._use_bound_estimation:
+                    other_costs = np.sum(self._lower_mean_transition[open_positions])
+                    estimated_costs = trans_costs + self._bound_factor_upcoming_costs * other_costs
+                    if estimated_costs >= self._best_costs:
+                        continue
                 self.find_shortest_subpath(new_route, trans_costs)
 
     def _evaluate_path(self, route: tuple[int, ...]) -> float:
@@ -117,6 +137,7 @@ def solve(transition_costs: np.ndarray|Sequence[Sequence[float]],
           start_costs: np.ndarray|Sequence[float]|None=None,
           initial_paths: tuple[tuple[int, ...], ...]|None=None,
           init_nearest_neighbours: bool=False,
+          bound_factor_upcoming_costs: float = 0,
           time_limit: float | None = None) -> tuple[tuple[int, ...], float]:
     """
     Parameters:
@@ -127,10 +148,13 @@ def solve(transition_costs: np.ndarray|Sequence[Sequence[float]],
         start_costs: a 1D vector
         initial_paths: a set of known good approximations
         init_nearest_neighbours: use a heuristic initialization?
+        bound_factor_upcoming_costs: a factor between 0 (default) and 1. If 0, it is guaranteed that the best solution will be found,
+            otherwise upcoming costs for a route will be estimated (and multiplied by this factor) and if they exceed a threshold the path will be abandoned
         time_limit: set a time limit (in s). If set, the optimal solution is not guaranteed to be found.
     """
     return _GlobalCostsTspSolver(transition_costs, global_costs, start_costs=start_costs,
                                  initial_paths=initial_paths, init_nearest_neighbours=init_nearest_neighbours,
+                                 bound_factor_upcoming_costs=bound_factor_upcoming_costs,
                                  time_limit=time_limit).find_shortest_path()
 
 

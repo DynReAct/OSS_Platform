@@ -332,6 +332,9 @@ class TabuSearch(LotsOptimizer):
         return self._costs.update_transition_costs(plant, current, next, status, snapshot, new_lot, current_material=current_material,
                                                    next_material=next_material, orders_custom_priority=orders_custom_priority)
 
+    def assign_lots(self, order_plant_assignments: dict[str, int]) -> dict[int, list[Lot]]:
+        return self._allocator.assign_lots(order_plant_assignments)
+
 
 class LotsAllocator:
     """
@@ -372,7 +375,7 @@ class LotsAllocator:
             order_ids: list[str] = [o for o, plant in order_plant_assignments.items() if plant == plant_id]
             orders: list[Order] = [self._orders[o] if self._orders is not None else self._snapshot.get_order(o, do_raise=True) for o in order_ids]
             lots: list[Lot] = self.assign_lots_googleor(plant_id, orders)
-            if global_costs and len(orders) < 25:
+            if global_costs and len(orders) <= 50:
                 new_order_ids: list[str] = [o for lot in lots for o in lot.orders]
                 orders_by_id: dict[str, Order] = {o.id: o for o in orders}
                 orders = [orders_by_id[o] for o in new_order_ids]
@@ -392,6 +395,7 @@ class LotsAllocator:
         return result
 
     def assign_lots_bf(self, plant_id: int, orders: list[Order]) -> list[Lot]:
+        # TODO better to reshuffle lots separately? At least if there are too many orders?
         plant = self._plants[plant_id]
         plant_targets = self._targets.target_weight.get(plant_id, EquipmentProduction(equipment=plant_id, total_weight=0))
         costs = self._costs
@@ -403,6 +407,8 @@ class LotsAllocator:
             prev_obj = self._orders[prev_order] if self._orders is not None else self._snapshot.get_order(prev_order, do_raise=True)
             start_costs = np.array([self._costs.transition_costs(plant, prev_obj, order) for order in orders])
             start_costs[np.isnan(start_costs)] = 50
+        num_orders = len(orders)
+        bound_factor = 0 if num_orders <= 5 else 1 if num_orders >= 15 else 0.25 + (num_orders - 5) / 10 * 0.75
 
         def global_costs(route: tuple[int, ...], trans_costs: float) -> float:   # TODO avoid recalculating transition costs?
             assignments = {orders[idx].id: OrderAssignment(equipment=plant_id, order=orders[idx].id, lot=dummy_lot, lot_idx=counter+1) for counter, idx in enumerate(route)}
@@ -412,8 +418,9 @@ class LotsAllocator:
             result = costs.objective_function(status).total_value
             return result
 
+
         from dynreact.lotcreation.global_tsp_bf import solve
-        route, costs0 = solve(transition_costs, global_costs, start_costs=start_costs, time_limit=1)  # TODO time limit configurable?
+        route, costs0 = solve(transition_costs, global_costs, start_costs=start_costs, bound_factor_upcoming_costs=bound_factor, time_limit=1)  # TODO time limit configurable?
         lot_count = 0
         lot_orders: list[Order] = []
         lots: list[Lot] = []

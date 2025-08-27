@@ -370,8 +370,11 @@ class LotsAllocator:
                 continue
             order_ids: list[str] = [o for o, plant in order_plant_assignments.items() if plant == plant_id]
             orders: list[Order] = [self._orders[o] if self._orders is not None else self._snapshot.get_order(o, do_raise=True) for o in order_ids]
-            # TODO
-            #lots = self.assign_lots_googleor(plant_id, orders)
+            #lots: list[Lot] = self.assign_lots_googleor(plant_id, orders)
+            #new_order_ids: list[str] = [o for lot in lots for o in lot.orders]
+            #orders_by_id: dict[str, Order] = {o.id: o for o in orders}
+            #new_orders = [orders_by_id[o] for o in new_order_ids]
+            #lots = self.assign_lots_2opt(plant_id, new_orders)
             lots = self.assign_lots_2opt(plant_id, orders)
             # if target lot sizes are prescribed and we end up above the limit, then we try to split lots
             targets = self._targets.target_weight.get(plant_id)
@@ -388,6 +391,7 @@ class LotsAllocator:
 
     def assign_lots_2opt(self, plant_id: int, orders: list[Order]) -> list[Lot]:
         order_ids: list[str] = [o.id for o in orders]
+
         orders_by_id = {o.id: o for o in orders}
         plant_targets = self._targets.target_weight.get(plant_id, EquipmentProduction(equipment=plant_id, total_weight=0))
         dummy_lot = "LotDummy"
@@ -397,12 +401,12 @@ class LotsAllocator:
 
         def distance_function(route: np.ndarray, order_ids2: list[str]) -> float:
             route_id: str = "_".join(str(idx) for idx in route)
-            if route_id in memoized_costs:   # never hits
+            if route_id in memoized_costs:
                 return memoized_costs[route_id]
-            # TODO determine lots first!?
             assignments = {order_ids[idx]: OrderAssignment(equipment=plant_id, order=order_ids[idx], lot=dummy_lot, lot_idx=counter+1) for counter, idx in enumerate(route)}
-            # TODO consider keyword parameters
-            status: EquipmentStatus = self._costs.evaluate_equipment_assignments(plant_targets, self._process, assignments, self._snapshot, self._targets.period)
+            # TODO consider other keyword parameters
+            status: EquipmentStatus = self._costs.evaluate_equipment_assignments(plant_targets, self._process, assignments, self._snapshot, self._targets.period,
+                                                                                 previous_order=self._previous_orders.get(plant_id) if self._previous_orders is not None else None)
             costs = self._costs.objective_function(status).total_value
             memoized_costs[route_id] = costs
             return costs

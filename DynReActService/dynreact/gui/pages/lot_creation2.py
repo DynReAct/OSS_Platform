@@ -1081,9 +1081,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
         return False
 
     def column_def_for_field(field: str, info: FieldInfo):
-        filter_id = "agNumberColumnFilter" if _is_numeric(info.annotation) else \
-            "agDateColumnFilter" if info.annotation == datetime or info.annotation == date else \
-                "agTextColumnFilter"
+        filter_id = "agNumberColumnFilter" if _is_numeric(info.annotation) else "agDateColumnFilter" if info.annotation == datetime or info.annotation == date else "agTextColumnFilter"
         col_def = {"field": field, "filter": filter_id, "filterParams": {"buttons": ["reset"]}}
         if field == "lots":
             col_def["filterParams"]["maxNumConditions"] = 50

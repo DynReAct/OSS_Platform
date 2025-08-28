@@ -714,17 +714,41 @@ def transfer_lot():
     else:
         return lot_sink.transfer_new(lot, snapshot, external_id=name)
 
+def mtp_scenario():
+    parser = argparse.ArgumentParser(description="Run a mid-term planning optimization benchmark scenario from a file.")
+    parser.add_argument("-f", "--file", help="Path to scenario file. If not specified, the first valid scenario file in the scenarios directory will be used.", default=None)
+    parser.add_argument("-d", "--dir", help="Base directory; only relevant if the file parameter is not specified. Default: \"scenarios\"", type=str, default="scenarios")
+    parser.add_argument("-p", "--print", help="Print solution", action="store_true")
+    args = parser.parse_args()
+    scenario: MidTermScenario | None = _find_scenario(args.file, args.dir)
+    if scenario is None:
+        print(f"No scenario found in {args.file if args.file else args.dir}")
+        return
+    if args.print:
+        print("Solution:")
+        # TODO
+    jsn = scenario.model_dump(exclude_none=True, exclude_unset=True)
+    del jsn["snapshot"]
+    del jsn["solution"]
+    jsn["backlog"] = json.dumps(scenario.backlog)
+    jsn["lots"] = {p: [json.dumps({l.id: l.orders}) for l in lots] for p, lots in scenario.solution.get_lots().items()}
+    print(json.dumps(jsn, indent=4, default=str).replace("\"{\\\"", "{\"").replace("\\\"]}\"", "]}")
+          .replace("\"[\"", "[\"").replace("\"]\"", "\"]").replace("\\\"", "\""))
+    return scenario
+
 def mtp_benchmark():
     parser = argparse.ArgumentParser(description="Run a mid-term planning optimization benchmark scenario from a file.")
     parser.add_argument("-f", "--file", help="Path to scenario file. If not specified, the first valid scenario file in the scenarios directory will be used.", default=None)
     parser.add_argument("-d", "--dir", help="Base directory; only relevant if the file parameter is not specified. Default: \"scenarios\"", type=str, default="scenarios")
     parser.add_argument("-s", "--store", help="Store result in file? Default: false", action="store_true")
     parser.add_argument("-i", "--iterations", help="Specify number of iterations. If negative (default) then a default number for this scenario will be used", type=int, default=-1)
+    parser.add_argument("-cp", "--child-processes", help="Number of child processes to use. Uses default value if unset. Set to 1 to disable child processes.", type=int, default=None)
     parser.add_argument("-p", "--print", help="Print solution", action="store_true")
     args = parser.parse_args()
     scenario: MidTermScenario|None = _find_scenario(args.file, args.dir)
     if scenario is None:
         print(f"No scenario found in {args.file if args.file else args.dir}")
+        return
     iterations = args.iterations
     if iterations < 0:
         iterations = scenario.iterations if scenario.iterations is not None else 100
@@ -739,8 +763,10 @@ def mtp_benchmark():
     empty_assignments = {order: OrderAssignment(order=order, equipment=-1, lot="", lot_idx=-1) for order in scenario.backlog}
     previous_orders = scenario.solution.previous_orders if scenario.solution is not None else None
     initial_solution = costs.evaluate_order_assignments(targets.process, empty_assignments, targets, snapshot, previous_orders=previous_orders)
-    # TODO option to specify number of child processes to use
     optimizer = algo.create_instance(targets.process, snapshot, costs, targets=targets, initial_solution=initial_solution, parameters=scenario.parameters)
+    optimizer_params = getattr(optimizer, "_params", None)              # XXX
+    if args.child_processes is not None and args.child_processes > 0:
+        setattr(optimizer_params, "NParallel", args.child_processes)    # XXX
     start_time_cpu = time.process_time()
     start_time_wall = time.time()
     start_datetime = DatetimeUtils.now()
@@ -750,7 +776,6 @@ def mtp_benchmark():
     if args.print:
         print("Solution:")
         # TODO
-    optimizer_params = getattr(optimizer, "_params", None)  # XXX
     procs = getattr(optimizer_params, "NParallel", -1) if optimizer_params is not None else -1   # we take 0 to mean "unknown"
     if optimizer_params is not None and not isinstance(optimizer_params, dict):
         optimizer_params = optimizer_params.__dict__
@@ -760,7 +785,7 @@ def mtp_benchmark():
                                  timestamp=start_datetime, optimizer_id="tabu_search", optimization_parameters=optimizer_params, lots=lots)
     for_display: dict[str, typing.Any] = benchmark.model_dump()
     for_display["lots"] = {p: [json.dumps({l.id: l.orders}) for l in lots] for p, lots in benchmark.lots.items()}
-    print(json.dumps(for_display, indent=4, default=str))
+    print(json.dumps(for_display, indent=4, default=str).replace("\"{\\\"", "{\"").replace("\\\"]}\"", "]}").replace("\\\"", "\""))
     return benchmark
 
 def _find_scenario(file: str|None, base_dir: str) -> MidTermScenario|None:

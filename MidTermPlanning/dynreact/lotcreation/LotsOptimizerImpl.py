@@ -368,19 +368,22 @@ class LotsAllocator:
         # remember the plants involved here
         plant_ids: set[int] = set(order_plant_assignments.values())
         result: dict[int, list[Lot]] = {}
+        tsp_method = self._params.tsp_solver_global_costs
         global_costs = self._costs.path_dependent_costs(self._process)
         for plant_id in plant_ids:
             if plant_id < 0:
                 continue
             order_ids: list[str] = [o for o, plant in order_plant_assignments.items() if plant == plant_id]
             orders: list[Order] = [self._orders[o] if self._orders is not None else self._snapshot.get_order(o, do_raise=True) for o in order_ids]
-            lots: list[Lot] = self.assign_lots_googleor(plant_id, orders)
-            if global_costs and len(orders) <= 50:
+            lots: list[Lot] = self.assign_lots_googleor(plant_id, orders) if "googleor" in tsp_method else self.assign_lots_bf(plant_id, orders, bound_factor=self._params.tsp_solver_global_bound_factor,
+                                           timeout=self._params.tsp_solver_global_bound_timeout, init_nearest_neighbours=self._params.tsp_solver_init_nearest_neighbours)
+            if global_costs and len(orders) <= 40 and tsp_method == "googleor_global1":
                 new_order_ids: list[str] = [o for lot in lots for o in lot.orders]
                 orders_by_id: dict[str, Order] = {o.id: o for o in orders}
                 orders = [orders_by_id[o] for o in new_order_ids]
                 # brute force ordering based on global costs;
-                lots = self.assign_lots_bf(plant_id, orders)
+                lots = self.assign_lots_bf(plant_id, orders, bound_factor=self._params.tsp_solver_global_bound_factor,
+                                           timeout=self._params.tsp_solver_global_bound_timeout, init_nearest_neighbours=self._params.tsp_solver_init_nearest_neighbours)
             # if target lot sizes are prescribed and we end up above the limit, then we try to split lots
             targets = self._targets.target_weight.get(plant_id)
             if targets is not None and targets.lot_weight_range is not None:
@@ -394,7 +397,9 @@ class LotsAllocator:
             result = {p: [self._adapt_base_lots(lot, addon.get(p, None))] for p, lot in self._base_lots.items()}
         return result
 
-    def assign_lots_bf(self, plant_id: int, orders: list[Order]) -> list[Lot]:
+    def assign_lots_bf(self, plant_id: int, orders: list[Order],
+                       bound_factor: float|None=None, timeout: float=1, init_nearest_neighbours: bool=False) -> list[Lot]:
+        timeout = timeout if timeout > 0 else None
         # TODO better to reshuffle lots separately? At least if there are too many orders?
         plant = self._plants[plant_id]
         plant_targets = self._targets.target_weight.get(plant_id, EquipmentProduction(equipment=plant_id, total_weight=0))
@@ -408,19 +413,21 @@ class LotsAllocator:
             start_costs = np.array([self._costs.transition_costs(plant, prev_obj, order) for order in orders])
             start_costs[np.isnan(start_costs)] = 50
         num_orders = len(orders)
-        bound_factor = 0 if num_orders <= 5 else 1 if num_orders >= 15 else 0.25 + (num_orders - 5) / 10 * 0.75
+        if bound_factor is None:
+            bound_factor = 0 if num_orders <= 5 else 1 if num_orders >= 15 else 0.25 + (num_orders - 5) / 10 * 0.75
+        elif bound_factor < 0:
+            bound_factor = 0
 
         def global_costs(route: tuple[int, ...], trans_costs: float) -> float:   # TODO avoid recalculating transition costs?
             assignments = {orders[idx].id: OrderAssignment(equipment=plant_id, order=orders[idx].id, lot=dummy_lot, lot_idx=counter+1) for counter, idx in enumerate(route)}
-            # TODO consider other keyword parameters
+            # TODO consider other keyword parameters, such as priorities
             status: EquipmentStatus = self._costs.evaluate_equipment_assignments(plant_targets, self._process, assignments, self._snapshot, self._targets.period,
                                                                     previous_order=self._previous_orders.get(plant_id) if self._previous_orders is not None else None)
             result = costs.objective_function(status).total_value
             return result
 
-
         from dynreact.lotcreation.global_tsp_bf import solve
-        route, costs0 = solve(transition_costs, global_costs, start_costs=start_costs, bound_factor_upcoming_costs=bound_factor, time_limit=1)  # TODO time limit configurable?
+        route, costs0 = solve(transition_costs, global_costs, start_costs=start_costs, bound_factor_upcoming_costs=bound_factor, time_limit=timeout, init_nearest_neighbours=init_nearest_neighbours)
         lot_count = 0
         lot_orders: list[Order] = []
         lots: list[Lot] = []

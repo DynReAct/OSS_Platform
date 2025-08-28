@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import os
+from typing import Literal
 
 import dotenv
 
@@ -7,40 +8,55 @@ import dotenv
 class TabuParams:
 
     ntotal: int = 1000
-    "Number of TabuSearch Iterations"
+    "Number of TabuSearch Iterations, if not explicitly specified via the run(max_iterations=...) parameter."
     Expiration: int = 10
     "Tabu List expiration"
     NMinUntilShuffle: int = 10
     "number of local minima to be reached until shuffeling"
-    #Path: str = "./out"
-    #StoreInitialSolution = True
-    "Save Initial solution in output path?"
-    #InstantSaveMinimum = True
-    "Save new global minimum before shuffeling"
-
-    NParallel = min(mp.cpu_count(), 8)
+    NParallel: int = min(mp.cpu_count(), 8)
     "parallel processing -> Set to 1 for debugging"
-
-    # Orders with DueDate < MinDueDate have to be processed
-    #MinDueDate = datetime(2020, 6, 1)  # dt.datetime.now() # - dt.timedelta(weeks=2)
-
-    TAllowed = 4
+    TAllowed: float = 4
     "Maximum transition cost within lot; cf. new lot costs in cost provider (default: 3, for SimpleCostProvider)"
-
-    CostNaN = 50.0
+    CostNaN: float = 50.0
     "default if cost can not be calculated"
+    tsp_solver_global_costs: Literal["googleor", "global1", "googleor_global1"] = "googleor_global1"
+    """
+    The algorithm to be used for sorting of orders assigned to one equipment. This is a traveling salesman problem,
+    but with path-dependent costs. The options are
+        - googleor: simply ignores global costs for scheduling and considers only local transition costs. Classical TSP solver.
+        - global1: sort of brute force solver with some basic short-circuiting for expensive paths 
+            (short-circuiting only evaluates local costs, less suitable for situations with high global/path-dependent cost contributions)
+        - googleor_global1: a combination that first finds a good local solution and then employs the global solver from this starting point 
+    """
+    tsp_solver_global_bound_factor: float|None = None
+    """
+    For the global tsp solver this factor determines the early stopping behaviour. If it is zero, no early stopping happens and the
+    solver is guaranteed to find the optimum solution (unless the timeout parameter is set, which it is by default), if it is one a 
+    somewhat aggressive early stopping strategy is used, which might lead to good solutions being missed, but should improve performance.
+    By default, the factor is selected chosen on the number of orders assigned to the equipment, the more orders, the higher the factor. 
+    """
+    tsp_solver_global_bound_timeout: float = 1
+    """
+    Timeout in seconds for the global tsp solver. Default: 1s. Set to zero or a negative value to disable the timeout, 
+    which may lead to excessive optimization durations. 
+    """
+    tsp_solver_init_nearest_neighbours: bool=False
+    """
+    This should only be relevant if the tsp method is global1, not if the googleor method is used for initialization.
+    """
+
 
     def __init__(self,
                  ntotal: int|None = None,
                  Expiration: int|None = None,
                  NMinUntilShuffle: int|None = None,
-                 #Path: str|None = None,
-                 #StoreInitialSolution: bool|None = None,
-                # InstantSaveMinimum: bool|None = None,
                  NParallel: int|None = None,
-                 #MinDueDate: datetime | None = None,
                  TAllowed: float|None = None,
-                 CostNaN: float|None = None
+                 CostNaN: float|None = None,
+                 tsp_solver_global_costs: Literal["googleor", "global1", "googleor_global1"]|None = None,
+                 tsp_solver_global_bound_factor: float | None = None,
+                 tsp_solver_global_bound_timeout: float|None = None,
+                 tsp_solver_init_nearest_neighbours: bool|None = None
     ):
         dotenv.load_dotenv()
         if ntotal is None:
@@ -55,24 +71,10 @@ class TabuParams:
             NMinUntilShuffle = int(os.getenv("TABU_LOCAL_MIN_UNTIL_SHUFFEL", self.NMinUntilShuffle))
         self.NMinUntilShuffle = NMinUntilShuffle
         "number of local minima to be reached until shuffeling"
-        #if Path is None:
-        #    Path = os.getenv("TABU_BASE_PATH", self.Path)
-        #self.Path = Path
-        #if StoreInitialSolution is None:
-        #    StoreInitialSolution = os.getenv("TABU_STORE_INITIAL_SOLUTION", str(self.StoreInitialSolution)).lower() == "false"
-        #self.StoreInitialSolution = StoreInitialSolution
-        "Save Initial solution in output path?"
-        #if InstantSaveMinimum is None:
-        #    InstantSaveMinimum = os.getenv("TABU_INSTANT_SAVE_MINIMUM", str(self.InstantSaveMinimum)).lower() == "true"
-        #self.InstantSaveMinimum = InstantSaveMinimum
-        "Save new global minimum before shuffeling"
         if NParallel is None:
             NParallel = int(os.getenv("TABU_NUM_CORES", self.NParallel))
         self.NParallel = NParallel
         "parallel processing -> Set to 1 for debugging"
-        #if MinDueDate is None:
-        #    MinDueDate = DatetimeUtils.parse_date(os.getenv("TABU_MIN_DUE_DATE")) if os.getenv("TABU_MIN_DUE_DATE") is not None else self.MinDueDate
-        #self.MinDueDate = MinDueDate
         if TAllowed is None:
             TAllowed = float(os.getenv("TABU_MAX_TRANSITION_COST", self.TAllowed))
         self.TAllowed = TAllowed
@@ -81,3 +83,21 @@ class TabuParams:
             CostNaN = float(os.getenv("TABU_COST_NAN", self.CostNaN))
         self.CostNaN = CostNaN
         "default if cost cannot be calculated"
+        if tsp_solver_global_costs is None:
+            tsp_solver_global_costs = os.getenv("TABU_GLOBAL_COSTS_SOLVER", TabuParams.tsp_solver_global_costs).lower().strip()
+            if tsp_solver_global_costs not in ("googleor", "global1", "googleor_global1"):
+                raise ValueError("Invalid tsp solver", tsp_solver_global_costs)
+        self.tsp_solver_global_costs = tsp_solver_global_costs
+        if tsp_solver_global_bound_factor is None:
+            tsp_solver_global_bound_factor0 = os.getenv("TABU_GLOBAL_COSTS_BOUND_FACTOR")
+            if tsp_solver_global_bound_factor0 is not None:
+                tsp_solver_global_bound_factor = float(tsp_solver_global_bound_factor0)
+        self.tsp_solver_global_bound_factor = tsp_solver_global_bound_factor
+        if tsp_solver_global_bound_timeout is None:
+            tsp_solver_global_bound_timeout = float(os.getenv("TABU_GLOBAL_COSTS_TIMEOUT", TabuParams.tsp_solver_global_bound_timeout))
+        self.tsp_solver_global_bound_timeout = tsp_solver_global_bound_timeout
+        if tsp_solver_init_nearest_neighbours is None:
+            tsp_solver_init_nearest_neighbours = os.getenv("TABU_GLOBAL_COSTS_INIT_NN", "false").lower() == "true"
+        self.tsp_solver_init_nearest_neighbours = tsp_solver_init_nearest_neighbours
+
+

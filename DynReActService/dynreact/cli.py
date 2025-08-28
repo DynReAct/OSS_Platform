@@ -1,4 +1,8 @@
 import argparse
+import glob
+import json
+import os.path
+import time
 import typing
 from datetime import timedelta, datetime, timezone
 from enum import Enum
@@ -15,6 +19,7 @@ from dynreact.base.impl.AggregationPersistence import AggregationInternal
 from dynreact.base.impl.AggregationProviderImpl import AggregationProviderImpl
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
+from dynreact.base.impl.Scenarios import MidTermScenario, MidTermBenchmark
 from dynreact.base.model import Snapshot, Material, OrderAssignment, Order, EquipmentProduction, ProductionTargets, \
     ProductionPlanning, ObjectiveFunction, Site, LabeledItem, Lot, Process, Equipment
 from dynreact.plugins import Plugins
@@ -709,3 +714,90 @@ def transfer_lot():
     else:
         return lot_sink.transfer_new(lot, snapshot, external_id=name)
 
+def mtp_benchmark():
+    parser = argparse.ArgumentParser(description="Run a mid-term planning optimization benchmark scenario from a file.")
+    parser.add_argument("-f", "--file", help="Path to scenario file. If not specified, the first valid scenario file in the scenarios directory will be used.", default=None)
+    parser.add_argument("-d", "--dir", help="Base directory; only relevant if the file parameter is not specified. Default: \"scenarios\"", type=str, default="scenarios")
+    parser.add_argument("-s", "--store", help="Store result in file? Default: false", action="store_true")
+    parser.add_argument("-i", "--iterations", help="Specify number of iterations. If negative (default) then a default number for this scenario will be used", type=int, default=-1)
+    parser.add_argument("-p", "--print", help="Print solution", action="store_true")
+    args = parser.parse_args()
+    scenario: MidTermScenario|None = _find_scenario(args.file, args.dir)
+    if scenario is None:
+        print(f"No scenario found in {args.file if args.file else args.dir}")
+    iterations = args.iterations
+    if iterations < 0:
+        iterations = scenario.iterations if scenario.iterations is not None else 100
+    config: DynReActSrvConfig = DynReActSrvConfig(config_provider=scenario.config, cost_provider=scenario.costs)
+    plugins = Plugins(config)
+    cfg_provider = plugins.get_config_provider()
+    costs = plugins.get_cost_provider()
+    site: Site = cfg_provider.site_config()
+    algo = plugins.get_lots_optimization()
+    snapshot = scenario.snapshot
+    targets = scenario.targets
+    empty_assignments = {order: OrderAssignment(order=order, equipment=-1, lot="", lot_idx=-1) for order in scenario.backlog}
+    previous_orders = scenario.solution.previous_orders if scenario.solution is not None else None
+    initial_solution = costs.evaluate_order_assignments(targets.process, empty_assignments, targets, snapshot, previous_orders=previous_orders)
+    # TODO option to specify number of child processes to use
+    optimizer = algo.create_instance(targets.process, snapshot, costs, targets=targets, initial_solution=initial_solution, parameters=scenario.parameters)
+    start_time_cpu = time.process_time()
+    start_time_wall = time.time()
+    start_datetime = DatetimeUtils.now()
+    result = optimizer.run(max_iterations=iterations)
+    end_time_cpu = time.process_time()
+    end_time_wall = time.time()
+    if args.print:
+        print("Solution:")
+        # TODO
+    optimizer_params = getattr(optimizer, "_params", None)  # XXX
+    procs = getattr(optimizer_params, "NParallel", -1) if optimizer_params is not None else -1   # we take 0 to mean "unknown"
+    if optimizer_params is not None and not isinstance(optimizer_params, dict):
+        optimizer_params = optimizer_params.__dict__
+    lots = result.best_solution.get_lots()
+    benchmark = MidTermBenchmark(scenario=scenario.id, iterations=iterations, child_processes=procs, cpu_time=end_time_cpu-start_time_cpu,
+                                 wall_time=end_time_wall-start_time_wall, objective=result.best_objective_value,
+                                 timestamp=start_datetime, optimizer_id="tabu_search", optimization_parameters=optimizer_params, lots=lots)
+    for_display: dict[str, typing.Any] = benchmark.model_dump()
+    for_display["lots"] = {p: [json.dumps({l.id: l.orders}) for l in lots] for p, lots in benchmark.lots.items()}
+    print(json.dumps(for_display, indent=4, default=str))
+    return benchmark
+
+def _find_scenario(file: str|None, base_dir: str) -> MidTermScenario|None:
+    if file is not None:
+        if os.path.isfile(file):
+            files = [file]
+        else:
+            files = glob.glob(file)
+        e = None
+        for f in files:
+            try:
+                with open(f, mode="r") as file:
+                    return MidTermScenario.model_validate_json(file.read())
+            except:
+                import sys
+                e = sys.exc_info()  # https://nedbatchelder.com/blog/200711/rethrowing_exceptions_in_python.html
+        if e is not None:
+            raise e[1](None).with_traceback(e[2])
+        return None
+    else:
+        return _find_scenario_recursive(base_dir)
+
+def _find_scenario_recursive(base_dir: str) -> MidTermScenario|None:
+    e = None
+    for f in sorted(os.listdir(base_dir), key=lambda f: "__" + f if os.path.isfile(f) else f):  # dirs later than files
+        full_path = os.path.join(base_dir, f)
+        if os.path.isfile(full_path):
+            try:
+                with open(full_path, mode="r") as file:
+                    return MidTermScenario.model_validate_json(file.read())
+            except:
+                import sys
+                e = sys.exc_info()  # https://nedbatchelder.com/blog/200711/rethrowing_exceptions_in_python.html
+        else:
+            result = _find_scenario_recursive(full_path)
+            if result is not None:
+                return result
+    if e is not None:  # TODO
+        pass
+    return None

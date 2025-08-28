@@ -43,7 +43,7 @@ class TabuSearch(LotsOptimizer):
                  initial_solution: ProductionPlanning, min_due_date: datetime|None = None,
                  # the next two are for initialization from a previous optimization run
                  best_solution: ProductionPlanning|None = None, history: list[ObjectiveFunction] | None = None,
-                 parameters: dict[str, any] | None = None,
+                 parameters: dict[str, Any] | None = None,
                  performance_models: list[PlantPerformanceModel] | None = None,
                  orders_custom_priority: dict[str, int] | None = None,
                  forced_orders:  list[str]|None = None,
@@ -600,7 +600,7 @@ class TabuAlgorithm(LotsOptimizationAlgo):
                                   # the next two are for initialization from a previous optimization run
                                   best_solution: ProductionPlanning | None = None, history: list[ObjectiveFunction] | None = None,
                                   performance_models: list[PlantPerformanceModel] | None = None,
-                                  parameters: dict[str, any] | None = None,
+                                  parameters: dict[str, Any] | None = None,
                                   orders_custom_priority: dict[str, int] | None = None,
                                   forced_orders: list[str] | None = None,
                                   base_lots: dict[int, Lot] | None = None

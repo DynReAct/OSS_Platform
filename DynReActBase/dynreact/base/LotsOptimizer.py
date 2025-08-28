@@ -5,7 +5,7 @@ already contains an implementation (in the MidTermPlanning folder).
 """
 
 from datetime import timedelta, datetime
-from typing import TypeVar, Generic, Sequence
+from typing import Any, TypeVar, Generic, Sequence
 
 import numpy as np
 
@@ -49,7 +49,7 @@ class LotsOptimizationState(Generic[P]):
                  best_solution: ProductionPlanning[P], best_objective_value: ObjectiveFunction,
                  num_iterations: int=0,  # deprecated
                  history: list[ObjectiveFunction]|None = None,
-                 parameters: dict[str, any]|None = None):
+                 parameters: dict[str, Any]|None = None):
         self.current_solution: ProductionPlanning[P] = current_solution
         self.current_object_value: ObjectiveFunction = current_objective_value
         self.best_solution: ProductionPlanning[P] = best_solution
@@ -57,7 +57,7 @@ class LotsOptimizationState(Generic[P]):
         self.num_iterations: int = num_iterations
         "deprecated"
         self.history: list[ObjectiveFunction] = list(history) if history is not None else [current_objective_value]
-        self.parameters: dict[str, any]|None = parameters
+        self.parameters: dict[str, Any]|None = parameters
 
 
 class LotsOptimizer(Generic[P]):
@@ -71,7 +71,7 @@ class LotsOptimizer(Generic[P]):
                  # the next two are for initialization from a previous optimization run
                  best_solution: ProductionPlanning[P]|None = None,
                  history: list[ObjectiveFunction] | None = None,
-                 parameters: dict[str, any]|None = None,
+                 parameters: dict[str, Any]|None = None,
                  performance_models: list[PlantPerformanceModel]|None = None,
                  orders_custom_priority: dict[str, int]|None = None,
                  forced_orders: list[str] | None = None,
@@ -159,7 +159,7 @@ class LotsOptimizer(Generic[P]):
         self._base_assignments: dict[str, OrderAssignment]|None = {o: OrderAssignment(order=o, equipment=lot.equipment, lot=lot.id, lot_idx=idx+1)
                                                             for lot in base_lots.values() for idx, o in enumerate(lot.orders)} if base_lots is not None else None
 
-    def parameters(self) -> dict[str, any]|None:
+    def parameters(self) -> dict[str, Any]|None:
         return self._state.parameters
 
     # side effects on state
@@ -434,7 +434,7 @@ class LotsOptimizationAlgo:
                         best_solution: ProductionPlanning[P] | None = None,
                         history: list[ObjectiveFunction] | None = None,
                         performance_models: list[PlantPerformanceModel] | None = None,
-                        parameters: dict[str, any] | None = None,
+                        parameters: dict[str, Any] | None = None,
                         include_inactive_lots: bool = False,
                         orders_custom_priority: dict[str, int] | None = None,
                         forced_orders: list[str] | None = None,
@@ -457,7 +457,7 @@ class LotsOptimizationAlgo:
                                   # the next two are for initialization from a previous optimization run
                                   best_solution: ProductionPlanning[P] | None = None, history: list[ObjectiveFunction] | None = None,
                                   performance_models: list[PlantPerformanceModel] | None = None,
-                                  parameters: dict[str, any] | None = None,
+                                  parameters: dict[str, Any] | None = None,
                                   orders_custom_priority: dict[str, int] | None = None,
                                   forced_orders: list[str] | None = None,
                                   base_lots: dict[int, Lot] | None = None

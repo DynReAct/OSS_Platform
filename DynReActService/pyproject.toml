@@ -30,6 +30,7 @@ analyze-site = "dynreact.cli:analyze_site"
 analyze-snapshot = "dynreact.cli:analyze_snapshot"
 create-lots = "dynreact.cli:create_lots"
 evaluate-lot = "dynreact.cli:evaluate_lot"
+mtp-benchmark = "dynreact.cli:mtp_benchmark"
 lot-sinks = "dynreact.cli:lot_sinks"
 show-material = "dynreact.cli:show_material"
 show-orders = "dynreact.cli:show_orders"
@@ -46,3 +47,4 @@ package-dir = {"" = "."}
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
 optional-dependencies = { file = ["requirements-dev.txt"]}
+

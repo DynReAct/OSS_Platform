@@ -14,8 +14,9 @@ from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationState
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
+from dynreact.base.impl.Scenarios import MidTermScenario
 from dynreact.base.model import ProductionPlanning, EquipmentStatus, Lot, Order, Material, Snapshot, Equipment, \
-    ObjectiveFunction, MaterialCategory
+    ObjectiveFunction, MaterialCategory, ProductionTargets
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
@@ -109,7 +110,11 @@ def layout(*args, **kwargs):
             ),
             html.H2("Orders"),
             html.Button("Download orders csv", id="download-orders-csv", className="dynreact-button"),
-            html.Br(), html.Br(),
+            html.Br(),
+            # this button is hidden, it needs to be activated via the browser console. Command:
+            # document.querySelector("#lotplanning-download-scenario").hidden=false
+            html.Button("Download scenario", id="lotplanning-download-scenario", className="dynreact-button", hidden=True),
+            html.Br(),
             html.Div(
                 dash_ag.AgGrid(
                     id="planning-lots-order-table",
@@ -149,6 +154,7 @@ def layout(*args, **kwargs):
         dcc.Store(id="lotplanning-transfer-type"),
         dcc.Store(id="lotplanning-material-structure"),   # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
         dcc.Store(id="lotplanning-material-targets"),     # dict[str, float]
+        dcc.Store(id="lotplanning-scenario-json"),        # for scenario download
 
         dcc.Interval(id="planning-interval", n_intervals=3_600_000),  # for polling when lot transfer is running
     ], id="lotsplanned")
@@ -597,6 +603,79 @@ clientside_callback(
     Input("lotplanning-transfer-cancel", "n_clicks"),
     State("lotplanning-transfer-dialog", "id"),
 )
+
+@callback(
+    Output("lotplanning-scenario-json", "data"),
+    Input("lotplanning-download-scenario", "n_clicks"),
+    State("selected-snapshot", "data"),
+    State("process-selector-lotplanning", "value"),
+    State("planning-selected-solution", "data"),   # TODO need ProductionTargets, order backlog, reduced snapshot and solution
+    prevent_initial_call=True
+)
+def extract_scenario_json(_, snapshot: str|datetime|None, process: str|None, solution: str|None):
+    snapshot = DatetimeUtils.parse_date(snapshot)
+    if not dash_authenticated(config) or process is None or snapshot is None or solution is None or solution in ("_SNAPSHOT_", "_DUE_DATE_"):
+        return None
+    result: LotsOptimizationState = state.get_results_persistence().load(snapshot, process, solution)
+    if result is None or result.best_solution is None:
+        return None
+    site = state.get_site()
+    plants = {p.id: p for p in site.equipment}
+    #lots: list[Lot] = sorted([lot for plant_lots in best_result.get_lots().values() for lot in plant_lots],
+    #                         key=lambda lot: (
+    #                         plants.get(lot.equipment).name_short if lot.equipment in plants else "ZZ", lot.id))
+    #unassigned_order_ids: list[str] = [ass.order for ass in best_result.order_assignments.values() if ass.lot == ""]
+    snap_obj = state.get_snapshot(snapshot)
+    best_result: ProductionPlanning = result.best_solution
+    targets: ProductionTargets = best_result.get_targets()
+    order_ids: list[str] = list(best_result.order_assignments.keys())
+    orders = [snap_obj.get_order(oid, do_raise=True) for oid in order_ids]
+    all_orders: list[Order] = orders if best_result.previous_orders is None else orders + [snap_obj.get_order(oid, do_raise=True) for oid in best_result.previous_orders.values()]
+    all_orders_by_id: dict[str, Order] = {o.id: o for o in all_orders}
+    reduced_material: list[Material] = [m for m in snap_obj.material if m.order in all_orders_by_id.keys()]
+    inline_material = {p: l for p, l in {p: [mat_order_data for mat_order_data in mat_list if mat_order_data.order in all_orders_by_id.keys()] for p, mat_list in snap_obj.inline_material.items()}.items() if len(l) > 0}
+    new_lots = {plant: [l for l in lots if any(o in all_orders_by_id for o in l.orders)] for plant, lots in snap_obj.lots.items()}
+
+    def _shrink_lot(l: Lot) -> Lot:
+        all_orders_present: bool = all(o in all_orders_by_id for o in l.orders)
+        if all_orders_present:
+            return l
+        new_orders = [o for o in l.orders if o in all_orders_by_id]
+        new_weight = sum(all_orders_by_id[o].actual_weight for o in new_orders)
+        return l.model_copy(update={"orders": new_orders, "weight": new_weight})
+
+    new_lots = {plant: [_shrink_lot(l) for l in lots] for plant, lots in new_lots.items() if len(lots) > 0}
+    reduced_snapshot: Snapshot = Snapshot(timestamp=snap_obj.timestamp, orders=all_orders, material=reduced_material,
+                                          inline_material=inline_material, lots=new_lots)
+    cost_provider = config.cost_provider
+    cost_id = cost_provider[:cost_provider.index(":")] if ":" in cost_provider else cost_provider
+    scenario_id = cost_id + "_snap_" + DatetimeUtils.format(snapshot, use_zone=False) + "_" + solution
+    scenario: MidTermScenario = MidTermScenario(id=scenario_id, config=config.config_provider, costs=cost_provider, #snapshot_provider=config.snapshot_provider,
+                                    snapshot=reduced_snapshot, targets=targets, backlog=order_ids, solution=best_result, objective=result.best_objective_value,
+                                    parameters={} if result.parameters is None else result.parameters, iterations=len(result.history))
+    #json = {
+    #    "targets": targets.model_dump(exclude_unset=True, exclude_none=True),
+    #    "objective": result.best_objective_value.model_dump(exclude_unset=True, exclude_none=True),
+    #    "parameters": {} if result.parameters is None else result.parameters,
+    #    "backlog": order_ids,
+    #    "solution": best_result.model_dump(exclude_unset=True, exclude_none=True),
+    #    "snapshot": reduced_snapshot.model_dump(exclude_unset=True, exclude_none=True),
+    #}
+    return scenario.model_dump(exclude_unset=True, exclude_none=True)
+
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="lots2",
+        function_name="downloadScenario",
+
+    ),
+    Output("lotplanning-download-scenario", "title"),
+    Input("lotplanning-scenario-json", "data"),
+    State("selected-snapshot", "data"),
+    State("planning-selected-solution", "data"),
+)
+
 
 """
 @callback(

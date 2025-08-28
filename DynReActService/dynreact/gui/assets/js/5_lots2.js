@@ -68,4 +68,14 @@
         widget.setAggregation(weightAggregation, targetWeights);
     }
 
+    // used by lot planning page to download scenarios
+    globalThis.dash_clientside.lots2.downloadScenario = function(json, snapshot, solution_id) {
+        if (!json || !snapshot || !solution_id)
+            return;
+        const fileName = "snap_" + snapshot + "_" + solution_id;
+        const data = typeof(json) === "string" ? json : JSON.stringify(json, undefined, 4);
+        JsUtils.downloadData(data, {format: "json", fileName: fileName});
+        return "";
+    }
+
 })();

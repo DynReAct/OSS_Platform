@@ -8,6 +8,7 @@ from typing import Any, Sequence
 
 import networkx as nx
 import numpy as np
+import numpy.typing as npt
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo, LotsOptimizer, LotsOptimizationState
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation
@@ -16,6 +17,10 @@ from dynreact.base.model import Snapshot, ProductionPlanning, ProductionTargets,
 
 from dynreact.lotcreation.TabuParams import TabuParams
 import dynreact.lotcreation.LotCreationGoogleOR as lcor
+from dynreact.lotcreation.globaltsp import GlobalTspInput
+from dynreact.lotcreation.globaltsp.BranchAndBoundWithEnsembleInput2 import GlobalSearchDefault
+from dynreact.lotcreation.globaltsp.GoogleOrSolver import GoogleOrSolver
+from dynreact.lotcreation.globaltsp.GlobalSearchBranchBound import GlobalSearchBB
 
 
 class TabuSwap:
@@ -370,21 +375,24 @@ class LotsAllocator:
         result: dict[int, list[Lot]] = {}
         tsp_method = self._params.tsp_solver_global_costs
         global_costs = self._costs.path_dependent_costs(self._process)
+        # solver = GlobalSearchDefault(bound_factor_upcoming_costs=0.5, timeout_pre_solvers=1) if global_costs else GoogleOrSolver()  # TODO parameters TODO option to use other solvers?
         for plant_id in plant_ids:
             if plant_id < 0:
                 continue
             order_ids: list[str] = [o for o, plant in order_plant_assignments.items() if plant == plant_id]
             orders: list[Order] = [self._orders[o] if self._orders is not None else self._snapshot.get_order(o, do_raise=True) for o in order_ids]
-            lots: list[Lot] = self.assign_lots_googleor(plant_id, orders) if "googleor" in tsp_method else self.assign_lots_bf(plant_id, orders, bound_factor=self._params.tsp_solver_global_bound_factor,
-                                           timeout=self._params.tsp_solver_global_bound_timeout, init_nearest_neighbours=self._params.tsp_solver_init_nearest_neighbours)
-            if global_costs and len(orders) <= 40 and tsp_method == "googleor_global1":
-                new_order_ids: list[str] = [o for lot in lots for o in lot.orders]
-                orders_by_id: dict[str, Order] = {o.id: o for o in orders}
-                orders = [orders_by_id[o] for o in new_order_ids]
-                # brute force ordering based on global costs;
-                lots = self.assign_lots_bf(plant_id, orders, bound_factor=self._params.tsp_solver_global_bound_factor,
-                                           timeout=self._params.tsp_solver_global_bound_timeout, init_nearest_neighbours=self._params.tsp_solver_init_nearest_neighbours)
-            # if target lot sizes are prescribed and we end up above the limit, then we try to split lots
+            lots: list[Lot] = self.assign_lots_internal(plant_id, orders, global_costs, self._snapshot, bound_factor=self._params.tsp_solver_global_bound_factor,
+                                      timeout=self._params.tsp_solver_global_timeout, solver_id=self._params.tsp_solver_global_costs)
+            #lots: list[Lot] = self.assign_lots_googleor(plant_id, orders) if "googleor" in tsp_method else self.assign_lots_bf(plant_id, orders, bound_factor=self._params.tsp_solver_global_bound_factor,
+            #                               timeout=self._params.tsp_solver_global_bound_timeout, init_nearest_neighbours=self._params.tsp_solver_init_nearest_neighbours)
+            #if global_costs and len(orders) <= 40 and tsp_method == "googleor_global1":
+            #    new_order_ids: list[str] = [o for lot in lots for o in lot.orders]
+            #    orders_by_id: dict[str, Order] = {o.id: o for o in orders}
+            #    orders = [orders_by_id[o] for o in new_order_ids]
+            #    # brute force ordering based on global costs;
+            #    lots = self.assign_lots_bf(plant_id, orders, bound_factor=self._params.tsp_solver_global_bound_factor,
+            #                               timeout=self._params.tsp_solver_global_bound_timeout, init_nearest_neighbours=self._params.tsp_solver_init_nearest_neighbours)
+            ## if target lot sizes are prescribed and we end up above the limit, then we try to split lots
             targets = self._targets.target_weight.get(plant_id)
             if targets is not None and targets.lot_weight_range is not None:
                 min_lot, max_lot = targets.lot_weight_range
@@ -396,6 +404,84 @@ class LotsAllocator:
             addon = {p: lots[0] for p, lots in result.items()}
             result = {p: [self._adapt_base_lots(lot, addon.get(p, None))] for p, lot in self._base_lots.items()}
         return result
+
+    # TODO WIP
+    def assign_lots_internal(self, plant_id: int, orders: list[Order], has_global_costs: bool, snapshot: Snapshot,
+                       bound_factor: float|None=None, timeout: float|None=1, solver_id: str|None=None) -> list[Lot]:
+        timeout = timeout if timeout is None or timeout > 0 else None
+        # TODO better to reshuffle lots separately? At least if there are too many orders?
+        plant = self._plants[plant_id]
+        plant_targets = self._targets.target_weight.get(plant_id, EquipmentProduction(equipment=plant_id, total_weight=0))
+        costs = self._costs
+        dummy_lot = "LotDummy"
+        transition_costs = np.array([[self._costs.transition_costs(plant, o1, o2) for o2 in orders] for o1 in orders], dtype=np.float32)
+        start_costs = None
+        prev_order: str|None = None
+        if self._previous_orders is not None and plant_id in self._previous_orders:
+            prev_order = self._previous_orders.get(plant_id)
+            prev_obj = self._orders[prev_order] if self._orders is not None else self._snapshot.get_order(prev_order,
+                                                                                                          do_raise=True)
+            start_costs = np.array([self._costs.transition_costs(plant, prev_obj, order) for order in orders])
+            start_costs[np.isnan(start_costs)] = 50
+        num_orders = len(orders)
+        if bound_factor is None:
+            bound_factor = 0 if num_orders < 5 else 1 if num_orders >= 15 else 0.25 + (num_orders - 5) / 10 * 0.75
+        elif bound_factor < 0:
+            bound_factor = 0
+
+        def global_costs(route: npt.NDArray[np.uint16], next_item: np.uint16, status: tuple[EquipmentStatus, ObjectiveFunction]) -> tuple[EquipmentStatus, ObjectiveFunction]:
+            #assignments = {orders[idx].id: OrderAssignment(equipment=plant_id, order=orders[idx].id, lot=dummy_lot,
+            #                                               lot_idx=counter + 1) for counter, idx in enumerate(route)}
+            # TODO consider other keyword parameters, such as priorities
+            if len(route) == 0:
+                oid = orders[next_item].id
+                assignments = {oid: OrderAssignment(order=oid, equipment=plant_id, lot=dummy_lot, lot_idx=1)}
+                assignments.update({o.id: OrderAssignment(order=o.id, equipment=-1, lot="", lot_idx=-1) for o in orders if o.id != oid})
+                status = self._costs.evaluate_equipment_assignments(plant_targets, self._process, assignments, snapshot, self._targets.period,
+                                                                    previous_order=prev_order)  # TODO structure parameters?
+                return status, costs.objective_function(status)
+            current: Order = orders[route[-1]]
+            next: Order = orders[next_item]
+            new_lot: bool = len(route) == 0 or self.create_new_lot_costs_based(transition_costs[route[-1], next_item])
+            return self._costs.update_transition_costs(plant, current, next, status[0], snapshot, new_lot=new_lot)
+
+        def eval_costs(status: tuple[EquipmentStatus, ObjectiveFunction]) -> float:
+            return status[1].total_value
+
+        empty_status = costs.equipment_status(snapshot, plant, self._targets.period, plant_targets.total_weight)
+        if solver_id == "default":
+            solver = (GlobalSearchDefault(bound_factor_upcoming_costs=bound_factor, timeout_pre_solvers=self._params.tsp_solver_ortools_timeout) if num_orders > 5 else \
+                        GlobalSearchBB(bound_factor_upcoming_costs=bound_factor)) if has_global_costs else GoogleOrSolver()
+        elif solver_id == "ortools":
+            solver = GoogleOrSolver()
+        elif solver_id == "globalbb":
+            solver = GlobalSearchBB(bound_factor_upcoming_costs=bound_factor)
+        else:
+            raise ValueError(f"Invalid solver id {solver_id}")
+        data: GlobalTspInput = GlobalTspInput(local_transition_costs=transition_costs, local_start_costs=start_costs, empty_state=(empty_status, costs.objective_function(empty_status)),
+                                              time_limit=timeout, transition_costs=global_costs, eval_costs=eval_costs)
+        result = solver.find_shortest_path_global(data)
+        route = result.route
+        lot_count = 0
+        lot_orders: list[Order] = []
+        lots: list[Lot] = []
+        last_order: Order | None = None
+        for idx in route:
+            order: Order = orders[idx]
+            costs = 0 if last_order is None else self._costs.transition_costs(plant, last_order, order)
+            if self.create_new_lot_costs_based(costs):
+                lot: Lot = Lot(id="LC_" + plant.name_short + "." + f"{lot_count:02d}", equipment=plant_id, active=False,
+                               status=1, orders=[o.id for o in lot_orders],
+                               weight=sum(o.actual_weight for o in lot_orders))
+                lots.append(lot)
+                lot_count += 1
+                lot_orders = []
+            lot_orders.append(order)
+        if len(lot_orders) > 0:
+            lots.append(
+                Lot(id="LC_" + plant.name_short + "." + f"{lot_count:02d}", equipment=plant_id, active=False, status=1,
+                    orders=[o.id for o in lot_orders], weight=sum(o.actual_weight for o in lot_orders)))
+        return lots
 
     def assign_lots_bf(self, plant_id: int, orders: list[Order],
                        bound_factor: float|None=None, timeout: float=1, init_nearest_neighbours: bool=False) -> list[Lot]:

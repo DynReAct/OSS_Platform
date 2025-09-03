@@ -446,7 +446,7 @@ class LotsAllocator:
             return self._costs.update_transition_costs(plant, current, next, status[0], snapshot, new_lot=new_lot)
 
         def eval_costs(status: tuple[EquipmentStatus, ObjectiveFunction]) -> float:
-            return status[1].total_value
+            return status[1].additive_costs
 
         empty_status = costs.equipment_status(snapshot, plant, self._targets.period, plant_targets.total_weight)
         if solver_id == "default":

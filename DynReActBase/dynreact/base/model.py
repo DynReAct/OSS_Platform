@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone, date
 from typing import Any, TypeVar, Generic, Literal
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 
 class Model(BaseModel):
@@ -271,6 +271,14 @@ class EquipmentStatus(Model, Generic[P]):
     "Internal state of the optimization"
 
 
+class EquipmentProduction(Model):
+
+    equipment: int
+    total_weight: float
+    lot_weight_range: tuple[float, float] | None = None
+    "Weight restriction for lots in t"
+
+
 class ObjectiveFunction(Model, extra="allow"):
     """
     Note that this class may have use-case dependent extra fields
@@ -278,6 +286,12 @@ class ObjectiveFunction(Model, extra="allow"):
 
     total_value: float
     "The overall objective function value"
+    additive_costs: float|None=None
+    """
+    The sum of individual components that are monotonous with respect to adding orders; excluding for instance the 
+    weight_deviation, lot_size_deviation and structure_deviation components, but potentially also certain custom parts.
+    If unset, the mentioned values are subtracted from total_value.
+    """
     lots_count: float|None=None
     "Penalty for number of lots"
     transition_costs: float|None=None
@@ -293,13 +307,11 @@ class ObjectiveFunction(Model, extra="allow"):
     priority_costs: float|None = None
     "Penalty for order priority"
 
-
-class EquipmentProduction(Model):
-
-    equipment: int
-    total_weight: float
-    lot_weight_range: tuple[float, float] | None = None
-    "Weight restriction for lots in t"
+    @model_validator(mode="after")
+    def set_additive_costs(self):
+        if self.additive_costs is None:
+            self.additive_costs = self.total_value - (self.lot_size_deviation or 0) - (self.weight_deviation or 0) - (self.structure_deviation or 0)
+        return self
 
 
 SUM_MATERIAL: str = "_sum"

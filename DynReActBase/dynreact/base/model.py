@@ -310,7 +310,8 @@ class ObjectiveFunction(Model, extra="allow"):
     @model_validator(mode="after")
     def set_additive_costs(self):
         if self.additive_costs is None:
-            self.additive_costs = self.total_value - (self.lot_size_deviation or 0) - (self.weight_deviation or 0) - (self.structure_deviation or 0)
+            self.additive_costs = self.total_value - (self.lot_size_deviation or 0) - (self.weight_deviation or 0) - \
+                                  (self.structure_deviation or 0) - (self.priority_costs or 0)
         return self
 
 

@@ -405,7 +405,6 @@ class LotsAllocator:
             result = {p: [self._adapt_base_lots(lot, addon.get(p, None))] for p, lot in self._base_lots.items()}
         return result
 
-    # TODO WIP
     def assign_lots_internal(self, plant_id: int, orders: list[Order], has_global_costs: bool, snapshot: Snapshot,
                        bound_factor: float|None=None, timeout: float|None=1, solver_id: str|None=None) -> list[Lot]:
         timeout = timeout if timeout is None or timeout > 0 else None
@@ -430,20 +429,18 @@ class LotsAllocator:
             bound_factor = 0
 
         def global_costs(route: npt.NDArray[np.uint16], next_item: np.uint16, status: tuple[EquipmentStatus, ObjectiveFunction]) -> tuple[EquipmentStatus, ObjectiveFunction]:
-            #assignments = {orders[idx].id: OrderAssignment(equipment=plant_id, order=orders[idx].id, lot=dummy_lot,
-            #                                               lot_idx=counter + 1) for counter, idx in enumerate(route)}
-            # TODO consider other keyword parameters, such as priorities
+            # Note that material structure need not be considered here, it is fixed by the order assignments to equipment
             if len(route) == 0:
                 oid = orders[next_item].id
                 assignments = {oid: OrderAssignment(order=oid, equipment=plant_id, lot=dummy_lot, lot_idx=1)}
                 assignments.update({o.id: OrderAssignment(order=o.id, equipment=-1, lot="", lot_idx=-1) for o in orders if o.id != oid})
                 status = self._costs.evaluate_equipment_assignments(plant_targets, self._process, assignments, snapshot, self._targets.period,
-                                                                    previous_order=prev_order)  # TODO structure parameters?
+                                                                    previous_order=prev_order, orders_custom_priority=self._orders_custom_priority)
                 return status, costs.objective_function(status)
             current: Order = orders[route[-1]]
             next: Order = orders[next_item]
             new_lot: bool = len(route) == 0 or self.create_new_lot_costs_based(transition_costs[route[-1], next_item])
-            return self._costs.update_transition_costs(plant, current, next, status[0], snapshot, new_lot=new_lot)
+            return self._costs.update_transition_costs(plant, current, next, status[0], snapshot, new_lot=new_lot, orders_custom_priority=self._orders_custom_priority)
 
         def eval_costs(status: tuple[EquipmentStatus, ObjectiveFunction]) -> float:
             return status[1].additive_costs
@@ -483,6 +480,7 @@ class LotsAllocator:
                     orders=[o.id for o in lot_orders], weight=sum(o.actual_weight for o in lot_orders)))
         return lots
 
+    """@deprecated"""
     def assign_lots_bf(self, plant_id: int, orders: list[Order],
                        bound_factor: float|None=None, timeout: float=1, init_nearest_neighbours: bool=False) -> list[Lot]:
         timeout = timeout if timeout > 0 else None
@@ -533,6 +531,7 @@ class LotsAllocator:
                     orders=[o.id for o in lot_orders], weight=sum(o.actual_weight for o in lot_orders)))
         return lots
 
+    "@deprecated"
     def assign_lots_googleor(self, plant_id: int, orders: list[Order]) -> list[Lot]:
         plant: Equipment = self._plants[plant_id]
         sz: int = len(orders)

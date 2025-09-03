@@ -288,7 +288,7 @@ class ObjectiveFunction(Model, extra="allow"):
     "The overall objective function value"
     additive_costs: float|None=None
     """
-    The sum of individual components that are monotonous with respect to adding orders; excluding for instance the 
+    The sum of individual components that are monotonously increasing with respect to adding orders; excluding for instance the 
     weight_deviation, lot_size_deviation and structure_deviation components, but potentially also certain custom parts.
     If unset, the mentioned values are subtracted from total_value.
     """

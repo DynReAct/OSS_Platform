@@ -227,15 +227,15 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
     snapshot = DatetimeUtils.parse_date(snapshot)
     value_formatter_object = {"function": "formatCell(params.value, 4)"}
     col_defs: list[dict[str, Any]] = [{"field": "id", "pinned": True},
-         {"field": "target_production", "filter": "agNumberColumnFilter", "headerName": "Target Production / t", "valueFormatter": value_formatter_object},
-         {"field": "initialization"},
+         {"field": "target_production", "filter": "agNumberColumnFilter", "headerName": "Target Production / t", "valueFormatter": value_formatter_object, "headerTooltip": "Target production"},
+         #{"field": "initialization"},  # ?
          {"field": "target_fct", "filter": "agNumberColumnFilter", "headerName": "Target function", "valueFormatter": value_formatter_object,
           "headerTooltip": "Value of the objective function. The lower the better, but results are only comparable for the same target weights and init settings."},
-         {"field": "iterations", "filter": "agNumberColumnFilter"},
+         {"field": "iterations", "filter": "agNumberColumnFilter", "headerTooltip": "Number of optimization iterations"},
          {"field": "orders_considered", "filter": "agNumberColumnFilter", "headerName": "Orders",
           "headerTooltip": "Number of orders considered in the lot creation, including those not assigned to a lot."},
-         {"field": "lots", "filter": "agNumberColumnFilter"},
-         {"field": "plants"},
+         {"field": "lots", "filter": "agNumberColumnFilter", "headerTooltip": "Number of lots"},
+         {"field": "plants", "headerTooltip": "Equipment/plants scheduled"},
          {"field": "comment"},
          #{"field": "transition_costs", "filter": "agNumberColumnFilter", "headerName": "Transition costs"},
          {"field": "performance_models", "headerName": "Performance models",
@@ -265,8 +265,16 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
     site = state.get_site()
 
     random_sol = next(value for key, value in sol_objects.items() if key != "_SNAPSHOT_" or len(sol_objects) <= 1)
-    objective_keys = [f for f in random_sol.current_object_value.model_dump().keys() if f != "total_value"]
-    col_defs.extend([{"field": f, "filter": "agNumberColumnFilter", "valueFormatter": value_formatter_object} for f in objective_keys])
+    objective_keys = [f for f in random_sol.current_object_value.model_dump().keys() if f != "total_value" and f != "additive_costs"]
+    col_defs.extend([{"field": f, "filter": "agNumberColumnFilter", "valueFormatter": value_formatter_object, "headerTooltip": f} for f in objective_keys])
+    has_performance_models = any(p for p in params.values() if "performance_models" in p and len(p.get("performance_models")) > 0)
+    has_comment = any(c for c in (p.get("comment") for p in params.values() if "comment" in p) if c is not None and len(c) > 0)
+    if not has_performance_models:
+        pc = next(idx for idx, col in enumerate(col_defs) if col.get("field") == "performance_models")
+        col_defs.pop(pc)
+    if not has_comment:
+        cc = next(idx for idx, col in enumerate(col_defs) if col.get("field") == "comment")
+        col_defs.pop(cc)
 
     def merge_dicts(d1: dict, d2: dict) -> dict:
         d1.update(d2)
@@ -390,7 +398,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
             filter_id = "agNumberColumnFilter" if info.annotation == float or info.annotation == int else \
                 "agDateColumnFilter" if info.annotation == datetime or info.annotation == date else "agTextColumnFilter"
         else:
-            filter_id = "agNumberColumnFilter" if isinstance(info, float) else \
+            filter_id = "agNumberColumnFilter" if isinstance(info, float|int) else \
                 "agDateColumnFilter" if isinstance(info, datetime) or isinstance(info, date) else "agTextColumnFilter"
         col_def = {"field": field, "filter": filter_id}
         return col_def
@@ -410,7 +418,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         fields_0 = dict(sorted(props.model_fields.items(), key=lambda item: relevant_fields.index(item[0]) if item[0] in relevant_fields else len(relevant_fields))) \
                       if relevant_fields is not None else props.model_fields
 
-    fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True},
+    fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True, "filter": "agTextColumnFilter"},
                 {"field": "equipment", "headerTooltip": "Current equipment location of the order"},
                 {"field": "costs", "headerTooltip": "Transition costs from previous order."},
                 {"field": "weight", "headerTooltip": "Order weight in tons." },

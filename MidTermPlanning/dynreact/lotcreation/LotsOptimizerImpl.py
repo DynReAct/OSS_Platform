@@ -462,10 +462,12 @@ class LotsAllocator:
         lot_count = 0
         lot_orders: list[Order] = []
         lots: list[Lot] = []
+        last_idx: int|None = None
         last_order: Order | None = None
         for idx in route:
+            costs = 0 if last_order is None else transition_costs[last_idx, idx]
             order: Order = orders[idx]
-            costs = 0 if last_order is None else self._costs.transition_costs(plant, last_order, order)
+            # costs = 0 if last_order is None else self._costs.transition_costs(plant, last_order, order)
             if self.create_new_lot_costs_based(costs):
                 lot: Lot = Lot(id="LC_" + plant.name_short + "." + f"{lot_count:02d}", equipment=plant_id, active=False,
                                status=1, orders=[o.id for o in lot_orders],
@@ -474,6 +476,8 @@ class LotsAllocator:
                 lot_count += 1
                 lot_orders = []
             lot_orders.append(order)
+            last_idx = idx
+            last_order = order
         if len(lot_orders) > 0:
             lots.append(
                 Lot(id="LC_" + plant.name_short + "." + f"{lot_count:02d}", equipment=plant_id, active=False, status=1,

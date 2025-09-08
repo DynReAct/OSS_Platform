@@ -204,7 +204,6 @@ def analyze_site():
 def evaluate_lot():
     parser = argparse.ArgumentParser()
     parser.add_argument("lot", help="Lot id", type=str)
-    parser.add_argument("-s", "--snapshot", help="Snapshot timestamp", type=str, default=None)
     parser = _trafo_args(parser=parser)
     args = parser.parse_args()
     config = DynReActSrvConfig(config_provider=args.config_provider, snapshot_provider=args.snapshot_provider, cost_provider=args.cost_provider)

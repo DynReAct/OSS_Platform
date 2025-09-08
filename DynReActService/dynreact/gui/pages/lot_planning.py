@@ -32,11 +32,8 @@ lottransfer_thread: threading.Thread|None = None
 lottransfer_results: dict[str, any] = {}
 
 
-# TODO display "proprietary" columns in table (in PlantStatus#planning) => they need to be marked somehow, or we simply include all additional ones
-# TODO display also the snapshot solution and/or due dates solution?
-# FIXME the number of orders shown in the table seems lower than in the lot creation settings?
 def layout(*args, **kwargs):
-    process: str | None = kwargs.get("process")  # TODO use store from main layout instead
+    process: str | None = kwargs.get("process")  # TODO use store from main layout instead(?)
     lot_size: str|None = kwargs.get("lotsize", "weight")   # constant, weight, orders, coils are allowed values
     site = state.get_site()
     return html.Div([

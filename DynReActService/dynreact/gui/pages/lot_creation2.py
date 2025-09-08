@@ -2179,6 +2179,8 @@ def performance_models_from_elements(process: str, components: list[Component]|N
 
 def _lot_info(lot: Lot) -> str:
     result = f"{lot.id} [status={lot.status}, active={lot.active}"
+    if hasattr(lot, "priority"):
+        result += f", priority={getattr(lot, 'priority')}"
     if lot.weight is not None:
         result += f", weight={lot.weight:.2f} t"
     if lot.comment is not None:

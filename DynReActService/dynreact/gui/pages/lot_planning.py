@@ -364,7 +364,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         orders_by_lot[lot.id] = lot_orders
     unassigned_orders: dict[str, Order] = {}
     for order in snap_obj.orders:
-        if order.id in unassigned_order_ids:
+        if order.id in unassigned_order_ids and (predecessor_orders is None or order.id not in predecessor_orders.values()):
             unassigned_orders[order.id] = order
             if len(unassigned_orders) == len(unassigned_order_ids):
                 break

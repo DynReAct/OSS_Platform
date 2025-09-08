@@ -217,7 +217,7 @@ class CostProvider:
         :return:
         """
         costs_parameter = self.priority_costs_parameter()
-        if costs_parameter <= 0:
+        if not isinstance(costs_parameter, float|int) or costs_parameter <= 0:
             return 0
         cnt_assigned_orders_prio = sum(status.planning.assigned_priority for status in planning.equipment_status.values())
         cnt_backlog_orders_prio = planning.total_priority      #ass + unass

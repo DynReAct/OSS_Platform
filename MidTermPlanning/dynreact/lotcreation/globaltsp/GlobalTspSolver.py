@@ -5,7 +5,7 @@ import numpy as np
 import numpy.typing as npt
 
 # TODO this is Python 12 syntax, need to support Python 11, as well
-type Route = npt.NDArray[np.uint16]   # 1D array
+Route = npt.NDArray[np.uint16]   # 1D array
 """
 A route between points [0, 1, 2, ... ], represented as a 1D array of the form [3, 0, 2, ...].
 """

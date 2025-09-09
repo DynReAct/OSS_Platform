@@ -1,4 +1,4 @@
-from typing import Callable, Generator, Any
+from typing import Callable, Generator, Any, TypeVar, Generic
 
 import numpy as np
 import numpy.typing as npt
@@ -6,7 +6,10 @@ import numpy.typing as npt
 from dynreact.lotcreation.globaltsp.GlobalTspSolver import Route, GlobalTspInput, GlobalCostsTspSolver, TspResult
 
 
-class _NearestNeighbourScenario[T]:
+T = TypeVar("T")
+
+
+class _NearestNeighbourScenario(Generic[T]):
 
     def __init__(self,
                  local_transition_costs: npt.NDArray[np.float32],
@@ -51,7 +54,7 @@ class _NearestNeighbourScenario[T]:
         return self._nearest_neighbour_solution(new_route, best_cost_obj)
 
 
-class NearestNeighbourSolver[T](GlobalCostsTspSolver[T]):
+class NearestNeighbourSolver(GlobalCostsTspSolver[T]):
 
     def find_shortest_path_global(self, data: GlobalTspInput[T]) -> TspResult[T]:
         return _NearestNeighbourScenario(data.local_transition_costs, data.transition_costs, data.eval_costs, data.empty_state, data.time_limit, data.local_start_costs).find_shortest_path()

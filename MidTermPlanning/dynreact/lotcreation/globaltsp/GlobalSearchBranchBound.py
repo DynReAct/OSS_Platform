@@ -1,13 +1,15 @@
 import time
-from typing import Callable, Mapping
+from typing import Callable, Mapping, TypeVar, Generic
 
 import numpy as np
 import numpy.typing as npt
 
 from dynreact.lotcreation.globaltsp.GlobalTspSolver import Route, GlobalTspInput, GlobalCostsTspSolver, TspResult
 
+T = TypeVar("T")
 
-class _GlobalSearchBBScenario[T]:
+
+class _GlobalSearchBBScenario(Generic[T]):
 
     def __init__(self,
                  local_transition_costs: npt.NDArray[np.float32],
@@ -124,7 +126,7 @@ class _GlobalSearchBBScenario[T]:
                 self.find_shortest_subpath(new_route, new_cost_obj)
 
 
-class GlobalSearchBB[T](GlobalCostsTspSolver[T]):
+class GlobalSearchBB(GlobalCostsTspSolver[T]):
     """
     A branch and bound algorithm, which iterates through all permutations, but with the option to
         - set a time limit

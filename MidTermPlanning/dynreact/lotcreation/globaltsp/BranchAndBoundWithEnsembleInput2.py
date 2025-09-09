@@ -1,6 +1,6 @@
 import time
 from itertools import groupby
-from typing import Callable, Any, Mapping, Sequence, Iterator, Generator
+from typing import Callable, Any, Mapping, Sequence, Iterator, Generator, TypeVar, Generic
 
 import numpy as np
 import numpy.typing as npt
@@ -16,15 +16,17 @@ the results of other optimization algorithms, so that the likelihood will be hig
 and hence to prune many bad ones quickly. 
 """
 
+T = TypeVar("T")
 
-def _evaluate_route[T](route: Route, empty: T, costs:  Callable[[Route, np.uint16 | int, T], T]) -> T:
+
+def _evaluate_route(route: Route, empty: T, costs:  Callable[[Route, np.uint16 | int, T], T]) -> T:
     state: T = empty
     for idx, item in enumerate(route):
         state = costs(route[:idx], item, state)
     return state
 
 
-class _SubSolver2[T]:
+class _SubSolver2(Generic[T]):
     """
     A sub solver is associated with one specific start route. It operates in coordinates in which the start route is
     [0, 1, 2, 3, ...]
@@ -163,7 +165,7 @@ class _SubSolver2[T]:
             self._best_state = None
 
 
-class _BBEnsembleScenario2[T]:
+class _BBEnsembleScenario2(Generic[T]):
 
     def __init__(self,
                  data: GlobalTspInput,
@@ -306,7 +308,7 @@ class _BBEnsembleScenario2[T]:
             start = False
         return TspResult(self._best_path, self._best_cost_obj, timeout_reached=timeout)
 
-class GlobalSearchBBEnsemble2[T](GlobalCostsTspSolver[T]):
+class GlobalSearchBBEnsemble2(GlobalCostsTspSolver[T]):
     """
     A branch and bound algorithm, which iterates through all permutations, but with the option to
         - set a time limit
@@ -335,7 +337,7 @@ class GlobalSearchBBEnsemble2[T](GlobalCostsTspSolver[T]):
         return _BBEnsembleScenario2(data, self._init_routes, bound_factor_upcoming_costs=self._bound_factor_upcoming_costs, batch_size=self._batch_size).find_shortest_path()
 
 
-class GlobalSearchDefault[T](GlobalCostsTspSolver[T]):
+class GlobalSearchDefault(GlobalCostsTspSolver[T]):
 
     def __init__(self, bound_factor_upcoming_costs: float|dict[int, float] = 0.25, batch_size: int=1000, timeout_pre_solvers: float|None=1.):
         """

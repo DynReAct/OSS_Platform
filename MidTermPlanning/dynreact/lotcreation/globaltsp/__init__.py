@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Sequence
+from typing import Sequence, TypeVar
 
 from dynreact.lotcreation.globaltsp.GlobalTspSolver import Route, GlobalTspInput, TspInput, TspResult, GlobalCostsTspSolver, TspSolver
 
@@ -12,7 +12,10 @@ class SolverId(StrEnum):
     BranchBoundEnsemble = "bb_ensemble"
 
 
-def solve[T](data: GlobalTspInput[T],
+T = TypeVar("T")
+
+# def solve[T] -> PYthon 3.12 syntax
+def solve(data: GlobalTspInput[T],
              solver_id: SolverId|Sequence[SolverId]|GlobalCostsTspSolver[T] = SolverId.BranchBoundEnsemble) -> TspResult[T]:
     """
     Parameters:
@@ -25,7 +28,7 @@ def solve[T](data: GlobalTspInput[T],
     return solver(solver_id).find_shortest_path_global(data)
 
 
-def solver[T](solver_id: SolverId|Sequence[SolverId]|GlobalCostsTspSolver[T] = SolverId.BranchBoundEnsemble) -> GlobalCostsTspSolver[T]:
+def solver(solver_id: SolverId|Sequence[SolverId]|GlobalCostsTspSolver[T] = SolverId.BranchBoundEnsemble) -> GlobalCostsTspSolver[T]:
     if solver_id == SolverId.BranchBoundEnsemble:
         from globaltsp.BranchAndBoundWithEnsembleInput2 import GlobalSearchDefault
         solver_id = GlobalSearchDefault()

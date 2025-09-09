@@ -1,6 +1,6 @@
 import time
 from itertools import groupby
-from typing import Callable, Any, Mapping, Sequence
+from typing import Callable, Any, Mapping, Sequence, TypeVar, Generic
 
 import numpy as np
 import numpy.typing as npt
@@ -20,15 +20,17 @@ account: std dev of the transition matrix column sums; costs of the different in
     => The DEI department intervenes and reduces the resources available for this scenario  
 """
 
+T = TypeVar("T")
 
-def _evaluate_route[T](route: Route, empty: T, costs:  Callable[[Route, np.uint16 | int, T], T]) -> T:
+
+def _evaluate_route(route: Route, empty: T, costs:  Callable[[Route, np.uint16 | int, T], T]) -> T:
     state: T = empty
     for idx, item in enumerate(route):
         state = costs(route[:idx], item, state)
     return state
 
 
-class _SubSolver[T]:
+class _SubSolver(Generic[T]):
     """
     A sub solver is associated with one specific start route. It operates in coordinates in which the start route is
     [0, 1, 2, 3, ...]
@@ -160,7 +162,7 @@ class _SubSolver[T]:
                     self._find_subpath(next_route, next_state, np.delete(open_items, pos))  # [i for i in open_items if i != item])
 
 
-class _BBEnsembleScenario[T]:
+class _BBEnsembleScenario(Generic[T]):
 
     def __init__(self,
                  data: GlobalTspInput,
@@ -298,7 +300,7 @@ class _BBEnsembleScenario[T]:
                         self._best_path = route
         return TspResult(self._best_path, self._best_cost_obj, timeout_reached=timeout)
 
-class GlobalSearchBBEnsemble[T](GlobalCostsTspSolver[T]):
+class GlobalSearchBBEnsemble(GlobalCostsTspSolver[T], Generic[T]):
     """
     A branch and bound algorithm, which iterates through all permutations, but with the option to
         - set a time limit

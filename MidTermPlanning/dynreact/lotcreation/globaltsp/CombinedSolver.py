@@ -1,11 +1,14 @@
-from typing import Sequence, Any
+from typing import Sequence, Any, TypeVar, Generic
 
 import numpy as np
 
 from dynreact.lotcreation.globaltsp.GlobalTspSolver import GlobalCostsTspSolver, GlobalTspInput, TspResult, evaluate_route, Route
 
 
-class CombinedSequentialSolver[T](GlobalCostsTspSolver[T]):
+T = TypeVar("T")
+
+
+class CombinedSequentialSolver(GlobalCostsTspSolver[T], Generic[T]):
     """
     Takes the result of one solver and feeds it as the start configuration into the next solver.
     """
@@ -42,7 +45,7 @@ class CombinedSequentialSolver[T](GlobalCostsTspSolver[T]):
                 local_data = permute(local_data, result.route, time_limit=time_limits[idx])
         return all_results[np.argmin(all_costs)]
 
-def permute[T](data: GlobalTspInput[T], permutation: Route, time_limit: float | None=None) -> GlobalTspInput[T]:
+def permute(data: GlobalTspInput[T], permutation: Route, time_limit: float | None=None) -> GlobalTspInput[T]:
     num: int = len(permutation)
     local_transition_costs = np.array([[data.local_transition_costs[permutation[i], permutation[j]] for j in range(num)] for i in range(num)], dtype=np.float32)
     local_start_costs = None
@@ -61,7 +64,7 @@ def permute[T](data: GlobalTspInput[T], permutation: Route, time_limit: float | 
 #    return np.array([as_list.index(idx) for idx in range(num)], dtype=np.uint16)
 
 
-class EnsembleSolver[T](GlobalCostsTspSolver[T]):
+class EnsembleSolver(GlobalCostsTspSolver[T], Generic[T]):
     """
     Compares the results from different solvers and selects the best; all solvers are fed the same start configuration,
     as opposed to CombinedSequentialSolver, where the result of solver i is fed as start config into solver i+1

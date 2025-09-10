@@ -443,7 +443,9 @@ class LotsAllocator:
             return self._costs.update_transition_costs(plant, current, next, status[0], snapshot, new_lot=new_lot, orders_custom_priority=self._orders_custom_priority)
 
         def eval_costs(status: tuple[EquipmentStatus, ObjectiveFunction], is_final: bool) -> float:
-            return status[1].additive_costs if not is_final else status[1].total_value
+            # The weight deviation is irrelevant here because it is the same for all routes; we therefore get better
+            # estimates by subtracting it and hence can apply better shortcutting
+            return status[1].additive_costs if not is_final else status[1].total_value - status[1].weight_deviation
 
         empty_status = costs.equipment_status(snapshot, plant, self._targets.period, plant_targets.total_weight)
         if solver_id == "default":

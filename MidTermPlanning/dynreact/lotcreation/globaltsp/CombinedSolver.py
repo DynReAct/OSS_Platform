@@ -24,7 +24,7 @@ class CombinedSequentialSolver(GlobalCostsTspSolver[T], Generic[T]):
         num: int = data.local_transition_costs.shape[0]
         route = np.arange(num, dtype=np.int16)
         state = evaluate_route(route, data)
-        costs = data.eval_costs(state)
+        costs = data.eval_costs(state, True)
         result = TspResult(route, state)
         all_results: list[TspResult[T]] = [result]   # initial config
         all_costs: list[float] = [costs]
@@ -37,7 +37,7 @@ class CombinedSequentialSolver(GlobalCostsTspSolver[T], Generic[T]):
             result = solver.find_shortest_path_global(local_data)
             route_in_original_coords = inverse_trafo[result.route]
             all_results.append(TspResult(route=route_in_original_coords, state=result.state, timeout_reached=result.timeout_reached))
-            all_costs.append(data.eval_costs(result.state))
+            all_costs.append(data.eval_costs(result.state, True))
             # reshuffle route so we can use the output of solver 1 as input for solver 2 => configurable
             if True:
                 # transformation from the new best route to the original coordinates
@@ -76,7 +76,7 @@ class EnsembleSolver(GlobalCostsTspSolver[T], Generic[T]):
 
     def find_shortest_path_global(self, data: GlobalTspInput[T]) -> TspResult[T]:
         results: list[TspResult[T]] = self.find_shortest_paths_global(data)
-        costs = [data.eval_costs(r.state) for r in results]
+        costs = [data.eval_costs(r.state, True) for r in results]
         return results[np.argmin(costs)]
 
     def find_shortest_paths_global(self, data: GlobalTspInput[T]) -> list[TspResult[T]]:

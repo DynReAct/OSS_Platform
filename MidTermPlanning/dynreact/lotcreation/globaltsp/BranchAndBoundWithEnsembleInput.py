@@ -94,8 +94,6 @@ class _SubSolver(Generic[T]):
         sub_route = last_route[:last_idx+1]
         self.find_best_subpath(sub_route)   # , state)
         route: Route|None = self._best_route
-        # FIXME
-        print("   SOLVER", self._id[:15], "returns cost", self._best_state, "route:", self._permutation[route])
         return (self._permutation[route] if route is not None else None), self._best_state
 
     def find_best_subpath(self, start_route: Route):
@@ -119,7 +117,7 @@ class _SubSolver(Generic[T]):
                     if has_match:
                         continue
                 next_state = self._transition_costs(new_start_route, idx2, state)
-                next_costs: float = self._eval_costs(next_state)
+                next_costs: float = self._eval_costs(next_state, False)
                 if next_costs >= self._best_costs:
                     continue
                 new_open_items = np.delete(open_items, pos)
@@ -135,14 +133,15 @@ class _SubSolver(Generic[T]):
         open_slots = len(open_items)
         route_length = self._num - open_slots + 1  # applies to next_route below
         excluded: list[Route]|None = self._excluded_routes.get(route_length)
+        is_final: bool = open_slots == 1
         for pos, item in enumerate(open_items):
             next_route = np.append(route, item)
             has_match: bool = excluded is not None and any(ex for ex in excluded if all(item == next_route[idx] for idx, item in enumerate(ex)))
             if has_match:
                 continue
             next_state = self._transition_costs(route, item, state)
-            next_costs = self._eval_costs(next_state)
-            if open_slots == 1:
+            next_costs = self._eval_costs(next_state, is_final)
+            if is_final:
                 self._done += 1    # we need to continue this final iteration, in any case
                 self._last_route = next_route
                 self._last_idx = route_length-1
@@ -179,12 +178,10 @@ class _BBEnsembleScenario(Generic[T]):
         for dup in reversed(duplicates):
             init_routes.pop(dup)
         init_states = [_evaluate_route(r, data.empty_state, data.transition_costs) for r in init_routes]
-        init_costs = [data.eval_costs(state) for state in init_states]
+        init_costs = [data.eval_costs(state, False) for state in init_states]
         init_routes = [route for cost, route in sorted(zip(init_costs, init_routes), key=lambda pair: pair[0])]  # sort routes by costs
         init_states = [state for cost, state in sorted(zip(init_costs, init_states), key=lambda pair: pair[0])]
         init_costs = sorted(init_costs)
-        # FIXME
-        print("  INITIAL costs", init_costs)
 
         self._local_transition_costs = data.local_transition_costs if isinstance(data.local_transition_costs, np.ndarray) \
             else np.array(data.local_transition_costs, dtype=np.float32)
@@ -284,16 +281,12 @@ class _BBEnsembleScenario(Generic[T]):
             if len(solvers) == 0:
                 break
             if self._time_limit is not None and time.time() - start_time >= self._time_limit:
-                # FIXME
-                print("  TIMEOUT AFTER ", time.time() - start_time, "s")
                 timeout = True
                 break
             for s in solvers:
                 route, state = s.run(100, self._best_costs)
-                # FIXME
-                print("    NEXT iteration returns ", state, "route", route)
                 if state is not None:
-                    costs = self._eval_costs(state)
+                    costs = self._eval_costs(state, True)
                     if costs < self._best_costs:
                         self._best_costs = costs
                         self._best_cost_obj = state

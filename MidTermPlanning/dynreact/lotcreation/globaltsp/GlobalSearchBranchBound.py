@@ -14,7 +14,7 @@ class _GlobalSearchBBScenario(Generic[T]):
     def __init__(self,
                  local_transition_costs: npt.NDArray[np.float32],
                  transition_costs: Callable[[Route, np.uint16 | int, T], T],
-                 eval_costs: Callable[[T], float],
+                 eval_costs: Callable[[T, bool], float],
                  empty_state: T,
                  time_limit: float|None = None,
                  local_start_costs: npt.NDArray[np.float32]|None = None,
@@ -82,7 +82,7 @@ class _GlobalSearchBBScenario(Generic[T]):
         self._start_time = time.time()
         for idx in range(num):
             cost_obj: T = self._transition_costs(np.array([], dtype=np.uint16), idx, self._empty_state)
-            costs: float = self._eval_costs(cost_obj)
+            costs: float = self._eval_costs(cost_obj, False)
             start_route = np.array([idx], dtype=np.uint16)
             if costs >= self._best_costs:
                 continue
@@ -97,6 +97,7 @@ class _GlobalSearchBBScenario(Generic[T]):
     def find_shortest_subpath(self, start_route: Route, cost_obj: T):
         open_positions: list[np.uint16] = [idx for idx in (np.uint16(idx) for idx in range(self._num)) if idx not in start_route]
         open_slots: int = self._num - len(start_route)
+        is_final: bool = open_slots == 1
         if self._time_limit is not None:
             if self._timeout_reached:
                 return
@@ -106,12 +107,12 @@ class _GlobalSearchBBScenario(Generic[T]):
             # not returning immediately ensures that at least one solution will be found, since we are at the final level already
         for idx in open_positions:
             new_cost_obj = self._transition_costs(start_route, idx, cost_obj)
-            new_costs: float = self._eval_costs(new_cost_obj)
+            new_costs: float = self._eval_costs(new_cost_obj, is_final)
             self._iteration_cnt += 1
             if new_costs >= self._best_costs:
                 continue
             new_route = np.append(start_route, idx)
-            if open_slots == 1:  # we already know costs are lower than the current best costs
+            if is_final:  # we already know costs are lower than the current best costs
                 self._best_costs = new_costs
                 self._best_cost_obj = new_cost_obj
                 self._best_path = new_route

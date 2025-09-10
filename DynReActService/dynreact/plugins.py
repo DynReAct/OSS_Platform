@@ -90,7 +90,7 @@ class Plugins:
     def get_lots_optimization(self) -> LotsOptimizationAlgo:
         if self._lots_optimizer is None:
             self._lots_optimizer = Plugins._load_module("dynreact.lotcreation.LotsOptimizerImpl", LotsOptimizationAlgo,
-                                                        self.get_config_provider().site_config())
+                                                        self.get_config_provider().site_config(), do_raise=True)
         return self._lots_optimizer
 
     def get_long_term_planning(self) -> LongTermPlanning:

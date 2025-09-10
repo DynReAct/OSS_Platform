@@ -14,7 +14,7 @@ class _NearestNeighbourScenario(Generic[T]):
     def __init__(self,
                  local_transition_costs: npt.NDArray[np.float32],
                  transition_costs: Callable[[Route, np.uint16 | int, T], T],
-                 eval_costs: Callable[[T], float],
+                 eval_costs: Callable[[T, bool], float],
                  empty_route: T,
                  time_limit: float|None = None,
                  local_start_costs: npt.NDArray[np.float32]|None = None):
@@ -43,7 +43,7 @@ class _NearestNeighbourScenario(Generic[T]):
         best_cost_obj: T | None = None
         for idx in open_positions:
             new_cost_obj = self._transition_costs(start_route, idx, cost_obj)
-            new_costs: float = self._eval_costs(new_cost_obj)
+            new_costs: float = self._eval_costs(new_cost_obj, False)
             if new_costs < best_costs:
                 best_idx = idx
                 best_costs = new_costs

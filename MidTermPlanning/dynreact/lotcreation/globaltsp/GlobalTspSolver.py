@@ -4,7 +4,6 @@ from typing import Callable, TypeVar, Generic
 import numpy as np
 import numpy.typing as npt
 
-# TODO this is Python 12 syntax, need to support Python 11, as well
 Route = npt.NDArray[np.uint16]   # 1D array
 """
 A route between points [0, 1, 2, ... ], represented as a 1D array of the form [3, 0, 2, ...].
@@ -33,9 +32,9 @@ class GlobalTspInput(TspInput, Generic[T]):
     It is assumed that the transition costs are always greater or equal to the corresponding local transition costs,
     otherwise the algorithms may lead to suboptimal results. 
     """
-    eval_costs: Callable[[T], float]
+    eval_costs: Callable[[T, bool], float]
     """
-    Extract total costs from the state object T.
+    Extract total costs from the state object T and a boolean indicator whether the route is complete or not.
     """
     empty_state: T
     """
@@ -88,7 +87,7 @@ def local_problem_as_global(data: TspInput) -> GlobalTspInput[float]:
             return cumulated_costs + (data.local_start_costs[next_item] if data.local_start_costs is not None else 0.)
         return cumulated_costs + data.local_transition_costs[route[-1], next_item]
     return GlobalTspInput(local_transition_costs=data.local_transition_costs, local_start_costs=data.local_start_costs, time_limit=data.time_limit,
-                          transition_costs=global_costs, eval_costs=lambda c: c, empty_state=0.)
+                          transition_costs=global_costs, eval_costs=lambda c, b: c, empty_state=0.)
 
 
 def evaluate_route(route: Route, data: GlobalTspInput[T]) -> T:

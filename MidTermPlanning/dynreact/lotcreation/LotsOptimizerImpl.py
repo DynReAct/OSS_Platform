@@ -442,8 +442,8 @@ class LotsAllocator:
             new_lot: bool = len(route) == 0 or self.create_new_lot_costs_based(transition_costs[route[-1], next_item])
             return self._costs.update_transition_costs(plant, current, next, status[0], snapshot, new_lot=new_lot, orders_custom_priority=self._orders_custom_priority)
 
-        def eval_costs(status: tuple[EquipmentStatus, ObjectiveFunction]) -> float:
-            return status[1].additive_costs
+        def eval_costs(status: tuple[EquipmentStatus, ObjectiveFunction], is_final: bool) -> float:
+            return status[1].additive_costs if not is_final else status[1].total_value
 
         empty_status = costs.equipment_status(snapshot, plant, self._targets.period, plant_targets.total_weight)
         if solver_id == "default":

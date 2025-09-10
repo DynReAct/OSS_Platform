@@ -111,7 +111,7 @@ class _SubSolver2(Generic[T]):
                     if has_match:
                         continue
                 next_state = self._transition_costs(new_start_route, idx2, state)
-                next_costs: float = self._eval_costs(next_state)
+                next_costs: float = self._eval_costs(next_state, False)
                 if next_costs >= self._best_costs:
                     self._done += 1
                     continue
@@ -127,6 +127,7 @@ class _SubSolver2(Generic[T]):
 
     def _find_subpath(self, route: Route, state: T, open_items: npt.NDArray[np.uint16]):
         open_slots = len(open_items)
+        is_final: bool = open_slots == 1
         route_length = self._num - open_slots + 1  # applies to next_route below
         excluded: list[Route]|None = self._excluded_routes.get(route_length)
         for pos, item in enumerate(open_items):
@@ -135,15 +136,15 @@ class _SubSolver2(Generic[T]):
             if has_match:
                 continue
             next_state = self._transition_costs(route, item, state)
-            next_costs = self._eval_costs(next_state)
-            if open_slots == 1:
+            next_costs = self._eval_costs(next_state, is_final)
+            if is_final:
                 self._done += 1    # we need to continue this final iteration, in any case
                 self._last_route = next_route
                 self._last_idx = route_length-1
             if next_costs >= self._best_costs:
                 self._done += 1
                 continue
-            if open_slots == 1:
+            if is_final:
                 self._best_costs = next_costs
                 self._best_state = next_state
                 self._best_route = next_route
@@ -182,7 +183,7 @@ class _BBEnsembleScenario2(Generic[T]):
         for dup in reversed(duplicates):
             init_routes.pop(dup)
         init_states = [_evaluate_route(r, data.empty_state, data.transition_costs) for r in init_routes]
-        init_costs = [data.eval_costs(state) for state in init_states]
+        init_costs = [data.eval_costs(state, True) for state in init_states]
         init_routes = [route for cost, route in sorted(zip(init_costs, init_routes), key=lambda pair: pair[0])]  # sort routes by costs
         init_states = [state for cost, state in sorted(zip(init_costs, init_states), key=lambda pair: pair[0])]
         init_costs = sorted(init_costs)
@@ -292,7 +293,7 @@ class _BBEnsembleScenario2(Generic[T]):
                     else:
                         route, state = next(g)
                     if state is not None:
-                        costs = self._eval_costs(state)
+                        costs = self._eval_costs(state, True)
                         if costs < self._best_costs:
                             self._best_costs = costs
                             self._best_cost_obj = state

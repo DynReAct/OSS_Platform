@@ -1087,7 +1087,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
             col_def["filterParams"]["maxNumConditions"] = 50
         return col_def
 
-    fields = [column_def_for_field(key, info) for key, info in snapshot_obj.orders[0].model_fields.items() if (key not in ["material_properties", "lot", "lot_position" ])] + \
+    fields = [column_def_for_field(key, info) for key, info in snapshot_obj.orders[0].model_fields.items() if (key not in ["material_properties", "lot", "lot_position", "material_status", "follow_up_processes" ])] + \
              ([column_def_for_field(key, info) for key, info in snapshot_obj.orders[0].material_properties.model_fields.items()] if isinstance(snapshot_obj.orders[0].material_properties, BaseModel) else [])
 
     plants = {p.id: p for p in site.equipment}
@@ -1098,8 +1098,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
             field["headerName"] = "Id"
             field["checkboxSelection"] = True
             # field["headerCheckboxSelection"] = True # This option is difficult to understand: it also selects rows which are currently hidden
-        if field["field"] in ["active_processes", "coil_status", "follow_up_processes", "material_status",
-                             "actual_weight", "material_classes"]:
+        if field["field"] in ["active_processes", "coil_status", "follow_up_processes", "material_status", "actual_weight", "material_classes"]:
             field["valueFormatter"] = value_formatter_object
         if field["field"] == "current_equipment":
             field["headerName"]  = "Equipment"

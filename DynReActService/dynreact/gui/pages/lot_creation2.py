@@ -962,12 +962,14 @@ def lot_buttons_disabled_check(selected_lots: list[str]|None, selected_rows: lis
     disabled = selected_lots is None or len(selected_lots) == 0 or snapshot_obj is None
     if disabled:
         return disabled, disabled, 0, 0
+    if isinstance(selected_rows, dict):
+        selected_rows = selected_rows.get("ids")
     selected_orders: list[str] = [row["id"] if isinstance(row, dict) else row for row in selected_rows] if selected_rows is not None else []
     lots_affected: list[Lot] = [lot for lots in snapshot_obj.lots.values() for lot in lots if lot.id in selected_lots]
     orders_affected: list[str] = [order for lot in lots_affected for order in lot.orders]
     total_orders = len(orders_affected)
-    selected_orders = len([o for o in orders_affected if o in selected_orders])
-    return disabled, disabled, selected_orders, total_orders
+    selected_orders_cnt = len([o for o in orders_affected if o in selected_orders])
+    return disabled, disabled, selected_orders_cnt, total_orders
 
 @callback(
     Output("lots2-orders-data", "data"),
@@ -986,6 +988,8 @@ def update_backlog_state(snapshot: str, process: str, rows: list[dict[str, any]]
     if update_selection:
         orders_data = {"process": process, "snapshot": snapshot_serialized}
     if rows is None:
+        orders_data.pop("orders_selected_cnt", None)
+        orders_data.pop("orders_selected_weight", None)
         return orders_data
     orders_data["orders_selected_cnt"] = len(rows)
     if isinstance(rows, dict):

@@ -966,7 +966,7 @@ def lot_buttons_disabled_check(selected_lots: list[str]|None, selected_rows: lis
         selected_rows = selected_rows.get("ids")
     selected_orders: list[str] = [row["id"] if isinstance(row, dict) else row for row in selected_rows] if selected_rows is not None else []
     lots_affected: list[Lot] = [lot for lots in snapshot_obj.lots.values() for lot in lots if lot.id in selected_lots]
-    orders_affected: list[str] = [order for lot in lots_affected for order in lot.orders]
+    orders_affected: set[str] = {order for lot in lots_affected for order in lot.orders}
     total_orders = len(orders_affected)
     selected_orders_cnt = len([o for o in orders_affected if o in selected_orders])
     return disabled, disabled, selected_orders_cnt, total_orders

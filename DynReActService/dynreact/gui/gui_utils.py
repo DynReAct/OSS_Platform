@@ -1,4 +1,9 @@
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from dash import html, callback_context
+
+from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Equipment
 
 
@@ -20,3 +25,15 @@ class GuiUtils:
     def changed_ids(excluded_ids: list[str]|None=None):
         "To be called from a callback"
         return [cid for cid in (p['prop_id'].split(".")[0] for p in callback_context.triggered) if excluded_ids is None or cid not in excluded_ids]
+
+    @staticmethod
+    def format_snapshot(snapshot: datetime|str|None, tz: str|None) -> str:
+        snapshot = DatetimeUtils.parse_date(snapshot)
+        if snapshot is None:
+            return ""
+        zi = None
+        try:
+            zi = ZoneInfo(tz)
+        except:
+            pass
+        return DatetimeUtils.format(snapshot.astimezone(zi))

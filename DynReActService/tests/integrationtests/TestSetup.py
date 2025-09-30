@@ -4,7 +4,7 @@ from datetime import datetime
 from dynreact.base.impl.SimpleCostProvider import SimpleCostProvider
 from dynreact.base.impl.StaticConfigurationProvider import StaticConfigurationProvider
 from dynreact.base.impl.StaticSnapshotProvider import StaticSnapshotProvider
-from dynreact.base.model import Site, Snapshot, Order, Material
+from dynreact.base.model import Site, Snapshot, Order, Material, Model
 from pydantic import BaseModel
 
 from dynreact.app_config import ConfigProvider, DynReActSrvConfig
@@ -33,13 +33,14 @@ class TestSetup:
         plugins._config_provider = StaticConfigurationProvider(site)
         plugins._snapshot_provider = StaticSnapshotProvider(site, snapshot)
         # maybe pass cost provider itself instead?
-        plugins._cost_provider = SimpleCostProvider(site, transition_costs=transition_costs, missing_weight_costs=missing_weight_costs,
+        plugins._cost_provider = SimpleCostProvider("simple:costs", site, transition_costs=transition_costs, missing_weight_costs=missing_weight_costs,
                                                 surplus_weight_costs=surplus_weight_costs, new_lot_costs=new_lot_costs)
         # TODO downtime provider
 
     @staticmethod
     def create_order(id: str, plants: list[int], weight: float, due_date: datetime|None=None):
-        return Order(id=id, allowed_equipment=plants, target_weight=weight, actual_weight=weight, due_date=due_date, material_properties=TestMaterial(material_id="test"))
+        return Order(id=id, allowed_equipment=plants, target_weight=weight, actual_weight=weight, due_date=due_date, material_properties=TestMaterial(material_id="test"),
+                     current_processes=[], active_processes={})
 
     @staticmethod
     def create_coils_for_orders(orders: list[Order], process: int) -> list[Material]:  # one coil per order
@@ -76,7 +77,7 @@ class DynReActAssertions:
         # assert snapshot1 == snapshot2, "Generic error"
 
 
-class TestMaterial(BaseModel):
+class TestMaterial(Model):
 
     material_id: str
 

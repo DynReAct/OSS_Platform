@@ -23,7 +23,8 @@ class ServiceTest(unittest.TestCase):
         test_site = Site(
             processes=[Process(name_short=ServiceTest.process, process_ids=[process_id])],
             equipment=plants,
-            storages=[]
+            storages=[],
+            material_categories=[]
         )
         orders = [TestSetup.create_order("a", range(num_plants), 10), TestSetup.create_order("b", range(num_plants), 10)]
         snapshot = Snapshot(timestamp=datetime(2024, 5, 1, tzinfo=timezone.utc),
@@ -62,7 +63,7 @@ class ServiceTest(unittest.TestCase):
         response.raise_for_status()
         json_resp = response.json()
         snapshot: Snapshot = Snapshot.model_validate(json_resp)
-        # fails... might be a pydantic bug
+        # fails... might be a pydantic
         #assert snapshot == self._snapshot, "Snapshots do not match"
         DynReActAssertions.assert_snapshots_equal(snapshot, self._snapshot)
 
@@ -70,7 +71,7 @@ class ServiceTest(unittest.TestCase):
         order1 = self._snapshot.orders[0].id
         order2 = self._snapshot.orders[1].id
         from dynreact.service.model import EquipmentTransition
-        body = EquipmentTransition(equipment=self._site.equipment[0].id, snapshot_id=self._snapshot.timestamp, current=order1, next=order2)
+        body = EquipmentTransition(equipment=self._site.equipment[0].id, snapshot_id=self._snapshot.timestamp, current_order=order1, next_order=order2)
         response = self._client.post("/costs/transitions", content=body.model_dump_json(),
                                      headers={"Accept": "application/json", "Content-Type": "application/json"})
         response.raise_for_status()
@@ -79,7 +80,7 @@ class ServiceTest(unittest.TestCase):
         assert math.isclose(costs, self._transition_costs[order1][order2]), "Unexpected transition costs " + str(costs) \
                                                         + ", expected " + str(self._transition_costs[order1][order2])
         # and the other way round
-        body = EquipmentTransition(equipment=self._site.equipment[0].id, snapshot_id=self._snapshot.timestamp, current=order2, next=order1)
+        body = EquipmentTransition(equipment=self._site.equipment[0].id, snapshot_id=self._snapshot.timestamp, current_order=order2, next_order=order1)
         response = self._client.post("/costs/transitions", content=body.model_dump_json(),
                                      headers={"Accept": "application/json", "Content-Type": "application/json"})
         response.raise_for_status()
@@ -103,12 +104,10 @@ class ServiceTest(unittest.TestCase):
                                msg="Unexpected target function value for empty production")
         endpoint = "/costs/transitions-stateful"
         transition: EquipmentTransitionStateful = EquipmentTransitionStateful(equipment=plant_id, snapshot_id=snapshot_id,
-                                                                              current="", next="", equipment_status=status)
+                                                                              current_order="", next_order="", equipment_status=status)
         prev: Order|None = None
         for order in self._snapshot.orders:
-            transition.current = prev.id if prev is not None else ""  # required field!
-            transition.next = order.id
-            transition.equipment_status = status
+            transition = transition.model_copy(update={"current_order": prev.id if prev is not None else "", "next_order": order.id, "equipment_status": status})
             transition_resp = self._client.post(endpoint, content=transition.model_dump_json(),
                             headers={"Accept": "application/json", "Content-Type": "application/json"})
             transition_resp.raise_for_status()

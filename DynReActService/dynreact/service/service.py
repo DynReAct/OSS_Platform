@@ -1,6 +1,7 @@
 import random
 import sys
 import threading
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Iterator, Literal, Annotated
 
@@ -8,7 +9,8 @@ from dynreact.base.LotsOptimizer import LotsOptimizer
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, \
-    MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction
+    MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction, AggregatedStorageContent, \
+    AggregatedMaterial
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.params import Path, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +22,18 @@ from dynreact.service.model import EquipmentTransition, EquipmentTransitionState
     LotsOptimizationResults, TransitionInfo, MaterialTransfer, LongTermPlanningResults
 from dynreact.service.optim_listener import LotsOptimizationListener
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # start aggregation
+    aggregation = state.get_aggregation_provider()
+    aggregation.start()
+    yield
+    try:
+        aggregation.stop()
+    except:
+        pass
+
 fastapi_app = FastAPI(
     title="DynReAct production planning service",
     description="DynReAct mid-term production planning service for steel plants.",
@@ -30,6 +44,7 @@ fastapi_app = FastAPI(
         "email": "info@bfi.de"
     },
     openapi_tags=[{"name": "dynreact"}],
+    lifespan=lifespan if config.aggregation else None
 )
 if config.cors:
     fastapi_app.add_middleware(
@@ -116,20 +131,30 @@ def aggregate_material(response: Response, timestamp: str | datetime = Path(...,
                 "2023-04-25T23:59Z": {"description": "A specific timestamp", "value": "2023-04-25T23:59Z"},
             }),
             level: Literal["plant","storage","process"] = Query("plant", description="The aggregation level."),
-            username = username) -> dict:
+            username = username) -> dict[int|str, AggregatedMaterial]:
     is_relative_timestamp: bool = isinstance(timestamp, str) and timestamp.startswith("now")
     if isinstance(timestamp, str):
         timestamp = parse_datetime_str(timestamp)
-    snapshot0: Snapshot = state.get_snapshot(timestamp)
-    agg = MaterialAggregation(state.get_site(), state.get_snapshot_provider())
-    agg_by_plants = agg.aggregate_categories_by_plant(snapshot0)
+    # snapshot0: Snapshot = state.get_snapshot(timestamp)
+    stg: AggregatedStorageContent = state.get_aggregation_provider().aggregated_storage_content(timestamp)
     if not is_relative_timestamp:
         response.headers["Cache-Control"] = "max-age=604800"  # 1 week
     if level == "storage":
-        return agg.aggregate_by_storage(agg_by_plants)
+        return stg.content_by_storage
     elif level == "process":
-        return agg.aggregate_by_process(agg_by_plants)
-    return agg_by_plants
+        return stg.content_by_process
+    return stg.content_by_equipment
+
+    #snapshot0: Snapshot = state.get_snapshot(timestamp)
+    #agg = MaterialAggregation(state.get_site(), state.get_snapshot_provider())
+    #agg_by_plants = agg.aggregate_categories_by_plant(snapshot0)
+    #if not is_relative_timestamp:
+    #    response.headers["Cache-Control"] = "max-age=604800"  # 1 week
+    #if level == "storage":
+    #    return agg.aggregate_by_storage(agg_by_plants)
+    #elif level == "process":
+    #    return agg.aggregate_by_process(agg_by_plants)
+    #return agg_by_plants
 
 
 @fastapi_app.get("/snapshots/{timestamp}",

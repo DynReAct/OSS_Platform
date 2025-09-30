@@ -1,0 +1,29 @@
+FROM python:3.13-bullseye
+WORKDIR /usr/src/app
+
+RUN mkdir DynReActBase && mkdir DynReActService && mkdir MidTermPlanning && mkdir SampleUseCase
+COPY DynReActBase/pyproject.toml DynReActBase/requirements.txt ./DynReActBase/
+COPY DynReActService/pyproject.toml DynReActService/requirements.txt DynReActService/run.py ./DynReActService/
+COPY MidTermPlanning/pyproject.toml MidTermPlanning/requirements.txt ./MidTermPlanning/
+COPY ShortTermPlanning/pyproject.toml ShortTermPlanning/requirements.txt ./ShortTermPlanning/
+
+
+# for debugging one might also add verbose option "-v" if something goes wrong
+#  --use-deprecated=legacy-resolver
+RUN pip install --no-cache-dir --disable-pip-version-check -r ./DynReActBase/requirements.txt -r ./MidTermPlanning/requirements.txt -r ./DynReActService/requirements.txt
+
+COPY DynReActBase/dynreact ./DynReActBase/dynreact/
+COPY DynReActService/dynreact ./DynReActService/dynreact/
+COPY MidTermPlanning/dynreact ./MidTermPlanning/dynreact/
+COPY ShortTermPlanning/dynreact ./ShortTermPlanning/dynreact/
+
+WORKDIR /usr/src/app/DynReActService
+
+RUN /bin/echo -e '\
+-e ../DynReActBase \
+-e ../MidTermPlanning \
+-e ../SampleUseCase \
+' > ./requirements_local.txt
+RUN pip install --no-cache-dir --disable-pip-version-check -r ./requirements_local.txt
+ENV PYTHONUNBUFFERED=1
+CMD uvicorn run:fastapi_app --host 0.0.0.0 --port ${PORT:-8050} --log-level debug

@@ -8,13 +8,14 @@ from dynreact.base.CostProvider import CostProvider
 from dynreact.base.DowntimeProvider import DowntimeProvider
 from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.NotApplicableException import NotApplicableException
-from dynreact.base.ShortTermPlanning import ShortTermPlanning
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.SnapshotProvider import SnapshotProvider
+from dynreact.base.impl.AggregationPersistence import AggregationPersistence
+from dynreact.base.impl.FileAggregationPersistence import FileAggregationPersistence
 from dynreact.base.impl.FileAvailabilityPersistence import FileAvailabilityPersistence
 from dynreact.base.impl.FileConfigProvider import FileConfigProvider
 from dynreact.base.impl.FileDowntimeProvider import FileDowntimeProvider
@@ -39,11 +40,12 @@ class Plugins:
         self._cost_provider: CostProvider|None = None
         self._lots_optimizer: LotsOptimizationAlgo|None = None
         self._long_term_planning: LongTermPlanning|None = None
-        self._short_term_planning: ShortTermPlanning| None = None
+        self._short_term_planning: Any| None = None
         self._results_persistence: ResultsPersistence|None = None
         self._availability_persistence: PlantAvailabilityPersistence|None = None
         self._plant_performance_models: list[PlantPerformanceModel]|None = None
         self._lot_sinks: dict[str, LotSink]|None = None
+        self._aggregation_persistence: AggregationPersistence|None = None
 
     def get_snapshot_provider(self) -> SnapshotProvider:
         if self._snapshot_provider is None:
@@ -88,7 +90,7 @@ class Plugins:
     def get_lots_optimization(self) -> LotsOptimizationAlgo:
         if self._lots_optimizer is None:
             self._lots_optimizer = Plugins._load_module("dynreact.lotcreation.LotsOptimizerImpl", LotsOptimizationAlgo,
-                                                        self.get_config_provider().site_config())
+                                                        self.get_config_provider().site_config(), do_raise=True)
         return self._lots_optimizer
 
     def get_long_term_planning(self) -> LongTermPlanning:
@@ -103,8 +105,9 @@ class Plugins:
                 raise Exception("Long term planning not found: " + str(self._config.long_term_provider))
         return self._long_term_planning
 
-    def get_stp_config_params(self) -> ShortTermPlanning:
+    def get_stp_config_params(self): # -> ShortTermPlanning:
         if self._short_term_planning is None:
+            from dynreact.base.ShortTermPlanning import ShortTermPlanning
             if self._config.short_term_planning.startswith("default+file:"):
                 self._short_term_planning = ShortTermPlanning(self._config.short_term_planning)
             else:
@@ -135,6 +138,18 @@ class Plugins:
                 if self._availability_persistence is None:
                     raise Exception("Plant availability persistence not found " + self._config.availability_persistence)
         return self._availability_persistence
+
+    def get_aggregation_persistence(self) -> AggregationPersistence:
+        if self._aggregation_persistence is None:
+            #site = self.get_config_provider().site_config()
+            if self._config.aggregation_persistence.startswith("default+file:"):
+                self._aggregation_persistence = FileAggregationPersistence(self._config.aggregation_persistence)
+            else:
+                self._aggregation_persistence = Plugins._load_module("dynreact.aggregation.AggregationPersistenceImpl",
+                                                                 AggregationPersistence, self._config.aggregation_persistence)
+                if self._aggregation_persistence is None:
+                    raise Exception("Aggregation persistence not found " + self._config.aggregation_persistence)
+        return self._aggregation_persistence
 
     def get_lot_sinks(self) -> dict[str, LotSink]:
         if self._lot_sinks is None:
@@ -245,14 +260,15 @@ class _ModIterator(Iterator):   # returns loaded modules
     def __init__(self, module: str):
         # Note: this works if there are duplicates in editable installations,
         # but not if there are duplicate modules in separate wheels
-        self._importers = iter(sys.meta_path)
+        self._importers = iter(sys.meta_path + [importlib.util])
+        # self._importers = iter([importlib.util]) # TODO maybe we do not need this sys.meta_path voodoo at all?
         self._module = module
 
     def __next__(self):
         while True:
             importer = next(self._importers)
             try:
-                spec_res = importer.find_spec(self._module, path=None)
+                spec_res = importer.find_spec(self._module)
                 if spec_res is not None:
                     mod = importlib.util.module_from_spec(spec_res)
                     # sys.modules[module] = mod  # we'll check first if this is the correct module

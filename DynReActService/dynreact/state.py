@@ -1,21 +1,24 @@
 from datetime import datetime, timedelta
+from typing import Any
 
+from dynreact.SnapshotUpdate import SnapshotUpdate
+from dynreact.base.AggregationProvider import AggregationProvider
 from dynreact.base.ConfigurationProvider import ConfigurationProvider
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.DowntimeProvider import DowntimeProvider
 from dynreact.base.LongTermPlanning import LongTermPlanning
-from dynreact.base.ShortTermPlanning import ShortTermPlanning
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.SnapshotProvider import SnapshotProvider
-from dynreact.base.model import Snapshot, Site, ProductionPlanning, ProductionTargets, Material
+from dynreact.base.impl.AggregationPersistence import AggregationPersistence
+from dynreact.base.impl.AggregationProviderImpl import AggregationProviderImpl
+from dynreact.base.model import Snapshot, Site, ProductionPlanning, ProductionTargets, Material, Lot
 
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.plugins import Plugins
-from dynreact.auction import auction
 
 
 class DynReActSrvState:
@@ -32,26 +35,38 @@ class DynReActSrvState:
         self._ltp: LongTermPlanning | None = None
         self._results_persistence: ResultsPersistence | None = None
         self._availability_persistence: PlantAvailabilityPersistence|None = None
-#
-# Added by JOM 20241005
-#
-        self._auction_obj : auction.Auction | None = None
-        self._stp: ShortTermPlanning | None = None
-#
-#
+        self._auction_obj : Any|None=None  # auction.Auction | None = None
+        self._stp: Any|None=None #ShortTermPlanning | None = None
+
         self._max_snapshot_caches: int = config.max_snapshot_caches
         self._max_snapshot_solutions_cache: int = config.max_snapshot_solutions_caches
         self._snapshots_cache: dict[datetime, Snapshot] = {}
+        self._snapshot_updates: SnapshotUpdate|None = None
         # snapshot, process, planning, targets
         self._snapshot_solutions_cache:  list[tuple[datetime, str, ProductionPlanning, ProductionTargets]] = []
         self._duedates_solutions_cache: list[tuple[datetime, str, ProductionPlanning, ProductionTargets]] = []
         self._coils_by_orders_cache: dict[datetime, dict[str, list[Material]]] = {}
         self._stp_page = None
+        self._aggregation: AggregationProvider|None = None
+        self._aggregation_persistence: AggregationPersistence|None = None
 
     def get_snapshot_provider(self) -> SnapshotProvider:
         if self._snapshot_provider is None:
             self._snapshot_provider = self._plugins.get_snapshot_provider()
+            sinks = self.get_lot_sinks()
+            if len(sinks) > 0:
+                self._snapshot_updates = SnapshotUpdate(self.get_site())
         return self._snapshot_provider
+
+    def get_aggregation_provider(self) -> AggregationProvider|None:
+        itv = self._config.aggregation_exec_interval_minutes
+        start_offset = self._config.aggregation_exec_offset_minutes
+        if itv <= 0:
+            return None
+        if self._aggregation is None:
+            self._aggregation = AggregationProviderImpl(self.get_site(), self.get_snapshot_provider(), self._plugins.get_aggregation_persistence(),
+                                                interval=timedelta(minutes=itv), interval_start=timedelta(minutes=start_offset))
+        return self._aggregation
 
     def get_config_provider(self) -> ConfigurationProvider:
         if self._config_provider is None:
@@ -91,7 +106,6 @@ class DynReActSrvState:
                 self._stp._stpConfigParams.TimeDelays.CW,self._stp._stpConfigParams.TimeDelays.EW,
                 self._stp._stpConfigParams.TimeDelays.SMALL_WAIT)
 
-    
     def get_results_persistence(self) -> ResultsPersistence:
         if self._results_persistence is None:
             self._results_persistence = self._plugins.get_results_persistence()
@@ -110,6 +124,9 @@ class DynReActSrvState:
     def get_snapshot(self, time: datetime|None = None, recurse: bool = True) -> Snapshot|None:
         if time is None:
             time = self.get_snapshot_provider().current_snapshot_id()
+        updates = self._snapshot_updates
+        if updates is not None and time in updates:
+            return updates[time]
         if time in self._snapshots_cache:
             return self._snapshots_cache[time]
         snapshot = self.get_snapshot_provider().load(time=time)
@@ -119,14 +136,22 @@ class DynReActSrvState:
                     return self.get_snapshot(time=time0, recurse=False)
             return snapshot
         new_time = snapshot.timestamp
-        if new_time not in self._snapshots_cache or time not in self._snapshots_cache:
+        if new_time not in self._snapshots_cache:  # or time not in self._snapshots_cache:
             while len(self._snapshots_cache) >= self._max_snapshot_caches:
                 first_ts = sorted(list(self._snapshots_cache.keys()))[0]
                 self._snapshots_cache.pop(first_ts)
             self._snapshots_cache[new_time] = snapshot
-            if time != new_time:
-                self._snapshots_cache[time] = snapshot
+        if updates is not None and new_time in updates:
+            return updates[new_time]
         return snapshot
+
+    def transfer_lot(self, snapshot: Snapshot, sink: LotSink, lot: Lot, name: str, update_snapshot: bool=True) -> str:
+        new_lot_id = sink.transfer_new(lot, snapshot, external_id=name)
+        updates = self._snapshot_updates
+        if updates is not None and update_snapshot:
+            lot = lot.copy(update={"id": new_lot_id})
+            new_snap = updates.update_snapshot(snapshot, lot)
+        return new_lot_id
 
     def get_snapshot_solution(self, process: str, snapshot: datetime|None=None,
                               horizon:  timedelta|None=None) -> tuple[ProductionPlanning, ProductionTargets]|None:
@@ -189,9 +214,7 @@ class DynReActSrvState:
         if self._stp_page is None:
             self._stp_page = self._plugins.load_stp_page()
         return self._stp_page
-#
-# Added by JOM 20241005
-#
+
     def get_auction_obj(self):
         if self._auction_obj is not None:
             return(self._auction_obj)

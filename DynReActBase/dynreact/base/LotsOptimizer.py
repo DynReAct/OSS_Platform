@@ -5,7 +5,7 @@ already contains an implementation (in the MidTermPlanning folder).
 """
 
 from datetime import timedelta, datetime
-from typing import TypeVar, Generic, Sequence
+from typing import Any, TypeVar, Generic, Sequence
 
 import numpy as np
 
@@ -49,7 +49,7 @@ class LotsOptimizationState(Generic[P]):
                  best_solution: ProductionPlanning[P], best_objective_value: ObjectiveFunction,
                  num_iterations: int=0,  # deprecated
                  history: list[ObjectiveFunction]|None = None,
-                 parameters: dict[str, any]|None = None):
+                 parameters: dict[str, Any]|None = None):
         self.current_solution: ProductionPlanning[P] = current_solution
         self.current_object_value: ObjectiveFunction = current_objective_value
         self.best_solution: ProductionPlanning[P] = best_solution
@@ -57,7 +57,7 @@ class LotsOptimizationState(Generic[P]):
         self.num_iterations: int = num_iterations
         "deprecated"
         self.history: list[ObjectiveFunction] = list(history) if history is not None else [current_objective_value]
-        self.parameters: dict[str, any]|None = parameters
+        self.parameters: dict[str, Any]|None = parameters
 
 
 class LotsOptimizer(Generic[P]):
@@ -71,9 +71,12 @@ class LotsOptimizer(Generic[P]):
                  # the next two are for initialization from a previous optimization run
                  best_solution: ProductionPlanning[P]|None = None,
                  history: list[ObjectiveFunction] | None = None,
-                 parameters: dict[str, any]|None = None,
+                 parameters: dict[str, Any]|None = None,
                  performance_models: list[PlantPerformanceModel]|None = None,
-                 orders_custom_priority: dict[str, int]|None = None
+                 orders_custom_priority: dict[str, int]|None = None,
+                 forced_orders: list[str] | None = None,
+                 # TODO if this is set, then a corresponding initial solution should be provided(?)
+                 base_lots: dict[int, Lot] | None = None  # Keys: equipment id; used to extend existing lots
                  ):
         self._listeners: list[OptimizationListener] = []
         self._site: Site = site
@@ -108,17 +111,55 @@ class LotsOptimizer(Generic[P]):
             self._orders = {o: snapshot.get_order(o) for o in initial_solution.order_assignments.keys()}
             self._total_priority = sum(orders_custom_priority.get(order.id, order.priority) for order in self._orders.values()) \
                     if orders_custom_priority is not None else sum(order.priority for order in self._orders.values())
+        if base_lots is not None:
+            self._orders = self._orders if self._orders is not None else {}
+            all_orders = (o for lot in base_lots.values() for o in lot.orders if o not in self._orders)
+            for order in all_orders:
+                self._orders[order] = snapshot.get_order(order)
         initial_costs = costs.process_objective_function(initial_solution) if initial_solution is not None else None
         best_costs = initial_costs if best_solution is None else costs.process_objective_function(best_solution)
         best_solution = initial_solution if best_solution is None else best_solution
         initial_costs_value = initial_costs.total_value if initial_costs is not None else None
         best_costs_value = best_costs
         history = [initial_costs] if history is None and initial_costs is not None else history if history is not None else []
+        if base_lots is not None:
+            self._previous_orders = {p: lot.orders[-1] for p, lot in base_lots.items() if len(lot.orders) > 0}
+            initial_is_best = initial_solution is best_solution
+            if best_solution is not None:
+                best_solution = best_solution.model_copy(deep=True)
+                best_solution.previous_orders = self._previous_orders
+                best_costs = costs.process_objective_function(best_solution)
+                best_costs_value = best_costs
+            if initial_is_best:
+                initial_solution = best_solution
+                initial_costs = best_costs
+            elif initial_solution is not None:
+                initial_solution = initial_solution.model_copy(deep=True)
+                initial_solution.previous_orders = self._previous_orders
+                initial_costs = costs.process_objective_function(initial_solution)
         # state
         self._state: LotsOptimizationState[P] = LotsOptimizationState(current_solution=initial_solution, best_solution=best_solution,
                                         current_objective_value=initial_costs, best_objective_value=best_costs_value, history=history, parameters=parameters)
+        self._previous_orders: dict[int, str]|None = best_solution.previous_orders if best_solution is not None else None
+        if self._previous_orders is not None and self._orders is not None and base_lots is None:
+            for order_id in self._previous_orders.values():
+                if order_id not in self._orders:
+                    self._orders[order_id] = snapshot.get_order(order_id)
+        if min_due_date is not None and self._orders is not None:
+            forced_orders = forced_orders if forced_orders is not None else []
+            forced_orders = forced_orders + [o.id for o in self._orders.values() if o.due_date is not None and o.due_date <= min_due_date]
+        if base_lots is not None and self._orders is not None:
+            forced_orders = forced_orders if forced_orders is not None else []
+            forced_orders = forced_orders + [o for lot in base_lots.values() for o in lot.orders if o not in forced_orders]
+        if forced_orders is not None and len(forced_orders) == 0:
+            forced_orders = None
+        self._forced_orders: list[str]|None = forced_orders
+        self._base_lots: dict[int, Lot]|None = {p: lot.model_copy(deep=True) for p, lot in base_lots.items()} if base_lots is not None else None
+        self._base_lot_weights: dict[int, float]|None = {p: sum(self._orders[o].actual_weight for o in lot.orders) for p, lot in base_lots.items()} if base_lots is not None else None
+        self._base_assignments: dict[str, OrderAssignment]|None = {o: OrderAssignment(order=o, equipment=lot.equipment, lot=lot.id, lot_idx=idx+1)
+                                                            for lot in base_lots.values() for idx, o in enumerate(lot.orders)} if base_lots is not None else None
 
-    def parameters(self) -> dict[str, any]|None:
+    def parameters(self) -> dict[str, Any]|None:
         return self._state.parameters
 
     # side effects on state
@@ -160,7 +201,8 @@ class LotsOptimizationAlgo:
     def snapshot_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider,
                                 targets: ProductionTargets|None = None,
                                 orders: list[str] | None = None,
-                                include_inactive_lots: bool=False) -> tuple[ProductionPlanning, ProductionTargets]:
+                                include_inactive_lots: bool=False,
+                                previous_orders: dict[int, str]|None=None) -> tuple[ProductionPlanning, ProductionTargets]:
         assignments: dict[str, OrderAssignment] = {}
         target_weights_by_plant: dict[int, float] = {}
         order_objs = snapshot.orders
@@ -186,7 +228,7 @@ class LotsOptimizationAlgo:
         targets: ProductionTargets = targets if targets is not None else \
             ProductionTargets(process=process, target_weight={p: EquipmentProduction(equipment=p, total_weight=weight) for p, weight in target_weights_by_plant.items()},
                               period=(snapshot.timestamp, snapshot.timestamp + planning_horizon))
-        planning = costs.evaluate_order_assignments(process, assignments, targets=targets, snapshot=snapshot) if costs is not None else None
+        planning = costs.evaluate_order_assignments(process, assignments, targets=targets, snapshot=snapshot, previous_orders=previous_orders) if costs is not None else None
         return planning, targets
 
     def _random_start_orders(self, plants: dict[int, Equipment], targets: ProductionTargets, orders: dict[str, Order],
@@ -233,7 +275,8 @@ class LotsOptimizationAlgo:
         return start_orders
 
     def heuristic_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider, snapshot_provider: SnapshotProvider,
-                           targets: ProductionTargets, orders: list[str], start_orders: dict[int, str]|None=None, orders_custom_priority: dict[str, int]|None=None) -> tuple[ProductionPlanning, ProductionTargets]:
+                           targets: ProductionTargets, orders: list[str], start_orders: dict[int, str]|None=None, orders_custom_priority: dict[str, int]|None=None,
+                           previous_orders: dict[int, str]|None=None) -> tuple[ProductionPlanning, ProductionTargets]:
         """
         If orders is not specified, this method will only consider as many orders for scheduling as are required to
         fulfill the targets per plant. Otherwise unassigned orders may occur.
@@ -327,13 +370,13 @@ class LotsOptimizationAlgo:
             order_assignments.update(
                 {order: OrderAssignment(order=order, equipment=-1, lot="", lot_idx=-1) for order in unassigned})
         planning = costs.evaluate_order_assignments(process, order_assignments, targets=targets, snapshot=snapshot,
-                                                    orders_custom_priority=orders_custom_priority)
+                                                    orders_custom_priority=orders_custom_priority, previous_orders=previous_orders)
         return planning, targets
 
 
     def due_dates_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider,
                            targets: ProductionTargets|None = None, orders: list[str] | None = None,
-                           include_inactive_lots: bool=False) -> tuple[ProductionPlanning, ProductionTargets]:
+                           include_inactive_lots: bool=False, previous_orders: dict[int, str]|None=None) -> tuple[ProductionPlanning, ProductionTargets]:
         """
         If orders is not specified, this method will only consider as many orders for scheduling as are required to
         fulfill the targets per plant. Otherwise unassigned orders may occur.
@@ -378,7 +421,7 @@ class LotsOptimizationAlgo:
         if orders is not None:
             unassigned: Sequence[str] = (order for order in orders if order not in assignments)
             order_assignments.update({order: OrderAssignment(order=order, equipment=-1, lot="", lot_idx=-1) for order in unassigned})
-        planning = costs.evaluate_order_assignments(process, order_assignments, targets=targets, snapshot=snapshot)
+        planning = costs.evaluate_order_assignments(process, order_assignments, targets=targets, snapshot=snapshot, previous_orders=previous_orders)
         return planning, targets
 
     def create_instance(self, process: str, snapshot: Snapshot, cost_provider: CostProvider,
@@ -391,9 +434,11 @@ class LotsOptimizationAlgo:
                         best_solution: ProductionPlanning[P] | None = None,
                         history: list[ObjectiveFunction] | None = None,
                         performance_models: list[PlantPerformanceModel] | None = None,
-                        parameters: dict[str, any] | None = None,
+                        parameters: dict[str, Any] | None = None,
                         include_inactive_lots: bool = False,
-                        orders_custom_priority: dict[str, int] | None = None
+                        orders_custom_priority: dict[str, int] | None = None,
+                        forced_orders: list[str] | None = None,
+                        base_lots: dict[int, Lot] | None = None  # if this is set, then orders will be appended to those lots instead of creating new ones
                         ) -> LotsOptimizer:
         if initial_solution is None or targets is None:
             planning_horizon = targets.period[1] - targets.period[0] if targets is not None else timedelta(hours=8)  # XXX?
@@ -405,14 +450,16 @@ class LotsOptimizationAlgo:
                 targets = targets0
         return self._create_instance_internal(process, snapshot, targets, cost_provider, initial_solution, min_due_date=min_due_date,
                                               best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
-                                              orders_custom_priority=orders_custom_priority)
+                                              orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots)
 
     def _create_instance_internal(self, process: str, snapshot: Snapshot, targets: ProductionTargets,
                                   cost_provider: CostProvider, initial_solution: ProductionPlanning, min_due_date: datetime|None = None,
                                   # the next two are for initialization from a previous optimization run
                                   best_solution: ProductionPlanning[P] | None = None, history: list[ObjectiveFunction] | None = None,
                                   performance_models: list[PlantPerformanceModel] | None = None,
-                                  parameters: dict[str, any] | None = None,
-                                  orders_custom_priority: dict[str, int] | None = None
+                                  parameters: dict[str, Any] | None = None,
+                                  orders_custom_priority: dict[str, int] | None = None,
+                                  forced_orders: list[str] | None = None,
+                                  base_lots: dict[int, Lot] | None = None
                                   ) -> LotsOptimizer:
         raise Exception("not implemented")

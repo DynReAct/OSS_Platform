@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone, date
 from typing import Any, TypeVar, Generic, Literal
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 
 class Model(BaseModel):
@@ -170,6 +170,8 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
     "Target weight in t"
     actual_weight: float
     "Sum of individual material weights in t"
+    material_count: int = 0
+    "Number of units in this order"
     material_classes: dict[str, str] = {}
     "Keys: material category id, values: material class ids"
     allowed_equipment: list[int]   # TODO dict[process, list[int]]?
@@ -194,14 +196,18 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
     priority: int = 0
     "Order priority"
 
+
 class Lot(Model):
     id: str
     equipment: int
     active: bool
-    # TODO documentation
-    status: int  # ?
+    status: int
+    "1: created; 2: blocked; 3: released; 4: in progress; 5: completed"
     orders: list[str]
     processing_status: Literal["PENDING", "STARTED", "FINISHED"]|None = None
+    comment: str|None = None
+    weight: float|None = None
+    "Convenience field for storing the total lot weight. Must be equal to the sum of the order weights. In tons."
 
 
 class MaterialOrderData(Model):
@@ -265,6 +271,14 @@ class EquipmentStatus(Model, Generic[P]):
     "Internal state of the optimization"
 
 
+class EquipmentProduction(Model):
+
+    equipment: int
+    total_weight: float
+    lot_weight_range: tuple[float, float] | None = None
+    "Weight restriction for lots in t"
+
+
 class ObjectiveFunction(Model, extra="allow"):
     """
     Note that this class may have use-case dependent extra fields
@@ -272,6 +286,12 @@ class ObjectiveFunction(Model, extra="allow"):
 
     total_value: float
     "The overall objective function value"
+    additive_costs: float|None=None
+    """
+    The sum of individual components that are monotonously increasing with respect to adding orders; excluding for instance the 
+    weight_deviation, lot_size_deviation and structure_deviation components, but potentially also certain custom parts.
+    If unset, the mentioned values are subtracted from total_value.
+    """
     lots_count: float|None=None
     "Penalty for number of lots"
     transition_costs: float|None=None
@@ -287,13 +307,12 @@ class ObjectiveFunction(Model, extra="allow"):
     priority_costs: float|None = None
     "Penalty for order priority"
 
-
-class EquipmentProduction(Model):
-
-    equipment: int
-    total_weight: float
-    lot_weight_range: tuple[float, float] | None = None
-    "Weight restriction for lots in t"
+    @model_validator(mode="after")
+    def set_additive_costs(self):
+        if self.additive_costs is None:
+            self.additive_costs = self.total_value - (self.lot_size_deviation or 0) - (self.weight_deviation or 0) - \
+                                  (self.structure_deviation or 0) - (self.priority_costs or 0)
+        return self
 
 
 SUM_MATERIAL: str = "_sum"
@@ -347,6 +366,8 @@ class ProductionPlanning(Model, Generic[P]):
     "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed. Special key \"_sum\" represents the total/aggregated value."
     total_priority: int = 0
     "Sum priority orders"
+    previous_orders: dict[int, str] | None = None
+    "Initial conditions for the optimization"
 
     # TODO cache results?
     def get_lots(self) -> dict[int, list[Lot]]:
@@ -441,16 +462,29 @@ class LotCreationOrderBacklogSettings(Model):
     "A list of process steps at which all orders (scheduled or not) are usually included in the order backlog for lot creation"
 
 
+class TargetLotSize(Model):
+    min: float
+    max: float
+
+
 class ProcessLotCreationSettings(Model):
     plannable: bool|None = None
     "Default: true"
     structure: LotCreationStructureSettings|None=None
     order_backlog: LotCreationOrderBacklogSettings|None=None
+    lot_sizes: dict[int, TargetLotSize]|TargetLotSize|None = None
+    "The target lot size can be specified either per equipment, or globally for all resources of the process"
+    total_size: float|dict[int, float]|None = None
+    "The preselected target size in tons for the lot creation. It can be adapted by the user. Either a global setting for the process step, or individual settings per equipment."
+    default_iterations: int|None=None
+    "Default number of iterations for the process step"
 
 
 class LotCreationSettings(Model):
     processes: dict[str, ProcessLotCreationSettings]
     "Settings per process step"
+    default_iterations: int | None = None
+    "Default number of iterations if no process-specific number is specified"
 
 
 class Site(LabeledItem):
@@ -665,6 +699,28 @@ class MidTermTargets(LongTermTargets):
     production_sub_targets: dict[str, list[ProductionTargets]]
     "Production targets for the planning sub periods. Keys: process ids, values: list of production targets, covering all planning sub periods chronologically."
 
+
+class AggregatedMaterial(Model):
+    total_weight: float
+    material_weights: dict[str, float] | None = None
+
+
+class AggregatedProduction(AggregatedMaterial):
+    """
+    total_weight refers to the total production in the time interval (finished material), and
+    material_weights to finished material by material class id in the time interval
+    """
+    aggregation_interval: tuple[datetime, datetime]
+    "The aggregation interval"
+    closed: bool = True
+    "Indicated whether the aggregation result is final or still subject to change in the future (interval in the past or still ongoing)"
+
+
+class AggregatedStorageContent(Model):
+
+    content_by_storage: dict[str, AggregatedMaterial]
+    content_by_process: dict[str, AggregatedMaterial]
+    content_by_equipment: dict[int, AggregatedMaterial]
 
 
 class ServiceHealth(Model):

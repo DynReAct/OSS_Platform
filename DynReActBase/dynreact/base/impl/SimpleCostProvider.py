@@ -82,25 +82,31 @@ class SimpleCostProvider(CostProvider):
 
     def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
                                        planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None, current_material: list[Material] | None=None,
-                                       track_structure: bool=False, main_category: str|None=None, orders_custom_priority: dict[str, int]|None=None) -> EquipmentStatus:
+                                       track_structure: bool=False, main_category: str|None=None, orders_custom_priority: dict[str, int]|None=None,
+                                       previous_order: str|None=None) -> EquipmentStatus:
         target_weight = equipment_targets.total_weight
         equipment = equipment_targets.equipment
         num_assignments = len(assignments)
+        plant_obj: Equipment = next(p for p in self._site.equipment if p.id == equipment and p.process == process)
         if num_assignments <= 1:
             delta_weight = target_weight
             order_id: str|None = next(iter(assignments.keys())) if num_assignments==1 else None
             min_due_date = None
             prio = 0
+            transition_costs = 0
             if num_assignments == 1:
                 order = snapshot.get_order(order_id, do_raise=True)
                 delta_weight = delta_weight - order.actual_weight
                 min_due_date = order.due_date
                 prio = orders_custom_priority.get(order.id, order.priority) if orders_custom_priority is not None else order.priority
+                if previous_order is not None:
+                    prev = snapshot.get_order(previous_order)
+                    if prev is not None:
+                        transition_costs += self.transition_costs(plant_obj, prev, order)
             target_fct = self._weight_deviation_costs(target_weight)
             return EquipmentStatus(targets=equipment_targets, snapshot_id=snapshot.timestamp, planning_period=planning_period, current_order=order_id,
-                                   planning=PlanningData(target_fct=target_fct, transition_costs=0, lots_count=num_assignments, orders_count=num_assignments,
+                                   planning=PlanningData(target_fct=target_fct, transition_costs=transition_costs, lots_count=num_assignments, orders_count=num_assignments,
                                               delta_weight=delta_weight, min_due_date=min_due_date, assigned_priority=prio))
-        plant_obj: Equipment = next(p for p in self._site.equipment if p.id == equipment and p.process == process)
         plant_assignments: list[OrderAssignment] = [a for a in assignments.values() if a.equipment == equipment]
         plant_assignments = sorted(plant_assignments, key=lambda a: (a.lot, a.lot_idx))  # FIXME uses deprecated lot field
         transition_costs: float = 0
@@ -108,28 +114,30 @@ class SimpleCostProvider(CostProvider):
         previous_lot: str = ""
         num_lots: int = 0
         prev_prev_oder: Order|None = None
-        previous_order: Order|None = None
+        previous_order_obj: Order|None = snapshot.get_order(previous_order) if previous_order is not None else None
         min_due_date: datetime|None = None
         sum_prio = 0
         for assignment in plant_assignments:
             order: Order = snapshot.get_order(assignment.order, do_raise=True)
             new_lot = assignment.lot
+            if new_lot == "":  # unassigned material does not contribute to costs
+                break
             if new_lot != previous_lot:
                 num_lots += 1
                 previous_lot = new_lot
             total_weight += order.actual_weight
-            if previous_order is not None:
-                transition_costs += self.transition_costs(plant_obj, previous_order, order)
+            if previous_order_obj is not None:
+                transition_costs += self.transition_costs(plant_obj, previous_order_obj, order)
             if order.due_date is not None and (min_due_date is None or order.due_date < min_due_date):
                 min_due_date = order.due_date
-            prev_prev_oder = previous_order
-            previous_order = order
+            prev_prev_oder = previous_order_obj
+            previous_order_obj = order
             sum_prio += orders_custom_priority.get(order.id, order.priority) if orders_custom_priority is not None else order.priority
         weight_diff = target_weight - total_weight
         weight_diff_costs = self._weight_deviation_costs(weight_diff)
         total_costs = transition_costs + (num_lots-1) * self._new_lot_costs + weight_diff_costs
         return EquipmentStatus(targets=equipment_targets, snapshot_id=snapshot.timestamp, planning_period=planning_period,
-                               current_order=previous_order.id if previous_order is not None else None, previous_order=prev_prev_oder.id if prev_prev_oder is not None else None,
+                               current_order=previous_order_obj.id if previous_order_obj is not None else None, previous_order=prev_prev_oder.id if prev_prev_oder is not None else None,
                                planning=PlanningData(target_fct=total_costs, transition_costs=transition_costs, lots_count=num_lots, orders_count=num_assignments,
                                                      current_material=[c.id for c in current_material] if current_material is not None else None,
                                                      delta_weight=weight_diff, min_due_date=min_due_date, assigned_priority=sum_prio))
@@ -141,7 +149,7 @@ class SimpleCostProvider(CostProvider):
         planning: PlanningData = status.planning
         transition_costs = planning.transition_costs  # TODO parameters
         log_costs = planning.logistic_costs
-        weight_deviation = 10 * abs(planning.delta_weight) / status.targets.total_weight
+        weight_deviation = self._weight_deviation_costs(planning.delta_weight)
         result = transition_costs + log_costs + weight_deviation
         return ObjectiveFunction(total_value=result, lots_count=planning.lots_count, weight_deviation=weight_deviation,
                                  transition_costs=transition_costs, logistic_costs=log_costs)

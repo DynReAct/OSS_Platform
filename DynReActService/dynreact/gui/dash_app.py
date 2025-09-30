@@ -5,7 +5,7 @@ from dash import dcc, html, Output, Input, State, clientside_callback, Clientsid
 from flask import Flask
 
 
-from dynreact.app import config
+from dynreact.app import config, state
 from dynreact.gui.pages.session_state import language, init_stores, site, selected_snapshot, \
     selected_snapshot_obj, selected_process
 
@@ -45,11 +45,27 @@ translations_key = "menu"
 
 def layout(*args, **kwargs):
     init_stores(*args, **kwargs)
+    prov = state.get_snapshot_provider()
+    is_importer = hasattr(prov, "next_scheduled_import")
+    if is_importer:  # add a submenu for snapshot imports
+        snapshot_link = html.Div([
+                    html.Div([
+                        html.Div("Snapshot", id="menu-snaps_header"),
+                        html.Div([
+                            dcc.Link("Snapshot", id="menu-snaps_header-1", className="menu-link login-required", href="/dash/", title="Open snapshots tab"),
+                            #dcc.Link("Lot creation", id="menu-lots-creation_header", className="menu-link", href="/dash/lots/create", title="Lots creation"),
+                            dcc.Link("Imports", id="menu-snaps-import_header", className="menu-link", href="/dash/imports", title="Snapshot imports")
+                        ], className="submenu-content")
+                    ])
+                ], className="menu-link login-required", title="Open snapshots tab")
+    else:
+        snapshot_link =  dcc.Link("Snapshot", id="menu-snaps_header", className="menu-link login-required",  href="/dash/", title="Open snapshots tab")
     menu_container = html.Div([
         dcc.Location(id="menu-url"),
         language,
         #dcc.Store(id="lang2", storage_type="memory"),
         dcc.Store(id="lang3", storage_type="memory"),  # dummy output for client side callbacks?
+        dcc.Store(id="client-tz", storage_type="memory"),  # holds client timezone information
         site, selected_snapshot, selected_snapshot_obj, selected_process,
         #html.Div("DynReAct", className="dynreact-header"),
         html.Img(src=app.get_asset_url(DYNREACT_LOGO), className="menu-logo"),
@@ -84,8 +100,7 @@ def layout(*args, **kwargs):
                 ], className="menu-link login-required", title="Open lot creation tab"),
             dcc.Link("Short term planning", id="menu-agents_header", className="menu-link login-required",
                      href="/dash/stp", title="Open short term planning tab"),
-            dcc.Link("Snapshot", id="menu-snaps_header", className="menu-link login-required",
-                     href="/dash/", title="Open snapshots tab"),
+            snapshot_link,
             dcc.Link("Performance models", id="menu-perf_header", className="menu-link login-required",
                      href="/dash/perfmodels", title="Open plant performance models tab"),
             html.Div(id="menu-user_header"),
@@ -174,6 +189,15 @@ clientside_callback(
     Output("menu-lang-select", "value"),
     Input("menu-lang-select", "value"),
     Input("menu-url", "href")   # problem: this triggers the callback before the new page is loaded
+)
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="dynreact",
+        function_name="getTimezoneOffset"
+    ),
+    Output("client-tz", "data"),
+    Input("client-tz", "storage_type")  # run once only
 )
 
 

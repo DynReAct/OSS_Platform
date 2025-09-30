@@ -11,7 +11,7 @@ version = "0.0.1"
 #]
 description = "The DynReAct service and GUI"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -23,6 +23,21 @@ dynamic = ["dependencies"]
 Homepage = "https://github.com/DynReAct/OSS_Platform"
 Issues = "https://github.com/DynReAct/OSS_Platform/issues"
 
+[project.scripts]
+aggregate-production = "dynreact.cli:aggregate_production"
+analyze-lots = "dynreact.cli:analyze_lots"
+analyze-site = "dynreact.cli:analyze_site"
+analyze-snapshot = "dynreact.cli:analyze_snapshot"
+create-lots = "dynreact.cli:create_lots"
+evaluate-lot = "dynreact.cli:evaluate_lot"
+mtp-benchmark = "dynreact.cli:mtp_benchmark"
+mtp-scenario = "dynreact.cli:mtp_scenario"
+lot-sinks = "dynreact.cli:lot_sinks"
+show-material = "dynreact.cli:show_material"
+show-orders = "dynreact.cli:show_orders"
+transition-costs = "dynreact.cli:transition_costs"
+transfer-lot = "dynreact.cli:transfer_lot"
+
 # See https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#setuptools-specific-configuration
 [tool.setuptools]
 packages = ["dynreact", "dynreact.auth", "dynreact.service", "dynreact.gui", "dynreact.gui.pages"]
@@ -32,3 +47,5 @@ package-dir = {"" = "."}
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
+optional-dependencies = { file = ["requirements-dev.txt"]}
+

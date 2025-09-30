@@ -86,4 +86,19 @@ class JsUtils {
         return el;
     }
 
+    static downloadData(data /*: string*/, options /*?: {format?: "json"|"csv"|"txt"; fileName?: string;}|undefined*/) {
+        let fileName = options?.fileName || "file";
+        const fileLower = fileName.toLowerCase();
+        const format = options?.format || (fileLower.endsWith(".json") ? "json" : fileLower.endsWith(".csv") ? "csv" : "txt");
+        if (!fileName.toLowerCase().endsWith("." + format))
+            fileName = fileName + "." + format;
+        const a = document.createElement("a");
+        const blob = new Blob([data], {type: format === "json" ? "application/json" : format === "csv" ? "text/csv" : "text/plain"});
+        const url = URL.createObjectURL(blob);
+        a.href = url;
+        a.setAttribute("download", fileName);
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
 }

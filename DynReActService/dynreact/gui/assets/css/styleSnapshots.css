@@ -32,4 +32,59 @@
     justify-content: start;
 }
 
+.snapimp-infogrid {
+    display: inline-grid;
+    grid-template-columns: auto auto;
+    column-gap: 0.3em;
+    row-gap: 0.3em;
+    align-items: center;
+    justify-content: start;
+    background-color: grey;
+    padding: 0.3em;
+}
 
+.snapimp-infogrid>div {
+    padding: 0.2em;
+}
+
+.snapimp-infogrid>div /*:nth-child(odd)*/ {
+    background-color: lightgrey;
+}
+
+.snapimp-infogrid>div:nth-child(even) {
+    color: rgba(2, 69, 17, 1);
+    font-weight: bold;
+}
+
+.snapimp-ctrl-grid {
+    display: grid;
+    grid-template-columns: auto auto;
+    column-gap: 1em;
+    row-gap: 0.5em;
+    margin-top: 1em;
+    align-items: center;
+    justify-content: start;
+}
+
+.snapimp-infobox {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1em;
+    margin-top: 2em;
+    background-color: lightblue;
+    color:  rgba(10, 48, 120) /*darkblue*/;
+}
+
+.snapimp-hidden {
+    display: none;
+}
+
+.snapimp-alert {
+    background-color: red;
+    color: white;
+}
+
+.snapimp-close:hover {
+    cursor: pointer;
+}

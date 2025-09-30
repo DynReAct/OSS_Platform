@@ -1,5 +1,6 @@
 from datetime import timedelta, datetime, date
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 import dash
 from dash import html, dcc, callback, Output, Input
@@ -20,17 +21,15 @@ translations_key = "snapshot"
 
 
 def layout(*args, **kwargs):
-    start_date, end_date, snap_options, selected_snap = get_date_range(selected_snapshot.data)  # : tuple[date, date, list[datetime], str]
     categories = state.get_site().material_categories
     return html.Div([
         #selected_snapshot,  # in dash_app layout
         html.H1("Snapshots"),
         html.H2("Snapshot selection", id="snapshot-select_header"),
         html.Div([
-            html.Div([html.Div("Active snapshot: ", id="snapshot-active"), dcc.Dropdown(id="snapshots-selector", className="snap-select",
-                                                                        options=snap_options, value=selected_snap)]),
+            html.Div([html.Div("Active snapshot: ", id="snapshot-active"), dcc.Dropdown(id="snapshots-selector", className="snap-select")]),
             html.Div([html.Div("Selection range: ", id="snapshot-selection_range"),
-            dcc.DatePickerRange(id="snapshots-date-range", display_format="YYYY-MM-DD", start_date=start_date, end_date=end_date)])
+            dcc.DatePickerRange(id="snapshots-date-range", display_format="YYYY-MM-DD")])
         ], className="snapshots-selector-row"),
         html.H2("Snapshot details", id="snapshot-details_header"),
         html.Div([html.Div("Display: ", id="snapshot-display_label"), dcc.Dropdown(id="order-coil-selector", className="snap-select", options=[
@@ -102,6 +101,25 @@ def _material_overview(categories: list[MaterialCategory]):
         # "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
     )])
 
+
+@callback(
+    Output("snapshots-selector", "options"),
+    Output("snapshots-selector", "value"),
+    Output("snapshots-date-range", "start_date"),
+    Output("snapshots-date-range", "end_date"),
+    Input("client-tz", "data")  # client timezone, defined in dash_app
+)
+def set_snapshot_options(tz: str|None):
+    zi = None
+    try:
+        zi = ZoneInfo(tz)
+    except:
+        pass
+    start_date, end_date, snap_options, selected_snap = get_date_range(selected_snapshot.data, zi=zi)
+    return snap_options, selected_snap, start_date, end_date
+
+
+
 @callback(
     Output("selected-snapshot", "data"),
     Output("selected-snapshot-obj", "data"),
@@ -140,7 +158,7 @@ def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["order
         fields = [column_def_for_field(key, info) for key, info in snapshot.material[0].model_fields.items()]  # TODO how to sort?
         return fields, [coil.model_dump(exclude_none=True, exclude_unset=True) for coil in snapshot.material]
     # TODO how to sort?
-    fields = [column_def_for_field(key, info) for key, info in snapshot.orders[0].model_fields.items() if (key not in ["material_properties", "material_status","lot", "lot_position" ])] + \
+    fields = [column_def_for_field(key, info) for key, info in snapshot.orders[0].model_fields.items() if (key not in ["material_properties", "material_status", "lot", "lot_position" ])] + \
              ([column_def_for_field(key, info) for key, info in snapshot.orders[0].material_properties.model_fields.items()] if \
                   snapshot.orders[0].material_properties is not None and isinstance(snapshot.orders[0].material_properties, BaseModel) else [])
     # Note: format cell is defined in snapshot.js, it is actually in the namespace "dashAgGridFunctions",

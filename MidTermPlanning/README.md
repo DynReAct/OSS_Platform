@@ -28,3 +28,18 @@ python -m pip install -r requirements.txt -r requirements_local.txt
 ```
 pip wheel . --no-cache-dir --disable-pip-version-check --no-deps --wheel-dir dist
 ```
+
+## Run tests
+
+In the present folder run
+
+```commandline
+python -m unittest discover tests/unittests
+```
+
+In order to run an individual test case:
+
+```commandline
+ python ./tests/unittests/test_optimization.py OptimizationTest.test_lot_creation_with_predecessor
+```
+

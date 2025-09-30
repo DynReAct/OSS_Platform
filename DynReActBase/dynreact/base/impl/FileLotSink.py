@@ -26,7 +26,7 @@ class FileLotSink(LotSink):
     def description(self, lang: str="en") -> str|None:
         return "Stores lots in json files; mainly for dev purposes."
 
-    def transfer(self, lot: Lot,
+    def transfer_new(self, lot: Lot,
                  snapshot: Snapshot,
                  external_id: str|None = None,
                  comment: str|None = None):
@@ -36,4 +36,19 @@ class FileLotSink(LotSink):
         filepath = os.path.join(self._folder, filename + ".json")
         with open(filepath, mode="w") as file:
             file.write(json_str)
+        return id
+
+    def transfer_append(self, lot: Lot,
+                        start_order: str,
+                        snapshot: Snapshot):
+        start_idx = lot.orders.index(start_order)
+        filename = PathUtils.to_valid_filename(lot.id)
+        filepath = os.path.join(self._folder, filename + ".json")
+        with open(filepath, mode="r") as file:
+            existing_lot = Lot.model_validate_json(file.read())
+        existing_lot.orders = existing_lot.orders + lot.orders[start_idx:]
+        json_str = existing_lot.model_dump_json(exclude_none=True, exclude_unset=True)
+        with open(filepath, mode="w") as file:
+            file.write(json_str)
+        return existing_lot.id or lot.id
 

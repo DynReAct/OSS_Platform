@@ -6,7 +6,7 @@ Experimental DynReActBase package.
 
 ### Install
 
-Tested with Python 3.12, but targeting at least 3.11 and 3.12. It is recommended to setup a virtual environment for the project:
+Tested with Python 3.11 and 3.12. It is recommended to setup a virtual environment for the project:
 
 ```commandline
 python -m venv --upgrade-deps venv

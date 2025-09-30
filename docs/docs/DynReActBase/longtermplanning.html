@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="img/favicon.ico" />
+    <title>Long term planning - Dynreact Base</title>
+    <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Long term planning";
+        var mkdocs_page_input_path = "longtermplanning.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="index.html" class="icon icon-home"> Dynreact Base
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="" href="../index.html">Back</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="index.html">General</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="cost_provider.html">Cost provider</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="lots_optimizer.html">Lots optimizer</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="model.html">Model</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="snapshot_provider.html">Snapshot provider</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Long term planning</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#longtermplanning-class">LongTermPlanning class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.LongTermPlanning.LongTermPlanning">LongTermPlanning</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.LongTermPlanning.LongTermPlanning.run">run</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Dynreact Base</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="index.html" class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Long term planning</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="long-term-planning">Long term planning</h1>
+<p>The LongTermPlanning module provides the interface for the LongTermPlanning algorithm.
+Currently, only a dummy implementation is provided in the open-source package,
+therefore it is required to develop a custom implementation for serious usage of the long-term planning.</p>
+<hr />
+<h2 id="longtermplanning-class"><strong>LongTermPlanning</strong> class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.LongTermPlanning.LongTermPlanning"></a>
+    <div class="doc doc-contents first">
+
+
+        <p>The long term planning interface.
+Implementation expected in module dynreact.longtermplanning.LongTermPlanningImpl</p>
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\LongTermPlanning.py</code></summary>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span>
+<span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span>
+<span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span>
+<span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span>
+<span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span>
+<span class="normal">38</span>
+<span class="normal">39</span>
+<span class="normal">40</span>
+<span class="normal">41</span>
+<span class="normal">42</span>
+<span class="normal">43</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">LongTermPlanning</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The long term planning interface.</span>
+<span class="sd">    Implementation expected in module dynreact.longtermplanning.LongTermPlanningImpl</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uri</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">site</span><span class="p">:</span> <span class="n">Site</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_site</span> <span class="o">=</span> <span class="n">site</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_uri</span> <span class="o">=</span> <span class="n">uri</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">id0</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">structure</span><span class="p">:</span> <span class="n">LongTermTargets</span><span class="p">,</span>
+            <span class="n">initial_storage_levels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">StorageLevel</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">shifts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">datetime</span><span class="p">,</span> <span class="n">datetime</span><span class="p">]]</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">plant_availabilities</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">EquipmentAvailability</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">MidTermTargets</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">StorageLevel</span><span class="p">]]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Execute the long-term planning optimization.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            id0: a unique run id</span>
+<span class="sd">            structure: the production targets for the optimization period</span>
+<span class="sd">            shifts: if shifts is not specified, it may be part of the optimization target, or a pre-defined</span>
+<span class="sd">                algorithm for shift creation can be used, depending on the implementation.</span>
+<span class="sd">            plant_availabilities: information about plant availabilities. Keys: plant id, values: availability.</span>
+<span class="sd">                If this is not specified or some plant is missing, then a default availability should be assumed, such as 24h per day.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            arg 0: the mid term production targets</span>
+<span class="sd">            arg 1: Evolution of the storage levels over the planning sub periods (target values at the end of the shifts).</span>
+<span class="sd">                               The list is for sub periods, the dict keys are storage ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;not implemented&quot;</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.LongTermPlanning.LongTermPlanning.run" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">run</span><span class="p">(</span><span class="n">id0</span><span class="p">,</span> <span class="n">structure</span><span class="p">,</span> <span class="n">initial_storage_levels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">shifts</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">plant_availabilities</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Execute the long-term planning optimization.</p>
+<p>Parameters:
+    id0: a unique run id
+    structure: the production targets for the optimization period
+    shifts: if shifts is not specified, it may be part of the optimization target, or a pre-defined
+        algorithm for shift creation can be used, depending on the implementation.
+    plant_availabilities: information about plant availabilities. Keys: plant id, values: availability.
+        If this is not specified or some plant is missing, then a default availability should be assumed, such as 24h per day.</p>
+<p>Returns:
+    arg 0: the mid term production targets
+    arg 1: Evolution of the storage levels over the planning sub periods (target values at the end of the shifts).
+                       The list is for sub periods, the dict keys are storage ids.</p>
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\LongTermPlanning.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span>
+<span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span>
+<span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span>
+<span class="normal">38</span>
+<span class="normal">39</span>
+<span class="normal">40</span>
+<span class="normal">41</span>
+<span class="normal">42</span>
+<span class="normal">43</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">id0</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">structure</span><span class="p">:</span> <span class="n">LongTermTargets</span><span class="p">,</span>
+        <span class="n">initial_storage_levels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">StorageLevel</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">shifts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">datetime</span><span class="p">,</span> <span class="n">datetime</span><span class="p">]]</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">plant_availabilities</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">EquipmentAvailability</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">MidTermTargets</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">StorageLevel</span><span class="p">]]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Execute the long-term planning optimization.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        id0: a unique run id</span>
+<span class="sd">        structure: the production targets for the optimization period</span>
+<span class="sd">        shifts: if shifts is not specified, it may be part of the optimization target, or a pre-defined</span>
+<span class="sd">            algorithm for shift creation can be used, depending on the implementation.</span>
+<span class="sd">        plant_availabilities: information about plant availabilities. Keys: plant id, values: availability.</span>
+<span class="sd">            If this is not specified or some plant is missing, then a default availability should be assumed, such as 24h per day.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        arg 0: the mid term production targets</span>
+<span class="sd">        arg 1: Evolution of the storage levels over the planning sub periods (target values at the end of the shifts).</span>
+<span class="sd">                           The list is for sub periods, the dict keys are storage ids.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;not implemented&quot;</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="snapshot_provider.html" class="btn btn-neutral float-left" title="Snapshot provider"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="snapshot_provider.html" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+  </span>
+</div>
+    <script src="js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = ".";</script>
+    <script src="js/theme_extra.js"></script>
+    <script src="js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

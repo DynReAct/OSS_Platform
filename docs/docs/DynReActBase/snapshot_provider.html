@@ -75,6 +75,10 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.SnapshotProvider.load">load</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.SnapshotProvider.is_lot_reschedulable">is_lot_reschedulable</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.SnapshotProvider.material_class_for_order">material_class_for_order</a>
+    </li>
     <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.SnapshotProvider.order_plant_assignment_from_snapshot">order_plant_assignment_from_snapshot</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.SnapshotProvider.target_weights_from_snapshot">target_weights_from_snapshot</a>
@@ -96,6 +100,8 @@
     <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_ACTIVE_LOTS">OMIT_ACTIVE_LOTS</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_INACTIVE_LOTS">OMIT_INACTIVE_LOTS</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_RELEASED_LOTS">OMIT_RELEASED_LOTS</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotProvider.OrderInitMethod.ACTIVE_PROCESS">ACTIVE_PROCESS</a>
     </li>
@@ -172,7 +178,7 @@ Implementation expected in module dynreact.snapshot.SnapshotProviderImpl</p>
 
 
 <h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.store" class="doc doc-heading">
-            <code class="highlight language-python">store(snapshot, *args, **kwargs)</code>
+            <code class="highlight language-python"><span class="n">store</span><span class="p">(</span><span class="n">snapshot</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></code>
 
 </h2>
 
@@ -189,7 +195,7 @@ Implementation expected in module dynreact.snapshot.SnapshotProviderImpl</p>
 
 
 <h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.snapshots" class="doc doc-heading">
-            <code class="highlight language-python">snapshots(start_time, end_time, order='asc')</code>
+            <code class="highlight language-python"><span class="n">snapshots</span><span class="p">(</span><span class="n">start_time</span><span class="p">,</span> <span class="n">end_time</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s1">&#39;asc&#39;</span><span class="p">)</span></code>
 
 </h2>
 
@@ -210,7 +216,7 @@ Implementation expected in module dynreact.snapshot.SnapshotProviderImpl</p>
 
 
 <h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.size" class="doc doc-heading">
-            <code class="highlight language-python">size(start_time, end_time)</code>
+            <code class="highlight language-python"><span class="n">size</span><span class="p">(</span><span class="n">start_time</span><span class="p">,</span> <span class="n">end_time</span><span class="p">)</span></code>
 
 </h2>
 
@@ -230,7 +236,7 @@ Implementation expected in module dynreact.snapshot.SnapshotProviderImpl</p>
 
 
 <h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.previous" class="doc doc-heading">
-            <code class="highlight language-python">previous(time=None)</code>
+            <code class="highlight language-python"><span class="n">previous</span><span class="p">(</span><span class="n">time</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 </h2>
 
@@ -249,7 +255,7 @@ Implementation expected in module dynreact.snapshot.SnapshotProviderImpl</p>
 
 
 <h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.next" class="doc doc-heading">
-            <code class="highlight language-python">next(time)</code>
+            <code class="highlight language-python"><span class="nb">next</span><span class="p">(</span><span class="n">time</span><span class="p">)</span></code>
 
 </h2>
 
@@ -270,7 +276,7 @@ Implementation expected in module dynreact.snapshot.SnapshotProviderImpl</p>
 
 
 <h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.load" class="doc doc-heading">
-            <code class="highlight language-python">load(*args, time=None, **kwargs)</code>
+            <code class="highlight language-python"><span class="n">load</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">time</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></code>
 
 </h2>
 
@@ -290,8 +296,145 @@ Implementation expected in module dynreact.snapshot.SnapshotProviderImpl</p>
 <div class="doc doc-object doc-function">
 
 
+<h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.is_lot_reschedulable" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">is_lot_reschedulable</span><span class="p">(</span><span class="n">lot</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>This method is used to check if orders assigned to some lot may be rescheduled.
+It can be overwritten by subclasses; by default, lots with status &lt;= 1 are considered reschedulable.</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>lot</code></b>
+                  (<code><a class="autorefs autorefs-internal" title="dynreact.base.model.Lot" href="model.html#dynreact.base.model.Lot">Lot</a></code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code>bool</code>
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.material_class_for_order" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">material_class_for_order</span><span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="n">category</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Overwrite this method in derived class to provide a custom material class mapping</p>
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>order</code></b>
+                  (<code><a class="autorefs autorefs-internal" title="dynreact.base.model.Order" href="model.html#dynreact.base.model.Order">Order</a></code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+            <li>
+              <b><code>category</code></b>
+                  (<code><a class="autorefs autorefs-internal" title="dynreact.base.model.MaterialCategory" href="model.html#dynreact.base.model.MaterialCategory">MaterialCategory</a></code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code><a class="autorefs autorefs-internal" title="dynreact.base.model.MaterialClass" href="model.html#dynreact.base.model.MaterialClass">MaterialClass</a> | None</code>
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.order_plant_assignment_from_snapshot" class="doc doc-heading">
-            <code class="highlight language-python">order_plant_assignment_from_snapshot(snapshot, process, include_inactive_lots=False)</code>
+            <code class="highlight language-python"><span class="n">order_plant_assignment_from_snapshot</span><span class="p">(</span><span class="n">snapshot</span><span class="p">,</span> <span class="n">process</span><span class="p">,</span> <span class="n">include_inactive_lots</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
 
 </h2>
 
@@ -363,7 +506,7 @@ Implementation expected in module dynreact.snapshot.SnapshotProviderImpl</p>
 
 
 <h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.target_weights_from_snapshot" class="doc doc-heading">
-            <code class="highlight language-python">target_weights_from_snapshot(snapshot, process, include_inactive_lots=False)</code>
+            <code class="highlight language-python"><span class="n">target_weights_from_snapshot</span><span class="p">(</span><span class="n">snapshot</span><span class="p">,</span> <span class="n">process</span><span class="p">,</span> <span class="n">include_inactive_lots</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
 
 </h2>
 
@@ -435,7 +578,7 @@ Implementation expected in module dynreact.snapshot.SnapshotProviderImpl</p>
 
 
 <h2 id="dynreact.base.SnapshotProvider.SnapshotProvider.eligible_orders" class="doc doc-heading">
-            <code class="highlight language-python">eligible_orders(snapshot, process, planning_horizon, method=[OrderInitMethod.ACTIVE_PROCESS, OrderInitMethod.CURRENT_PLANNING, OrderInitMethod.INACTIVE_LOTS, OrderInitMethod.OMIT_CURRENT_LOT])</code>
+            <code class="highlight language-python"><span class="n">eligible_orders</span><span class="p">(</span><span class="n">snapshot</span><span class="p">,</span> <span class="n">process</span><span class="p">,</span> <span class="n">planning_horizon</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="p">(</span><span class="n">OrderInitMethod</span><span class="o">.</span><span class="n">ACTIVE_PROCESS</span><span class="p">,</span> <span class="n">OrderInitMethod</span><span class="o">.</span><span class="n">CURRENT_PLANNING</span><span class="p">,</span> <span class="n">OrderInitMethod</span><span class="o">.</span><span class="n">INACTIVE_LOTS</span><span class="p">,</span> <span class="n">OrderInitMethod</span><span class="o">.</span><span class="n">OMIT_CURRENT_LOT</span><span class="p">,</span> <span class="n">OrderInitMethod</span><span class="o">.</span><span class="n">OMIT_RELEASED_LOTS</span><span class="p">),</span> <span class="n">include_previous_processes_planned</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">include_previous_processes_all</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 </h2>
 
@@ -484,7 +627,7 @@ TODO this is unfinished, will need more input data, such as predecessor stage pl
             <li>
               <b><code>method</code></b>
                   (<code><a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod" href="#dynreact.base.SnapshotProvider.OrderInitMethod">OrderInitMethod</a> | <span title="typing.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod" href="#dynreact.base.SnapshotProvider.OrderInitMethod">OrderInitMethod</a>]</code>, default:
-                      <code>[<a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod.ACTIVE_PROCESS" href="#dynreact.base.SnapshotProvider.OrderInitMethod.ACTIVE_PROCESS">ACTIVE_PROCESS</a>, <a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod.CURRENT_PLANNING" href="#dynreact.base.SnapshotProvider.OrderInitMethod.CURRENT_PLANNING">CURRENT_PLANNING</a>, <a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod.INACTIVE_LOTS" href="#dynreact.base.SnapshotProvider.OrderInitMethod.INACTIVE_LOTS">INACTIVE_LOTS</a>, <a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_CURRENT_LOT" href="#dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_CURRENT_LOT">OMIT_CURRENT_LOT</a>]</code>
+                      <code>(<a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod.ACTIVE_PROCESS" href="#dynreact.base.SnapshotProvider.OrderInitMethod.ACTIVE_PROCESS">ACTIVE_PROCESS</a>, <a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod.CURRENT_PLANNING" href="#dynreact.base.SnapshotProvider.OrderInitMethod.CURRENT_PLANNING">CURRENT_PLANNING</a>, <a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod.INACTIVE_LOTS" href="#dynreact.base.SnapshotProvider.OrderInitMethod.INACTIVE_LOTS">INACTIVE_LOTS</a>, <a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_CURRENT_LOT" href="#dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_CURRENT_LOT">OMIT_CURRENT_LOT</a>, <a class="autorefs autorefs-internal" title="dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_RELEASED_LOTS" href="#dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_RELEASED_LOTS">OMIT_RELEASED_LOTS</a>)</code>
 )
               –
               <div class="doc-md-description">
@@ -494,10 +637,23 @@ TODO this is unfinished, will need more input data, such as predecessor stage pl
               </div>
             </li>
             <li>
-              <b><code>include_scheduled_orders</code></b>
+              <b><code>include_previous_processes_planned</code></b>
+                  (<code>list[str] | None</code>, default:
+                      <code>None</code>
+)
               –
               <div class="doc-md-description">
-                <p>include those orders that are contained in a lot for the specified process already</p>
+                <p>include all orders scheduled for the specified predecessor stages</p>
+              </div>
+            </li>
+            <li>
+              <b><code>include_previous_processes_all</code></b>
+                  (<code>list[str] | None</code>, default:
+                      <code>None</code>
+)
+              –
+              <div class="doc-md-description">
+                <p>include all orders currently at the specified predecessor stages</p>
               </div>
             </li>
         </ul>
@@ -575,7 +731,7 @@ TODO implement new specifiers.</p>
 
 
 <h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.CURRENT_PLANNING" class="doc doc-heading">
-            <code class="highlight language-python">CURRENT_PLANNING = 'current_planning'</code>
+            <code class="highlight language-python"><span class="n">CURRENT_PLANNING</span> <span class="o">=</span> <span class="s1">&#39;current_planning&#39;</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
@@ -600,7 +756,7 @@ if CURRENT_PLANNING and OMIT_PLANNED_LOTS are both active then an error is throw
 
 
 <h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.INACTIVE_LOTS" class="doc doc-heading">
-            <code class="highlight language-python">INACTIVE_LOTS = 'inactive_lots'</code>
+            <code class="highlight language-python"><span class="n">INACTIVE_LOTS</span> <span class="o">=</span> <span class="s1">&#39;inactive_lots&#39;</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
@@ -623,7 +779,7 @@ Active by default.</p>
 
 
 <h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_CURRENT_LOT" class="doc doc-heading">
-            <code class="highlight language-python">OMIT_CURRENT_LOT = 'omit_current_lot'</code>
+            <code class="highlight language-python"><span class="n">OMIT_CURRENT_LOT</span> <span class="o">=</span> <span class="s1">&#39;omit_current_lot&#39;</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
@@ -647,7 +803,7 @@ Active by default.</p>
 
 
 <h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_SUBSEQUENT_LOT" class="doc doc-heading">
-            <code class="highlight language-python">OMIT_SUBSEQUENT_LOT = 'omit_subsequent_lot'</code>
+            <code class="highlight language-python"><span class="n">OMIT_SUBSEQUENT_LOT</span> <span class="o">=</span> <span class="s1">&#39;omit_subsequent_lot&#39;</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
@@ -671,7 +827,7 @@ Inactive by default.</p>
 
 
 <h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_ACTIVE_LOTS" class="doc doc-heading">
-            <code class="highlight language-python">OMIT_ACTIVE_LOTS = 'omit_active_lots'</code>
+            <code class="highlight language-python"><span class="n">OMIT_ACTIVE_LOTS</span> <span class="o">=</span> <span class="s1">&#39;omit_active_lots&#39;</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
@@ -694,7 +850,7 @@ Incompatible with CURRENT_PLANNING; if CURRENT_PLANNING and OMIT_ACTIVE_LOTS are
 
 
 <h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_INACTIVE_LOTS" class="doc doc-heading">
-            <code class="highlight language-python">OMIT_INACTIVE_LOTS = 'omit_inactive_lots'</code>
+            <code class="highlight language-python"><span class="n">OMIT_INACTIVE_LOTS</span> <span class="o">=</span> <span class="s1">&#39;omit_inactive_lots&#39;</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
@@ -716,8 +872,30 @@ Incompatible with INACTIVE_LOTS; if INACTIVE_LOTS and OMIT_INACTIVE_LOTS are bot
 
 
 
+<h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.OMIT_RELEASED_LOTS" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">OMIT_RELEASED_LOTS</span> <span class="o">=</span> <span class="s1">&#39;omit_released_lots&#39;</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Omit lots with status &gt;= 3.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
 <h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.ACTIVE_PROCESS" class="doc doc-heading">
-            <code class="highlight language-python">ACTIVE_PROCESS = 'active_process'</code>
+            <code class="highlight language-python"><span class="n">ACTIVE_PROCESS</span> <span class="o">=</span> <span class="s1">&#39;active_process&#39;</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
@@ -739,7 +917,7 @@ Incompatible with INACTIVE_LOTS; if INACTIVE_LOTS and OMIT_INACTIVE_LOTS are bot
 
 
 <h2 id="dynreact.base.SnapshotProvider.OrderInitMethod.ACTIVE_PLANT" class="doc doc-heading">
-            <code class="highlight language-python">ACTIVE_PLANT = 'active_plant'</code>
+            <code class="highlight language-python"><span class="n">ACTIVE_PLANT</span> <span class="o">=</span> <span class="s1">&#39;active_plant&#39;</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>

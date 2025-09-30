@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="img/favicon.ico" />
+    <title>Cost provider - Dynreact Base</title>
+    <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Cost provider";
+        var mkdocs_page_input_path = "cost_provider.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="index.html" class="icon icon-home"> Dynreact Base
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="" href="../index.html">Back</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="index.html">General</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Cost provider</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#costprovider-class">CostProvider class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider">CostProvider</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.__init__">__init__</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.evaluate_order_assignments">evaluate_order_assignments</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.objective_function">objective_function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.process_objective_function">process_objective_function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.equipment_status">equipment_status</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="lots_optimizer.html">Lots optimizer</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="model.html">Model</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="snapshot_provider.html">Snapshot provider</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="longtermplanning.html">Long term planning</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Dynreact Base</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="index.html" class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Cost provider</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="cost-provider">Cost provider</h1>
+<p>The CostProvider module defines the CostProvider class, which should be thought of as an
+interface that must be implemented for each specific scheduling use-case. It contains all
+the custom logic for building an objective function for schedules.</p>
+<hr />
+<h2 id="costprovider-class"><strong>CostProvider</strong> class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.CostProvider.CostProvider"></a>
+    <div class="doc doc-contents first">
+
+
+        <p>An interface that must be implemented for each specific scheduling use-case. It contains all
+the custom logic for building an objective function for schedules.
+Implementation expected in package dynreact.cost.CostCalculatorImpl</p>
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 15</span>
+<span class="normal"> 16</span>
+<span class="normal"> 17</span>
+<span class="normal"> 18</span>
+<span class="normal"> 19</span>
+<span class="normal"> 20</span>
+<span class="normal"> 21</span>
+<span class="normal"> 22</span>
+<span class="normal"> 23</span>
+<span class="normal"> 24</span>
+<span class="normal"> 25</span>
+<span class="normal"> 26</span>
+<span class="normal"> 27</span>
+<span class="normal"> 28</span>
+<span class="normal"> 29</span>
+<span class="normal"> 30</span>
+<span class="normal"> 31</span>
+<span class="normal"> 32</span>
+<span class="normal"> 33</span>
+<span class="normal"> 34</span>
+<span class="normal"> 35</span>
+<span class="normal"> 36</span>
+<span class="normal"> 37</span>
+<span class="normal"> 38</span>
+<span class="normal"> 39</span>
+<span class="normal"> 40</span>
+<span class="normal"> 41</span>
+<span class="normal"> 42</span>
+<span class="normal"> 43</span>
+<span class="normal"> 44</span>
+<span class="normal"> 45</span>
+<span class="normal"> 46</span>
+<span class="normal"> 47</span>
+<span class="normal"> 48</span>
+<span class="normal"> 49</span>
+<span class="normal"> 50</span>
+<span class="normal"> 51</span>
+<span class="normal"> 52</span>
+<span class="normal"> 53</span>
+<span class="normal"> 54</span>
+<span class="normal"> 55</span>
+<span class="normal"> 56</span>
+<span class="normal"> 57</span>
+<span class="normal"> 58</span>
+<span class="normal"> 59</span>
+<span class="normal"> 60</span>
+<span class="normal"> 61</span>
+<span class="normal"> 62</span>
+<span class="normal"> 63</span>
+<span class="normal"> 64</span>
+<span class="normal"> 65</span>
+<span class="normal"> 66</span>
+<span class="normal"> 67</span>
+<span class="normal"> 68</span>
+<span class="normal"> 69</span>
+<span class="normal"> 70</span>
+<span class="normal"> 71</span>
+<span class="normal"> 72</span>
+<span class="normal"> 73</span>
+<span class="normal"> 74</span>
+<span class="normal"> 75</span>
+<span class="normal"> 76</span>
+<span class="normal"> 77</span>
+<span class="normal"> 78</span>
+<span class="normal"> 79</span>
+<span class="normal"> 80</span>
+<span class="normal"> 81</span>
+<span class="normal"> 82</span>
+<span class="normal"> 83</span>
+<span class="normal"> 84</span>
+<span class="normal"> 85</span>
+<span class="normal"> 86</span>
+<span class="normal"> 87</span>
+<span class="normal"> 88</span>
+<span class="normal"> 89</span>
+<span class="normal"> 90</span>
+<span class="normal"> 91</span>
+<span class="normal"> 92</span>
+<span class="normal"> 93</span>
+<span class="normal"> 94</span>
+<span class="normal"> 95</span>
+<span class="normal"> 96</span>
+<span class="normal"> 97</span>
+<span class="normal"> 98</span>
+<span class="normal"> 99</span>
+<span class="normal">100</span>
+<span class="normal">101</span>
+<span class="normal">102</span>
+<span class="normal">103</span>
+<span class="normal">104</span>
+<span class="normal">105</span>
+<span class="normal">106</span>
+<span class="normal">107</span>
+<span class="normal">108</span>
+<span class="normal">109</span>
+<span class="normal">110</span>
+<span class="normal">111</span>
+<span class="normal">112</span>
+<span class="normal">113</span>
+<span class="normal">114</span>
+<span class="normal">115</span>
+<span class="normal">116</span>
+<span class="normal">117</span>
+<span class="normal">118</span>
+<span class="normal">119</span>
+<span class="normal">120</span>
+<span class="normal">121</span>
+<span class="normal">122</span>
+<span class="normal">123</span>
+<span class="normal">124</span>
+<span class="normal">125</span>
+<span class="normal">126</span>
+<span class="normal">127</span>
+<span class="normal">128</span>
+<span class="normal">129</span>
+<span class="normal">130</span>
+<span class="normal">131</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span>
+<span class="normal">135</span>
+<span class="normal">136</span>
+<span class="normal">137</span>
+<span class="normal">138</span>
+<span class="normal">139</span>
+<span class="normal">140</span>
+<span class="normal">141</span>
+<span class="normal">142</span>
+<span class="normal">143</span>
+<span class="normal">144</span>
+<span class="normal">145</span>
+<span class="normal">146</span>
+<span class="normal">147</span>
+<span class="normal">148</span>
+<span class="normal">149</span>
+<span class="normal">150</span>
+<span class="normal">151</span>
+<span class="normal">152</span>
+<span class="normal">153</span>
+<span class="normal">154</span>
+<span class="normal">155</span>
+<span class="normal">156</span>
+<span class="normal">157</span>
+<span class="normal">158</span>
+<span class="normal">159</span>
+<span class="normal">160</span>
+<span class="normal">161</span>
+<span class="normal">162</span>
+<span class="normal">163</span>
+<span class="normal">164</span>
+<span class="normal">165</span>
+<span class="normal">166</span>
+<span class="normal">167</span>
+<span class="normal">168</span>
+<span class="normal">169</span>
+<span class="normal">170</span>
+<span class="normal">171</span>
+<span class="normal">172</span>
+<span class="normal">173</span>
+<span class="normal">174</span>
+<span class="normal">175</span>
+<span class="normal">176</span>
+<span class="normal">177</span>
+<span class="normal">178</span>
+<span class="normal">179</span>
+<span class="normal">180</span>
+<span class="normal">181</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span>
+<span class="normal">211</span>
+<span class="normal">212</span>
+<span class="normal">213</span>
+<span class="normal">214</span>
+<span class="normal">215</span>
+<span class="normal">216</span>
+<span class="normal">217</span>
+<span class="normal">218</span>
+<span class="normal">219</span>
+<span class="normal">220</span>
+<span class="normal">221</span>
+<span class="normal">222</span>
+<span class="normal">223</span>
+<span class="normal">224</span>
+<span class="normal">225</span>
+<span class="normal">226</span>
+<span class="normal">227</span>
+<span class="normal">228</span>
+<span class="normal">229</span>
+<span class="normal">230</span>
+<span class="normal">231</span>
+<span class="normal">232</span>
+<span class="normal">233</span>
+<span class="normal">234</span>
+<span class="normal">235</span>
+<span class="normal">236</span>
+<span class="normal">237</span>
+<span class="normal">238</span>
+<span class="normal">239</span>
+<span class="normal">240</span>
+<span class="normal">241</span>
+<span class="normal">242</span>
+<span class="normal">243</span>
+<span class="normal">244</span>
+<span class="normal">245</span>
+<span class="normal">246</span>
+<span class="normal">247</span>
+<span class="normal">248</span>
+<span class="normal">249</span>
+<span class="normal">250</span>
+<span class="normal">251</span>
+<span class="normal">252</span>
+<span class="normal">253</span>
+<span class="normal">254</span>
+<span class="normal">255</span>
+<span class="normal">256</span>
+<span class="normal">257</span>
+<span class="normal">258</span>
+<span class="normal">259</span>
+<span class="normal">260</span>
+<span class="normal">261</span>
+<span class="normal">262</span>
+<span class="normal">263</span>
+<span class="normal">264</span>
+<span class="normal">265</span>
+<span class="normal">266</span>
+<span class="normal">267</span>
+<span class="normal">268</span>
+<span class="normal">269</span>
+<span class="normal">270</span>
+<span class="normal">271</span>
+<span class="normal">272</span>
+<span class="normal">273</span>
+<span class="normal">274</span>
+<span class="normal">275</span>
+<span class="normal">276</span>
+<span class="normal">277</span>
+<span class="normal">278</span>
+<span class="normal">279</span>
+<span class="normal">280</span>
+<span class="normal">281</span>
+<span class="normal">282</span>
+<span class="normal">283</span>
+<span class="normal">284</span>
+<span class="normal">285</span>
+<span class="normal">286</span>
+<span class="normal">287</span>
+<span class="normal">288</span>
+<span class="normal">289</span>
+<span class="normal">290</span>
+<span class="normal">291</span>
+<span class="normal">292</span>
+<span class="normal">293</span>
+<span class="normal">294</span>
+<span class="normal">295</span>
+<span class="normal">296</span>
+<span class="normal">297</span>
+<span class="normal">298</span>
+<span class="normal">299</span>
+<span class="normal">300</span>
+<span class="normal">301</span>
+<span class="normal">302</span>
+<span class="normal">303</span>
+<span class="normal">304</span>
+<span class="normal">305</span>
+<span class="normal">306</span>
+<span class="normal">307</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">CostProvider</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    An interface that must be implemented for each specific scheduling use-case. It contains all</span>
+<span class="sd">    the custom logic for building an objective function for schedules.</span>
+<span class="sd">    Implementation expected in package dynreact.cost.CostCalculatorImpl</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>  <span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="o">|</span><span class="kc">None</span><span class="p">,</span> <span class="n">site</span><span class="p">:</span> <span class="n">Site</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_url</span> <span class="o">=</span> <span class="n">url</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_site</span> <span class="o">=</span> <span class="n">site</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">transition_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plant</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">,</span> <span class="n">current</span><span class="p">:</span> <span class="n">Order</span><span class="p">,</span> <span class="nb">next</span><span class="p">:</span> <span class="n">Order</span><span class="p">,</span> <span class="n">current_material</span><span class="p">:</span> <span class="n">Material</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">next_material</span><span class="p">:</span> <span class="n">Material</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates the transition costs for two orders at a given plant. If materials are specified,</span>
+<span class="sd">        then the transition costs between individual materials are evaluated instead.</span>
+<span class="sd">        This function does not take into account global constraints and objectives.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;not implemented&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">logistic_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">new_equipment</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">,</span> <span class="n">order</span><span class="p">:</span> <span class="n">Order</span><span class="p">,</span> <span class="n">material</span><span class="p">:</span> <span class="n">Material</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates the transition costs for an order or individual material from an order to be transported to a new</span>
+<span class="sd">        equipment.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="mi">0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_order_assignments</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">process</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">assignments</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OrderAssignment</span><span class="p">],</span> <span class="n">targets</span><span class="p">:</span> <span class="n">ProductionTargets</span><span class="p">,</span>
+                                   <span class="n">snapshot</span><span class="p">:</span> <span class="n">Snapshot</span><span class="p">,</span> <span class="n">total_priority</span><span class="p">:</span> <span class="nb">int</span><span class="o">|</span><span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">orders_custom_priority</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                                   <span class="n">previous_orders</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ProductionPlanning</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :param process:</span>
+<span class="sd">        :param assignments:</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1">#plants = [p for p in self._site.plants if p.process == process]</span>
+        <span class="n">plant_ids</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">targets</span><span class="o">.</span><span class="n">target_weight</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="n">plants</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_site</span><span class="o">.</span><span class="n">equipment</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">process</span> <span class="o">==</span> <span class="n">process</span> <span class="ow">and</span> <span class="n">p</span><span class="o">.</span><span class="n">id</span> <span class="ow">in</span> <span class="n">plant_ids</span><span class="p">]</span>
+        <span class="n">track_structure</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">targets</span><span class="o">.</span><span class="n">material_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">targets</span><span class="o">.</span><span class="n">material_weights</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="n">target_structure</span> <span class="o">=</span> <span class="n">targets</span><span class="o">.</span><span class="n">material_weights</span> <span class="k">if</span> <span class="n">track_structure</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">main_category</span><span class="p">:</span> <span class="n">MaterialCategory</span><span class="o">|</span><span class="kc">None</span> <span class="o">=</span> <span class="n">ModelUtils</span><span class="o">.</span><span class="n">main_category_for_targets</span><span class="p">(</span><span class="n">targets</span><span class="o">.</span><span class="n">material_weights</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_site</span><span class="o">.</span><span class="n">material_categories</span><span class="p">)</span> <span class="k">if</span> <span class="n">track_structure</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">status</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">EquipmentStatus</span><span class="p">]</span> <span class="o">=</span> \
+            <span class="p">{</span><span class="n">plant</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate_equipment_assignments</span><span class="p">(</span><span class="n">targets</span><span class="o">.</span><span class="n">target_weight</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">plant</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">EquipmentProduction</span><span class="p">(</span><span class="n">equipment</span><span class="o">=</span><span class="n">plant</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">total_weight</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)),</span>
+                                                <span class="n">process</span><span class="p">,</span> <span class="n">assignments</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">,</span> <span class="n">targets</span><span class="o">.</span><span class="n">period</span><span class="p">,</span> <span class="n">track_structure</span><span class="o">=</span><span class="n">track_structure</span><span class="p">,</span>
+                                                <span class="n">main_category</span><span class="o">=</span><span class="n">main_category</span><span class="o">.</span><span class="n">id</span> <span class="k">if</span> <span class="n">main_category</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+                                                <span class="n">orders_custom_priority</span><span class="o">=</span><span class="n">orders_custom_priority</span><span class="p">,</span>
+                                                <span class="n">previous_order</span><span class="o">=</span><span class="n">previous_orders</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">plant</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="k">if</span> <span class="n">previous_orders</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span> <span class="k">for</span> <span class="n">plant</span> <span class="ow">in</span> <span class="n">plants</span><span class="p">}</span>
+        <span class="n">order_assignments</span> <span class="o">=</span> <span class="p">{</span><span class="n">o</span><span class="p">:</span> <span class="n">ass</span> <span class="k">for</span> <span class="n">o</span><span class="p">,</span> <span class="n">ass</span> <span class="ow">in</span> <span class="n">assignments</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">ass</span><span class="o">.</span><span class="n">equipment</span> <span class="ow">in</span> <span class="n">plant_ids</span><span class="p">}</span>
+        <span class="n">unassigned</span> <span class="o">=</span> <span class="p">{</span><span class="n">o</span><span class="p">:</span> <span class="n">ass</span> <span class="k">for</span> <span class="n">o</span><span class="p">,</span> <span class="n">ass</span> <span class="ow">in</span> <span class="n">assignments</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">ass</span><span class="o">.</span><span class="n">equipment</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">}</span>
+        <span class="n">order_assignments</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">unassigned</span><span class="p">)</span>
+        <span class="c1"># calc total prio only first time</span>
+        <span class="k">if</span> <span class="n">total_priority</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">total_priority</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">if</span> <span class="n">orders_custom_priority</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">order_id</span> <span class="ow">in</span> <span class="n">order_assignments</span><span class="p">:</span>
+                    <span class="n">my_prio</span> <span class="o">=</span> <span class="n">orders_custom_priority</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">order_id</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">my_prio</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">my_prio</span> <span class="o">=</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">get_order</span><span class="p">(</span><span class="n">order_id</span><span class="p">)</span><span class="o">.</span><span class="n">priority</span>
+                    <span class="n">total_priority</span> <span class="o">+=</span> <span class="n">my_prio</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">total_priority</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">snapshot</span><span class="o">.</span><span class="n">get_order</span><span class="p">(</span><span class="n">order_id</span><span class="p">,</span> <span class="n">do_raise</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">priority</span> <span class="k">for</span> <span class="n">order_id</span> <span class="ow">in</span> <span class="n">order_assignments</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ProductionPlanning</span><span class="p">(</span><span class="n">process</span><span class="o">=</span><span class="n">process</span><span class="p">,</span> <span class="n">order_assignments</span><span class="o">=</span><span class="n">order_assignments</span><span class="p">,</span> <span class="n">equipment_status</span><span class="o">=</span><span class="n">status</span><span class="p">,</span>
+                                  <span class="n">target_structure</span><span class="o">=</span><span class="n">target_structure</span><span class="p">,</span> <span class="n">total_priority</span><span class="o">=</span><span class="n">total_priority</span><span class="p">,</span> <span class="n">previous_orders</span><span class="o">=</span><span class="n">previous_orders</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_equipment_assignments</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">equipment_targets</span><span class="p">:</span> <span class="n">EquipmentProduction</span><span class="p">,</span> <span class="n">process</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">assignments</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OrderAssignment</span><span class="p">],</span> <span class="n">snapshot</span><span class="p">:</span> <span class="n">Snapshot</span><span class="p">,</span>
+                                       <span class="n">planning_period</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">datetime</span><span class="p">,</span> <span class="n">datetime</span><span class="p">],</span> <span class="n">min_due_date</span><span class="p">:</span> <span class="n">datetime</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                                       <span class="n">current_material</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Material</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                                       <span class="n">track_structure</span><span class="p">:</span> <span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">main_category</span><span class="p">:</span> <span class="nb">str</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                                       <span class="n">orders_custom_priority</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                                       <span class="n">previous_order</span><span class="p">:</span> <span class="nb">str</span><span class="o">|</span><span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EquipmentStatus</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Main function to be implemented in derived class taking into account global status.</span>
+<span class="sd">        Note that this must set the PlantStatus.planning.target_fct value.</span>
+<span class="sd">        :param equipment:</span>
+<span class="sd">        :param assignments: order assignments; keys: order ids</span>
+<span class="sd">        :param target_weight:</span>
+<span class="sd">        :param snapshot:</span>
+<span class="sd">        :param current_coils: should only be present if the last order is not assumed to be processed entirely</span>
+<span class="sd">        :param track_structure:</span>
+<span class="sd">        :param main_category: only relevant if track_structure is true; used for nested structure targets</span>
+<span class="sd">        :param orders_custom_priority:</span>
+<span class="sd">        :param previous_order:</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Not implemented&quot;</span><span class="p">)</span>
+
+    <span class="c1"># TODO this is meant to be an incremental version of the evaluate_order_assignment method above</span>
+    <span class="c1">#def transition_costs_stateful(self, plant: Plant, current: Order, next: Order, status: PlantStatus, current_coil: Coil|None = None, next_coil: Coil|None = None) -&gt; tuple[PlantStatus, float]:</span>
+    <span class="c1">#    &quot;&quot;&quot;</span>
+    <span class="c1">#    Calculates the change in the global target function. Needs the current status as input, and delivers the new status as output, alongside the</span>
+    <span class="c1">#    value of the target function. Typically, the resulting costs will include the stateless transition costs plus</span>
+    <span class="c1">#    additional global costs.</span>
+    <span class="c1">#    &quot;&quot;&quot;</span>
+    <span class="c1">#    raise Exception(&quot;not implemented&quot;)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_transition_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plant</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">,</span> <span class="n">current</span><span class="p">:</span> <span class="n">Order</span><span class="p">,</span> <span class="nb">next</span><span class="p">:</span> <span class="n">Order</span><span class="p">,</span> <span class="n">status</span><span class="p">:</span> <span class="n">EquipmentStatus</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">:</span> <span class="n">Snapshot</span><span class="p">,</span>
+                                <span class="n">new_lot</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">current_material</span><span class="p">:</span> <span class="n">Material</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">next_material</span><span class="p">:</span> <span class="n">Material</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                                <span class="n">orders_custom_priority</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">EquipmentStatus</span><span class="p">,</span> <span class="n">ObjectiveFunction</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Intended to be called by the lot creation, which first needs to check whether a new lot has to be created</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;not implemented&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">objective_function</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">status</span><span class="p">:</span> <span class="n">EquipmentStatus</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ObjectiveFunction</span><span class="p">:</span>
+        <span class="s2">&quot;Evaluate the target/objective function for a specific plant status&quot;</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;not implemented&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_objective_function</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">planning</span><span class="p">:</span> <span class="n">ProductionPlanning</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ObjectiveFunction</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Evaluate the objective function for one process. By default, this is the sum of all objective functions</span>
+<span class="sd">        evaluated on the individual plants, but it is possible to override this behaviour in a derived implementation</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">process</span> <span class="o">=</span> <span class="n">planning</span><span class="o">.</span><span class="n">process</span>
+        <span class="n">all_plants</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Equipment</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">p</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_site</span><span class="o">.</span><span class="n">equipment</span><span class="p">}</span>
+        <span class="n">process_plants</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">EquipmentStatus</span><span class="p">]</span> \
+            <span class="o">=</span> <span class="p">[</span><span class="n">status</span> <span class="k">for</span> <span class="n">status</span> <span class="ow">in</span> <span class="n">planning</span><span class="o">.</span><span class="n">equipment_status</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="n">status</span><span class="o">.</span><span class="n">targets</span><span class="o">.</span><span class="n">equipment</span> <span class="ow">in</span> <span class="n">all_plants</span> <span class="ow">and</span> <span class="n">all_plants</span><span class="p">[</span><span class="n">status</span><span class="o">.</span><span class="n">targets</span><span class="o">.</span><span class="n">equipment</span><span class="p">]</span><span class="o">.</span><span class="n">process</span> <span class="o">==</span> <span class="n">process</span><span class="p">]</span>
+        <span class="n">objectives</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ObjectiveFunction</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">objective_function</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">process_plants</span><span class="p">]</span>
+        <span class="n">aggregated</span> <span class="o">=</span> <span class="n">CostProvider</span><span class="o">.</span><span class="n">sum_objectives</span><span class="p">(</span><span class="n">objectives</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">planning</span><span class="o">.</span><span class="n">target_structure</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">planning</span><span class="o">.</span><span class="n">target_structure</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">structure_costs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure_costs</span><span class="p">(</span><span class="n">planning</span><span class="p">)</span>
+            <span class="n">aggregated</span><span class="o">.</span><span class="n">structure_deviation</span> <span class="o">=</span> <span class="n">structure_costs</span>
+            <span class="n">aggregated</span><span class="o">.</span><span class="n">total_value</span> <span class="o">+=</span> <span class="n">structure_costs</span>
+        <span class="n">priority_costs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_costs</span><span class="p">(</span><span class="n">planning</span><span class="p">)</span>
+        <span class="n">aggregated</span><span class="o">.</span><span class="n">priority_costs</span> <span class="o">=</span> <span class="n">priority_costs</span>
+        <span class="n">aggregated</span><span class="o">.</span><span class="n">total_value</span> <span class="o">+=</span> <span class="n">priority_costs</span>
+        <span class="k">return</span> <span class="n">aggregated</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">structure_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">planning</span><span class="p">:</span> <span class="n">ProductionPlanning</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :param planning</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">planning</span><span class="o">.</span><span class="n">target_structure</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">0</span>
+        <span class="n">costs_parameter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure_costs_parameter</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">costs_parameter</span><span class="p">,</span> <span class="nb">float</span><span class="o">|</span><span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="n">costs_parameter</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">0</span>
+        <span class="n">is_nested</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">struct</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span> <span class="k">for</span> <span class="n">struct</span> <span class="ow">in</span> <span class="n">planning</span><span class="o">.</span><span class="n">target_structure</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_structure_costs_flat</span><span class="p">(</span><span class="n">planning</span><span class="p">,</span> <span class="n">costs_parameter</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">is_nested</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_structure_costs_nested</span><span class="p">(</span><span class="n">planning</span><span class="p">,</span> <span class="n">costs_parameter</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_structure_costs_flat</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">planning</span><span class="p">:</span> <span class="n">ProductionPlanning</span><span class="p">,</span> <span class="n">costs_parameter</span><span class="p">):</span>
+        <span class="n">structure</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="n">ModelUtils</span><span class="o">.</span><span class="n">aggregated_structure</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_site</span><span class="p">,</span> <span class="n">planning</span><span class="p">)</span>
+        <span class="n">deviations_by_category</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># outer key: category, inner keys: &quot;diff&quot;, &quot;target&quot;, &quot;value&quot;</span>
+        <span class="k">for</span> <span class="n">cl</span><span class="p">,</span> <span class="n">target</span> <span class="ow">in</span> <span class="n">planning</span><span class="o">.</span><span class="n">target_structure</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">cl</span> <span class="o">==</span> <span class="n">SUM_MATERIAL</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">category</span> <span class="o">=</span> <span class="nb">next</span><span class="p">((</span><span class="n">cat</span> <span class="k">for</span> <span class="n">cat</span><span class="p">,</span> <span class="n">cl_dict</span> <span class="ow">in</span> <span class="n">structure</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">cl</span> <span class="ow">in</span> <span class="n">cl_dict</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">category</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># should not happen</span>
+                <span class="k">continue</span>
+            <span class="n">actual_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">structure</span><span class="p">[</span><span class="n">category</span><span class="p">][</span><span class="n">cl</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">category</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">deviations_by_category</span><span class="p">:</span>
+                <span class="n">deviations_by_category</span><span class="p">[</span><span class="n">category</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">deviations_by_category</span><span class="p">[</span><span class="n">category</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;diff&quot;</span><span class="p">:</span> <span class="n">target</span> <span class="o">-</span> <span class="n">actual_value</span><span class="p">,</span> <span class="s2">&quot;target&quot;</span><span class="p">:</span> <span class="n">target</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">actual_value</span><span class="p">})</span>
+        <span class="n">costs</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">cat</span><span class="p">,</span> <span class="n">results</span> <span class="ow">in</span> <span class="n">deviations_by_category</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">total_diff</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">dct</span><span class="p">[</span><span class="s2">&quot;diff&quot;</span><span class="p">])</span> <span class="k">for</span> <span class="n">dct</span> <span class="ow">in</span> <span class="n">results</span><span class="p">)</span>
+            <span class="n">total_targets</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">dct</span><span class="p">[</span><span class="s2">&quot;target&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">dct</span> <span class="ow">in</span> <span class="n">results</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">total_targets</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Targets must be positive, got </span><span class="si">{</span><span class="n">total_targets</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">costs</span> <span class="o">+=</span> <span class="n">total_diff</span> <span class="o">/</span> <span class="n">total_targets</span> <span class="o">*</span> <span class="n">costs_parameter</span>
+        <span class="k">return</span> <span class="n">costs</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_structure_costs_nested</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">planning</span><span class="p">:</span> <span class="n">ProductionPlanning</span><span class="p">,</span> <span class="n">costs_parameter</span><span class="p">):</span>
+        <span class="n">process</span> <span class="o">=</span> <span class="n">planning</span><span class="o">.</span><span class="n">process</span>
+        <span class="n">primary_category_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_site</span><span class="o">.</span><span class="n">lot_creation</span><span class="o">.</span><span class="n">processes</span><span class="p">[</span><span class="n">process</span><span class="p">]</span><span class="o">.</span><span class="n">structure</span><span class="o">.</span><span class="n">primary_category</span>
+        <span class="n">structure</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]]</span> <span class="o">=</span> <span class="n">ModelUtils</span><span class="o">.</span><span class="n">aggregated_structure_nested</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_site</span><span class="p">,</span> <span class="n">planning</span><span class="p">,</span> <span class="n">primary_category_id</span><span class="p">)</span>
+        <span class="s2">&quot;Outermost key: class id for main category, middle key: sub category id, innermost key: class id; (special keys </span><span class="se">\&quot;</span><span class="s2">_sum</span><span class="se">\&quot;</span><span class="s2"> represent the total/aggregated values).&quot;</span>
+        <span class="n">deviations_by_category</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]]]</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># outer key: category, inner keys: &quot;diff&quot;, &quot;target&quot;, &quot;value&quot;</span>
+        <span class="k">for</span> <span class="n">mastercl</span><span class="p">,</span> <span class="n">target</span> <span class="ow">in</span> <span class="n">planning</span><span class="o">.</span><span class="n">target_structure</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">mastercl</span> <span class="o">==</span> <span class="n">SUM_MATERIAL</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="n">deviations_by_category</span><span class="p">[</span><span class="n">mastercl</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">cl</span><span class="p">,</span> <span class="n">target2</span> <span class="ow">in</span> <span class="n">target</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">cl</span> <span class="o">==</span> <span class="n">SUM_MATERIAL</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="c1"># get category to class from structure</span>
+                <span class="n">category</span> <span class="o">=</span> <span class="nb">next</span><span class="p">((</span><span class="n">cat</span> <span class="k">for</span> <span class="n">cat</span><span class="p">,</span> <span class="n">cl_dict</span> <span class="ow">in</span> <span class="n">structure</span><span class="p">[</span><span class="n">mastercl</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">cl</span> <span class="ow">in</span> <span class="n">cl_dict</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">category</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># should not happen</span>
+                    <span class="k">continue</span>
+                <span class="n">actual_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">structure</span><span class="p">[</span><span class="n">mastercl</span><span class="p">][</span><span class="n">category</span><span class="p">][</span><span class="n">cl</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">category</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">deviations_by_category</span><span class="p">[</span><span class="n">mastercl</span><span class="p">]:</span>
+                    <span class="n">deviations_by_category</span><span class="p">[</span><span class="n">mastercl</span><span class="p">][</span><span class="n">category</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="n">deviations_by_category</span><span class="p">[</span><span class="n">mastercl</span><span class="p">][</span><span class="n">category</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;diff&quot;</span><span class="p">:</span> <span class="n">target2</span> <span class="o">-</span> <span class="n">actual_value</span><span class="p">,</span> <span class="s2">&quot;target&quot;</span><span class="p">:</span> <span class="n">target2</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">actual_value</span><span class="p">})</span>
+        <span class="n">costs</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">mastercl</span><span class="p">,</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">deviations_by_category</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">cl</span><span class="p">,</span> <span class="n">results</span> <span class="ow">in</span> <span class="n">cat</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">total_diff</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">dct</span><span class="p">[</span><span class="s2">&quot;diff&quot;</span><span class="p">])</span> <span class="k">for</span> <span class="n">dct</span> <span class="ow">in</span> <span class="n">results</span><span class="p">)</span>
+                <span class="n">total_targets</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">dct</span><span class="p">[</span><span class="s2">&quot;target&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">dct</span> <span class="ow">in</span> <span class="n">results</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">total_targets</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Targets must be positive, got </span><span class="si">{</span><span class="n">total_targets</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">costs</span> <span class="o">+=</span> <span class="n">total_diff</span> <span class="o">/</span> <span class="n">total_targets</span> <span class="o">*</span> <span class="n">costs_parameter</span>
+        <span class="k">return</span> <span class="n">costs</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">structure_costs_parameter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Overwrite this with a positive value to enable the default structure costs algorithm</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="mi">0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">priority_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">planning</span><span class="p">:</span> <span class="n">ProductionPlanning</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :param planning</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">costs_parameter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_costs_parameter</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">costs_parameter</span><span class="p">,</span> <span class="nb">float</span><span class="o">|</span><span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="n">costs_parameter</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">0</span>
+        <span class="n">cnt_assigned_orders_prio</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">status</span><span class="o">.</span><span class="n">planning</span><span class="o">.</span><span class="n">assigned_priority</span> <span class="k">for</span> <span class="n">status</span> <span class="ow">in</span> <span class="n">planning</span><span class="o">.</span><span class="n">equipment_status</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="n">cnt_backlog_orders_prio</span> <span class="o">=</span> <span class="n">planning</span><span class="o">.</span><span class="n">total_priority</span>      <span class="c1">#ass + unass</span>
+        <span class="n">unassigned</span> <span class="o">=</span> <span class="n">cnt_backlog_orders_prio</span> <span class="o">-</span> <span class="n">cnt_assigned_orders_prio</span>
+        <span class="k">if</span> <span class="n">unassigned</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">0</span>
+        <span class="n">costs</span> <span class="o">=</span> <span class="n">unassigned</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span><span class="o">+</span><span class="n">cnt_assigned_orders_prio</span><span class="p">)</span> <span class="o">*</span> <span class="n">costs_parameter</span>
+        <span class="k">return</span> <span class="n">costs</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">priority_costs_parameter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Overwrite this with a positive value to enable the default priority costs algorithm</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="mi">0</span>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">optimum_possible_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">process</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">num_plants</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="k">return</span> <span class="mi">0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">path_dependent_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">process</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Overwrite in subclass if the optimal sorting of orders depends on global/path-dependent costs.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">relevant_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">equipment</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="o">|</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Optional method, for display purposes only. To be overridden in derived class.</span>
+<span class="sd">        Convention: &quot;order.material_properties.&lt;$FIELD_NAME&gt;&quot;, &quot;material.properties.&lt;$FIELD_NAME&gt;&quot;</span>
+<span class="sd">        :param equipment:</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">equipment_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">:</span> <span class="n">Snapshot</span><span class="p">,</span> <span class="n">plant</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">,</span> <span class="n">planning_period</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">datetime</span><span class="p">,</span> <span class="n">datetime</span><span class="p">],</span> <span class="n">target_weight</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+                         <span class="n">material_based</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+                         <span class="n">current</span><span class="p">:</span> <span class="n">Order</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">previous</span><span class="p">:</span> <span class="n">Order</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                         <span class="n">current_material</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Material</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">track_structure</span><span class="p">:</span> <span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EquipmentStatus</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :param snapshot:</span>
+<span class="sd">        :param plant:</span>
+<span class="sd">        :param planning_period  TODO validate that planning_period starts with current snapshot?</span>
+<span class="sd">        :param target_weight</span>
+<span class="sd">        :param material_based: treat coils as basic unit or orders (default)?</span>
+<span class="sd">        :param current: current order; by default this will be determined from the snapshot, but it can also be provided explicitly</span>
+<span class="sd">        :param previous: previous order;  by default this will be determined from the snapshot (if this information is available), but it can also be provided explicitly</span>
+<span class="sd">        :param: current_coils: should only be present if the last order is not assumed to be processed entirely</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">process</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_site</span><span class="o">.</span><span class="n">get_process</span><span class="p">(</span><span class="n">plant</span><span class="o">.</span><span class="n">process</span><span class="p">,</span> <span class="n">do_raise</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">name_short</span>
+        <span class="k">if</span> <span class="n">current</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">current_material</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">current_material</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">current</span> <span class="o">=</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">get_order</span><span class="p">(</span><span class="n">current_material</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">order</span><span class="p">,</span> <span class="n">do_raise</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">current</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span><span class="n">material_based</span> <span class="ow">and</span> <span class="n">current_material</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="n">inline_coils</span> <span class="o">=</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">inline_material</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">plant</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">inline_coils</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">inline_coils</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">current</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">current</span><span class="o">.</span><span class="n">id</span> <span class="o">!=</span> <span class="n">inline_coils</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">order</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Specified current order does not match current coils&#39; order&quot;</span><span class="p">)</span>
+                <span class="n">current</span> <span class="o">=</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">get_order</span><span class="p">(</span><span class="n">inline_coils</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">order</span><span class="p">,</span> <span class="n">do_raise</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">current_material</span> <span class="o">=</span> <span class="p">[</span><span class="n">snapshot</span><span class="o">.</span><span class="n">get_material</span><span class="p">(</span><span class="n">ocd</span><span class="o">.</span><span class="n">material</span><span class="p">,</span> <span class="n">do_raise</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">for</span> <span class="n">ocd</span> <span class="ow">in</span> <span class="n">inline_coils</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">current_material</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">material_based</span> <span class="ow">and</span> <span class="n">current_material</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Could not determine current coils&quot;</span><span class="p">)</span>
+        <span class="n">assignments</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OrderAssignment</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">previous</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">prev_lot</span> <span class="o">=</span> <span class="n">previous</span><span class="o">.</span><span class="n">lots</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">process</span><span class="p">)</span> <span class="k">if</span> <span class="n">previous</span><span class="o">.</span><span class="n">lots</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="n">prev_lot_idx</span> <span class="o">=</span> <span class="n">previous</span><span class="o">.</span><span class="n">lot_positions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">process</span><span class="p">)</span> <span class="k">if</span> <span class="n">prev_lot</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="n">assignments</span><span class="p">[</span><span class="n">previous</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderAssignment</span><span class="p">(</span><span class="n">equipment</span><span class="o">=</span><span class="n">plant</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="n">previous</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">lot</span><span class="o">=</span><span class="n">prev_lot</span> <span class="k">if</span> <span class="n">prev_lot</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">plant</span><span class="o">.</span><span class="n">name_short</span> <span class="o">+</span> <span class="s2">&quot;_X&quot;</span><span class="p">,</span>
+                                                      <span class="n">lot_idx</span><span class="o">=</span><span class="n">prev_lot_idx</span> <span class="k">if</span> <span class="n">prev_lot_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">current</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">curr_lot</span> <span class="o">=</span> <span class="n">current</span><span class="o">.</span><span class="n">lots</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">process</span><span class="p">)</span> <span class="k">if</span> <span class="n">current</span><span class="o">.</span><span class="n">lots</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="n">curr_lot_idx</span> <span class="o">=</span> <span class="n">current</span><span class="o">.</span><span class="n">lot_positions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">process</span><span class="p">)</span> <span class="k">if</span> <span class="n">curr_lot</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="n">assignments</span><span class="p">[</span><span class="n">current</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderAssignment</span><span class="p">(</span><span class="n">equipment</span><span class="o">=</span><span class="n">plant</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="n">current</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">lot</span><span class="o">=</span><span class="n">curr_lot</span> <span class="k">if</span> <span class="n">curr_lot</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">plant</span><span class="o">.</span><span class="n">name_short</span> <span class="o">+</span> <span class="s2">&quot;_X&quot;</span><span class="p">,</span>
+                                                      <span class="n">lot_idx</span><span class="o">=</span><span class="n">curr_lot_idx</span> <span class="k">if</span> <span class="n">curr_lot_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate_equipment_assignments</span><span class="p">(</span><span class="n">EquipmentProduction</span><span class="p">(</span><span class="n">equipment</span><span class="o">=</span><span class="n">plant</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">total_weight</span><span class="o">=</span><span class="n">target_weight</span><span class="p">),</span>
+                                                   <span class="n">plant</span><span class="o">.</span><span class="n">process</span><span class="p">,</span> <span class="n">assignments</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">,</span> <span class="n">planning_period</span><span class="p">,</span>
+                                                   <span class="n">current_material</span><span class="o">=</span><span class="n">current_material</span> <span class="k">if</span> <span class="n">material_based</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span> <span class="n">track_structure</span><span class="o">=</span><span class="n">track_structure</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sum_objectives</span><span class="p">(</span><span class="n">objective_functions</span><span class="p">:</span><span class="nb">list</span><span class="p">[</span><span class="n">ObjectiveFunction</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ObjectiveFunction</span><span class="p">:</span>
+        <span class="n">all_fields</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">field</span> <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">objective_functions</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">obj</span><span class="o">.</span><span class="n">model_fields_set</span><span class="p">}</span>
+        <span class="n">field_values</span> <span class="o">=</span> <span class="p">{</span><span class="n">field</span><span class="p">:</span> <span class="nb">sum</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">o</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">o</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span> <span class="k">else</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">objective_functions</span><span class="p">)</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">all_fields</span><span class="p">}</span>
+        <span class="k">if</span> <span class="s2">&quot;total_value&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">field_values</span><span class="p">:</span>
+            <span class="n">field_values</span><span class="p">[</span><span class="s2">&quot;total_value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">ObjectiveFunction</span><span class="p">(</span><span class="o">**</span><span class="n">field_values</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
+</code></pre></div></td></tr></table></div>
+              </details>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.CostProvider.CostProvider.__init__" class="doc doc-heading">
+            <code class="highlight language-python"><span class="fm">__init__</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">site</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>  <span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="o">|</span><span class="kc">None</span><span class="p">,</span> <span class="n">site</span><span class="p">:</span> <span class="n">Site</span><span class="p">):</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_url</span> <span class="o">=</span> <span class="n">url</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_site</span> <span class="o">=</span> <span class="n">site</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.CostProvider.CostProvider.evaluate_order_assignments" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">evaluate_order_assignments</span><span class="p">(</span><span class="n">process</span><span class="p">,</span> <span class="n">assignments</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">,</span> <span class="n">total_priority</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">orders_custom_priority</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">previous_orders</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>process</code></b>
+                  (<code>str</code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+            <li>
+              <b><code>assignments</code></b>
+                  (<code>dict[str, <a class="autorefs autorefs-internal" title="dynreact.base.model.OrderAssignment" href="model.html#dynreact.base.model.OrderAssignment">OrderAssignment</a>]</code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code><a class="autorefs autorefs-internal" title="dynreact.base.model.ProductionPlanning" href="model.html#dynreact.base.model.ProductionPlanning">ProductionPlanning</a></code>
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">41</span>
+<span class="normal">42</span>
+<span class="normal">43</span>
+<span class="normal">44</span>
+<span class="normal">45</span>
+<span class="normal">46</span>
+<span class="normal">47</span>
+<span class="normal">48</span>
+<span class="normal">49</span>
+<span class="normal">50</span>
+<span class="normal">51</span>
+<span class="normal">52</span>
+<span class="normal">53</span>
+<span class="normal">54</span>
+<span class="normal">55</span>
+<span class="normal">56</span>
+<span class="normal">57</span>
+<span class="normal">58</span>
+<span class="normal">59</span>
+<span class="normal">60</span>
+<span class="normal">61</span>
+<span class="normal">62</span>
+<span class="normal">63</span>
+<span class="normal">64</span>
+<span class="normal">65</span>
+<span class="normal">66</span>
+<span class="normal">67</span>
+<span class="normal">68</span>
+<span class="normal">69</span>
+<span class="normal">70</span>
+<span class="normal">71</span>
+<span class="normal">72</span>
+<span class="normal">73</span>
+<span class="normal">74</span>
+<span class="normal">75</span>
+<span class="normal">76</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">evaluate_order_assignments</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">process</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">assignments</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OrderAssignment</span><span class="p">],</span> <span class="n">targets</span><span class="p">:</span> <span class="n">ProductionTargets</span><span class="p">,</span>
+                               <span class="n">snapshot</span><span class="p">:</span> <span class="n">Snapshot</span><span class="p">,</span> <span class="n">total_priority</span><span class="p">:</span> <span class="nb">int</span><span class="o">|</span><span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">orders_custom_priority</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                               <span class="n">previous_orders</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ProductionPlanning</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    :param process:</span>
+<span class="sd">    :param assignments:</span>
+<span class="sd">    :return:</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1">#plants = [p for p in self._site.plants if p.process == process]</span>
+    <span class="n">plant_ids</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">targets</span><span class="o">.</span><span class="n">target_weight</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+    <span class="n">plants</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_site</span><span class="o">.</span><span class="n">equipment</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">process</span> <span class="o">==</span> <span class="n">process</span> <span class="ow">and</span> <span class="n">p</span><span class="o">.</span><span class="n">id</span> <span class="ow">in</span> <span class="n">plant_ids</span><span class="p">]</span>
+    <span class="n">track_structure</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">targets</span><span class="o">.</span><span class="n">material_weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">targets</span><span class="o">.</span><span class="n">material_weights</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    <span class="n">target_structure</span> <span class="o">=</span> <span class="n">targets</span><span class="o">.</span><span class="n">material_weights</span> <span class="k">if</span> <span class="n">track_structure</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">main_category</span><span class="p">:</span> <span class="n">MaterialCategory</span><span class="o">|</span><span class="kc">None</span> <span class="o">=</span> <span class="n">ModelUtils</span><span class="o">.</span><span class="n">main_category_for_targets</span><span class="p">(</span><span class="n">targets</span><span class="o">.</span><span class="n">material_weights</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_site</span><span class="o">.</span><span class="n">material_categories</span><span class="p">)</span> <span class="k">if</span> <span class="n">track_structure</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">status</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">EquipmentStatus</span><span class="p">]</span> <span class="o">=</span> \
+        <span class="p">{</span><span class="n">plant</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate_equipment_assignments</span><span class="p">(</span><span class="n">targets</span><span class="o">.</span><span class="n">target_weight</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">plant</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">EquipmentProduction</span><span class="p">(</span><span class="n">equipment</span><span class="o">=</span><span class="n">plant</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">total_weight</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)),</span>
+                                            <span class="n">process</span><span class="p">,</span> <span class="n">assignments</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">,</span> <span class="n">targets</span><span class="o">.</span><span class="n">period</span><span class="p">,</span> <span class="n">track_structure</span><span class="o">=</span><span class="n">track_structure</span><span class="p">,</span>
+                                            <span class="n">main_category</span><span class="o">=</span><span class="n">main_category</span><span class="o">.</span><span class="n">id</span> <span class="k">if</span> <span class="n">main_category</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+                                            <span class="n">orders_custom_priority</span><span class="o">=</span><span class="n">orders_custom_priority</span><span class="p">,</span>
+                                            <span class="n">previous_order</span><span class="o">=</span><span class="n">previous_orders</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">plant</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="k">if</span> <span class="n">previous_orders</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span> <span class="k">for</span> <span class="n">plant</span> <span class="ow">in</span> <span class="n">plants</span><span class="p">}</span>
+    <span class="n">order_assignments</span> <span class="o">=</span> <span class="p">{</span><span class="n">o</span><span class="p">:</span> <span class="n">ass</span> <span class="k">for</span> <span class="n">o</span><span class="p">,</span> <span class="n">ass</span> <span class="ow">in</span> <span class="n">assignments</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">ass</span><span class="o">.</span><span class="n">equipment</span> <span class="ow">in</span> <span class="n">plant_ids</span><span class="p">}</span>
+    <span class="n">unassigned</span> <span class="o">=</span> <span class="p">{</span><span class="n">o</span><span class="p">:</span> <span class="n">ass</span> <span class="k">for</span> <span class="n">o</span><span class="p">,</span> <span class="n">ass</span> <span class="ow">in</span> <span class="n">assignments</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">ass</span><span class="o">.</span><span class="n">equipment</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">}</span>
+    <span class="n">order_assignments</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">unassigned</span><span class="p">)</span>
+    <span class="c1"># calc total prio only first time</span>
+    <span class="k">if</span> <span class="n">total_priority</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">total_priority</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="n">orders_custom_priority</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">order_id</span> <span class="ow">in</span> <span class="n">order_assignments</span><span class="p">:</span>
+                <span class="n">my_prio</span> <span class="o">=</span> <span class="n">orders_custom_priority</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">order_id</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">my_prio</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">my_prio</span> <span class="o">=</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">get_order</span><span class="p">(</span><span class="n">order_id</span><span class="p">)</span><span class="o">.</span><span class="n">priority</span>
+                <span class="n">total_priority</span> <span class="o">+=</span> <span class="n">my_prio</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">total_priority</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">snapshot</span><span class="o">.</span><span class="n">get_order</span><span class="p">(</span><span class="n">order_id</span><span class="p">,</span> <span class="n">do_raise</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">priority</span> <span class="k">for</span> <span class="n">order_id</span> <span class="ow">in</span> <span class="n">order_assignments</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ProductionPlanning</span><span class="p">(</span><span class="n">process</span><span class="o">=</span><span class="n">process</span><span class="p">,</span> <span class="n">order_assignments</span><span class="o">=</span><span class="n">order_assignments</span><span class="p">,</span> <span class="n">equipment_status</span><span class="o">=</span><span class="n">status</span><span class="p">,</span>
+                              <span class="n">target_structure</span><span class="o">=</span><span class="n">target_structure</span><span class="p">,</span> <span class="n">total_priority</span><span class="o">=</span><span class="n">total_priority</span><span class="p">,</span> <span class="n">previous_orders</span><span class="o">=</span><span class="n">previous_orders</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.CostProvider.CostProvider.objective_function" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">objective_function</span><span class="p">(</span><span class="n">status</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Evaluate the target/objective function for a specific plant status</p>
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">117</span>
+<span class="normal">118</span>
+<span class="normal">119</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">objective_function</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">status</span><span class="p">:</span> <span class="n">EquipmentStatus</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ObjectiveFunction</span><span class="p">:</span>
+    <span class="s2">&quot;Evaluate the target/objective function for a specific plant status&quot;</span>
+    <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;not implemented&quot;</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.CostProvider.CostProvider.process_objective_function" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">process_objective_function</span><span class="p">(</span><span class="n">planning</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Evaluate the objective function for one process. By default, this is the sum of all objective functions
+evaluated on the individual plants, but it is possible to override this behaviour in a derived implementation</p>
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">121</span>
+<span class="normal">122</span>
+<span class="normal">123</span>
+<span class="normal">124</span>
+<span class="normal">125</span>
+<span class="normal">126</span>
+<span class="normal">127</span>
+<span class="normal">128</span>
+<span class="normal">129</span>
+<span class="normal">130</span>
+<span class="normal">131</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span>
+<span class="normal">135</span>
+<span class="normal">136</span>
+<span class="normal">137</span>
+<span class="normal">138</span>
+<span class="normal">139</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">process_objective_function</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">planning</span><span class="p">:</span> <span class="n">ProductionPlanning</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ObjectiveFunction</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Evaluate the objective function for one process. By default, this is the sum of all objective functions</span>
+<span class="sd">    evaluated on the individual plants, but it is possible to override this behaviour in a derived implementation</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">process</span> <span class="o">=</span> <span class="n">planning</span><span class="o">.</span><span class="n">process</span>
+    <span class="n">all_plants</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Equipment</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">p</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_site</span><span class="o">.</span><span class="n">equipment</span><span class="p">}</span>
+    <span class="n">process_plants</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">EquipmentStatus</span><span class="p">]</span> \
+        <span class="o">=</span> <span class="p">[</span><span class="n">status</span> <span class="k">for</span> <span class="n">status</span> <span class="ow">in</span> <span class="n">planning</span><span class="o">.</span><span class="n">equipment_status</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="n">status</span><span class="o">.</span><span class="n">targets</span><span class="o">.</span><span class="n">equipment</span> <span class="ow">in</span> <span class="n">all_plants</span> <span class="ow">and</span> <span class="n">all_plants</span><span class="p">[</span><span class="n">status</span><span class="o">.</span><span class="n">targets</span><span class="o">.</span><span class="n">equipment</span><span class="p">]</span><span class="o">.</span><span class="n">process</span> <span class="o">==</span> <span class="n">process</span><span class="p">]</span>
+    <span class="n">objectives</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ObjectiveFunction</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">objective_function</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">process_plants</span><span class="p">]</span>
+    <span class="n">aggregated</span> <span class="o">=</span> <span class="n">CostProvider</span><span class="o">.</span><span class="n">sum_objectives</span><span class="p">(</span><span class="n">objectives</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">planning</span><span class="o">.</span><span class="n">target_structure</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">planning</span><span class="o">.</span><span class="n">target_structure</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">structure_costs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure_costs</span><span class="p">(</span><span class="n">planning</span><span class="p">)</span>
+        <span class="n">aggregated</span><span class="o">.</span><span class="n">structure_deviation</span> <span class="o">=</span> <span class="n">structure_costs</span>
+        <span class="n">aggregated</span><span class="o">.</span><span class="n">total_value</span> <span class="o">+=</span> <span class="n">structure_costs</span>
+    <span class="n">priority_costs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_costs</span><span class="p">(</span><span class="n">planning</span><span class="p">)</span>
+    <span class="n">aggregated</span><span class="o">.</span><span class="n">priority_costs</span> <span class="o">=</span> <span class="n">priority_costs</span>
+    <span class="n">aggregated</span><span class="o">.</span><span class="n">total_value</span> <span class="o">+=</span> <span class="n">priority_costs</span>
+    <span class="k">return</span> <span class="n">aggregated</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.CostProvider.CostProvider.equipment_status" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">equipment_status</span><span class="p">(</span><span class="n">snapshot</span><span class="p">,</span> <span class="n">plant</span><span class="p">,</span> <span class="n">planning_period</span><span class="p">,</span> <span class="n">target_weight</span><span class="p">,</span> <span class="n">material_based</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">current</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">previous</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">current_material</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">track_structure</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        
+
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Parameters:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+              <b><code>snapshot</code></b>
+                  (<code><a class="autorefs autorefs-internal" title="dynreact.base.model.Snapshot" href="model.html#dynreact.base.model.Snapshot">Snapshot</a></code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+            <li>
+              <b><code>plant</code></b>
+                  (<code><a class="autorefs autorefs-internal" title="dynreact.base.model.Equipment" href="model.html#dynreact.base.model.Equipment">Equipment</a></code>)
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+            <li>
+              <b><code>material_based</code></b>
+                  (<code>bool</code>, default:
+                      <code>False</code>
+)
+              –
+              <div class="doc-md-description">
+                <p>treat coils as basic unit or orders (default)?</p>
+              </div>
+            </li>
+            <li>
+              <b><code>current</code></b>
+                  (<code><a class="autorefs autorefs-internal" title="dynreact.base.model.Order" href="model.html#dynreact.base.model.Order">Order</a> | None</code>, default:
+                      <code>None</code>
+)
+              –
+              <div class="doc-md-description">
+                <p>current order; by default this will be determined from the snapshot, but it can also be provided explicitly</p>
+              </div>
+            </li>
+            <li>
+              <b><code>previous</code></b>
+                  (<code><a class="autorefs autorefs-internal" title="dynreact.base.model.Order" href="model.html#dynreact.base.model.Order">Order</a> | None</code>, default:
+                      <code>None</code>
+)
+              –
+              <div class="doc-md-description">
+                <p>previous order;  by default this will be determined from the snapshot (if this information is available), but it can also be provided explicitly</p>
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="field-list">
+  <colgroup>
+    <col class="field-name" />
+    <col class="field-body" />
+  </colgroup>
+  <tbody valign="top">
+    <tr class="field">
+      <th class="field-name">Returns:</th>
+      <td class="field-body">
+        <ul class="first simple">
+            <li>
+                  <code><a class="autorefs autorefs-internal" title="dynreact.base.model.EquipmentStatus" href="model.html#dynreact.base.model.EquipmentStatus">EquipmentStatus</a></code>
+              –
+              <div class="doc-md-description">
+                
+              </div>
+            </li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">256</span>
+<span class="normal">257</span>
+<span class="normal">258</span>
+<span class="normal">259</span>
+<span class="normal">260</span>
+<span class="normal">261</span>
+<span class="normal">262</span>
+<span class="normal">263</span>
+<span class="normal">264</span>
+<span class="normal">265</span>
+<span class="normal">266</span>
+<span class="normal">267</span>
+<span class="normal">268</span>
+<span class="normal">269</span>
+<span class="normal">270</span>
+<span class="normal">271</span>
+<span class="normal">272</span>
+<span class="normal">273</span>
+<span class="normal">274</span>
+<span class="normal">275</span>
+<span class="normal">276</span>
+<span class="normal">277</span>
+<span class="normal">278</span>
+<span class="normal">279</span>
+<span class="normal">280</span>
+<span class="normal">281</span>
+<span class="normal">282</span>
+<span class="normal">283</span>
+<span class="normal">284</span>
+<span class="normal">285</span>
+<span class="normal">286</span>
+<span class="normal">287</span>
+<span class="normal">288</span>
+<span class="normal">289</span>
+<span class="normal">290</span>
+<span class="normal">291</span>
+<span class="normal">292</span>
+<span class="normal">293</span>
+<span class="normal">294</span>
+<span class="normal">295</span>
+<span class="normal">296</span>
+<span class="normal">297</span>
+<span class="normal">298</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">equipment_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">:</span> <span class="n">Snapshot</span><span class="p">,</span> <span class="n">plant</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">,</span> <span class="n">planning_period</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">datetime</span><span class="p">,</span> <span class="n">datetime</span><span class="p">],</span> <span class="n">target_weight</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+                     <span class="n">material_based</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+                     <span class="n">current</span><span class="p">:</span> <span class="n">Order</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">previous</span><span class="p">:</span> <span class="n">Order</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                     <span class="n">current_material</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Material</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">track_structure</span><span class="p">:</span> <span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EquipmentStatus</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    :param snapshot:</span>
+<span class="sd">    :param plant:</span>
+<span class="sd">    :param planning_period  TODO validate that planning_period starts with current snapshot?</span>
+<span class="sd">    :param target_weight</span>
+<span class="sd">    :param material_based: treat coils as basic unit or orders (default)?</span>
+<span class="sd">    :param current: current order; by default this will be determined from the snapshot, but it can also be provided explicitly</span>
+<span class="sd">    :param previous: previous order;  by default this will be determined from the snapshot (if this information is available), but it can also be provided explicitly</span>
+<span class="sd">    :param: current_coils: should only be present if the last order is not assumed to be processed entirely</span>
+<span class="sd">    :return:</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">process</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_site</span><span class="o">.</span><span class="n">get_process</span><span class="p">(</span><span class="n">plant</span><span class="o">.</span><span class="n">process</span><span class="p">,</span> <span class="n">do_raise</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">name_short</span>
+    <span class="k">if</span> <span class="n">current</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">current_material</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">current_material</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">current</span> <span class="o">=</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">get_order</span><span class="p">(</span><span class="n">current_material</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">order</span><span class="p">,</span> <span class="n">do_raise</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">current</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span><span class="n">material_based</span> <span class="ow">and</span> <span class="n">current_material</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="n">inline_coils</span> <span class="o">=</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">inline_material</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">plant</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">inline_coils</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">inline_coils</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">current</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">current</span><span class="o">.</span><span class="n">id</span> <span class="o">!=</span> <span class="n">inline_coils</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">order</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Specified current order does not match current coils&#39; order&quot;</span><span class="p">)</span>
+            <span class="n">current</span> <span class="o">=</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">get_order</span><span class="p">(</span><span class="n">inline_coils</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">order</span><span class="p">,</span> <span class="n">do_raise</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">current_material</span> <span class="o">=</span> <span class="p">[</span><span class="n">snapshot</span><span class="o">.</span><span class="n">get_material</span><span class="p">(</span><span class="n">ocd</span><span class="o">.</span><span class="n">material</span><span class="p">,</span> <span class="n">do_raise</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">for</span> <span class="n">ocd</span> <span class="ow">in</span> <span class="n">inline_coils</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">current_material</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">material_based</span> <span class="ow">and</span> <span class="n">current_material</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Could not determine current coils&quot;</span><span class="p">)</span>
+    <span class="n">assignments</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OrderAssignment</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">previous</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">prev_lot</span> <span class="o">=</span> <span class="n">previous</span><span class="o">.</span><span class="n">lots</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">process</span><span class="p">)</span> <span class="k">if</span> <span class="n">previous</span><span class="o">.</span><span class="n">lots</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">prev_lot_idx</span> <span class="o">=</span> <span class="n">previous</span><span class="o">.</span><span class="n">lot_positions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">process</span><span class="p">)</span> <span class="k">if</span> <span class="n">prev_lot</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">assignments</span><span class="p">[</span><span class="n">previous</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderAssignment</span><span class="p">(</span><span class="n">equipment</span><span class="o">=</span><span class="n">plant</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="n">previous</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">lot</span><span class="o">=</span><span class="n">prev_lot</span> <span class="k">if</span> <span class="n">prev_lot</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">plant</span><span class="o">.</span><span class="n">name_short</span> <span class="o">+</span> <span class="s2">&quot;_X&quot;</span><span class="p">,</span>
+                                                  <span class="n">lot_idx</span><span class="o">=</span><span class="n">prev_lot_idx</span> <span class="k">if</span> <span class="n">prev_lot_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">current</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">curr_lot</span> <span class="o">=</span> <span class="n">current</span><span class="o">.</span><span class="n">lots</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">process</span><span class="p">)</span> <span class="k">if</span> <span class="n">current</span><span class="o">.</span><span class="n">lots</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">curr_lot_idx</span> <span class="o">=</span> <span class="n">current</span><span class="o">.</span><span class="n">lot_positions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">process</span><span class="p">)</span> <span class="k">if</span> <span class="n">curr_lot</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">assignments</span><span class="p">[</span><span class="n">current</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderAssignment</span><span class="p">(</span><span class="n">equipment</span><span class="o">=</span><span class="n">plant</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="n">current</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">lot</span><span class="o">=</span><span class="n">curr_lot</span> <span class="k">if</span> <span class="n">curr_lot</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">plant</span><span class="o">.</span><span class="n">name_short</span> <span class="o">+</span> <span class="s2">&quot;_X&quot;</span><span class="p">,</span>
+                                                  <span class="n">lot_idx</span><span class="o">=</span><span class="n">curr_lot_idx</span> <span class="k">if</span> <span class="n">curr_lot_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate_equipment_assignments</span><span class="p">(</span><span class="n">EquipmentProduction</span><span class="p">(</span><span class="n">equipment</span><span class="o">=</span><span class="n">plant</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">total_weight</span><span class="o">=</span><span class="n">target_weight</span><span class="p">),</span>
+                                               <span class="n">plant</span><span class="o">.</span><span class="n">process</span><span class="p">,</span> <span class="n">assignments</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">,</span> <span class="n">planning_period</span><span class="p">,</span>
+                                               <span class="n">current_material</span><span class="o">=</span><span class="n">current_material</span> <span class="k">if</span> <span class="n">material_based</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span> <span class="n">track_structure</span><span class="o">=</span><span class="n">track_structure</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="index.html" class="btn btn-neutral float-left" title="General"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="lots_optimizer.html" class="btn btn-neutral float-right" title="Lots optimizer">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="index.html" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="lots_optimizer.html" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = ".";</script>
+    <script src="js/theme_extra.js"></script>
+    <script src="js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

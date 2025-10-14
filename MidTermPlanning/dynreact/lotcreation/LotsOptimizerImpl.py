@@ -311,10 +311,8 @@ class TabuSearch(LotsOptimizer):
                 objective_value = item[2]
                 swpbest = item[0]
                 best_solution = item[1]
-
         if swpbest is None:
             return None, None, None
-
         for tli in TabuList:
             tli.Expiration -= 1
 
@@ -338,7 +336,7 @@ class TabuSearch(LotsOptimizer):
                                                    next_material=next_material, orders_custom_priority=orders_custom_priority)
 
     def assign_lots(self, order_plant_assignments: dict[str, int]) -> dict[int, list[Lot]]:
-        return self._allocator.assign_lots(order_plant_assignments)
+        return self._allocator.assign_lots(order_plant_assignments)[0]
 
 
 class LotsAllocator:
@@ -369,20 +367,24 @@ class LotsAllocator:
         self._orders_custom_priority = orders_custom_priority
 
     # previously: CalcSolution (although it also determined the PlantStatus objects)
-    def assign_lots(self, order_plant_assignments: dict[str, int]) -> dict[int, list[Lot]]:
+    def assign_lots(self, order_plant_assignments: dict[str, int], timeout: float|None=None) -> tuple[dict[int, list[Lot]], bool]:
+        """Returns lots plus information if the algo ran into a timeout"""
         # remember the plants involved here
         plant_ids: set[int] = set(order_plant_assignments.values())
         result: dict[int, list[Lot]] = {}
         tsp_method = self._params.tsp_solver_global_costs
         global_costs = self._costs.path_dependent_costs(self._process)
         # solver = GlobalSearchDefault(bound_factor_upcoming_costs=0.5, timeout_pre_solvers=1) if global_costs else GoogleOrSolver()  # TODO parameters TODO option to use other solvers?
+        timed_out: bool = False
         for plant_id in plant_ids:
             if plant_id < 0:
                 continue
             order_ids: list[str] = [o for o, plant in order_plant_assignments.items() if plant == plant_id]
             orders: list[Order] = [self._orders[o] if self._orders is not None else self._snapshot.get_order(o, do_raise=True) for o in order_ids]
-            lots: list[Lot] = self.assign_lots_internal(plant_id, orders, global_costs, self._snapshot, bound_factor=self._params.tsp_solver_global_bound_factor,
-                                      timeout=self._params.tsp_solver_global_timeout, solver_id=self._params.tsp_solver_global_costs)
+            lots, timeout_hit = self.assign_lots_internal(plant_id, orders, global_costs, self._snapshot, bound_factor=self._params.tsp_solver_global_bound_factor,
+                                      timeout=timeout or self._params.tsp_solver_global_timeout, solver_id=self._params.tsp_solver_global_costs)
+            if timeout_hit:
+                timed_out = True
             #lots: list[Lot] = self.assign_lots_googleor(plant_id, orders) if "googleor" in tsp_method else self.assign_lots_bf(plant_id, orders, bound_factor=self._params.tsp_solver_global_bound_factor,
             #                               timeout=self._params.tsp_solver_global_bound_timeout, init_nearest_neighbours=self._params.tsp_solver_init_nearest_neighbours)
             #if global_costs and len(orders) <= 40 and tsp_method == "googleor_global1":
@@ -403,10 +405,11 @@ class LotsAllocator:
         if self._base_lots is not None:  # in this case we only want to extend the existing lots
             addon = {p: lots[0] for p, lots in result.items()}
             result = {p: [self._adapt_base_lots(lot, addon.get(p, None))] for p, lot in self._base_lots.items()}
-        return result
+        return result, timed_out
 
     def assign_lots_internal(self, plant_id: int, orders: list[Order], has_global_costs: bool, snapshot: Snapshot,
-                       bound_factor: float|None=None, timeout: float|None=1, solver_id: str|None=None) -> list[Lot]:
+                       bound_factor: float|None=None, timeout: float|None=1, solver_id: str|None=None) -> tuple[list[Lot], bool|None]:
+        """Returns lots, plus indicator if timeout has been hit"""
         timeout = timeout if timeout is None or timeout > 0 else None
         # TODO better to reshuffle lots separately? At least if there are too many orders?
         plant = self._plants[plant_id]
@@ -424,7 +427,7 @@ class LotsAllocator:
             start_costs[np.isnan(start_costs)] = 50
         num_orders = len(orders)
         if bound_factor is None:
-            bound_factor = 0 if num_orders < 5 else 1 if num_orders >= 15 else 0.25 + (num_orders - 5) / 10 * 0.75
+            bound_factor = 0 if num_orders < 5 else 1 if num_orders >= 10 else 0.25 + (num_orders - 5) / 5 * 0.75
         elif bound_factor < 0:
             bound_factor = 0
 
@@ -484,7 +487,7 @@ class LotsAllocator:
             lots.append(
                 Lot(id="LC_" + plant.name_short + "." + f"{lot_count:02d}", equipment=plant_id, active=False, status=1,
                     orders=[o.id for o in lot_orders], weight=sum(o.actual_weight for o in lot_orders)))
-        return lots
+        return lots, result.timeout_reached
 
     """@deprecated"""
     def assign_lots_bf(self, plant_id: int, orders: list[Order],
@@ -635,7 +638,7 @@ class LotsAllocator:
         return transition_costs > self._params.TAllowed
 
     def optimize_lots(self, order_plant_assignments: dict[str, int]) -> ProductionPlanning:
-        new_lots: dict[int, list[Lot]] = self.assign_lots(order_plant_assignments)
+        new_lots: dict[int, list[Lot]] = self.assign_lots(order_plant_assignments)[0]
         new_assignments: dict[str, OrderAssignment] = {}
         for plant, lots in new_lots.items():
             for lot in lots:
@@ -738,6 +741,7 @@ class CTabuWorker:
         best_objective: ObjectiveFunction|None = None
         empty_plants = []
         track_structure: bool = targets.material_weights is not None
+        best_timed_out: bool = False
         for assignment in self.slist:
             order: Order = orders[assignment.order]
             forbidden_plants: list[int] = forbidden_assignments.get(order.id, empty_plants)
@@ -766,7 +770,7 @@ class CTabuWorker:
                 assignments_for_lc = {o: order_assignments[o].equipment for o in affected_orders if order_assignments[o].equipment >= 0}
                 if swp.PlantTo >= 0:
                     assignments_for_lc[swp.Order] = swp.PlantTo
-                new_assigned_lots: dict[int, list[Lot]] = self.tabu_search.assign_lots(assignments_for_lc)
+                new_assigned_lots, timeout_hit = self.tabu_search.assign_lots(assignments_for_lc)
                 if is_lot_append:  # expensive, only required if we are appending to existing lots
                     for plant, lots in new_assigned_lots.items():
                         for lot in lots:
@@ -830,9 +834,54 @@ class CTabuWorker:
                     best_objective = total_objectives
                     best_swap = swp
                     best_solution = planning_candidate
+                    best_timed_out = timeout_hit
         if best_objective is None:
             best_objective = ObjectiveFunction(total_value=objective_value)
+        # TODO regarding the conditions, we'd also need to rerun if no initial tsp was applied at all
+        # TODO this part is difficult to test, since it is only activated under specific timing conditions => need some stats about this behaviour
+        elif costs.path_dependent_costs(self.planning.process) and best_timed_out and self.tabu_search._params.tsp_solver_global_timeout is not None \
+                and self.tabu_search._params.tsp_solver_final_timeout is not None and self.tabu_search._params.tsp_solver_final_timeout > self.tabu_search._params.tsp_solver_global_timeout:
+            # if there are global costs, run the TSP again for the plants with new configurations but this time with higher resource budget
+            plant_by_order: dict[str, int] = {o: ass.equipment for o, ass in best_solution.order_assignments.items() if ass.equipment >= 0}
+            final_lots, _ = self.tabu_search.assign_lots(plant_by_order, timeout=self.tabu_search._params.tsp_solver_final_timeout)  # : dict[int, list[Lot]]
+            old_lots: dict[int, list[Lot]] = best_solution.get_lots()
+            lots_differ = len(final_lots) != len(old_lots) or any(p not in old_lots for p in final_lots.keys()) or  \
+                          any(CTabuWorker._lots_differ(final_lots[p], old_lots[p]) for p in final_lots.keys())
+            # check if there are any differences to the previous configuration, only then recalculate the costs!
+            if lots_differ:  # we know that order assignments can only differ in the ordering, not in the equipment assignments
+                # adapt existing assignments, not needed any more
+                assignments: dict[str, OrderAssignment] = {}
+                plant_status = {}
+                for p, lots in final_lots.items():
+                    for lot in lots:
+                        for idx, ord in enumerate(lot.orders):
+                            assignments[ord] = OrderAssignment(order=ord, equipment=p, lot=lot.id, lot_idx=idx+1)
+                    equipment_targets = targets.target_weight.get(p, EquipmentProduction(equipment=p, total_weight=0.0))
+                    start_order = previous_orders.get(p) if previous_orders is not None else None
+                    new_status: EquipmentStatus = costs.evaluate_equipment_assignments(equipment_targets, planning.process, assignments, snapshot, targets.period,
+                                        track_structure=track_structure, main_category=main_category, orders_custom_priority=orders_custom_priority, previous_order=start_order)
+                    plant_status[p] = new_status
+                new_sol = ProductionPlanning(process=planning.process, order_assignments=assignments, equipment_status=plant_status, target_structure=targets.material_weights,
+                                                        total_priority=planning.total_priority, previous_orders=previous_orders)
+                total_objectives = costs.process_objective_function(new_sol)
+                if total_objectives.total_value < best_objective.total_value:
+                    best_solution = new_sol
+                    best_objective = total_objectives
         return best_swap, best_solution, best_objective
+
+    @staticmethod
+    def _lots_differ(l1: list[Lot], l2: list[Lot]) -> bool:
+        if len(l1) != len(l2):
+            return True
+        for lot1, lot2 in zip(l1, l2):
+            if len(lot1.orders) != len(lot2.orders):
+                return True
+            for o1, o2 in zip(lot1.orders, lot2.orders):
+                if o1 != o2:
+                    return True
+        return False
+
+
 
 
 # must be defined in global scope for being useable with pool.imap

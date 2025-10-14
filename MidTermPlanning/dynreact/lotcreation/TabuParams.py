@@ -11,7 +11,7 @@ class TabuParams:
     "Number of TabuSearch Iterations, if not explicitly specified via the run(max_iterations=...) parameter."
     Expiration: int = 10
     "Tabu List expiration"
-    NMinUntilShuffle: int = 10
+    NMinUntilShuffle: int = 5
     "number of local minima to be reached until shuffeling"
     NParallel: int = min(mp.cpu_count(), 8)
     "parallel processing -> Set to 1 for debugging"
@@ -35,20 +35,21 @@ class TabuParams:
     somewhat aggressive early stopping strategy is used, which might lead to good solutions being missed, but should improve performance.
     By default, the factor is selected chosen on the number of orders assigned to the equipment, the more orders, the higher the factor. 
     """
-    tsp_solver_global_timeout: float = 2.
+    tsp_solver_global_timeout: float = 1
     """
     Timeout in seconds for the global tsp solver. Default: 1s. Set to zero or a negative value to disable the timeout, 
-    which may lead to excessive optimization durations. 
+    which may lead to excessive optimization durations.
+    """
+    tsp_solver_final_timeout: float = 4
+    """
+    Timeout in seconds for a final tsp optimization in each iteration of the optimization.
+    Typically, this timeout should be set to a higher value than tsp_sovler_global_timeout, since this optimization
+    will not run so often.
     """
     tsp_solver_ortools_timeout: int = 1
     """
     Timeout for the ortools solver in seconds. Default: 1s. Only integer values supported
     """
-    #tsp_solver_init_nearest_neighbours: bool=False
-    """
-    This should only be relevant if the tsp method is global1, not if the googleor method is used for initialization.
-    """
-
 
     def __init__(self,
                  ntotal: int|None = None,
@@ -73,7 +74,7 @@ class TabuParams:
         self.Expiration = Expiration
         "Tabu List expiration"
         if NMinUntilShuffle is None:
-            NMinUntilShuffle = int(os.getenv("TABU_LOCAL_MIN_UNTIL_SHUFFEL", self.NMinUntilShuffle))
+            NMinUntilShuffle = int(os.getenv("TABU_LOCAL_MIN_UNTIL_SHUFFEL") or os.getenv("TABU_LOCAL_MIN_UNTIL_SHUFFLE") or self.NMinUntilShuffle)
         self.NMinUntilShuffle = NMinUntilShuffle
         "number of local minima to be reached until shuffeling"
         if NParallel is None:

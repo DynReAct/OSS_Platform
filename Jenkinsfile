@@ -259,8 +259,8 @@ node {
               --user root \\
               "${REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
               bash -c "source .venv/bin/activate && \\
-                       pip install poetry && \\
-                       poetry install --no-root && \\
+                       python3 -m pip install --retries 5 --timeout 120  poetry==1.8.4 && \\
+                       poetry install --no-root --no-ansi && \\
                        cd /app/shortterm/dynreact/tests/integration_test && \\
                        pytest -s test_auction.py::test_scenario_08"
             """

@@ -106,7 +106,11 @@ def layout(*args, **kwargs):
                 )
             ),
             html.H2("Orders"),
-            html.Button("Download orders csv", id="download-orders-csv", className="dynreact-button"),
+            html.Div([html.Button("Download orders csv", id="download-orders-csv", className="dynreact-button"),
+                      html.Div("\U0001F6C8", title="Download a csv file. Note that the csv is based on English punctuation. " +
+                            "To import this file into Excel with non-English default settings, first open an empty sheet, go to the \"Data\" tab, select \"Get external data\" (leftmost button), " +
+                            "then \"Query options\" -> \"Current workbook\" - \"Regional settings\" -> Select \"English (Europe)\". Then import data \"From text/csv\" and select the downloaded file. " +
+                            "Otherwise Excel will transform fractional numbers into dates and other strange objects.")], className="lotplanning-button-info-row"),
             html.Br(),
             # this button is hidden, it needs to be activated via the browser console. Command:
             # document.querySelector("#lotplanning-download-scenario").hidden=false
@@ -415,10 +419,11 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         fields_0 = dict(sorted(props.model_fields.items(), key=lambda item: relevant_fields.index(item[0]) if item[0] in relevant_fields else len(relevant_fields))) \
                       if relevant_fields is not None else props.model_fields
 
+    value_formatter_object = {"function": "formatCell(params.value, 2, 4)"}
     fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True, "filter": "agTextColumnFilter"},
                 {"field": "equipment", "headerTooltip": "Current equipment location of the order"},
-                {"field": "costs", "headerTooltip": "Transition costs from previous order."},
-                {"field": "weight", "headerTooltip": "Order weight in tons." },
+                {"field": "costs", "headerTooltip": "Transition costs from previous order.", "valueFormatter": value_formatter_object},
+                {"field": "weight", "headerTooltip": "Order weight in tons.", "valueFormatter": value_formatter_object },
                 {"field": "due_date", "headerTooltip": "Order due date." },
                 {"field": "priority", "headerTooltip": "Order priority."}] + \
              [column_def_for_field(key, info) for key, info in fields_0.items()]
@@ -498,7 +503,7 @@ def export_data_as_csv(n_clicks, snapshot: str|None, process: str|None, solution
     filename = "lots_" + process + "_" + \
                DatetimeUtils.format(snapshot).replace("+0000","").replace(":", "").replace("-", "").replace("T", "") + \
                "_" + solution.replace("\\", "_").replace("/", "_").replace(":", "_") + ".csv"
-    options = {"fileName": filename, "columnSeparator": ";" }
+    options = {"fileName": filename, "columnSeparator": ";", "suppressQuotes": True }
     return True, options
 
 
@@ -519,8 +524,8 @@ def export_order_data_as_csv(n_clicks, snapshot: str|None, process: str|None, so
     filename = "orders_lots_" + process + "_" + \
                DatetimeUtils.format(snapshot).replace("+0000","").replace(":", "").replace("-", "").replace("T", "") + \
                "_" + solution.replace("\\", "_").replace("/", "_").replace(":", "_") + ".csv"
-    options = {"fileName": filename, "columnSeparator": ";"}
-    # TODO columns selector
+    options = {"fileName": filename, "columnSeparator": ";", "suppressQuotes":True}
+    # TODO columns selector?
     return True, options
 
 

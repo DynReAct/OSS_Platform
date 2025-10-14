@@ -21,3 +21,12 @@
     display: inline;
 }
 
+.lotplanning-button-info-row {
+    display: flex; column-gap: 0.5em; align-items: center;
+}
+
+.lotplanning-button-info-row>div {
+    font-size: 1.3em;
+    color: darkgreen;
+}
+

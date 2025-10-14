@@ -1,9 +1,15 @@
 FROM python:3.12.3 AS builder
 LABEL authors="Hector Flores"
 
-RUN pip install poetry==2.1.1
+RUN pip install poetry==1.8.4
 
-ENV POETRY_NO_INTERACTION=1 \
+ENV PIP_REQUIRE_HASES=
+
+ENV PIP_INDEX_URL=https://pypi.org/simple \
+    PIP_TRUSTED_HOST="pypi.org files.pythonhosted.org" \
+    PIP_DEFAULT_TIMEOUT=120 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_IN_PROJECT=1 \
     POETRY_VIRTUALENVS_CREATE=1 \
     POETRY_CACHE_DIR=/tmp/poetry_cache

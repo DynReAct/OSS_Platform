@@ -37,7 +37,7 @@ class DockerManager:
         try:
 
             # Get updated list of containers before launching
-            self.list_tracked_containers()
+            all_containers = self.list_tracked_containers()
 
             command_str = f"python -m shortterm {agent} {mode} {dict_to_cli_params(params)}".strip()
 
@@ -58,7 +58,7 @@ class DockerManager:
 
                 name = f"{container_prefix + '_' if container_prefix else ''}{agent.upper()}_{name}"
 
-                if any((d['name'] == name and d['status'] == "exited") for d in list):
+                if any((d['name'] == name and d['status'] == "exited") for d in all_containers):
                     print("Container with the same name found, auto removing")
                     self.clean_container(name)
 
@@ -184,6 +184,7 @@ class DockerManager:
         else:
             print(f"\nTracked Containers for tag '{self.tag}':")
             for container in containers:
+                container.reload()
                 self.tracked_containers.append({
                     "id": container.id,
                     "status": container.status,

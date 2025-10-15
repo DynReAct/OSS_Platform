@@ -34,7 +34,8 @@ RUN apt update && apt upgrade -y && \
 
 # Build librdkafka from source (latest version)
 WORKDIR /tmp
-RUN git clone --depth 1 --branch v2.8.0 https://github.com/confluentinc/librdkafka.git && \
+RUN git config --global http.postBuffer 104857600 && \
+    git clone --depth 1 --branch v2.8.0 https://github.com/confluentinc/librdkafka.git && \
     cd librdkafka && \
     ./configure --prefix=/usr --install-deps && \
     make -j$(nproc) && \

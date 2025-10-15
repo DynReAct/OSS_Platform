@@ -15,7 +15,8 @@ from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import ProductionPlanning, PlanningData, ProductionTargets, Snapshot, OrderAssignment, Site, \
-    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction, MaterialClass
+    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction, MaterialClass, \
+    ServiceMetrics, Histogram
 
 
 class OptimizationListener:
@@ -518,3 +519,20 @@ class LotsOptimizationAlgo:
 
     def stats(self) -> dict[str, OptimizationStatistics]:
         return {p: stats.model_copy(deep=True) for p, stats in self._stats.items()}
+
+    def metrics(self) -> ServiceMetrics:
+        """
+         result += _to_histogram(f"{service_prefix}midtermplanning_iterations_total", stats.iterations, [10, 100, 1000], labels={"process": proc})
+            result += _to_histogram(f"{service_prefix}midtermplanning_backlog_count", stats.backlog_count, [10, 75, 200], labels={"process": proc})
+            result += _to_histogram(f"{service_prefix}midtermplanning_backlog_weight", stats.backlog_size, [500, 5000], labels={"process": proc})
+            result += _to_histogram(f"{service_prefix}midtermplanning_iteration_duration_seconds", [int(d / i) for d, i in zip(stats.durations_seconds, stats.iterations)],
+                                    [4, 15, 60], labels={"process": proc})"""
+        metrics = []
+        for proc, stats in self._stats.items():
+            if len(stats.iterations) > 0:
+                metrics.append(Histogram(id="iterations_total", labels={"process": proc}, data=stats.iterations, buckets=[10, 100, 1000])),
+                metrics.append(Histogram(id="backlog_count", labels={"process": proc}, data=stats.backlog_count, buckets=[10, 75, 200])),
+                metrics.append(Histogram(id="backlog_weight", labels={"process": proc}, data=stats.backlog_size, buckets=[500, 5000])),
+                metrics.append(Histogram(id="iteration_duration_seconds", labels={"process": proc},
+                                         data=[int(d / i) for d, i in zip(stats.durations_seconds, stats.iterations)], buckets=[4, 15, 60])),
+        return ServiceMetrics(service_id="midtermplanning", metrics=metrics)

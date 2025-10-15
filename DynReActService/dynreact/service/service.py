@@ -13,7 +13,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, \
     MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction, AggregatedStorageContent, \
-    AggregatedMaterial
+    AggregatedMaterial, Histogram, ServiceMetrics, PrimitiveMetric
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.params import Path, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -456,31 +456,37 @@ def metrics(username = username) -> PlainTextResponse:
     result = ""
     service_prefix = "dynreact_"
     result += f"{service_prefix}uptime_seconds {int(time.time()-start)}\n"
-    opti: LotsOptimizationAlgo = state.get_lots_optimization()
-    mtp_stats: dict[str, OptimizationStatistics] = opti.stats()
-    for proc, stats in mtp_stats.items():
-        result += f"{service_prefix}midtermplanning_runs_total{{process=\"{proc}\"}} {stats.runs}\n"
-        if stats.runs > 0:
-            result += _to_histogramm(f"{service_prefix}midtermplanning_iterations_total", stats.iterations, [10, 100, 1000], labels={"process": proc})
-            result += _to_histogramm(f"{service_prefix}midtermplanning_backlog_count", stats.backlog_count, [10, 75, 200], labels={"process": proc})
-            result += _to_histogramm(f"{service_prefix}midtermplanning_backlog_weight", stats.backlog_size, [500, 5000], labels={"process": proc})
-            result += _to_histogramm(f"{service_prefix}midtermplanning_iteration_duration_seconds", [int(d/i) for d, i in zip(stats.durations_seconds, stats.iterations)],
-                                     [4, 15, 60], labels={"process": proc})
+    result += _print_service_metrics(state.get_lots_optimization().metrics())
+    result += _print_service_metrics(state.get_snapshot_provider().metrics())
     return PlainTextResponse(result)
 
-
-def _to_histogramm(metric: str, data: list[float], buckets: list[float], labels: dict[str, str]|None=None, add_infinity: bool=True) -> str:
+def _print_service_metrics(metrics: ServiceMetrics) -> str:
+    prefix = "dynreact_" + metrics.service_id + "_"
     result = ""
-    labels_str = "" if labels is None else ",".join([k + "=\"" + v + "\"" for k, v in labels.items()]) + ","
-    for bucket in buckets:
+    for metric in metrics.metrics:
+        if isinstance(metric, Histogram):
+            result += _print_histogram(metric, prefix)
+        elif isinstance(metric, PrimitiveMetric):
+            labels_agg_str = "" if metric.labels is None or len(metric.labels) == 0 else "{" + ",".join([k + "=\"" + v + "\"" for k, v in metric.labels.items()]) + "}"
+            result += f"{prefix + metric.id}{labels_agg_str} {metric.value}\n"
+    return result
+
+def _print_histogram(histogram: Histogram, prefix: str) -> str:
+    result = ""
+    if len(histogram.data) == 0:
+        return result
+    labels = histogram.labels
+    metric = prefix + histogram.id
+    data = histogram.data
+    labels_str = "" if labels is None or len(labels) == 0 else ",".join([k + "=\"" + v + "\"" for k, v in labels.items()]) + ","
+    for bucket in histogram.buckets:
         result += f"{metric}_bucket{{{labels_str}le=\"{bucket}\"}} {sum(1 for d in data if d <= bucket)}\n"
-    if add_infinity:
+    if histogram.include_infinity:
         result += f"{metric}_bucket{{{labels_str}le=\"+Inf\"}} {len(data)}\n"
-    labels_agg_str = "" if labels is None else "{" + ",".join([k + "=\"" + v + "\"" for k, v in labels.items()]) + "}"
+    labels_agg_str = "" if labels is None or len(labels) == 0 else "{" + ",".join([k + "=\"" + v + "\"" for k, v in labels.items()]) + "}"
     result += f"{metric}_count{labels_agg_str} {len(data)}\n"
     result += f"{metric}_sum{labels_agg_str} {sum(data)}\n"
     return result
-
 
 
 def parse_datetime_str(dt: str) -> datetime:

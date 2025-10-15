@@ -9,7 +9,8 @@ from datetime import datetime, timezone
 from typing import Iterator, Literal, Iterable, Any
 
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import Snapshot, Site, Lot, Process, Material, Order, MaterialCategory, MaterialClass
+from dynreact.base.model import Snapshot, Site, Lot, Process, Material, Order, MaterialCategory, MaterialClass, \
+    ServiceMetrics
 
 
 # Note: requires Python >= 3.11
@@ -380,6 +381,8 @@ class SnapshotProvider:
                     applicable_orders0.remove(order)
         return list(applicable_orders0)
 
-
+    def metrics(self) -> ServiceMetrics:
+        # Overwrite in derived class
+        return ServiceMetrics(service_id="snapshotprovider", metrics=[])
 
 

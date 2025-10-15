@@ -1,7 +1,7 @@
 FROM python:3.12.3 AS builder
 LABEL authors="Hector Flores"
 
-RUN pip install poetry==1.8.4
+RUN pip install poetry==2.1.1
 
 ENV PIP_REQUIRE_HASES=
 

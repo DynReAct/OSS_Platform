@@ -860,6 +860,7 @@ class CTabuWorker:
                     new_status: EquipmentStatus = costs.evaluate_equipment_assignments(equipment_targets, planning.process, assignments, snapshot, targets.period,
                                         track_structure=track_structure, main_category=main_category, orders_custom_priority=orders_custom_priority, previous_order=start_order)
                     plant_status[p] = new_status
+                assignments.update({o: OrderAssignment(order=o, equipment=-1, lot="", lot_idx=-1) for o in planning.order_assignments.keys() if o not in assignments})
                 new_sol = ProductionPlanning(process=planning.process, order_assignments=assignments, equipment_status=plant_status, target_structure=targets.material_weights,
                                                         total_priority=planning.total_priority, previous_orders=previous_orders)
                 total_objectives = costs.process_objective_function(new_sol)
@@ -923,6 +924,12 @@ class CTabuWorker:
                     last_lot = oa.lot
                     new_assignments[order] = OrderAssignment(order=order, equipment=target_plant, lot="LC_" + plant.name_short + "." + f"{lot_count:02d}", lot_idx=lot_idx)
                     lot_idx += 1
+                if best_cost_idx >= len(other_orders) :
+                    new_lot = self.tabu_search.create_new_lot_costs_based(transition_costs_left[-1])
+                    if new_lot:
+                        lot_count += 1
+                        lot_idx = 1
+                    new_assignments[swap.Order] = OrderAssignment(order=swap.Order, equipment=target_plant, lot="LC_" + plant.name_short + "." + f"{lot_count:02d}", lot_idx=lot_idx)
             equipment_targets = targets.target_weight.get(target_plant, EquipmentProduction(equipment=target_plant, total_weight=0.0))
             new_status: EquipmentStatus = costs.evaluate_equipment_assignments(equipment_targets, planning.process, new_assignments, snapshot, targets.period,
                             track_structure=track_structure, main_category=main_category, orders_custom_priority=orders_custom_priority, previous_order =start_order)

@@ -458,6 +458,10 @@ def metrics(username = username) -> PlainTextResponse:
     result += f"{service_prefix}uptime_seconds {int(time.time()-start)}\n"
     result += _print_service_metrics(state.get_lots_optimization().metrics())
     result += _print_service_metrics(state.get_snapshot_provider().metrics())
+    lot_sinks = state.get_lot_sinks(if_exists=True)
+    if lot_sinks is not None:
+        for sink in lot_sinks.values():
+            result += _print_service_metrics(sink.metrics())
     return PlainTextResponse(result)
 
 def _print_service_metrics(metrics: ServiceMetrics) -> str:

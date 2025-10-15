@@ -151,8 +151,8 @@ class Plugins:
                     raise Exception("Aggregation persistence not found " + self._config.aggregation_persistence)
         return self._aggregation_persistence
 
-    def get_lot_sinks(self) -> dict[str, LotSink]:
-        if self._lot_sinks is None:
+    def get_lot_sinks(self, if_exists: bool=False) -> dict[str, LotSink]:
+        if self._lot_sinks is None and not if_exists:
             site = self.get_config_provider().site_config()
             sinks = {}
             for sink_config in self._config.lot_sinks:

@@ -207,7 +207,7 @@ class DynReActSrvState:
     def get_plant_performance_models(self) -> list[PlantPerformanceModel]:
         return self._plugins.get_plant_performance_models()
 
-    def get_lot_sinks(self) -> dict[str, LotSink]:
+    def get_lot_sinks(self, if_exists: bool=False) -> dict[str, LotSink]:
         return self._plugins.get_lot_sinks()
 
     def get_stp_page(self):

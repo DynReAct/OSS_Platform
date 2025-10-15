@@ -1,4 +1,4 @@
-from dynreact.base.model import Lot, Site, Snapshot
+from dynreact.base.model import Lot, Site, Snapshot, ServiceMetrics
 
 
 class LotSink:
@@ -38,4 +38,10 @@ class LotSink:
         :return: lot id
         """
         raise Exception("not implemented")
+
+    def metrics(self) -> ServiceMetrics:
+        # Overwrite in derived sink; it is recommended to have at least the following metrics (counters):
+        # transfers_total, lots_transferred_total, transfer_errors_total
+        # use labels to distinguish different types of lot sinks
+        return ServiceMetrics(service_id="midtermplanning_lotsink", metrics=[])
 

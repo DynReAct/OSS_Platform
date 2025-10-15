@@ -6,6 +6,9 @@ import dotenv
 
 
 class TabuParams:
+    """
+    Parameters for the mid-term planning algorithm.
+    """
 
     ntotal: int = 1000
     "Number of TabuSearch Iterations, if not explicitly specified via the run(max_iterations=...) parameter."
@@ -40,6 +43,11 @@ class TabuParams:
     Timeout in seconds for the global tsp solver. Default: 1s. Set to zero or a negative value to disable the timeout, 
     which may lead to excessive optimization durations.
     """
+    tsp_solver_final_tsp: bool = True
+    """
+    If enabled (by default it is), the tsp solver will be run once again at the end of each iteration, if either  
+    the tsp solver timed out for the best solution, or was not run at all for the best solution.
+    """
     tsp_solver_final_timeout: float = 4
     """
     Timeout in seconds for a final tsp optimization in each iteration of the optimization.
@@ -49,6 +57,17 @@ class TabuParams:
     tsp_solver_ortools_timeout: int = 1
     """
     Timeout for the ortools solver in seconds. Default: 1s. Only integer values supported
+    """
+    max_tsps_per_worker: int = 3   # TODO disable in those tests that require a deterministic solution
+    """
+    Maximum number of traveling salesman problems to be solved per worker process in each optimization step.
+    Set to a negative number for unlimited tsps (may impact performance), 
+    or to zero to completely disable the traveling salesman solver 
+    (in this case a simplistic heuristic will be used instead, not recommended). 
+    """
+    rand_seed: int|None = None  # TODO set in tests
+    """
+    Pseudo-random seed for tests.  
     """
 
     def __init__(self,
@@ -61,32 +80,35 @@ class TabuParams:
                  tsp_solver_global_costs: Literal["ortools", "globalbb", "default"]|None = None,
                  tsp_solver_global_bound_factor: float | None = None,
                  tsp_solver_global_timeout: float|None = None,
+                 tsp_solver_final_tsp: bool|None = None,
+                 tsp_solver_final_timeout: float|None = None,
                  tsp_solver_ortools_timeout: int|None = None,
-                 #tsp_solver_init_nearest_neighbours: bool|None = None
+                 max_tsps_per_worker: int|None = None,
+                 rand_seed: int|None = None
     ):
         dotenv.load_dotenv()
         if ntotal is None:
-            ntotal = int(os.getenv("TABU_ITERATIONS", self.ntotal))
+            ntotal = int(os.getenv("TABU_ITERATIONS", TabuParams.ntotal))
         self.ntotal = ntotal
         "Number of TabuSearch Iterations"
         if Expiration is None:
-            Expiration = int(os.getenv("TABU_LIST_EXPIRATION", self.Expiration))
+            Expiration = int(os.getenv("TABU_LIST_EXPIRATION", TabuParams.Expiration))
         self.Expiration = Expiration
         "Tabu List expiration"
         if NMinUntilShuffle is None:
-            NMinUntilShuffle = int(os.getenv("TABU_LOCAL_MIN_UNTIL_SHUFFEL") or os.getenv("TABU_LOCAL_MIN_UNTIL_SHUFFLE") or self.NMinUntilShuffle)
+            NMinUntilShuffle = int(os.getenv("TABU_LOCAL_MIN_UNTIL_SHUFFEL") or os.getenv("TABU_LOCAL_MIN_UNTIL_SHUFFLE") or TabuParams.NMinUntilShuffle)
         self.NMinUntilShuffle = NMinUntilShuffle
         "number of local minima to be reached until shuffeling"
         if NParallel is None:
-            NParallel = int(os.getenv("TABU_NUM_CORES", self.NParallel))
+            NParallel = int(os.getenv("TABU_NUM_CORES", TabuParams.NParallel))
         self.NParallel = NParallel
         "parallel processing -> Set to 1 for debugging"
         if TAllowed is None:
-            TAllowed = float(os.getenv("TABU_MAX_TRANSITION_COST", self.TAllowed))
+            TAllowed = float(os.getenv("TABU_MAX_TRANSITION_COST", TabuParams.TAllowed))
         self.TAllowed = TAllowed
         "Maximum transition cost within lot"
         if CostNaN is None:
-            CostNaN = float(os.getenv("TABU_COST_NAN", self.CostNaN))
+            CostNaN = float(os.getenv("TABU_COST_NAN", TabuParams.CostNaN))
         self.CostNaN = CostNaN
         "default if cost cannot be calculated"
         if tsp_solver_global_costs is None:
@@ -102,11 +124,24 @@ class TabuParams:
         if tsp_solver_global_timeout is None:
             tsp_solver_global_timeout = float(os.getenv("TABU_GLOBAL_COSTS_TIMEOUT", TabuParams.tsp_solver_global_timeout))
         self.tsp_solver_global_timeout = tsp_solver_global_timeout
+        if tsp_solver_final_tsp is None:
+            tsp_solver_final_tsp0 = os.getenv("TABU_FINAL_TSP")
+            if tsp_solver_final_tsp0 is not None:
+                tsp_solver_final_tsp = tsp_solver_final_tsp0.lower() == "true" or tsp_solver_final_tsp0 == "1"
+            else:
+                tsp_solver_final_tsp = TabuParams.tsp_solver_final_tsp
+        self.tsp_solver_final_tsp = tsp_solver_final_tsp
+        if tsp_solver_final_timeout is None:
+            tsp_solver_final_timeout = float(os.getenv("TABU_FINAL_COSTS_TIMEOUT", TabuParams.tsp_solver_final_timeout))
+        self.tsp_solver_final_timeout = tsp_solver_final_timeout
         if tsp_solver_ortools_timeout is None:
             tsp_solver_ortools_timeout = float(os.getenv("TABU_ORTOOLS_TIMEOUT", TabuParams.tsp_solver_ortools_timeout))
         self.tsp_solver_ortools_timeout = tsp_solver_ortools_timeout
-        #if tsp_solver_init_nearest_neighbours is None:
-        #    tsp_solver_init_nearest_neighbours = os.getenv("TABU_GLOBAL_COSTS_INIT_NN", "false").lower() == "true"
-        #self.tsp_solver_init_nearest_neighbours = tsp_solver_init_nearest_neighbours
-
-
+        if max_tsps_per_worker is None:
+            max_tsps_per_worker = int(os.getenv("TABU_MAX_TSPS", TabuParams.max_tsps_per_worker))
+        self.max_tsps_per_worker = max_tsps_per_worker
+        if rand_seed is None:
+            rand_seed0 = os.getenv("TABU_RAND_SEED")
+            if rand_seed0 is not None and rand_seed0 != "":
+                rand_seed = int(rand_seed0)
+        self.rand_seed = rand_seed

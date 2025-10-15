@@ -75,6 +75,23 @@ class CostProvider:
         return ProductionPlanning(process=process, order_assignments=order_assignments, equipment_status=status,
                                   target_structure=target_structure, total_priority=total_priority, previous_orders=previous_orders)
 
+    def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot,
+                                new_lot: bool, current_material: Material | None = None, next_material: Material | None = None,
+                                orders_custom_priority: dict[str, int]|None=None) -> tuple[EquipmentStatus, ObjectiveFunction]:
+        """
+        Intended to be called by the lot creation, which first needs to check whether a new lot has to be created
+        """
+        raise Exception("not implemented")
+
+    # TODO this is meant to be an incremental version of the evaluate_order_assignment method above
+    #def transition_costs_stateful(self, plant: Plant, current: Order, next: Order, status: PlantStatus, current_coil: Coil|None = None, next_coil: Coil|None = None) -> tuple[PlantStatus, float]:
+    #    """
+    #    Calculates the change in the global target function. Needs the current status as input, and delivers the new status as output, alongside the
+    #    value of the target function. Typically, the resulting costs will include the stateless transition costs plus
+    #    additional global costs.
+    #    """
+    #    raise Exception("not implemented")
+
     def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
                                        planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None,
                                        current_material: list[Material] | None=None,
@@ -96,23 +113,6 @@ class CostProvider:
         :return:
         """
         raise Exception("Not implemented")
-
-    # TODO this is meant to be an incremental version of the evaluate_order_assignment method above
-    #def transition_costs_stateful(self, plant: Plant, current: Order, next: Order, status: PlantStatus, current_coil: Coil|None = None, next_coil: Coil|None = None) -> tuple[PlantStatus, float]:
-    #    """
-    #    Calculates the change in the global target function. Needs the current status as input, and delivers the new status as output, alongside the
-    #    value of the target function. Typically, the resulting costs will include the stateless transition costs plus
-    #    additional global costs.
-    #    """
-    #    raise Exception("not implemented")
-
-    def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot,
-                                new_lot: bool, current_material: Material | None = None, next_material: Material | None = None,
-                                orders_custom_priority: dict[str, int]|None=None) -> tuple[EquipmentStatus, ObjectiveFunction]:
-        """
-        Intended to be called by the lot creation, which first needs to check whether a new lot has to be created
-        """
-        raise Exception("not implemented")
 
     def objective_function(self, status: EquipmentStatus) -> ObjectiveFunction:
         "Evaluate the target/objective function for a specific plant status"

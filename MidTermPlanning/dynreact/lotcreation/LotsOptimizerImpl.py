@@ -1,26 +1,26 @@
 import multiprocessing
+# https://stackoverflow.com/questions/75996502/module-multiprocessing-has-no-attribute-pool-error
+import multiprocessing.pool
 import random
 from copy import copy
 from datetime import datetime
-# https://stackoverflow.com/questions/75996502/module-multiprocessing-has-no-attribute-pool-error
-import multiprocessing.pool
 from typing import Any, Sequence
 
 import networkx as nx
 import numpy as np
 import numpy.typing as npt
+
+import dynreact.lotcreation.LotCreationGoogleOR as lcor
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo, LotsOptimizer, LotsOptimizationState
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation
 from dynreact.base.model import Snapshot, ProductionPlanning, ProductionTargets, Site, OrderAssignment, Order, \
     EquipmentStatus, Lot, Equipment, EquipmentProduction, ObjectiveFunction
-
 from dynreact.lotcreation.TabuParams import TabuParams
-import dynreact.lotcreation.LotCreationGoogleOR as lcor
 from dynreact.lotcreation.globaltsp import GlobalTspInput
 from dynreact.lotcreation.globaltsp.BranchAndBoundWithEnsembleInput2 import GlobalSearchDefault
-from dynreact.lotcreation.globaltsp.GoogleOrSolver import GoogleOrSolver
 from dynreact.lotcreation.globaltsp.GlobalSearchBranchBound import GlobalSearchBB
+from dynreact.lotcreation.globaltsp.GoogleOrSolver import GoogleOrSolver
 
 
 class TabuSwap:
@@ -124,6 +124,7 @@ class TabuSearch(LotsOptimizer):
         niter = 0
         tlo = []
         pool = multiprocessing.Pool() if self._params.NParallel > 1 else None
+        worker_cnt: int = 0
 
         #vbest: ProductionPlanning = self._state.current_solution
         #target_vbest: float = self._state.current_object_value
@@ -162,7 +163,8 @@ class TabuSearch(LotsOptimizer):
                     self._state.history.append(target_vbest0)
                 # optimal solution found
                 break
-            next_step: tuple[TabuSwap, ProductionPlanning, ObjectiveFunction] = self.FindNextStep(self._state.current_solution, TabuList, pool)
+            next_step: tuple[TabuSwap, ProductionPlanning, ObjectiveFunction] = self.FindNextStep(self._state.current_solution, TabuList, pool, worker_cnt)
+            worker_cnt += self._params.NParallel
             if next_step is None or next_step[0] is None:
                 # continue  # TODO what's the point of continuing... nothing will change in the next iteration?
                 break
@@ -281,7 +283,7 @@ class TabuSearch(LotsOptimizer):
         #    plt.savefig(GetFileName("Lots_", "png", vbest_global, self.PDict, self.params))
         return copy(self._state)
 
-    def FindNextStep(self, planning: ProductionPlanning, TabuList: set[Any], pool: multiprocessing.pool.Pool|None) -> tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]:
+    def FindNextStep(self, planning: ProductionPlanning, TabuList: set[Any], pool: multiprocessing.pool.Pool|None, worker_cnt: int) -> tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]:
         # sl1 = list(sol.values())  # order plant assignments
         sl1: list[OrderAssignment] = [ass for ass in planning.order_assignments.values()]
         if self._base_lots is not None:  # do not optimize the fixed orders
@@ -292,7 +294,8 @@ class TabuSearch(LotsOptimizer):
         # slp = [[sl1[i] for i in range(len(sl1)) if (i % self.params.NParallel) == r] for r in range(self.params.NParallel)]
         slp: list[list[OrderAssignment]] = [[sl1[i] for i in range(len(sl1)) if (i % self._params.NParallel) == r] for r in range(self._params.NParallel)]
         # slist: list[OrderAssignment], TabuList: set[Any], tabu_search: LotsAllocator, planning: ProductionPlanning
-        items = [CTabuWorker(sl, TabuList, self._allocator, planning) for sl in slp]
+        rand_seeds = [self._params.rand_seed + worker_cnt + idx if self._params.rand_seed is not None else None for idx in range(len(slp))]
+        items = [CTabuWorker(sl, TabuList, self._allocator, planning, self._params.max_tsps_per_worker, rand_seed=rand_seeds[idx]) for idx, sl in enumerate(slp)]
         solutions: list[tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]] = []
 
         # parallel tabu search loop
@@ -713,22 +716,20 @@ class TabuAlgorithm(LotsOptimizationAlgo):
 
 class CTabuWorker:
 
-    def __init__(self,  slist: list[OrderAssignment], TabuList: set[Any], tabu_search: LotsAllocator, planning: ProductionPlanning):
+    def __init__(self,  slist: list[OrderAssignment], TabuList: set[Any], tabu_search: LotsAllocator, planning: ProductionPlanning, max_tsps: int, rand_seed: int|None=None):
         self.slist: list[OrderAssignment] = slist
         self.TabuList: set[TabuSwap] = TabuList
         self.tabu_search: LotsAllocator = tabu_search
         self.planning: ProductionPlanning = planning  # the starting point
+        self.max_tsps = max_tsps
+        order_ids = [ass.order for ass in self.slist]
+        self.orders: dict[str, Order] = {oid: self.tabu_search._orders[oid] for oid in order_ids}
+        self.rand_seed: int|None = rand_seed
 
     def BestN(self) -> tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]:
-        order_ids = [ass.order for ass in self.slist]
-        orders: dict[str, Order] = {oid: self.tabu_search._orders[oid] for oid in order_ids}
-        plants: dict[int, Equipment] = self.tabu_search._plants
-        params: TabuParams = self.tabu_search._params
         targets: ProductionTargets = self.tabu_search._targets
         costs: CostProvider = self.tabu_search._costs
-        forced_orders = self.tabu_search._forced_orders
         snapshot = self.tabu_search._snapshot
-        forbidden_assignments = self.tabu_search._forbidden_assignments
         is_lot_append: bool = self.tabu_search._base_lots is not None
         previous_orders: dict[int, str] | None = self.tabu_search._previous_orders
         planning = self.planning
@@ -739,108 +740,106 @@ class CTabuWorker:
         best_solution: ProductionPlanning = None
         objective_value: float = float("inf")
         best_objective: ObjectiveFunction|None = None
-        empty_plants = []
         track_structure: bool = targets.material_weights is not None
         best_timed_out: bool = False
-        for assignment in self.slist:
-            order: Order = orders[assignment.order]
-            forbidden_plants: list[int] = forbidden_assignments.get(order.id, empty_plants)
-            # sl2 = list(map(lambda x: x[0], filter(lambda x: x[1], self.PM[swp1.Order.ID].items())))
+        swaps: list[TabuSwap] = self._get_swaps()
+        dummy_swaps: list[TabuSwap] = []  # for those we will not solve the TSP
+        if self.max_tsps >= 0 and len(swaps) > self.max_tsps:
+            # every worker has a limited budget of TSPs to solve, so we need to select those
+            tsp_swaps = random.Random(x=self.rand_seed).sample(swaps, k=self.max_tsps) if self.max_tsps > 0 else []
+            dummy_swaps = [s for s in swaps if s not in tsp_swaps]
+            swaps = tsp_swaps
+        for swp in swaps:
+            order_assignments: dict[str, OrderAssignment] = planning.order_assignments
+            # the tricky part in the new assignments is to get the order right... for each plant, orders should be sorted according to the lots, and unassigned orders should come last
+            new_assignments: dict[str, OrderAssignment] = {key: ass for key, ass in planning.order_assignments.items() if
+                                            ass.equipment >= 0 and ass.equipment != swp.PlantTo and ass.equipment != swp.PlantFrom}  # dict(self.planning.order_assignments)  # shallow copy
+            affected_orders: list[str] = [o for o, ass in order_assignments.items() if ass.equipment >= 0 and (ass.equipment == swp.PlantFrom or ass.equipment == swp.PlantTo) and ass.order != swp.Order]
 
-            allowed_plants: list[int] = [p for p in order.allowed_equipment if p in plants and p not in forbidden_plants]
-            if assignment.equipment >= 0 and (forced_orders is None or assignment.order not in forced_orders):
-                allowed_plants.append(-1)
-            if len(allowed_plants) == 0:
-                continue
-            # nbh = list(filter(lambda swp: swp not in self.TabuList and swp.PlantFrom != swp.PlantTo,
-            #                      [TabuSwap(swp1.Order.ID, swp1.AssignedPlant, s, self.params.Expiration) for s in sl2]))
-            swaps: Sequence[TabuSwap] = \
-                (TabuSwap(assignment.order, assignment.equipment, new_plant, params.Expiration) for new_plant in allowed_plants if new_plant != assignment.equipment)
-            swaps = (swap for swap in swaps if swap not in self.TabuList)
-            for swp in swaps:
-
-                order_assignments: dict[str, OrderAssignment] = planning.order_assignments
-                # the tricky part in the new assignments is to get the order right... for each plant, orders should be sorted according to the lots, and unassigned orders should come last
-                new_assignments: dict[str, OrderAssignment] = {key: ass for key, ass in planning.order_assignments.items() if
-                                                ass.equipment >= 0 and ass.equipment != swp.PlantTo and ass.equipment != swp.PlantFrom}  # dict(self.planning.order_assignments)  # shallow copy
-                affected_orders: list[str] = [o for o, ass in order_assignments.items() if ass.equipment >= 0 and (ass.equipment == swp.PlantFrom or ass.equipment == swp.PlantTo) and ass.order != swp.Order]
-
-                plant_status: dict[int, EquipmentStatus] = dict(planning.equipment_status)  # shallow copy
-                # reset plant solutions for swap
-                assignments_for_lc = {o: order_assignments[o].equipment for o in affected_orders if order_assignments[o].equipment >= 0}
+            plant_status: dict[int, EquipmentStatus] = dict(planning.equipment_status)  # shallow copy
+            # reset plant solutions for swap
+            assignments_for_lc = {o: order_assignments[o].equipment for o in affected_orders if order_assignments[o].equipment >= 0}
+            if swp.PlantTo >= 0:
+                assignments_for_lc[swp.Order] = swp.PlantTo
+            new_assigned_lots, timeout_hit = self.tabu_search.assign_lots(assignments_for_lc)
+            if is_lot_append:  # expensive, only required if we are appending to existing lots
+                for plant, lots in new_assigned_lots.items():
+                    for lot in lots:
+                        for idx,o in enumerate(lot.orders):
+                            new_assignments[o] = OrderAssignment(order=o, equipment=plant, lot=lot.id, lot_idx=idx+1)
+                for o, ass in order_assignments.items():
+                    if o not in new_assignments:
+                        new_assignments[o] = OrderAssignment(order=o, equipment=-1, lot="", lot_idx=-1)
+                for plant in list(plant_status.keys()):
+                    equipment_targets = targets.target_weight.get(plant, EquipmentProduction(equipment=plant, total_weight=0.0))
+                    start_order = previous_orders.get(plant) if previous_orders is not None else None
+                    new_status: EquipmentStatus = costs.evaluate_equipment_assignments(equipment_targets, planning.process, new_assignments, snapshot, targets.period,
+                                track_structure=track_structure, main_category=main_category, orders_custom_priority=orders_custom_priority, previous_order=start_order)
+                    plant_status[plant] = new_status
+            else:
+                if swp.PlantFrom >= 0:
+                    plant_status[swp.PlantFrom] = None
+                    assigned_lots: list[Lot] = new_assigned_lots.get(swp.PlantFrom, [])
+                    for lot in assigned_lots:
+                        for idx, order_id in enumerate(lot.orders):
+                            new_assignments[order_id] = OrderAssignment(equipment=swp.PlantFrom, order=order_id, lot=lot.id, lot_idx=idx+1)
+                            if order_id != swp.Order and order_id in affected_orders:
+                                affected_orders.remove(order_id)
+                    equipment_targets = targets.target_weight.get(swp.PlantFrom, EquipmentProduction(equipment=swp.PlantFrom, total_weight=0.0))
+                    start_order = previous_orders.get(swp.PlantFrom) if previous_orders is not None else None
+                    new_status: EquipmentStatus = costs.evaluate_equipment_assignments(equipment_targets, planning.process, new_assignments, snapshot, targets.period,
+                                    track_structure=track_structure, main_category=main_category, orders_custom_priority=orders_custom_priority, previous_order =start_order)
+                    plant_status[swp.PlantFrom] = new_status
                 if swp.PlantTo >= 0:
-                    assignments_for_lc[swp.Order] = swp.PlantTo
-                new_assigned_lots, timeout_hit = self.tabu_search.assign_lots(assignments_for_lc)
-                if is_lot_append:  # expensive, only required if we are appending to existing lots
-                    for plant, lots in new_assigned_lots.items():
-                        for lot in lots:
-                            for idx,o in enumerate(lot.orders):
-                                new_assignments[o] = OrderAssignment(order=o, equipment=plant, lot=lot.id, lot_idx=idx+1)
-                    for o, ass in order_assignments.items():
-                        if o not in new_assignments:
-                            new_assignments[o] = OrderAssignment(order=o, equipment=-1, lot="", lot_idx=-1)
-                    for plant in list(plant_status.keys()):
-                        equipment_targets = targets.target_weight.get(plant, EquipmentProduction(equipment=plant, total_weight=0.0))
-                        start_order = previous_orders.get(plant) if previous_orders is not None else None
-                        new_status: EquipmentStatus = costs.evaluate_equipment_assignments(equipment_targets, planning.process, new_assignments, snapshot, targets.period,
-                                    track_structure=track_structure, main_category=main_category, orders_custom_priority=orders_custom_priority, previous_order=start_order)
-                        plant_status[plant] = new_status
-                else:
-                    if swp.PlantFrom >= 0:
-                        plant_status[swp.PlantFrom] = None
-                        assigned_lots: list[Lot] = new_assigned_lots.get(swp.PlantFrom, [])
-                        for lot in assigned_lots:
-                            for idx, order_id in enumerate(lot.orders):
-                                new_assignments[order_id] = OrderAssignment(equipment=swp.PlantFrom, order=order_id, lot=lot.id, lot_idx=idx+1)
-                                if order_id != swp.Order and order_id in affected_orders:
-                                    affected_orders.remove(order_id)
-                        equipment_targets = targets.target_weight.get(swp.PlantFrom, EquipmentProduction(equipment=swp.PlantFrom, total_weight=0.0))
-                        start_order = previous_orders.get(swp.PlantFrom) if previous_orders is not None else None
-                        new_status: EquipmentStatus = costs.evaluate_equipment_assignments(equipment_targets, planning.process, new_assignments, snapshot, targets.period,
-                                        track_structure=track_structure, main_category=main_category, orders_custom_priority=orders_custom_priority, previous_order =start_order)
-                        plant_status[swp.PlantFrom] = new_status
-                    if swp.PlantTo >= 0:
-                        plant_status[swp.PlantTo] = None
-                        assigned_lots: list[Lot] = new_assigned_lots.get(swp.PlantTo, [])
-                        for lot in assigned_lots:
-                            for idx, order_id in enumerate(lot.orders):
-                                new_assignments[order_id] = OrderAssignment(equipment=swp.PlantTo, order=order_id, lot=lot.id, lot_idx=idx + 1)
-                                if order_id != swp.Order and order_id in affected_orders:
-                                    affected_orders.remove(order_id)
-                        equipment_targets = targets.target_weight.get(swp.PlantTo, EquipmentProduction(equipment=swp.PlantTo, total_weight=0.0))
-                        start_order = previous_orders.get(swp.PlantTo) if previous_orders is not None else None
-                        new_status: EquipmentStatus = costs.evaluate_equipment_assignments(equipment_targets, planning.process,new_assignments, snapshot, targets.period,
-                                       track_structure=track_structure, main_category=main_category, orders_custom_priority=orders_custom_priority, previous_order =start_order)
-                        plant_status[swp.PlantTo] = new_status
-                    # reappend unassigned
-                    for order_id in affected_orders:
-                        new_assignments[order_id] = OrderAssignment(order=order_id, equipment=-1, lot="", lot_idx=-1)
-                    for order_id, ass in order_assignments.items():
-                        if ass.equipment < 0 and order_id != swp.Order:
-                            new_assignments[order_id] = ass
-                if swp.Order not in new_assignments:
-                    new_assignments[swp.Order] = OrderAssignment(order=swp.Order, equipment=-1, lot="", lot_idx=-1)
-                if not is_lot_append:
-                    assert len(new_assignments) == len(order_assignments), "Assignments missing"
-                planning_candidate = ProductionPlanning(process=planning.process, order_assignments=new_assignments,
-                                   equipment_status=plant_status, target_structure=targets.material_weights,
-                                   total_priority=planning.total_priority,
-                                    previous_orders=previous_orders)
-                total_objectives = costs.process_objective_function(planning_candidate)
-                #total_objectives = CostProvider.sum_objectives([self.costs.objective_function(status) for status in plant_status.values()])
-                objective_fct = total_objectives.total_value
-                if objective_fct < objective_value:
-                    objective_value = objective_fct
-                    best_objective = total_objectives
-                    best_swap = swp
-                    best_solution = planning_candidate
-                    best_timed_out = timeout_hit
+                    plant_status[swp.PlantTo] = None
+                    assigned_lots: list[Lot] = new_assigned_lots.get(swp.PlantTo, [])
+                    for lot in assigned_lots:
+                        for idx, order_id in enumerate(lot.orders):
+                            new_assignments[order_id] = OrderAssignment(equipment=swp.PlantTo, order=order_id, lot=lot.id, lot_idx=idx + 1)
+                            if order_id != swp.Order and order_id in affected_orders:
+                                affected_orders.remove(order_id)
+                    equipment_targets = targets.target_weight.get(swp.PlantTo, EquipmentProduction(equipment=swp.PlantTo, total_weight=0.0))
+                    start_order = previous_orders.get(swp.PlantTo) if previous_orders is not None else None
+                    new_status: EquipmentStatus = costs.evaluate_equipment_assignments(equipment_targets, planning.process,new_assignments, snapshot, targets.period,
+                                   track_structure=track_structure, main_category=main_category, orders_custom_priority=orders_custom_priority, previous_order =start_order)
+                    plant_status[swp.PlantTo] = new_status
+                # reappend unassigned
+                for order_id in affected_orders:
+                    new_assignments[order_id] = OrderAssignment(order=order_id, equipment=-1, lot="", lot_idx=-1)
+                for order_id, ass in order_assignments.items():
+                    if ass.equipment < 0 and order_id != swp.Order:
+                        new_assignments[order_id] = ass
+            if swp.Order not in new_assignments:
+                new_assignments[swp.Order] = OrderAssignment(order=swp.Order, equipment=-1, lot="", lot_idx=-1)
+            if not is_lot_append:
+                assert len(new_assignments) == len(order_assignments), "Assignments missing"
+            planning_candidate = ProductionPlanning(process=planning.process, order_assignments=new_assignments,
+                               equipment_status=plant_status, target_structure=targets.material_weights,
+                               total_priority=planning.total_priority,
+                                previous_orders=previous_orders)
+            total_objectives = costs.process_objective_function(planning_candidate)
+            #total_objectives = CostProvider.sum_objectives([self.costs.objective_function(status) for status in plant_status.values()])
+            objective_fct = total_objectives.total_value
+            if objective_fct < objective_value:
+                objective_value = objective_fct
+                best_objective = total_objectives
+                best_swap = swp
+                best_solution = planning_candidate
+                best_timed_out = timeout_hit
+        for swap in dummy_swaps:
+            # here we do not solve the TSP for time budget reasons; instead a simplistic heuristic method is used
+            # to hopefully find a reasonably good configuration
+            swap_planning, swap_objective = self._eval_dummy_swap(swap)
+            objective_fct = swap_objective.total_value
+            if objective_fct < objective_value:
+                objective_value = objective_fct
+                best_objective = swap_objective
+                best_swap = swap
+                best_solution = swap_planning
+                best_timed_out = True
         if best_objective is None:
             best_objective = ObjectiveFunction(total_value=objective_value)
-        # TODO regarding the conditions, we'd also need to rerun if no initial tsp was applied at all
-        # TODO this part is difficult to test, since it is only activated under specific timing conditions => need some stats about this behaviour
-        elif costs.path_dependent_costs(self.planning.process) and best_timed_out and self.tabu_search._params.tsp_solver_global_timeout is not None \
-                and self.tabu_search._params.tsp_solver_final_timeout is not None and self.tabu_search._params.tsp_solver_final_timeout > self.tabu_search._params.tsp_solver_global_timeout:
+        elif best_timed_out and self.tabu_search._params.tsp_solver_final_tsp:
             # if there are global costs, run the TSP again for the plants with new configurations but this time with higher resource budget
             plant_by_order: dict[str, int] = {o: ass.equipment for o, ass in best_solution.order_assignments.items() if ass.equipment >= 0}
             final_lots, _ = self.tabu_search.assign_lots(plant_by_order, timeout=self.tabu_search._params.tsp_solver_final_timeout)  # : dict[int, list[Lot]]
@@ -868,6 +867,131 @@ class CTabuWorker:
                     best_solution = new_sol
                     best_objective = total_objectives
         return best_swap, best_solution, best_objective
+
+    def _eval_dummy_swap(self, swap: TabuSwap) -> tuple[ProductionPlanning, ObjectiveFunction]:
+        targets: ProductionTargets = self.tabu_search._targets
+        costs: CostProvider = self.tabu_search._costs
+        snapshot = self.tabu_search._snapshot
+        previous_orders: dict[int, str] | None = self.tabu_search._previous_orders
+        planning = self.planning
+        main_category: str | None = self.tabu_search._main_category
+        orders_custom_priority: dict[str, int] | None = self.tabu_search._orders_custom_priority
+        track_structure: bool = targets.material_weights is not None
+        orders: dict[str, Order] = self.tabu_search._orders
+        # here we do not solve the TSP for time budget reasons; instead a simplistic heuristic method is used
+        # to hopefully find a reasonably good configuration
+        target_plant = swap.PlantTo
+        source_plant = swap.PlantFrom
+        swap_order: Order = orders[swap.Order]
+        plant_status: dict[int, EquipmentStatus] = dict(planning.equipment_status)  # shallow copy
+        old_assignments = planning.order_assignments
+        all_assignments = {o: ass for o, ass in old_assignments.items() if ass.equipment >= 0 and ass.equipment != target_plant and ass.equipment != source_plant}
+        if target_plant >= 0:
+            other_orders: list[str] = [o for o, ass in old_assignments.items() if ass.equipment == target_plant]
+            plant = self.tabu_search._plants[target_plant]
+            transition_costs_left = [costs.transition_costs(plant, orders[order], swap_order) for order in other_orders]
+            transition_costs_right = [costs.transition_costs(plant, swap_order, orders[order]) for order in other_orders]
+            start_order = previous_orders.get(target_plant) if previous_orders is not None else None
+            new_assignments: dict[str, OrderAssignment] = {}
+            if len(other_orders) == 0:
+                new_assignments[swap.Order] = OrderAssignment(order=swap.Order, equipment=target_plant, lot="LC_" + plant.name_short + ".01", lot_idx=1)
+            else:
+                if start_order is None:
+                    transition_costs_left.insert(0, transition_costs_left[0])
+                else:
+                    start_costs = costs.transition_costs(plant, orders[start_order], swap_order)
+                    transition_costs_left.insert(0, start_costs)
+                transition_costs_right.append(transition_costs_right[-1])
+                transition_costs = [(cl + cr)/2 for cl, cr in zip(transition_costs_left, transition_costs_right)]
+                best_cost = min(transition_costs)
+                best_cost_idx = transition_costs.index(best_cost)
+                lot_count: int = 0
+                lot_idx: int = 1
+                last_lot: str = ""
+                for idx, order in enumerate(other_orders):
+                    oa = old_assignments[order]
+                    if idx == best_cost_idx:
+                        new_lot = self.tabu_search.create_new_lot_costs_based(transition_costs_left[idx])
+                        if new_lot:
+                            lot_count += 1
+                            lot_idx = 1
+                        new_assignments[swap.Order] = OrderAssignment(order=swap.Order, equipment=target_plant, lot="LC_" + plant.name_short + "." + f"{lot_count:02d}" , lot_idx=lot_idx)
+                        new_lot = self.tabu_search.create_new_lot_costs_based(transition_costs_right[idx])
+                        lot_idx += 1
+                    else:
+                        new_lot = last_lot != oa.lot
+                    if new_lot:
+                        lot_count += 1
+                        lot_idx = 1
+                    last_lot = oa.lot
+                    new_assignments[order] = OrderAssignment(order=order, equipment=target_plant, lot="LC_" + plant.name_short + "." + f"{lot_count:02d}", lot_idx=lot_idx)
+                    lot_idx += 1
+            equipment_targets = targets.target_weight.get(target_plant, EquipmentProduction(equipment=target_plant, total_weight=0.0))
+            new_status: EquipmentStatus = costs.evaluate_equipment_assignments(equipment_targets, planning.process, new_assignments, snapshot, targets.period,
+                            track_structure=track_structure, main_category=main_category, orders_custom_priority=orders_custom_priority, previous_order =start_order)
+            plant_status[target_plant] = new_status
+            all_assignments.update(new_assignments)
+        if source_plant >= 0:  # TODO we simply remove the old order without reshuffling the other orders => ?
+            other_orders = [o for o, ass in old_assignments.items() if ass.equipment == source_plant]
+            plant = self.tabu_search._plants[source_plant]
+            new_assignments: dict[str, OrderAssignment] = {}
+            if len(other_orders) > 1:
+                swap_index = other_orders.index(swap.Order)
+                lot_count: int = 0
+                lot_idx: int = 1
+                last_lot: str = ""
+                new_lot = True
+                for idx, order in enumerate(other_orders):
+                    oa = old_assignments[order]
+                    if idx == swap_index:
+                        new_lot = idx == 0 or idx == len(other_orders) - 1 or self.tabu_search.create_new_lot_costs_based(costs.transition_costs(plant, orders[other_orders[idx-1]], orders[other_orders[idx-1]]))
+                        continue
+                    if idx != swap_index + 1:
+                        new_lot = last_lot != oa.lot
+                    if new_lot:
+                        lot_count += 1
+                        lot_idx = 1
+                    last_lot = oa.lot
+                    new_assignments[order] = OrderAssignment(order=order, equipment=source_plant, lot="LC_" + plant.name_short + "." + f"{lot_count:02d}", lot_idx=lot_idx)
+                    lot_idx += 1
+            equipment_targets = targets.target_weight.get(source_plant, EquipmentProduction(equipment=source_plant, total_weight=0.0))
+            start_order = previous_orders.get(source_plant) if previous_orders is not None else None
+            new_status: EquipmentStatus = costs.evaluate_equipment_assignments(equipment_targets, planning.process, new_assignments, snapshot, targets.period,
+                            track_structure=track_structure, main_category=main_category, orders_custom_priority=orders_custom_priority, previous_order =start_order)
+            plant_status[source_plant] = new_status
+            all_assignments.update(new_assignments)
+        all_assignments.update({o: ass for o, ass in old_assignments.items() if ass.equipment < 0 and o != swap.Order})
+        if target_plant < 0:
+            all_assignments[swap.Order] = OrderAssignment(order=swap.Order, equipment=-1, lot="", lot_idx=-1)
+        planning_candidate = ProductionPlanning(process=planning.process, order_assignments=all_assignments, equipment_status=plant_status, target_structure=targets.material_weights,
+                                                total_priority=planning.total_priority, previous_orders=previous_orders)
+        total_objectives = costs.process_objective_function(planning_candidate)
+        return planning_candidate, total_objectives
+
+
+    def _get_swaps(self) -> list[TabuSwap]:
+        orders = self.orders
+        forbidden_assignments = self.tabu_search._forbidden_assignments
+        swaps: list[TabuSwap] = []
+        plants: dict[int, Equipment] = self.tabu_search._plants
+        forced_orders = self.tabu_search._forced_orders
+        empty_plants = []
+        expiration = self.tabu_search._params.Expiration
+        for assignment in self.slist:
+            order: Order = orders[assignment.order]
+            forbidden_plants: list[int] = forbidden_assignments.get(order.id, empty_plants)
+            # sl2 = list(map(lambda x: x[0], filter(lambda x: x[1], self.PM[swp1.Order.ID].items())))
+
+            allowed_plants: list[int] = [p for p in order.allowed_equipment if p in plants and p not in forbidden_plants]
+            if assignment.equipment >= 0 and (forced_orders is None or assignment.order not in forced_orders):
+                allowed_plants.append(-1)
+            if len(allowed_plants) == 0:
+                continue
+            swaps0: Sequence[TabuSwap] = (TabuSwap(assignment.order, assignment.equipment, new_plant, expiration) for new_plant in allowed_plants if new_plant != assignment.equipment)
+            for swap in swaps0:
+                if swap not in self.TabuList:
+                    swaps.append(swap)
+        return swaps
 
     @staticmethod
     def _lots_differ(l1: list[Lot], l2: list[Lot]) -> bool:

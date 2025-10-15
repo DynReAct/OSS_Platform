@@ -1,11 +1,14 @@
 import random
 import sys
 import threading
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Iterator, Literal, Annotated
 
-from dynreact.base.LotsOptimizer import LotsOptimizer
+from starlette.responses import PlainTextResponse
+
+from dynreact.base.LotsOptimizer import LotsOptimizer, LotsOptimizationAlgo, OptimizationStatistics
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, \
@@ -56,6 +59,7 @@ if config.cors:
     )
 
 username = fastapi_authentication(config)
+start = time.time()
 
 
 @fastapi_app.get("/site",
@@ -443,6 +447,40 @@ def get_longtermplanning_result(
     results_ctrl = state.get_results_persistence()
     targets, levels = results_ctrl.load_ltp(start, solution_id)
     return LongTermPlanningResults(targets=targets, storage_levels=levels)
+
+
+@fastapi_app.get("/metrics",
+                tags=["dynreact"],
+                summary="Prometheus metrics for the DynReAct service")
+def metrics(username = username) -> PlainTextResponse:
+    result = ""
+    service_prefix = "dynreact_"
+    result += f"{service_prefix}uptime_seconds {int(time.time()-start)}\n"
+    opti: LotsOptimizationAlgo = state.get_lots_optimization()
+    mtp_stats: dict[str, OptimizationStatistics] = opti.stats()
+    for proc, stats in mtp_stats.items():
+        result += f"{service_prefix}midtermplanning_runs_total{{process=\"{proc}\"}} {stats.runs}\n"
+        if stats.runs > 0:
+            result += _to_histogramm(f"{service_prefix}midtermplanning_iterations_total", stats.iterations, [10, 100, 1000], labels={"process": proc})
+            result += _to_histogramm(f"{service_prefix}midtermplanning_backlog_count", stats.backlog_count, [10, 75, 200], labels={"process": proc})
+            result += _to_histogramm(f"{service_prefix}midtermplanning_backlog_weight", stats.backlog_size, [500, 5000], labels={"process": proc})
+            result += _to_histogramm(f"{service_prefix}midtermplanning_iteration_duration_seconds", [int(d/i) for d, i in zip(stats.durations_seconds, stats.iterations)],
+                                     [4, 15, 60], labels={"process": proc})
+    return PlainTextResponse(result)
+
+
+def _to_histogramm(metric: str, data: list[float], buckets: list[float], labels: dict[str, str]|None=None, add_infinity: bool=True) -> str:
+    result = ""
+    labels_str = "" if labels is None else ",".join([k + "=\"" + v + "\"" for k, v in labels.items()]) + ","
+    for bucket in buckets:
+        result += f"{metric}_bucket{{{labels_str}le=\"{bucket}\"}} {sum(1 for d in data if d <= bucket)}\n"
+    if add_infinity:
+        result += f"{metric}_bucket{{{labels_str}le=\"+Inf\"}} {len(data)}\n"
+    labels_agg_str = "" if labels is None else "{" + ",".join([k + "=\"" + v + "\"" for k, v in labels.items()]) + "}"
+    result += f"{metric}_count{labels_agg_str} {len(data)}\n"
+    result += f"{metric}_sum{labels_agg_str} {sum(data)}\n"
+    return result
+
 
 
 def parse_datetime_str(dt: str) -> datetime:

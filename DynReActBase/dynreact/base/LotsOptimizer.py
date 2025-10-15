@@ -3,11 +3,12 @@ The LotsOptimizer module contains the interface specification for the mid-term p
 algorithm. It is possible to provide a custom implementation, but the DynReAct software
 already contains an implementation (in the MidTermPlanning folder).
 """
-
+import time
 from datetime import timedelta, datetime
 from typing import Any, TypeVar, Generic, Sequence
 
 import numpy as np
+from pydantic import BaseModel
 
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
@@ -58,6 +59,43 @@ class LotsOptimizationState(Generic[P]):
         "deprecated"
         self.history: list[ObjectiveFunction] = list(history) if history is not None else [current_objective_value]
         self.parameters: dict[str, Any]|None = parameters
+
+
+class OptimizationStatistics(BaseModel, use_attribute_docstrings=True):
+    """
+    Statistics about the mid term planning optimization.
+    """
+    process: str
+    runs: int = 0
+    target_production: list[float] = []
+    "Target production in tons per run"
+    backlog_count: list[int] = []
+    "Backlog count (number of orders) per run"
+    backlog_size: list[float] = []
+    "Backlog weight in tons per run"
+    iterations: list[int] = []
+    "Number of iterations per run"
+    durations_seconds: list[int] = []
+    """
+    Total duration in seconds. Should be divided by number of iterations to get meaningful information about the 
+    performance of the system, but also the target production and backlog size provide important context for this. 
+    """
+
+
+class _StatisticsListener(OptimizationListener):
+
+    def __init__(self, stats: OptimizationStatistics, idx: int):
+        super().__init__()
+        self._stats = stats
+        self._idx = idx
+        self._iterations = 0
+        self._start_time = time.time()
+
+    def update_solution(self, planning: ProductionPlanning, objective_value: ObjectiveFunction):
+        idx = self._idx
+        self._iterations += 1
+        self._stats.iterations[idx] += 1
+        self._stats.durations_seconds[idx] = int(time.time() - self._start_time)
 
 
 class LotsOptimizer(Generic[P]):
@@ -196,6 +234,7 @@ class LotsOptimizationAlgo:
 
     def __init__(self, site: Site):
         self._site = site
+        self._stats: dict[str, OptimizationStatistics] = {}
 
     # TODO clarify: should we consider the planning horizon here? => would need some information about planned lot execution time
     def snapshot_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider,
@@ -448,9 +487,22 @@ class LotsOptimizationAlgo:
                 initial_solution = initial_solution0
             if targets is None:
                 targets = targets0
-        return self._create_instance_internal(process, snapshot, targets, cost_provider, initial_solution, min_due_date=min_due_date,
+        instance = self._create_instance_internal(process, snapshot, targets, cost_provider, initial_solution, min_due_date=min_due_date,
                                               best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
                                               orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots)
+        if process not in self._stats:
+            self._stats[process] = OptimizationStatistics(process=process)
+        stats = self._stats[process]
+        stats.runs += 1
+        stats.target_production.append(sum(w.total_weight for w in targets.target_weight.values()))
+        stats.backlog_count.append(len(initial_solution.order_assignments))
+        stats.backlog_size.append(0.)  # TODO somewhat expensive calculation
+        stats.iterations.append(0)
+        stats.durations_seconds.append(0)
+        stats_index = len(stats.target_production)-1
+        listener: _StatisticsListener = _StatisticsListener(self._stats[process], stats_index)
+        instance.add_listener(listener)
+        return instance
 
     def _create_instance_internal(self, process: str, snapshot: Snapshot, targets: ProductionTargets,
                                   cost_provider: CostProvider, initial_solution: ProductionPlanning, min_due_date: datetime|None = None,
@@ -463,3 +515,6 @@ class LotsOptimizationAlgo:
                                   base_lots: dict[int, Lot] | None = None
                                   ) -> LotsOptimizer:
         raise Exception("not implemented")
+
+    def stats(self) -> dict[str, OptimizationStatistics]:
+        return {p: stats.model_copy(deep=True) for p, stats in self._stats.items()}

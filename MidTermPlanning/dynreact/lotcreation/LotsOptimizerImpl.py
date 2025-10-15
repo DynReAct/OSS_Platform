@@ -896,12 +896,9 @@ class CTabuWorker:
             if len(other_orders) == 0:
                 new_assignments[swap.Order] = OrderAssignment(order=swap.Order, equipment=target_plant, lot="LC_" + plant.name_short + ".01", lot_idx=1)
             else:
-                if start_order is None:
-                    transition_costs_left.insert(0, transition_costs_left[0])
-                else:
-                    start_costs = costs.transition_costs(plant, orders[start_order], swap_order)
-                    transition_costs_left.insert(0, start_costs)
-                transition_costs_right.append(transition_costs_right[-1])
+                start_costs = costs.transition_costs(plant, orders[start_order], swap_order) if start_order is not None else transition_costs_right[0]
+                transition_costs_left.insert(0, start_costs)
+                transition_costs_right.append(transition_costs_left[-1])
                 transition_costs = [(cl + cr)/2 for cl, cr in zip(transition_costs_left, transition_costs_right)]
                 best_cost = min(transition_costs)
                 best_cost_idx = transition_costs.index(best_cost)
@@ -911,7 +908,7 @@ class CTabuWorker:
                 for idx, order in enumerate(other_orders):
                     oa = old_assignments[order]
                     if idx == best_cost_idx:
-                        new_lot = self.tabu_search.create_new_lot_costs_based(transition_costs_left[idx])
+                        new_lot = idx > 0 and self.tabu_search.create_new_lot_costs_based(transition_costs_left[idx])
                         if new_lot:
                             lot_count += 1
                             lot_idx = 1
@@ -919,7 +916,7 @@ class CTabuWorker:
                         new_lot = self.tabu_search.create_new_lot_costs_based(transition_costs_right[idx])
                         lot_idx += 1
                     else:
-                        new_lot = last_lot != oa.lot
+                        new_lot = idx > 0 and last_lot != oa.lot
                     if new_lot:
                         lot_count += 1
                         lot_idx = 1
@@ -944,10 +941,10 @@ class CTabuWorker:
                 for idx, order in enumerate(other_orders):
                     oa = old_assignments[order]
                     if idx == swap_index:
-                        new_lot = idx == 0 or idx == len(other_orders) - 1 or self.tabu_search.create_new_lot_costs_based(costs.transition_costs(plant, orders[other_orders[idx-1]], orders[other_orders[idx-1]]))
+                        new_lot = 0 < idx < len(other_orders) - 1 and self.tabu_search.create_new_lot_costs_based(costs.transition_costs(plant, orders[other_orders[idx-1]], orders[other_orders[idx+1]]))
                         continue
                     if idx != swap_index + 1:
-                        new_lot = last_lot != oa.lot
+                        new_lot = idx > 0 and last_lot != oa.lot
                     if new_lot:
                         lot_count += 1
                         lot_idx = 1

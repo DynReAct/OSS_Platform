@@ -272,7 +272,7 @@ class LotsOptimizationAlgo:
         return planning, targets
 
     def _random_start_orders(self, plants: dict[int, Equipment], targets: ProductionTargets, orders: dict[str, Order],
-                             snapshot_provider: SnapshotProvider, start_orders: dict[int, str]|None) -> dict[int, str]:
+                             snapshot_provider: SnapshotProvider, costs: CostProvider, start_orders: dict[int, str]|None, previous_orders: dict[int, str]|None) -> dict[int, str]:
         start_orders = start_orders or {}
         if targets.material_weights is not None:
             # try to assign start orders corresponding to different targeted material classes
@@ -309,6 +309,15 @@ class LotsOptimizationAlgo:
                         start_orders[plants1[0]] = o.id
         plants2 = [p for p in plants.keys() if p not in start_orders]
         for p in plants2:
+            prev = previous_orders.get(p) if previous_orders is not None else None
+            if prev is not None:
+                prev_obj = orders[prev]
+                plant_obj = plants[p]
+                transition_costs: dict[str, float] = {oid: costs.transition_costs(plant_obj, prev_obj, order) for oid, order in orders.items() if p in order.allowed_equipment}
+                if len(transition_costs) > 0:
+                    lowest_transition_order: str = min(transition_costs, key=transition_costs.get)
+                    start_orders[p] = lowest_transition_order
+                    continue
             random_order: Order | None = next((o for o in orders.values() if p in o.allowed_equipment and o.id not in start_orders.values()), None)
             if random_order is not None:
                 start_orders[p] = random_order.id
@@ -360,7 +369,7 @@ class LotsOptimizationAlgo:
                 if other_plant in available_tons_by_plant:
                     available_tons_by_plant[other_plant] = available_tons_by_plant[other_plant] - o.actual_weight
 
-        start_orders = self._random_start_orders(plants, targets, order_objects, snapshot_provider, start_orders)
+        start_orders = self._random_start_orders(plants, targets, order_objects, snapshot_provider, costs, start_orders, previous_orders)
         for plant in [plant for plant in plants.keys() if plant not in start_orders]:
             plants.pop(plant)
         for plant, order_id in start_orders.items():

@@ -370,7 +370,7 @@ class LotsAllocator:
         self._orders_custom_priority = orders_custom_priority
 
     # previously: CalcSolution (although it also determined the PlantStatus objects)
-    def assign_lots(self, order_plant_assignments: dict[str, int], timeout: float|None=None) -> tuple[dict[int, list[Lot]], bool]:
+    def assign_lots(self, order_plant_assignments: dict[str, int], timeout: float|None=None, pre_timeout: int|None=None) -> tuple[dict[int, list[Lot]], bool]:
         """Returns lots plus information if the algo ran into a timeout"""
         # remember the plants involved here
         plant_ids: set[int] = set(order_plant_assignments.values())
@@ -385,7 +385,8 @@ class LotsAllocator:
             order_ids: list[str] = [o for o, plant in order_plant_assignments.items() if plant == plant_id]
             orders: list[Order] = [self._orders[o] if self._orders is not None else self._snapshot.get_order(o, do_raise=True) for o in order_ids]
             lots, timeout_hit = self.assign_lots_internal(plant_id, orders, global_costs, self._snapshot, bound_factor=self._params.tsp_solver_global_bound_factor,
-                                      timeout=timeout or self._params.tsp_solver_global_timeout, solver_id=self._params.tsp_solver_global_costs)
+                                      timeout=timeout if timeout is not None else self._params.tsp_solver_global_timeout,
+                                      pre_timeout=pre_timeout, solver_id=self._params.tsp_solver_global_costs)
             if timeout_hit:
                 timed_out = True
             #lots: list[Lot] = self.assign_lots_googleor(plant_id, orders) if "googleor" in tsp_method else self.assign_lots_bf(plant_id, orders, bound_factor=self._params.tsp_solver_global_bound_factor,
@@ -411,9 +412,9 @@ class LotsAllocator:
         return result, timed_out
 
     def assign_lots_internal(self, plant_id: int, orders: list[Order], has_global_costs: bool, snapshot: Snapshot,
-                       bound_factor: float|None=None, timeout: float|None=1, solver_id: str|None=None) -> tuple[list[Lot], bool|None]:
+                       bound_factor: float|None=None, timeout: float|None=None, pre_timeout: int|None=None, solver_id: str|None=None) -> tuple[list[Lot], bool|None]:
         """Returns lots, plus indicator if timeout has been hit"""
-        timeout = timeout if timeout is None or timeout > 0 else None
+        timeout = timeout if timeout is not None and timeout > 0 else None if timeout is not None else self._params.tsp_solver_global_timeout
         # TODO better to reshuffle lots separately? At least if there are too many orders?
         plant = self._plants[plant_id]
         plant_targets = self._targets.target_weight.get(plant_id, EquipmentProduction(equipment=plant_id, total_weight=0))
@@ -455,7 +456,8 @@ class LotsAllocator:
 
         empty_status = costs.equipment_status(snapshot, plant, self._targets.period, plant_targets.total_weight)
         if solver_id == "default":
-            solver = (GlobalSearchDefault(bound_factor_upcoming_costs=bound_factor, timeout_pre_solvers=self._params.tsp_solver_ortools_timeout) if num_orders > 5 else \
+            ortootls_timeout = pre_timeout if pre_timeout is not None and pre_timeout > 0 else None if pre_timeout is not None else self._params.tsp_solver_ortools_timeout
+            solver = (GlobalSearchDefault(bound_factor_upcoming_costs=bound_factor, timeout_pre_solvers=ortootls_timeout) if num_orders > 5 else \
                         GlobalSearchBB(bound_factor_upcoming_costs=bound_factor)) if has_global_costs else GoogleOrSolver()
         elif solver_id == "ortools":
             solver = GoogleOrSolver()
@@ -641,17 +643,20 @@ class LotsAllocator:
         return transition_costs > self._params.TAllowed
 
     def optimize_lots(self, order_plant_assignments: dict[str, int]) -> ProductionPlanning:
-        new_lots: dict[int, list[Lot]] = self.assign_lots(order_plant_assignments)[0]
+        # This method is used to optimize the initial configuration, therefore we apply higher timeouts than in the
+        # iteration step optimization, which is on the hot path and less critical.
+        or_timeout = 3*self._params.tsp_solver_ortools_timeout if self._params.tsp_solver_ortools_timeout is not None else None
+        new_lots: dict[int, list[Lot]] = self.assign_lots(order_plant_assignments, timeout=self._params.tsp_solver_final_timeout, pre_timeout=or_timeout)[0]
         new_assignments: dict[str, OrderAssignment] = {}
         for plant, lots in new_lots.items():
             for lot in lots:
                 for lot_idx, order in enumerate(lot.orders):
                     new_assignments[order] = OrderAssignment(equipment=plant, order=order, lot=lot.id, lot_idx=lot_idx+1)
+        for order in order_plant_assignments.keys():
+            if order not in new_assignments:
+                new_assignments[order] = OrderAssignment(equipment=-1, order=order, lot="", lot_idx=-1)
         new_planning: ProductionPlanning = self._costs.evaluate_order_assignments(self._process, new_assignments, self._targets, self._snapshot,
                                                         total_priority=self._total_priority, previous_orders=self._previous_orders)
-        for order, plant in order_plant_assignments.items():
-            if plant < 0:
-                new_planning.order_assignments[order] = OrderAssignment(equipment=-1, order=order, lot="", lot_idx=-1)
         return new_planning
 
     @staticmethod

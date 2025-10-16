@@ -213,6 +213,7 @@ def transfer_popup():
 def proc_changed(update_cnt: int, process: str|None, old_process) -> tuple[str, float]:
     if process is not None:
         return process, 7_200_000
+    update_cnt = update_cnt or 0
     # wait for up to 4 seconds for external initialization, then abort
     interval = 7_200_00 if (old_process is not None and update_cnt > 5) or (process is None and update_cnt > 40) else dash.no_update
     return dash.no_update, interval

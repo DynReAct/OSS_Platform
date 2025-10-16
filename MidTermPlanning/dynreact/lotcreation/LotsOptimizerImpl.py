@@ -847,7 +847,8 @@ class CTabuWorker:
         elif best_timed_out and self.tabu_search._params.tsp_solver_final_tsp:
             # if there are global costs, run the TSP again for the plants with new configurations but this time with higher resource budget
             plant_by_order: dict[str, int] = {o: ass.equipment for o, ass in best_solution.order_assignments.items() if ass.equipment >= 0}
-            final_lots, _ = self.tabu_search.assign_lots(plant_by_order, timeout=self.tabu_search._params.tsp_solver_final_timeout)  # : dict[int, list[Lot]]
+            pre_timeout = 2 * self.tabu_search._params.tsp_solver_ortools_timeout if self.tabu_search._params.tsp_solver_ortools_timeout is not None else None
+            final_lots, _ = self.tabu_search.assign_lots(plant_by_order, timeout=self.tabu_search._params.tsp_solver_final_timeout, pre_timeout=pre_timeout)  # : dict[int, list[Lot]]
             old_lots: dict[int, list[Lot]] = best_solution.get_lots()
             lots_differ = len(final_lots) != len(old_lots) or any(p not in old_lots for p in final_lots.keys()) or  \
                           any(CTabuWorker._lots_differ(final_lots[p], old_lots[p]) for p in final_lots.keys())

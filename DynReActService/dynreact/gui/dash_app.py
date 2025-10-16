@@ -6,8 +6,11 @@ from flask import Flask
 
 
 from dynreact.app import config, state
-from dynreact.gui.pages.session_state import language, init_stores, site, selected_snapshot, \
-    selected_snapshot_obj, selected_process
+from dynreact.base.impl.DatetimeUtils import DatetimeUtils
+from dynreact.base.model import Snapshot
+from dynreact.gui.gui_utils import GuiUtils
+from dynreact.gui.pages.session_state import language, site, selected_snapshot, selected_snapshot_obj, selected_process, \
+    snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector
 
 server = Flask(__name__)
 
@@ -66,7 +69,7 @@ def layout(*args, **kwargs):
         #dcc.Store(id="lang2", storage_type="memory"),
         dcc.Store(id="lang3", storage_type="memory"),  # dummy output for client side callbacks?
         dcc.Store(id="client-tz", storage_type="memory"),  # holds client timezone information
-        site, selected_snapshot, selected_snapshot_obj, selected_process,
+        site, selected_snapshot, selected_snapshot_obj, selected_process, snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector,
         #html.Div("DynReAct", className="dynreact-header"),
         html.Img(src=app.get_asset_url(DYNREACT_LOGO), className="menu-logo"),
         html.Img(src=app.get_asset_url(DYNREACT_BACKGROUND), className="menu-background"),
@@ -160,6 +163,54 @@ clientside_callback(
     State("site-store", "data"),
 )
 
+@callback(
+    Output("selected-snapshot", "data"),
+    Output("selected-snapshot-obj", "data"),
+    Output("selected-process", "data"),
+    Input("menu-url", "search"),
+    Input("snapshot_selected-snapshot", "data"),
+    Input("create_process-selector", "data"),
+    Input("lotplanning_process-selector", "data"),
+    Input("client-tz", "data"),
+    State("selected-snapshot", "data")
+)
+def params_changed(params: str|None, user_set_snapshot: str|None, create_process: str|None, planning_process: str|None, client_tz: str|None, old_snapshot: str|None):
+    """
+    Setting shared state between pages
+    """
+    changed = GuiUtils.changed_ids()
+    process_changed_by_user = "create_process-selector" in changed or  "lotplanning_process-selector" in changed
+    if "snapshot_selected-snapshot" in changed:
+        snapshot, process = user_set_snapshot, dash.no_update
+    elif process_changed_by_user:
+        snapshot, process = dash.no_update, create_process if "create_process-selector" in changed else planning_process
+        if process is None:
+            process = dash.no_update
+    elif params is None or len(params) == 0:
+        snapshot, process = dash.no_update, dash.no_update
+    else:
+        params = params[1:]
+        params_dict: dict[str, str] = {arr[0].lower(): arr[1] for arr in (val.split("=") for val in params.split("&")) if len(arr) == 2 and len(arr[0]) > 0}
+        snapshot = params_dict.get("snapshot") or dash.no_update
+        process = params_dict.get("process") or dash.no_update
+    if snapshot == old_snapshot:
+        snapshot = dash.no_update
+    snap = dash.no_update
+    if snapshot == dash.no_update and old_snapshot is None and not process_changed_by_user:
+        ## init snapshot
+        snap = state.get_snapshot()
+        snapshot = GuiUtils.format_snapshot(snap.timestamp, client_tz) if snap is not None else None
+    elif snapshot != dash.no_update:
+        snap = state.get_snapshot(DatetimeUtils.parse_date(snapshot))
+        snapshot = GuiUtils.format_snapshot(snap.timestamp, client_tz) if snap is not None else None
+    if snap != dash.no_update:
+        snap = snap.model_dump(exclude_none=True, exclude_unset=True)
+    return snapshot, snap, process
+
+
+def _get_snapshot(snapshot_id: str|None) -> Snapshot|None:
+    time = DatetimeUtils.parse_date(snapshot_id)
+    return state.get_snapshot(time)
 
 
 # Looks circular, but apparently it is possible...

@@ -19,7 +19,7 @@ from pydantic import TypeAdapter
 from dynreact.app import state, config
 from dynreact.gui.gui_utils import GuiUtils
 from dynreact.gui.pages.plants_graph import plants_graph, default_stylesheet
-from dynreact.gui.pages.session_state import selected_snapshot, get_date_range
+from dynreact.gui.pages.session_state import get_date_range
 
 dash.register_page(__name__, path="/ltp")
 translations_key = "ltp"
@@ -123,7 +123,7 @@ def layout(*args, **kwargs):
         # ======== Popups and hidden elements =========
         structure_portfolio_popup(total_production),
         plant_calendar_popup(),
-        storage_init_popup(),
+        storage_init_popup(kwargs.get("snapshot")),   # TODO better selection of snapshot
         # stores information about the last start time and horizon for which material properties have been set,
         # in the format {"startTime": startTime, "horizon": horizon}
         dcc.Store(id="ltp-material-settings"),
@@ -181,9 +181,9 @@ def plant_calendar_popup():
         id="ltp-calendar-dialog", className="dialog-filled", open=False)
 
 
-def storage_init_popup():
+def storage_init_popup(snapshot: str|None):
     # TODO handle timezone
-    start_date, end_date, snap_options, selected_snap = get_date_range(selected_snapshot.data)  # : tuple[date, date, list[datetime], str]
+    start_date, end_date, snap_options, selected_snap = get_date_range(snapshot)  # : tuple[date, date, list[datetime], str]
     return html.Dialog(
         html.Div([
             html.H3("Storages status"),

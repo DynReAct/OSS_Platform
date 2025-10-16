@@ -22,7 +22,7 @@ from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
 from dynreact.gui.gui_utils import GuiUtils
 from dynreact.gui.pages.components import lots_view
-from dynreact.gui.pages.session_state import init_stores, selected_process, selected_snapshot
+#from dynreact.gui.pages.session_state import selected_process, selected_snapshot
 
 dash.register_page(__name__, path="/lots/planned")
 translations_key = "lotsplanning"
@@ -42,11 +42,11 @@ def layout(*args, **kwargs):
             proc1 = next((proc.name_short for proc in state.get_site().processes if proc.name_short.upper().startswith(proc0)), None)
             if proc1 is not None:
                 kwargs["process"] = proc1
-    init_stores(*args, **kwargs)
-    process: str|None = selected_process.data if hasattr(selected_process, "data") else None
+    #init_stores(*args, **kwargs)
+    process: str|None = kwargs.get("process")
     lot_size: str|None = kwargs.get("lotsize", "weight")   # constant, weight, orders, coils are allowed values
     site = state.get_site()
-    snap = GuiUtils.format_snapshot(selected_snapshot.data, None) if hasattr(selected_snapshot, "data") and selected_snapshot.data else None
+    snap = GuiUtils.format_snapshot(kwargs["snapshot"], None) if "snapshot" in kwargs else None
     return html.Div([
         html.H1("Lots planning", id="lotsplanning-title"),
         html.Div([
@@ -170,6 +170,7 @@ def layout(*args, **kwargs):
         dcc.Store(id="lotplanning-scenario-json"),        # for scenario download
 
         dcc.Interval(id="planning-interval", n_intervals=3_600_000),  # for polling when lot transfer is running
+        dcc.Interval(id="lotplanning-process-init", interval=100),
     ], id="lotsplanned")
 
 
@@ -203,13 +204,32 @@ def transfer_popup():
         id="lotplanning-transfer-dialog", className="dialog-filled lotplanning-transfer-dialog", open=False)
 
 
+# init the process, if not done yet
+@callback(Output("process-selector-lotplanning", "value"),
+          Output("lotplanning-process-init", "interval"),
+          Input("lotplanning-process-init", "n_intervals"),
+          State("selected-process", "data"),
+          State("process-selector-lotplanning", "value"))
+def proc_changed(update_cnt: int, process: str|None, old_process) -> tuple[str, float]:
+    if process is not None:
+        return process, 7_200_000
+    # wait for up to 4 seconds for external initialization, then abort
+    interval = 7_200_00 if (old_process is not None and update_cnt > 5) or (process is None and update_cnt > 40) else dash.no_update
+    return dash.no_update, interval
+
+
+@callback(Output("lotplanning_process-selector", "data"),  # defined in session state => this will set the global process property
+          Input("process-selector-lotplanning", "value"),
+          config_prevent_initial_callbacks=True)
+def proc_changed2(process: str|None) -> str:
+    return process if process is not None else dash.no_update
+
+
 @callback(Output("current_snapshot_lotplanning", "children"),
           Input("selected-snapshot", "data"),
           Input("client-tz", "data")  # client timezone, global store
 )
 def snapshot_changed(snapshot: datetime|str|None, tz: str|None) -> str:
-    # XXX this is a workaround to the fact that setting the selected_snapshot set in the layout method is not reflected yet in the initial callback
-    snapshot = selected_snapshot.data if hasattr(selected_snapshot, "data") else snapshot
     return GuiUtils.format_snapshot(snapshot, tz)
 
 @callback(
@@ -223,9 +243,12 @@ def update_link(snapshot: str|datetime|None, process: str|None) -> str:
     if not dash_authenticated(config):
         return url
     snapshot = DatetimeUtils.parse_date(snapshot)
-    if snapshot is None or process is None:
-        return url
-    url += "?process=" + process + "&snapshot=" + DatetimeUtils.format(snapshot)
+    added: bool=False
+    if snapshot is not None:
+        url += "?snapshot=" + DatetimeUtils.format(snapshot)
+        added = True
+    if process is not None:
+        url += ("?" if not added else "&") + "process=" + process
     return url
 
 
@@ -241,8 +264,6 @@ def update_link(snapshot: str|datetime|None, process: str|None) -> str:
 def solutions_table(snapshot: str|datetime|None, process: str|None, preselected_solution: str|None):
     if not dash_authenticated(config):
         return [], [], []
-    # XXX this is a workaround to the fact that setting the selected_snapshot set in the layout method is not reflected yet in the initial callback
-    snapshot = selected_snapshot.data if hasattr(selected_snapshot, "data") else snapshot
     snapshot = DatetimeUtils.parse_date(snapshot)
     value_formatter_object = {"function": "formatCell(params.value, 4)"}
     col_defs: list[dict[str, Any]] = [{"field": "id", "pinned": True},

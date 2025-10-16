@@ -31,7 +31,6 @@ from dynreact.auth.authentication import dash_authenticated
 from dynreact.gui.gui_utils import GuiUtils
 from dynreact.gui.pages.components import prepare_lots_for_lot_view, lots_view
 from dynreact.gui.pages.optimization_listener import FrontendOptimizationListener
-from dynreact.gui.pages.session_state import init_stores, selected_process, selected_snapshot
 
 dash.register_page(__name__, path="/lots/create2")
 translations_key = "lots2"
@@ -46,8 +45,8 @@ lot_creation_listener: FrontendOptimizationListener|None = None
 # TODO swimlane visualization
 # TODO init method existing solution
 def layout(*args, **kwargs):
-    init_stores(*args, **kwargs)
-    process: str|None = selected_process.data if hasattr(selected_process, "data") else None
+    # init_stores(*args, **kwargs)
+    process: str|None = kwargs.get("process")  # should also trigger process selction via dash_app
     running, running_proc = check_running_optimization()
     if running:
         process = running_proc
@@ -64,7 +63,7 @@ def layout(*args, **kwargs):
     excluded_processes = [] if site.lot_creation is None or site.lot_creation.processes is None else \
             [proc for proc, config in site.lot_creation.processes.items() if config.plannable == False]
     procs = [p for p in site.processes if p.name_short not in excluded_processes]
-    snap = GuiUtils.format_snapshot(selected_snapshot.data, None) if hasattr(selected_snapshot,"data") and selected_snapshot.data else None
+    snap = GuiUtils.format_snapshot(kwargs["snapshot"], None) if "snapshot" in kwargs else None
     layout = html.Div([
         html.H1("Lot creation", id="lots2-title"),
         # ======= Top row: snapshot and process selector =========
@@ -126,6 +125,7 @@ def layout(*args, **kwargs):
         dcc.Store(id="lots2-objectives-history"),     # optimization results, objective function
         dcc.Store(id="lots2-target-weight", data=0),  # number in tons; updated only on tab change and process change
         dcc.Interval(id="lots2-interval", interval=3_600_000),  # for polling when optimization is running
+        dcc.Interval(id="lots2-process-init", interval=100),
         # ======== Popups  =========
         structure_portfolio_popup(111222),
         dcc.Store(id="lots2-material-setpoints", data=None),  # dictionary
@@ -463,14 +463,32 @@ def structure_portfolio_popup(initial_weight: float):
         ], title=""),
         id="lots2-structure-dialog", className="dialog-filled", open=False)
 
+# init the process, if not done yet
+@callback(Output("lots2-process-selector", "value"),
+          Output("lots2-process-init", "interval"),
+          Input("lots2-process-init", "n_intervals"),
+          State("selected-process", "data"),
+          State("lots2-process-selector", "value"))
+def proc_changed(update_cnt: int, process: str|None, old_process) -> tuple[str, float]:
+    if process is not None:
+        return process, 7_200_000
+    # wait for up to 4 seconds for external initialization, then abort
+    interval = 7_200_00 if (old_process is not None and update_cnt > 5) or (process is None and update_cnt > 40) else dash.no_update
+    return dash.no_update, interval
+
+
+@callback(Output("create_process-selector", "data"),  # defined in session state => this will set the global process property
+          Input("lots2-process-selector", "value"),
+          config_prevent_initial_callbacks=True)
+def proc_changed2(process: str|None) -> str:
+    return process if process is not None else dash.no_update
 
 
 @callback(Output("lots2-current_snapshot", "children"),
           Input("selected-snapshot", "data"), #     selected-snapshot is a page-global store
           Input("client-tz", "data"))  # client timezone, global store
 def snapshot_changed(snapshot: datetime|None, tz: str|None) -> str:
-    # XXX this is a workaround to the fact that setting the selected_snapshot set in the layout method is not reflected yet in the initial callback
-    snapshot = selected_snapshot.data if hasattr(selected_snapshot, "data") else snapshot
+    #snapshot = selected_snapshot.data if hasattr(selected_snapshot, "data") else snapshot
     return GuiUtils.format_snapshot(snapshot, tz)
 
 
@@ -497,7 +515,7 @@ def toggle_settings_tabs_visibility(snapshot: str|datetime|None, process: str|No
           Input("lots2-tabbutton-settings", "n_clicks"),
           Input("lots2-tabsnav-prev", "n_clicks"),
           Input("lots2-tabsnav-next", "n_clicks"),
-          Input("lots2-process-selector", "value"),
+          Input("lots2-process-selector", "value")
 )
 def select_settings_tab(active_tab: Literal["targets", "orders", "settings"]|None,  _, __, ___, ____, _v, v) -> Literal["targets", "orders", "settings"]:
     if not dash_authenticated(config):
@@ -506,7 +524,7 @@ def select_settings_tab(active_tab: Literal["targets", "orders", "settings"]|Non
     if len(changed_ids) == 0:  # initial callback
         return active_tab  # must not return no_update here, because it blocks dependent callbacks
     button_id = next((bid for bid in changed_ids if bid.startswith("lots2-tabbutton-")), None)
-    if button_id is None and "lots2-process-selector" in changed_ids:
+    if button_id is None and "selected-process" in changed_ids:
         button_id = "lots2-tabbutton-targets"
     new_active_tab: Literal["targets", "orders", "settings"] = "targets"
     if button_id is not None:
@@ -561,7 +579,7 @@ def select_settings_tab(active_tab: Literal["targets", "orders", "settings"]|Non
     Input("lots2-active-tab", "data"),
     Input("lots2-orders-table", "selectedRows"),
     State("selected-snapshot", "data"),
-    State("lots2-process-selector", "value"),
+    State("lots2-process-selector", "value")
 )
 def show_structure_overview(active_tab: Literal["targets", "orders", "settings"]|None,
                             selected_rows: list[dict[str, any]] | None,
@@ -652,7 +670,7 @@ def ltp_table_opened(_, snapshot: str, process: str, horizon_hours: int):
 @callback(
     Output("lots2-material-setpoints", "clear_data"),
     Input("lots2-materials-clear", "n_clicks"),
-    Input("lots2-process-selector", "value"),
+    Input("lots2-process-selector", "value")
 )
 def clear_setpoints(n_click_clear, process: str|None) -> bool:
     if n_click_clear is not None and n_click_clear > 0:
@@ -685,7 +703,7 @@ def update_plants(snapshot: str,
                   use_lot_range0: list[Literal[""]]
                   ) -> tuple[list[Component], list[any], list[Literal[""]]]:
     changed = GuiUtils.changed_ids()
-    process_changed = "lots2-process-selector" in changed
+    process_changed = "selected-process" in changed
     use_lot_range: bool = len(use_lot_range0) > 0 and not process_changed
     init_lot_size_from_settings: bool = False
     site = state.get_site()
@@ -929,7 +947,7 @@ def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] 
     snapshot_obj = state.get_snapshot(snapshot)
     if snapshot_obj is None or len(snapshot_obj.orders) == 0:
         return {}, None, {}
-    process_changed = "lots2-process-selector" in GuiUtils.changed_ids()
+    process_changed = "selected-process" in GuiUtils.changed_ids()
     if active_tab != "orders" and not process_changed:
         return no_update, no_update, no_update
     update_selection: bool = selected_processes is None or process_changed or (order_data is not None and order_data.get("snapshot") != snapshot_serialized)
@@ -955,7 +973,7 @@ def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] 
     Output("lots2-orders-lots-order-total", "children"),
     Input("lots2-oders-lots-lots", "value"),
     Input("lots2-orders-table", "selectedRows"),
-    State("lots2-process-selector", "value"),
+    Input("lots2-process-selector", "value"),
     State("selected-snapshot", "data"),
     config_prevent_initial_callbacks=True
 )
@@ -1637,7 +1655,7 @@ def process_changed(snapshot: datetime|None,
         process = proc_running
         #if process != process_in:
         #    process_out = process
-    elif "lots2-process-selector" in changed_ids:  # ensure graph output is removed
+    elif "selected-process" in changed_ids:  # ensure graph output is removed
         lot_creation_listener = None
         existing_solution = None
         # update iterations

@@ -23,18 +23,19 @@ def init_stores(*args, **kwargs):   #-> tuple[dcc.Store, dcc.Store, dcc.Store, d
     global selected_snapshot
     global selected_snapshot_obj
     global selected_process
-    if hasattr(site, "data") and site.data is not None:
-        return
-    site_obj = state.get_site().model_dump(exclude_none=True, exclude_unset=True)
-    process: str | None = kwargs.get("process")  # TODO alternatively, use store?
-    snapshot: datetime|None = DatetimeUtils.parse_date(kwargs.get("snapshot"))
-    snapshot_obj = state.get_snapshot(snapshot)
-    snapshot_serialized = snapshot_obj.model_dump(exclude_unset=True, exclude_none=True) if snapshot_obj is not None else None
-    site.data = site_obj
-    # Note: this implies dropping the seconds part!
-    selected_snapshot.data = DatetimeUtils.format(snapshot_obj.timestamp) if snapshot_obj is not None else None
-    selected_snapshot_obj.data = snapshot_serialized
-    selected_process.data=process
+    if not hasattr(site, "data") or site.data is None:
+        site_obj = state.get_site().model_dump(exclude_none=True, exclude_unset=True)
+        site.data = site_obj
+    process: str | None = kwargs.get("process")
+    selected_process.data=process or (selected_process.data if hasattr(selected_process, "data") else None)
+    if not hasattr(selected_snapshot, "data") or not selected_snapshot.data or "snapshot" in kwargs:
+        snapshot: datetime|None = DatetimeUtils.parse_date(kwargs.get("snapshot"))
+        snapshot_obj = state.get_snapshot(snapshot)
+        snapshot_serialized = snapshot_obj.model_dump(exclude_unset=True, exclude_none=True) if snapshot_obj is not None else None
+        # Note: this implies dropping the seconds part!
+        selected_snapshot.data = DatetimeUtils.format(snapshot_obj.timestamp) if snapshot_obj is not None else None
+        selected_snapshot_obj.data = snapshot_serialized
+
 
 
 # Type: str

@@ -44,7 +44,7 @@ translations_key = "menu"
 
 
 def layout(*args, **kwargs):
-    init_stores(*args, **kwargs)
+    # init_stores(*args, **kwargs)  # it seems that arguments are not passed to the global layout function
     prov = state.get_snapshot_provider()
     is_importer = hasattr(prov, "next_scheduled_import")
     if is_importer:  # add a submenu for snapshot imports

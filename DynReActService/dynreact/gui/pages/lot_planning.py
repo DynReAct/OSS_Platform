@@ -22,6 +22,7 @@ from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
 from dynreact.gui.gui_utils import GuiUtils
 from dynreact.gui.pages.components import lots_view
+from dynreact.gui.pages.session_state import init_stores, selected_process, selected_snapshot
 
 dash.register_page(__name__, path="/lots/planned")
 translations_key = "lotsplanning"
@@ -33,13 +34,23 @@ lottransfer_results: dict[str, any] = {}
 
 
 def layout(*args, **kwargs):
-    process: str | None = kwargs.get("process")  # TODO use store from main layout instead(?)
+    initial_solution = kwargs.get("solution")
+    if initial_solution is not None and "process" not in kwargs:
+        sep_idx = next((idx for idx, c in enumerate(initial_solution) if c == "-" or c == "_" or c == ":"), -1)
+        if sep_idx > 0:
+            proc0 = initial_solution[:sep_idx].upper()
+            proc1 = next((proc.name_short for proc in state.get_site().processes if proc.name_short.upper().startswith(proc0)), None)
+            if proc1 is not None:
+                kwargs["process"] = proc1
+    init_stores(*args, **kwargs)
+    process: str|None = selected_process.data if hasattr(selected_process, "data") else None
     lot_size: str|None = kwargs.get("lotsize", "weight")   # constant, weight, orders, coils are allowed values
     site = state.get_site()
+    snap = GuiUtils.format_snapshot(selected_snapshot.data, None) if hasattr(selected_snapshot, "data") and selected_snapshot.data else None
     return html.Div([
         html.H1("Lots planning", id="lotsplanning-title"),
         html.Div([
-            html.Div([html.Div("Snapshot: "), html.Div(id="current_snapshot_lotplanning")]),
+            html.Div([html.Div("Snapshot: "), html.Div(snap, id="current_snapshot_lotplanning")]),
             html.Div([html.Div("Process: "), dcc.Dropdown(id="process-selector-lotplanning",
                                                           options=[{"value": p.name_short, "label": p.name_short,
                                                                     "title": p.name if p.name is not None else p.name_short}
@@ -146,6 +157,7 @@ def layout(*args, **kwargs):
             )
         ], id="planning-lots-table-wrapper", hidden=True),
         transfer_popup(),
+        dcc.Store(id="planning-initial_solution", data=initial_solution),  # str|None
         dcc.Store(id="planning-selected-solution"),  # str
         dcc.Store(id="planning-solution-data"),      # rowData, list of dicts, one row per lot
         dcc.Store(id="planning-selected-lot"),       # lot id; selected by clicking a row in the lots table
@@ -196,6 +208,8 @@ def transfer_popup():
           Input("client-tz", "data")  # client timezone, global store
 )
 def snapshot_changed(snapshot: datetime|str|None, tz: str|None) -> str:
+    # XXX this is a workaround to the fact that setting the selected_snapshot set in the layout method is not reflected yet in the initial callback
+    snapshot = selected_snapshot.data if hasattr(selected_snapshot, "data") else snapshot
     return GuiUtils.format_snapshot(snapshot, tz)
 
 @callback(
@@ -218,13 +232,17 @@ def update_link(snapshot: str|datetime|None, process: str|None) -> str:
 @callback(
     Output("plan-solutions-table", "columnDefs"),
     Output("plan-solutions-table", "rowData"),
+    Output("plan-solutions-table", "selectedRows"),
     State("selected-snapshot", "data"),
     Input("process-selector-lotplanning", "value"),
+    Input("planning-initial_solution", "data")
     #Input("create-existing-sols", "value"),
 )
-def solutions_table(snapshot: str|datetime|None, process: str|None):
+def solutions_table(snapshot: str|datetime|None, process: str|None, preselected_solution: str|None):
     if not dash_authenticated(config):
-        return []
+        return [], [], []
+    # XXX this is a workaround to the fact that setting the selected_snapshot set in the layout method is not reflected yet in the initial callback
+    snapshot = selected_snapshot.data if hasattr(selected_snapshot, "data") else snapshot
     snapshot = DatetimeUtils.parse_date(snapshot)
     value_formatter_object = {"function": "formatCell(params.value, 4)"}
     col_defs: list[dict[str, Any]] = [{"field": "id", "pinned": True},
@@ -243,7 +261,7 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
           "headerTooltip": "Plant performance models considered"},
     ]
     if snapshot is None or process is None:
-        return col_defs, []
+        return col_defs, [], []
     persistence = state.get_results_persistence()
     solutions: list[str] = sorted(persistence.solutions(snapshot, process), reverse=True)
     sol_objects: dict[str, LotsOptimizationState] = {sol: persistence.load(snapshot, process, sol) for sol in solutions}
@@ -296,12 +314,16 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
     },
        {key: (getattr(solution.best_objective_value, key) if hasattr(solution.best_objective_value, key) else 0) or 0 for key in objective_keys })
                 for sol_id, solution in sol_objects.items()]
-    return col_defs, row_data
+    selected_rows = []
+    if preselected_solution is not None and preselected_solution in sol_objects:
+        selected_rows.append({"id": preselected_solution})
+    return col_defs, row_data, selected_rows
 
 
 @callback(
     Output("planning-selected-solution", "data"),
     Input("plan-solutions-table", "selectedRows"),
+
 )
 def solution_selected(selected_rows: list[dict[str, any]]|None) -> str|None:
     if selected_rows is None or len(selected_rows) == 0:

@@ -14,13 +14,14 @@ from pydantic.fields import FieldInfo
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
-from dynreact.gui.pages.session_state import selected_snapshot, get_date_range
+from dynreact.gui.pages.session_state import selected_snapshot, get_date_range, init_stores
 
 dash.register_page(__name__, path="/")
 translations_key = "snapshot"
 
 
 def layout(*args, **kwargs):
+    init_stores(*args, **kwargs)
     categories = state.get_site().material_categories
     return html.Div([
         #selected_snapshot,  # in dash_app layout

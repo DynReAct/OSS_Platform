@@ -129,11 +129,13 @@ class DynReActSrvState:
             return updates[time]
         if time in self._snapshots_cache:
             return self._snapshots_cache[time]
+        if time is not None and recurse:
+            matches = list(self.get_snapshot_provider().snapshots(time - timedelta(minutes=10), time + timedelta(minutes=10)))
+            matches_sorted = sorted(matches, key=lambda m: abs((m-time).total_seconds()))
+            if len(matches_sorted) > 0:
+                return self.get_snapshot(time=matches_sorted[0], recurse=False)
         snapshot = self.get_snapshot_provider().load(time=time)
         if snapshot is None:
-            if time is not None and recurse:
-                for time0 in self.get_snapshot_provider().snapshots(time - timedelta(minutes=5), time + timedelta(minutes=5)):
-                    return self.get_snapshot(time=time0, recurse=False)
             return snapshot
         new_time = snapshot.timestamp
         if new_time not in self._snapshots_cache:  # or time not in self._snapshots_cache:

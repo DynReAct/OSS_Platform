@@ -31,7 +31,7 @@ from dynreact.auth.authentication import dash_authenticated
 from dynreact.gui.gui_utils import GuiUtils
 from dynreact.gui.pages.components import prepare_lots_for_lot_view, lots_view
 from dynreact.gui.pages.optimization_listener import FrontendOptimizationListener
-
+from dynreact.gui.pages.session_state import init_stores, selected_process, selected_snapshot
 
 dash.register_page(__name__, path="/lots/create2")
 translations_key = "lots2"
@@ -46,7 +46,8 @@ lot_creation_listener: FrontendOptimizationListener|None = None
 # TODO swimlane visualization
 # TODO init method existing solution
 def layout(*args, **kwargs):
-    process: str|None = kwargs.get("process")  # TODO use store from main layout instead?
+    init_stores(*args, **kwargs)
+    process: str|None = selected_process.data if hasattr(selected_process, "data") else None
     running, running_proc = check_running_optimization()
     if running:
         process = running_proc
@@ -63,11 +64,12 @@ def layout(*args, **kwargs):
     excluded_processes = [] if site.lot_creation is None or site.lot_creation.processes is None else \
             [proc for proc, config in site.lot_creation.processes.items() if config.plannable == False]
     procs = [p for p in site.processes if p.name_short not in excluded_processes]
+    snap = GuiUtils.format_snapshot(selected_snapshot.data, None) if hasattr(selected_snapshot,"data") and selected_snapshot.data else None
     layout = html.Div([
         html.H1("Lot creation", id="lots2-title"),
         # ======= Top row: snapshot and process selector =========
         html.Div([
-            html.Div([html.Div("Snapshot: "), html.Div(id="lots2-current_snapshot")]),
+            html.Div([html.Div("Snapshot: "), html.Div(snap, id="lots2-current_snapshot")]),
             html.Div([html.Div("Process: "), dcc.Dropdown(id="lots2-process-selector",
                         options=[{"value": p.name_short, "label": p.name_short,
                                   "title": p.name if p.name is not None else p.name_short} for p in procs],
@@ -467,6 +469,8 @@ def structure_portfolio_popup(initial_weight: float):
           Input("selected-snapshot", "data"), #     selected-snapshot is a page-global store
           Input("client-tz", "data"))  # client timezone, global store
 def snapshot_changed(snapshot: datetime|None, tz: str|None) -> str:
+    # XXX this is a workaround to the fact that setting the selected_snapshot set in the layout method is not reflected yet in the initial callback
+    snapshot = selected_snapshot.data if hasattr(selected_snapshot, "data") else snapshot
     return GuiUtils.format_snapshot(snapshot, tz)
 
 

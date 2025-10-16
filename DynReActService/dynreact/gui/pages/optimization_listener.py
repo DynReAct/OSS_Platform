@@ -1,4 +1,6 @@
-from dynreact.base.LotsOptimizer import OptimizationListener, LotsOptimizationState
+import traceback
+
+from dynreact.base.LotsOptimizer import OptimizationListener, LotsOptimizationState, LotsOptimizer
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.model import ProductionPlanning, ObjectiveFunction
 
@@ -6,6 +8,7 @@ from dynreact.base.model import ProductionPlanning, ObjectiveFunction
 class FrontendOptimizationListener(OptimizationListener):
 
     def __init__(self, id: str, persistence: ResultsPersistence|None, store_results: bool,
+                 optimization: LotsOptimizer,
                  initial_state: LotsOptimizationState|None = None, parameters: dict[str, any]|None = None):
         super().__init__()
         self._active: bool = True
@@ -14,6 +17,8 @@ class FrontendOptimizationListener(OptimizationListener):
         self._state: LotsOptimizationState|None = initial_state
         self._store_results: bool = store_results
         self._parameters = parameters
+        self._optimizer = optimization
+        self._process = optimization.process()
 
     def update_solution(self, planning: ProductionPlanning, objective_value: ObjectiveFunction):
         if self._state is None:
@@ -28,6 +33,9 @@ class FrontendOptimizationListener(OptimizationListener):
                 self._state.best_objective_value = objective_value
         if self._store_results and self._persistence is not None:
             self._persistence.store(self._id, self._state)
+
+    def process(self) -> str:
+        return self._process
 
     def update_iteration(self, iteration_cnt: int, lots_cnt: int, objective_value: ObjectiveFunction) -> bool:
         return self._active
@@ -45,3 +53,21 @@ class FrontendOptimizationListener(OptimizationListener):
 
     def parameters(self) -> dict[str, any]|None:
         return self._parameters if self._state is None else self._state.parameters
+
+    def optimization(self) -> LotsOptimizer:
+        return self._optimizer
+
+    def restart(self, store_results: bool):
+        self.reset()
+        self._active = True
+        store_now: bool = store_results and not self._store_results
+        self._store_results = store_results
+        if store_now and self._persistence is not None and self._state is not None:
+            try:
+                self._persistence.store(self._id, self._state)
+            except:
+                traceback.print_exc()
+                pass
+
+
+

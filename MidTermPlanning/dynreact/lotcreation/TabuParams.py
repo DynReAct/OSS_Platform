@@ -58,14 +58,14 @@ class TabuParams:
     """
     Timeout for the ortools solver in seconds. Default: 1s. Only integer values supported
     """
-    max_tsps_per_worker: int = 3   # TODO disable in those tests that require a deterministic solution
+    max_tsps_per_worker: int = 3
     """
     Maximum number of traveling salesman problems to be solved per worker process in each optimization step.
-    Set to a negative number for unlimited tsps (may impact performance), 
+    Set to a negative number for unlimited tsps (may impact performance, but sensible for tests which require a deterministic behaviour), 
     or to zero to completely disable the traveling salesman solver 
-    (in this case a simplistic heuristic will be used instead, not recommended). 
+    (in this case a simplistic heuristic will be used instead, not recommended).  
     """
-    rand_seed: int|None = None  # TODO set in tests
+    rand_seed: int|None = None
     """
     Pseudo-random seed for tests.  
     """

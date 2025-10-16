@@ -64,6 +64,8 @@ class TabuSearch(LotsOptimizer):
         self._order_priorities = None if self._orders is None else {o.id: o.priority for o in self._orders.values()}
         if orders_custom_priority is not None:
             self._order_priorities.update(orders_custom_priority)
+        self._initialized: bool = False
+        self._tabu_list: set[TabuSwap] = set()
         self._allocator: LotsAllocator = LotsAllocator(process, {p.id: p for p in self._plants}, self._orders, self._snapshot, self._costs,
                                               self._targets, self._params, self._total_priority, self._forbidden_assignments, self._forced_orders, self._previous_orders,
                                               self._base_lots, self._base_lot_weights,  self._base_assignments, self._main_category,self._orders_custom_priority)
@@ -101,55 +103,64 @@ class TabuSearch(LotsOptimizer):
                 self._state.best_objective_value = objective
         return initial_plant_assignments
 
-    def run(self, max_iterations: int|None = None, debug: bool=False) -> LotsOptimizationState:
-        initial_plant_assignments: dict[str, int] = {order: ass.equipment for order, ass in self._state.current_solution.order_assignments.items()}
-        has_missing_forced_orders = False
-        if self._forced_orders is not None:
-            missing = [o for o in self._forced_orders if initial_plant_assignments.get(o, -1) < 0]
-            has_missing_forced_orders = len(missing) > 0
-            for o in missing:
-                order = self._orders.get(o)
-                equipment = [e for e in order.allowed_equipment if e in self._plant_ids]
-                if len(equipment) > 0:
-                    initial_plant_assignments[o] = equipment[0]
-        initial_plant_assignments = self._init_performance_models(initial_plant_assignments)
-        TabuList: set[TabuSwap] = set()
-        ntotal: int = max_iterations if max_iterations is not None else self._params.ntotal
-        ilots = np.zeros(ntotal)
-        idelta = np.zeros(ntotal)
-        iTarget = np.zeros(ntotal)
-        iSwaps = []
-        mini = -1
-        MinCount = 0
+    def run(self, max_iterations: int|None = None, debug: bool=False, continued: bool=False) -> LotsOptimizationState:
         niter = 0
-        tlo = []
+        ntotal: int = max_iterations if max_iterations is not None else self._params.ntotal
+        interrupted: bool = False
+        continued = continued and self._initialized
+        if continued:
+            vbest: ProductionPlanning = self._state.current_solution
+            target_vbest0: ObjectiveFunction = self._state.current_object_value
+            target_vbest: float = target_vbest0.total_value
+            vbest_global: ProductionPlanning = self._state.best_solution
+            target_vbest_global: float = self._state.best_objective_value.total_value
+        else:
+            initial_plant_assignments: dict[str, int] = {order: ass.equipment for order, ass in self._state.current_solution.order_assignments.items()}
+            has_missing_forced_orders = False
+            if self._forced_orders is not None:
+                missing = [o for o in self._forced_orders if initial_plant_assignments.get(o, -1) < 0]
+                has_missing_forced_orders = len(missing) > 0
+                for o in missing:
+                    order = self._orders.get(o)
+                    equipment = [e for e in order.allowed_equipment if e in self._plant_ids]
+                    if len(equipment) > 0:
+                        initial_plant_assignments[o] = equipment[0]
+            initial_plant_assignments = self._init_performance_models(initial_plant_assignments)
+            #vbest: ProductionPlanning = self._state.current_solution
+            #target_vbest: float = self._state.current_object_value
+            if self._base_lots is not None:  # append to existing lots
+                initial_plant_assignments = {orders: plant for orders, plant in initial_plant_assignments.items() if orders not in self._base_assignments}
+            vbest = self._allocator.optimize_lots(initial_plant_assignments)
+            target_vbest0 = self._costs.process_objective_function(vbest)
+            target_vbest = target_vbest0.total_value
+            self._state.current_solution = vbest
+            self._state.current_object_value = target_vbest0
+            if target_vbest != self._state.history[-1].total_value:
+                self._state.history.append(target_vbest0)
+            vbest_global = self._state.best_solution
+            target_vbest_global = self._state.best_objective_value.total_value
+            if target_vbest < target_vbest_global or has_missing_forced_orders:
+                vbest_global = vbest
+                target_vbest_global = target_vbest
+                self._state.best_solution = vbest
+                self._state.best_objective_value = target_vbest0
+            for listener in self._listeners:
+                listener.update_solution(self._state.current_solution, self._state.current_object_value)
+                if not listener.update_iteration(niter, vbest.get_num_lots(), self._state.current_object_value):
+                    interrupted = True
+            self._initialized = True
+        total_priority = vbest.total_priority
         pool = multiprocessing.Pool() if self._params.NParallel > 1 else None
         worker_cnt: int = 0
-
-        #vbest: ProductionPlanning = self._state.current_solution
-        #target_vbest: float = self._state.current_object_value
-        if self._base_lots is not None:  # append to existing lots
-            initial_plant_assignments = {orders: plant for orders, plant in initial_plant_assignments.items() if orders not in self._base_assignments}
-        vbest: ProductionPlanning = self._allocator.optimize_lots(initial_plant_assignments)
-        total_priority = vbest.total_priority
-        target_vbest0: ObjectiveFunction = self._costs.process_objective_function(vbest)
-        target_vbest: float = target_vbest0.total_value
-        self._state.current_solution = vbest
-        self._state.current_object_value = target_vbest0
-        if target_vbest != self._state.history[-1].total_value:
-            self._state.history.append(target_vbest0)
-        vbest_global: ProductionPlanning = self._state.best_solution
-        target_vbest_global: float = self._state.best_objective_value.total_value
-        if target_vbest < target_vbest_global or has_missing_forced_orders:
-            vbest_global = vbest
-            target_vbest_global = target_vbest
-            self._state.best_solution = vbest
-            self._state.best_objective_value = target_vbest0
-        interrupted: bool = False
-        for listener in self._listeners:
-            listener.update_solution(self._state.current_solution, self._state.current_object_value)
-            if not listener.update_iteration(niter, vbest.get_num_lots(), self._state.current_object_value):
-                interrupted = True
+        ilots = np.zeros(ntotal)
+        # idelta = np.zeros(ntotal)
+        iTarget = np.zeros(ntotal)
+        iSwaps = []
+        TabuList: set[TabuSwap] = self._tabu_list
+        MinCount = 0
+        iterations_without_shuffle: int = 0
+        max_iterations_without_shuffle: int = int(ntotal/2) if ntotal >= 20 else ntotal
+        rnd = random.Random(x=self._params.rand_seed)
         while niter < ntotal and not interrupted:
             # planning: ProductionPlanning = self._costs.evaluate_order_assignments(self._process, s_best, self._targets, self._snapshot)
             # target_vbest = FTarget(vbest, self.PDict, self.params)
@@ -181,6 +192,7 @@ class TabuSearch(LotsOptimizer):
             #target_sval = FTarget(sval, self.PDict, self._params)
             target_sval0 = next_step[2]
             target_sval = target_sval0.total_value
+            iterations_without_shuffle += 1
             if target_sval < target_vbest:
                 vbest = next_solution
                 mini = niter
@@ -200,15 +212,18 @@ class TabuSearch(LotsOptimizer):
                         #    GetFileName("Lots_" + str(mini) + "_", "xlsx", vbest_global, self.PDict, self.params), self.sol,
                         #    PSDict,
                         #    SnapshotDto(PDict=self.PDict, ODict=self.ODict, PM=self.PM, LM=self.LM, OCt=self.OCt))
-            elif MinCount <= self._params.NMinUntilShuffle:  #
+            elif MinCount <= self._params.NMinUntilShuffle and iterations_without_shuffle < max_iterations_without_shuffle:  #
                 self._state.current_solution = next_solution
                 self._state.current_object_value = target_sval0
                 self._state.history.append(target_sval0)
                 MinCount += 1
             else:  # we haven't improved over the previous best value in a while, so reshuffle
                 MinCount = 0
+                iterations_without_shuffle = 0
+                if max_iterations_without_shuffle >= 20:
+                    max_iterations_without_shuffle = int(2*max_iterations_without_shuffle/3)
                 # perform random shuffle of orders with high swap probability
-                rdswap = random.random()
+                rdswap = rnd.random()
 
                 lots: dict[int, list[Lot]] = self._state.current_solution.get_lots()
                 swap_probabilities: dict[str, float] = {lot.id: 1/len(lot.orders) for lots_list in lots.values() for lot in lots_list}

@@ -39,6 +39,9 @@ class OptimizationListener:
     def is_done(self) -> bool:
         return self._done
 
+    def reset(self):
+        self._done = False
+
 
 P = TypeVar("P", bound=PlanningData)
 
@@ -198,11 +201,17 @@ class LotsOptimizer(Generic[P]):
         self._base_assignments: dict[str, OrderAssignment]|None = {o: OrderAssignment(order=o, equipment=lot.equipment, lot=lot.id, lot_idx=idx+1)
                                                             for lot in base_lots.values() for idx, o in enumerate(lot.orders)} if base_lots is not None else None
 
+    def process(self) -> str:
+        return self._process
+
+    def snapshot(self) -> datetime:
+        return self._snapshot.timestamp
+
     def parameters(self) -> dict[str, Any]|None:
         return self._state.parameters
 
     # side effects on state
-    def run(self, max_iterations: int|None = None, debug: bool=False) -> LotsOptimizationState[P]:
+    def run(self, max_iterations: int|None = None, debug: bool=False, continued: bool=False) -> LotsOptimizationState[P]:
         raise Exception("Not implemented")
 
     def state(self) -> LotsOptimizationState[P]:

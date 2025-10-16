@@ -20,6 +20,7 @@ def _set_test_params(algo: LotsOptimizer):
     # disable limited number of tsps per worker to guarantee deterministic test behaviour
     params.max_tsps_per_worker = -1
     # params.tsp_solver_global_timeout = 2  # higher timeout in tests to avoid spurious failures?
+    params.rand_seed = 42
 
 
 class OptimizationTest(unittest.TestCase):

@@ -101,6 +101,7 @@ class FileResultsPersistence(ResultsPersistence):
         json_str = model.model_dump_json(exclude_unset=True, exclude_none=True)
         with open(new_file, "w") as file:
             file.write(json_str)
+        self.load.cache_clear()
         return FileResultsPersistence._solution_id_for_file(new_file)
 
     def delete(self, snapshot_id: datetime, process: str, solution_id: str) -> bool:
@@ -108,6 +109,7 @@ class FileResultsPersistence(ResultsPersistence):
         if not os.path.isfile(file):
             return False
         os.remove(file)
+        self.load.cache_clear()
         return True
 
     @functools.lru_cache(maxsize=32)
@@ -153,6 +155,7 @@ class FileResultsPersistence(ResultsPersistence):
         json_full += "\n}"
         with open(new_file, "w") as file:
             file.write(json_full)
+        self.load_ltp.cache_clear()
         return FileResultsPersistence._solution_id_for_file(new_file)
 
     def delete_ltp(self, start_time: datetime, solution_id: str) -> bool:
@@ -160,6 +163,7 @@ class FileResultsPersistence(ResultsPersistence):
         if not os.path.isfile(file):
             return False
         os.remove(file)
+        self.load_ltp.cache_clear()
         return True
 
     @functools.lru_cache(maxsize=32)

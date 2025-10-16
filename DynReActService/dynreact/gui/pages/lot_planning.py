@@ -257,7 +257,7 @@ def update_link(snapshot: str|datetime|None, process: str|None) -> str:
     Output("plan-solutions-table", "columnDefs"),
     Output("plan-solutions-table", "rowData"),
     Output("plan-solutions-table", "selectedRows"),
-    State("selected-snapshot", "data"),
+    Input("selected-snapshot", "data"),
     Input("process-selector-lotplanning", "value"),
     Input("planning-initial_solution", "data")
     #Input("create-existing-sols", "value"),

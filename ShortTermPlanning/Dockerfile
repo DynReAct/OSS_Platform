@@ -45,6 +45,10 @@ ENV PIP_INDEX_URL=https://pypi.org/simple \
     POETRY_VIRTUALENVS_CREATE=1 \
     POETRY_CACHE_DIR=/tmp/poetry_cache
 
+RUN pip install --upgrade pip wheel setuptools && \
+    pip install --no-cache-dir "poetry==2.1.1" && \
+    poetry --version
+
 RUN poetry config installer.parallel false
 
 COPY pyproject.toml ./

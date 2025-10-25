@@ -1,18 +1,7 @@
 FROM python:3.12.3 AS builder
 LABEL authors="Hector Flores"
 
-RUN pip install poetry==2.1.1
-
-ENV PIP_REQUIRE_HASES=
-
-ENV PIP_INDEX_URL=https://pypi.org/simple \
-    PIP_TRUSTED_HOST="pypi.org files.pythonhosted.org" \
-    PIP_DEFAULT_TIMEOUT=120 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=1 \
-    POETRY_VIRTUALENVS_CREATE=1 \
-    POETRY_CACHE_DIR=/tmp/poetry_cache
+# RUN pip install poetry==2.1.1
 
 # Install system dependencies
 RUN apt update && apt upgrade -y && \
@@ -44,9 +33,26 @@ RUN git config --global http.postBuffer 104857600 && \
 
 WORKDIR /app
 
+ENV PIP_REQUIRE_HASES=
+
+ENV PIP_INDEX_URL=https://pypi.org/simple \
+    PIP_TRUSTED_HOST="pypi.org files.pythonhosted.org" \
+    PIP_DEFAULT_TIMEOUT=120 \
+    PIP_RETRIES=10 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_IN_PROJECT=1 \
+    POETRY_VIRTUALENVS_CREATE=1 \
+    POETRY_CACHE_DIR=/tmp/poetry_cache
+
+RUN poetry config installer.parallel false
+
 COPY pyproject.toml ./
 
-RUN poetry install --only main --no-root --no-interaction && rm -rf $POETRY_CACHE_DIR
+RUN for i in 1 2 3; do \
+      poetry install --only main --no-root --no-interaction --no-ansi && break || \
+      (echo "Poetry failed (attempt $i) — cleaning cache & retrying..." && rm -rf "$POETRY_CACHE_DIR" && sleep 5); \
+    done
 
 FROM python:3.12.3
 

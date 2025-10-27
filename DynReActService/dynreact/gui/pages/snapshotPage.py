@@ -116,7 +116,9 @@ def _material_overview(categories: list[MaterialCategory]):
     State("selected-snapshot", "data")
 )
 def set_snapshot_options(tz: str|None, _, snapshot: str|None):
-    if snapshot is None or not dash_authenticated(config):
+    if not dash_authenticated(config):
+        return dash.no_update, dash.no_update,dash.no_update,dash.no_update, 30_000
+    if snapshot is None:
         return dash.no_update, dash.no_update,dash.no_update,dash.no_update,dash.no_update
     zi = None
     try:

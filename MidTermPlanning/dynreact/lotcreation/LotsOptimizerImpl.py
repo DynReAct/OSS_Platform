@@ -159,7 +159,7 @@ class TabuSearch(LotsOptimizer):
         TabuList: set[TabuSwap] = self._tabu_list
         MinCount = 0
         iterations_without_shuffle: int = 0
-        max_iterations_without_shuffle: int = int(ntotal/2) if ntotal >= 20 else ntotal
+        max_iterations_without_shuffle: int = min(50, int(ntotal/2)) if ntotal >= 20 else ntotal
         rnd = random.Random(x=self._params.rand_seed)
         while niter < ntotal and not interrupted:
             # planning: ProductionPlanning = self._costs.evaluate_order_assignments(self._process, s_best, self._targets, self._snapshot)

@@ -16,6 +16,7 @@ from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.AggregationPersistence import AggregationPersistence
 from dynreact.base.impl.AggregationProviderImpl import AggregationProviderImpl
 from dynreact.base.model import Snapshot, Site, ProductionPlanning, ProductionTargets, Material, Lot
+from dynreact.lots_optimization import LotCreator
 
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.plugins import Plugins
@@ -49,6 +50,15 @@ class DynReActSrvState:
         self._stp_page = None
         self._aggregation: AggregationProvider|None = None
         self._aggregation_persistence: AggregationPersistence|None = None
+        self._optimization_state = LotCreator()
+        self._lots_batch_job = None
+
+    def start(self):
+        from dynreact.batch import LotsBatchOptimizationJob
+        self._lots_batch_job = LotsBatchOptimizationJob(self._config, self)
+
+    def get_lot_creator(self) -> LotCreator:
+        return self._optimization_state
 
     def get_snapshot_provider(self) -> SnapshotProvider:
         if self._snapshot_provider is None:

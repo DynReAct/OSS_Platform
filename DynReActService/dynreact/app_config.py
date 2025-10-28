@@ -22,6 +22,13 @@ class DynReActSrvConfig:
     lot_sinks: list[str] = ["default+file:./results"]
     max_snapshot_caches: int = 3
     max_snapshot_solutions_caches: int = 10
+    lots_batch_config: str = ""   # TODO option to specify initialization method
+    """
+    Configuration for periodic batch lot creation processes.
+    Format: <time of day>;<process id1>:<max_iterations>:<max duration>,<process id2>:<max duration>,... . 
+    Multiple configs to be separated by a single space. 
+    Example: 06:00;PROC1:1000:15m,PROC2:250:10m;
+    """
     out_directory: str = "./out"
     cors: bool = False
     auth_method: Literal["dummy", "ldap", "ldap_simple"]|None = None
@@ -57,6 +64,7 @@ class DynReActSrvConfig:
                  out_directory: str|None = None,
                  max_snapshot_caches: int|None = None,
                  max_snapshot_solutions_caches: int|None = None,
+                 lots_batch_config: str|None = None,
                  cors: bool|None = None,
                  auth_method: Literal["dummy", "ldap", "ldap_simple"]|None = None,
                  auth_max_user_length: int|None = None,
@@ -101,6 +109,9 @@ class DynReActSrvConfig:
             lot_sinks = [sink.strip() for sink in os.getenv("LOT_SINKS", DynReActSrvConfig.lot_sinks[0]).split(",")]
         elif isinstance(lot_sinks, str):
             lot_sinks = [lot_sinks]
+        if lots_batch_config is None:
+            lots_batch_config = os.getenv("LOTS_BATCH_CONFIG", DynReActSrvConfig.lots_batch_config)
+        self.lots_batch_config = lots_batch_config
         self.config_provider: str = config_provider
         self.snapshot_provider: str = snapshot_provider
         self.downtime_provider = downtime_provider

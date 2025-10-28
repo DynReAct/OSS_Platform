@@ -5,4 +5,5 @@ from dynreact.state import DynReActSrvState
 config: DynReActSrvConfig = ConfigProvider.config
 plugins = Plugins(config)
 state = DynReActSrvState(config, plugins)
+state.start()
 #

@@ -25,9 +25,13 @@ class DynReActSrvConfig:
     lots_batch_config: str = ""   # TODO option to specify initialization method
     """
     Configuration for periodic batch lot creation processes.
-    Format: <time of day>;<process id1>:<max_iterations>:<max duration>,<process id2>:<max duration>,... . 
+    Format: <time of day>;<process id1>:<max_iterations>:<max duration>,<process id2>:<max duration>,...[;test] .
+    If the `test` flag is set, then the batch job will run once on startup, based on the latest snapshot available. 
     Multiple configs to be separated by a single space. 
-    Example: 06:00;PROC1:1000:15m,PROC2:250:10m;
+    Examples: 
+        06:00;PROC1:1000:15m,PROC2:250:10m;
+        06:00;PROC1:1000:15m,PROC2:250:10m;test
+        
     """
     out_directory: str = "./out"
     cors: bool = False

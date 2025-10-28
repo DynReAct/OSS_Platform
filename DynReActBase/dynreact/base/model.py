@@ -8,7 +8,8 @@ The classes defined in this module are serializable and can be made accessible v
 """
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone, date
-from typing import Any, TypeVar, Generic, Literal, Sequence
+from numbers import Number
+from typing import Any, TypeVar, Generic, Literal, Sequence, Mapping
 
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 
@@ -370,9 +371,10 @@ class ProductionPlanning(Model, Generic[P]):
     "Initial conditions for the optimization"
 
     # TODO cache results?
-    def get_lots(self) -> dict[int, list[Lot]]:
+    def get_lots(self, orders: dict[str, Order]|None=None) -> dict[int, list[Lot]]:
         """
         :return: dictionary with keys = equipment ids, values = lots
+        If the orders field is provided, then the lot weights will be filled, as well (missing orders are ignored, however)
         """
         result: dict[int, dict[str, dict[int, str]]] = {}  # keys: equipment, lot_id, lot_idx, order
         for order, assignment in self.order_assignments.items():
@@ -391,10 +393,13 @@ class ProductionPlanning(Model, Generic[P]):
         for plant_id, lots in result.items():
             lots_sorted: list[str] = sorted(lots)
             plant_lots: list[Lot] = []
-            for lot_id in lots_sorted:  # TODO test
+            for lot_id in lots_sorted:
                 order_data: dict[int, str] = lots[lot_id]
                 lot_indices: list[int] = sorted(order_data)
-                lot = Lot(id=lot_id, equipment=plant_id, active=True, status=0, orders=[order_data[idx] for idx in lot_indices])
+                lot_weight = None
+                if orders is not None:
+                    lot_weight = sum(orders[order].actual_weight if order in orders else 0 for order in order_data.values())
+                lot = Lot(id=lot_id, equipment=plant_id, active=True, status=0, orders=[order_data[idx] for idx in lot_indices], weight=lot_weight)
                 plant_lots.append(lot)
             result_sorted[plant_id] = plant_lots
         return result_sorted
@@ -478,6 +483,20 @@ class ProcessLotCreationSettings(Model):
     "The preselected target size in tons for the lot creation. It can be adapted by the user. Either a global setting for the process step, or individual settings per equipment."
     default_iterations: int|None=None
     "Default number of iterations for the process step"
+
+    def get_equipment_targets(self, equipment_id: int, default_value: float|None=None) -> float|None:
+        if isinstance(self.total_size, Number):
+            return self.total_size
+        if isinstance(self.total_size, Mapping) and equipment_id in self.total_size:
+            return self.total_size[equipment_id]
+        return default_value
+
+    def get_equipment_lot_sizes(self, equipment_id: int, default_value: TargetLotSize|None=None) -> TargetLotSize|None:
+        if isinstance(self.lot_sizes, TargetLotSize):
+            return self.lot_sizes
+        if isinstance(self.lot_sizes, Mapping) and equipment_id in self.lot_sizes:
+            return self.lot_sizes[equipment_id]
+        return default_value
 
 
 class LotCreationSettings(Model):

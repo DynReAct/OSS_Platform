@@ -5,7 +5,6 @@ from dash import dcc, html, Output, Input, State, clientside_callback, Clientsid
 from flask import Flask
 
 
-from dynreact.app import config
 from dynreact.gui.pages.session_state import language, init_stores, site, selected_snapshot, \
     selected_snapshot_obj, selected_process
 
@@ -15,9 +14,8 @@ server = Flask(__name__)
 app = dash.Dash(__name__, server=server, routes_pathname_prefix="/", requests_pathname_prefix="/dash/",
                 assets_folder="assets", suppress_callback_exceptions=False, title="DynReAct",
                 use_pages=True, pages_folder="pages")
-# app = dash.Dash(__name__, server=server,  url_base_pathname="/dash/",
-#                 assets_folder="assets", suppress_callback_exceptions=False, title="DynReAct",
-#                 use_pages=True, pages_folder="pages")
+
+from dynreact.app import config
 
 if config.auth_method is not None:
     secret_key = os.getenv("FLASK_SESSION_KEY")

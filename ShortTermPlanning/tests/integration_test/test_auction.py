@@ -234,7 +234,7 @@ def test_scenario_06():
         "verbose": 3,
         "runningWait": "10",
         "cloningWait": "30",
-        "auctionWait": "50",
+        "auctionWait": "200",
         "counterbidWait": "15",
         "smallWait": "5",
         "exitWait": "10",

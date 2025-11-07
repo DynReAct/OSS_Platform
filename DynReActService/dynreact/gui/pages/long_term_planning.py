@@ -33,6 +33,7 @@ allowed_shift_durations: list[int] = [1, 2, 4, 8, 12, 24, 48, 72, 168]
 
 # TODO storage initialization from snapshot
 # TODO pass plant availabilities to LTP
+# TODO test custom availabilities in conjunction with the new ShiftProvider
 def layout(*args, **kwargs):
     horizon_weeks: int = int(kwargs.get("weeks", 4))    # planning horizon in weeks
     total_production: float = kwargs.get("total", 100_000)
@@ -133,6 +134,8 @@ def layout(*args, **kwargs):
         # contains a list of json serialized PlantAvailability objects for the currently selected plant, or None,
         # as input for the calendar popup
         dcc.Store(id="ltp-plant-availability", storage_type="memory"),
+        # dict[date as string, e.g. "2023-12-01" => hours]
+        dcc.Store(id="ltp-plant-shifts", storage_type="memory"),
         # contains a json serialized PlantAvailability object for the currently selected plant, or None,
         # as output from the calendar popup
         dcc.Store(id="ltp-availability-buffer", storage_type="memory"),
@@ -486,6 +489,7 @@ def _get_start_end_time(start_time: datetime|str, horizon: str|int) -> tuple[dat
 
 
 @callback(Output("ltp-plant-availability", "data"),
+        Output("ltp-plant-shifts", "data"),
         Input("ltp-selected_plant", "data"),           # user clicked on a plant node in the graph
         Input("ltp-calendar-clear", "n_clicks"),
         State("ltp-start-time", "value"),
@@ -493,19 +497,28 @@ def _get_start_end_time(start_time: datetime|str, horizon: str|int) -> tuple[dat
         config_prevent_initial_callbacks=True)
 def init_calendar(selected_plant: int|None, _, start_time: datetime|str, horizon: str|int):
     if selected_plant is None or start_time is None or horizon is None or not dash_authenticated(config):
-        return None
+        return None, None
     selected_plant = int(selected_plant)
     start, end = _get_start_end_time(start_time, horizon)
     if start is None or end is None:
-        return None
+        return None, None
     availabilities: PlantAvailabilityPersistence = state.get_availability_persistence()
     changed = GuiUtils.changed_ids()
     if "ltp-calendar-clear" in changed:
         availabilities.delete(selected_plant, start, end)
-        return None
+        return None, None
     av: list[EquipmentAvailability] = availabilities.load(selected_plant, start, end)
     av_json = TypeAdapter(list[EquipmentAvailability]).dump_json(av).decode("utf-8")
-    return av_json
+    # TODO timezone
+    shifts = state.get_shifts_provider().load(selected_plant, datetime.combine(start, datetime.min.time()), end=datetime.combine(end, datetime.min.time()))
+    shifts_by_days = {}
+    for shift in shifts:
+        day_start = shift.period[0].replace(hour=0, minute=0, second=0, microsecond=0)
+        if day_start not in shifts_by_days:
+            shifts_by_days[day_start] = 0
+        shifts_by_days[day_start] += shift.worktime.total_seconds()/3600
+    shifts_by_days = {day.strftime("%Y-%m-%d"): hours for day, hours in shifts_by_days.items()}
+    return av_json, shifts_by_days
 
 
 clientside_callback(
@@ -515,6 +528,7 @@ clientside_callback(
     ),
     Output("ltp-start-time", "title"),   # dummy
     Input("ltp-plant-availability", "data"),
+    Input("ltp-plant-shifts", "data"),
     State("ltp-selected_plant", "data"),
     State("ltp-start-time", "value"),
     State("ltp-horizon-weeks", "value"),
@@ -597,15 +611,15 @@ def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
             State("ltp-horizon-weeks", "value")
 )
 # TODO currently returns a flat structure, i.e. one div per plant. Better: make it a grid, with 2 divs per plant, also divide between 3 or so columns
-def set_initial_availabilities(_: Any, start_time: datetime|str, horizon: str|int):
+def set_initial_availabilities(_: Any, start_time: datetime|str, horizon: str|int):  # TODO take into account shifts provider
     persistence = state.get_availability_persistence()
     start, end = _get_start_end_time(start_time, horizon)
     if start is None or end is None:
         return "Not available"
     plants: dict[int, Equipment] = {p.id: p for p in state.get_site().equipment}
     plant_data: dict[int, list[EquipmentAvailability]] = persistence.load_all(start, end)
-    days = end - start
-    hours_per_plant: dict[int, timedelta] = {pid: days for pid in plants.keys() if pid not in plant_data}
+    shifts = state.get_shifts_provider().load_all(datetime.combine(start, datetime.min.time()), end=datetime.combine(end, datetime.min.time()))
+    hours_per_plant: dict[int, timedelta] = {pid: sum((s.worktime for s in shifts.get(pid)), start=timedelta()) if pid in shifts else timedelta() for pid in plants.keys() if pid not in plant_data}
     hours_per_plant.update({pid: ModelUtils.aggregate_availabilities(avail, start, end) for pid, avail in plant_data.items()})
     # sort according to plants array
     hours_per_plant = dict(sorted(hours_per_plant.items(), key=lambda key_val: next(idx for idx, pid in enumerate(plants.keys()) if pid == key_val[0])))

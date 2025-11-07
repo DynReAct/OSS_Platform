@@ -53,8 +53,9 @@ class PlantCalendar extends HTMLElement {
     * @param {string} startTime
     * @param {(string|number)} horizonWeeks
     * @param {Object[]} availabilities
+    * @param {date "2023-12-01" => planned working hours} shifts
     */
-    setAvailabilities(startTime, horizonWeeks, availabilities, plant) {
+    setAvailabilities(startTime, horizonWeeks, availabilities, shifts, plant) {
         if (!(horizonWeeks > 0))
             throw new Error("horizonWeeks must be a positive number");
         JsUtils.clear(this.#grid);
@@ -85,6 +86,9 @@ class PlantCalendar extends HTMLElement {
                     JsUtils.createElement("div", {parent: frag, text: day, classes: "ltp-day-header"}));
         let cnt = 0;
         const date = new Date(startDate);
+        shifts = shifts || {};
+        let shift_iter = Object.keys(shifts)[Symbol.iterator]();
+        let current_shift_res = shift_iter.next().value;
         for (let week=0; week<weeksToDisplay; week++) {
             for (let dayOfWeek=0; dayOfWeek<7; dayOfWeek++) {
                 if (week === 0 && dayOfWeek < startDayOfWeek) {
@@ -96,12 +100,25 @@ class PlantCalendar extends HTMLElement {
                 const dateFormatted = date.getDate() + "." + (date.getMonth() + 1) + ".";
                 const formatted2 = JsUtils.formatDate(date, {skipTime: true});
                 const applicableAvailability = availabilities?.find(av => av.period[0] <= formatted2 && av.period[1] > formatted2);
-                const baselineHours1 = JsUtils.parseDurationHours(applicableAvailability?.daily_baseline, baselineHours);
-                let currentValue = baselineHours1;
-                if (applicableAvailability?.deltas && formatted2 in applicableAvailability.deltas) {
-                     const delta = applicableAvailability.deltas[formatted2]
-                     const deltaHours = JsUtils.parseDurationHours(delta, 0);
-                     currentValue += deltaHours;
+                let currentValue = 0;
+                if (applicableAvailability) {
+                    const baselineHours1 = JsUtils.parseDurationHours(applicableAvailability?.daily_baseline, baselineHours);
+                    currentValue = baselineHours1;
+                    if (applicableAvailability?.deltas && formatted2 in applicableAvailability.deltas) {
+                         const delta = applicableAvailability.deltas[formatted2]
+                         const deltaHours = JsUtils.parseDurationHours(delta, 0);
+                         currentValue += deltaHours;
+                    }
+                } else if (current_shift_res !== undefined) {
+                    // try to find an applicable shift
+                    while (current_shift_res < formatted2) {
+                         current_shift_res = shift_iter.next().value;
+                         if (current_shift_res === undefined)
+                            break;
+                    }
+                    if (current_shift_res === formatted2) {
+                        currentValue = shifts[current_shift_res];
+                    }
                 }
                 const dayContainer = JsUtils.createElement("div", {parent: frag, classes: "ltp-day", attributes: {"data-day": formatted2}});
                 JsUtils.createElement("div", {parent: dayContainer, text: dateFormatted});

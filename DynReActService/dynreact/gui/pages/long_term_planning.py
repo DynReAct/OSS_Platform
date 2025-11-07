@@ -2,7 +2,7 @@ import threading
 import traceback
 from calendar import monthrange  # , Day  # Python 3.12
 from datetime import datetime, timedelta, date
-from typing import Any
+from typing import Any, Sequence
 
 import dash
 from dash import html, dcc, callback, Output, Input, clientside_callback, ClientsideFunction, State
@@ -13,7 +13,8 @@ from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersiste
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
-from dynreact.base.model import LongTermTargets, EquipmentAvailability, StorageLevel, Storage, Equipment
+from dynreact.base.model import LongTermTargets, EquipmentAvailability, StorageLevel, Storage, Equipment, \
+    PlannedWorkingShift
 from pydantic import TypeAdapter
 
 from dynreact.app import state, config
@@ -611,7 +612,7 @@ def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
             State("ltp-horizon-weeks", "value")
 )
 # TODO currently returns a flat structure, i.e. one div per plant. Better: make it a grid, with 2 divs per plant, also divide between 3 or so columns
-def set_initial_availabilities(_: Any, start_time: datetime|str, horizon: str|int):  # TODO take into account shifts provider
+def set_initial_availabilities(_: Any, start_time: datetime|str, horizon: str|int):
     persistence = state.get_availability_persistence()
     start, end = _get_start_end_time(start_time, horizon)
     if start is None or end is None:
@@ -731,7 +732,8 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
         if ltp_thread is None and total_amount is not None:
             levels = TypeAdapter(dict[str, StorageLevel]).validate_json(storage_levels)
             availabilities: dict[int, list[EquipmentAvailability]] = state.get_availability_persistence().load_all(start, end)
-            availabilities_aggregated = PlantAvailabilityPersistence.aggregate([p.id for p in state.get_site().equipment], start, end, availabilities)
+            shifts: dict[int, Sequence[PlannedWorkingShift]] = state.get_shifts_provider().load_all(datetime.combine(start, datetime.min.time()), end=datetime.combine(end, datetime.min.time()))
+            availabilities_aggregated = PlantAvailabilityPersistence.aggregate([p.id for p in state.get_site().equipment], start, end, availabilities, shifts=shifts)
             run(DatetimeUtils.parse_date(start_time), horizon_weeks, shift_duration_hours, setpoints, total_production, levels, availabilities_aggregated)
     if "ltp-stop" in changed_ids and ltp_thread is not None:
         stop()

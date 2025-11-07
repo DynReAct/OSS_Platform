@@ -683,6 +683,12 @@ class Snapshot(Model, Generic[MATERIAL_PROPERTIES]):
         return list(selected_coils.values())
 
 
+class PlannedWorkingShift(Model):
+    equipment: int
+    period: tuple[datetime, datetime]
+    worktime: timedelta
+
+
 class LongTermTargets(Model):
     """
     Long term production targets for different product categories, as input for the long-term
@@ -701,6 +707,8 @@ class LongTermTargets(Model):
     """
     total_production: float
     "Total production target in tons."
+    shifts: Sequence[PlannedWorkingShift]|None=None
+    "The working shifts in the planned period, if they are fixed already."
 
 
 class MidTermTargets(LongTermTargets):

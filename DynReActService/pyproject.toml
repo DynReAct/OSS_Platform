@@ -35,6 +35,7 @@ mtp-scenario = "dynreact.cli:mtp_scenario"
 lot-sinks = "dynreact.cli:lot_sinks"
 show-material = "dynreact.cli:show_material"
 show-orders = "dynreact.cli:show_orders"
+show-shifts = "dynreact.cli:show_shifts"
 transition-costs = "dynreact.cli:transition_costs"
 transfer-lot = "dynreact.cli:transfer_lot"
 

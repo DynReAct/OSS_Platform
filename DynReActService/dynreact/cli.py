@@ -3,7 +3,7 @@ import glob
 import json
 import os.path
 import time
-import typing
+from typing import Sequence, Mapping, Any
 from datetime import timedelta, datetime, timezone
 from enum import Enum
 
@@ -21,7 +21,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.impl.Scenarios import MidTermScenario, MidTermBenchmark
 from dynreact.base.model import Snapshot, Material, OrderAssignment, Order, EquipmentProduction, ProductionTargets, \
-    ProductionPlanning, ObjectiveFunction, Site, LabeledItem, Lot, Process, Equipment
+    ProductionPlanning, ObjectiveFunction, Site, LabeledItem, Lot, Process, Equipment, PlannedWorkingShift
 from dynreact.plugins import Plugins
 
 
@@ -407,7 +407,41 @@ def show_material():
         _print_orders(mat, fields, wide=wide, equipment=eq)
 
 
-def _field_for_order(o: Order|Material, field: str) -> typing.Sequence[str]:
+def show_shifts():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-p", "--process", help="Filter by process stage", type=str, default=None)
+    parser.add_argument("-eq", "--equipment", help="Filter by equipment; separate multiple by commas.", type=str, default=None)
+    parser.add_argument("-s", "--start", help="Start time", type=str, default=None)
+    parser.add_argument("-e", "--end", help="End time", type=str, default=None)
+    parser.add_argument("-l", "--limit", help="Limit, max number of shifts to show", type=int, default=100)
+    parser.add_argument("-cp", "--config-provider", help="Config provider id, such as", type=str, default=None)
+    #parser.add_argument("-w", "--wide", help="Show wide cells, do not crop content", action="store_true")
+    args = parser.parse_args()
+    start: datetime | None = DatetimeUtils.parse_date(args.start)
+    end: datetime | None = DatetimeUtils.parse_date(args.end)
+    if start is None:
+        start = DatetimeUtils.now()
+    config = DynReActSrvConfig(config_provider=args.config_provider)
+    plugins = Plugins(config)
+    site = plugins.get_config_provider().site_config()
+    provider = plugins.get_shifts_provider()
+    equipment: list[Equipment]|None = _plants_for_ids(args.equipment, site)
+    procs = _processes_for_ids(args.process, site)
+    if procs is not None:
+        proc_ids = [p.name_short for p in procs]
+        equipment = [e for e in equipment if e.process in proc_ids] if equipment is not None else [e for proc in proc_ids for plants in site.get_process_equipment(proc) for e in plants]
+    all_shifts: dict[int, Sequence[PlannedWorkingShift]] = provider.load_all(start, end=end, equipments=[e.id for e in equipment], limit=args.limit)
+    print("Shifts:")
+    for plant, shifts in all_shifts.items():
+        equip = site.get_equipment(plant)
+        print(f"Equipment {equip.name_short or equip.id}:")
+        for shift in shifts:
+            hours = shift.worktime.total_seconds() / 3600
+            hours = int(hours) if hours == int(hours) else round(hours, 1)
+            print(f"|  {DatetimeUtils.format(shift.period[0], use_zone=False).replace("T", " ")}  |  {DatetimeUtils.format(shift.period[1], use_zone=False).replace("T", " ")} | {hours} |")
+
+
+def _field_for_order(o: Order|Material, field: str) -> Sequence[str]:
     if hasattr(o, field):
         return (field, )
     if isinstance(o, Order) and hasattr(o.material_properties, field):
@@ -415,8 +449,8 @@ def _field_for_order(o: Order|Material, field: str) -> typing.Sequence[str]:
     if "*" in field:
         start_wildcard: bool = field.startswith("*")
         end_wildcard: bool = field.endswith("*")
-        new_field = field.upper()
         if start_wildcard:
+            new_field = field.upper()
             new_field = new_field[1:]
         if end_wildcard:
             new_field = new_field[:-1]
@@ -425,6 +459,13 @@ def _field_for_order(o: Order|Material, field: str) -> typing.Sequence[str]:
                                 (end_wildcard or key.upper().endswith(new_field))] if isinstance(o, Order) and o.material_properties is not None and isinstance(o.material_properties, BaseModel) else [])
         return fields
     return ()
+
+
+def _processes_for_ids(process_arg: str|None, site: Site) -> list[Process]|None:
+    if not process_arg:
+        return None
+    process_ids = [p for p in (p.strip() for p in process_arg.split(",")) if p != ""]
+    return [_process_for_id(site.processes, p) for p in process_ids]
 
 
 def _process_for_id(processes: list[Process], process_id0: str) -> Process:
@@ -438,6 +479,12 @@ def _process_for_id(processes: list[Process], process_id0: str) -> Process:
     return proc
 
 
+def _plants_for_ids(equipment_arg: str|None, site: Site) -> list[Equipment]|None:
+    if not equipment_arg:
+        return None
+    plant_ids = [p for p in (p.strip() for p in equipment_arg.split(",")) if p != ""]
+    return [_plant_for_id(site.equipment, p) for p in plant_ids]
+
 def _plant_for_id(plants: list[Equipment], plant_id0: str) -> Equipment:
     plant = next((p for p in plants if str(p.id) == plant_id0), None)
     if plant is not None:
@@ -449,7 +496,7 @@ def _plant_for_id(plants: list[Equipment], plant_id0: str) -> Equipment:
     return plant
 
 
-def _print_field_name(f: str, wide:bool=False, values: list[typing.Any] | None=None) -> str:
+def _print_field_name(f: str, wide:bool=False, values: list[Any] | None=None) -> str:
     if "." in f:
         dot = f.rindex(".")
         f = f[dot+1:]
@@ -471,14 +518,14 @@ def _value_for_col(order: Order, f: str, equipment: list[Equipment]|None=None) -
         f = f[idx+1:]
         obj = getattr(obj, first, None)
     obj = getattr(obj, f, None) if obj is not None else None
-    if equipment is not None and (f == "current_equipment" or f == "allowed_equipment") and isinstance(obj, typing.Sequence):
+    if equipment is not None and (f == "current_equipment" or f == "allowed_equipment") and isinstance(obj, Sequence):
         obj = [next((f"{e.name_short} ({e.id})" for e in equipment if e.id == p and e.name_short is not None), str(p)) for p in obj]
     return obj
 
 def _format_value(v: float|int|str|None, l: int, wide: bool=False) -> str:
     if v is None:
         return "".join([" " for _ in range(l+2)])
-    if isinstance(v, typing.Mapping) or isinstance(v, typing.Sequence):
+    if isinstance(v, Mapping) or isinstance(v, Sequence):
         v = str(v)
     if isinstance(v, str):
         return (" {:" + str(l) + "." + str(l) + "s} ").format(v) if not wide else (" {:" + str(l) + "s} ").format(v)

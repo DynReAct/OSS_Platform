@@ -33,6 +33,7 @@ class DynReActSrvConfig:
         06:00;PROC1:1000:15m,PROC2:250:10m;test
         
     """
+    shifts_provider: str = "dummy:default"
     out_directory: str = "./out"
     cors: bool = False
     auth_method: Literal["dummy", "ldap", "ldap_simple"]|None = None
@@ -69,6 +70,7 @@ class DynReActSrvConfig:
                  max_snapshot_caches: int|None = None,
                  max_snapshot_solutions_caches: int|None = None,
                  lots_batch_config: str|None = None,
+                 shifts_provider: str|None = None,
                  cors: bool|None = None,
                  auth_method: Literal["dummy", "ldap", "ldap_simple"]|None = None,
                  auth_max_user_length: int|None = None,
@@ -126,6 +128,9 @@ class DynReActSrvConfig:
         self.availability_persistence = availability_persistence
         self.aggregation_persistence = aggregation_persistence
         self.lot_sinks = lot_sinks
+        if shifts_provider is None:
+            shifts_provider = os.getenv("SHIFTS_PROVIDER", DynReActSrvConfig.shifts_provider)
+        self.shifts_provider = shifts_provider
         if out_directory is None:
             out_directory = os.getenv("OUT_DIRECTORY", DynReActSrvConfig.out_directory)
         self.out_directory: str = out_directory

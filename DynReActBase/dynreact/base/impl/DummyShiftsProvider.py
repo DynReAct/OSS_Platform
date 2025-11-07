@@ -1,5 +1,6 @@
 import random
 from datetime import datetime, timedelta
+from functools import lru_cache
 from typing import Sequence
 
 from dynreact.base.NotApplicableException import NotApplicableException
@@ -49,9 +50,15 @@ class DummyShiftsProvider(ShiftsProvider):
                 if (end is not None and shift0 >= end) or (limit is not None and cnt >= limit):
                     done = True
                     break
+                shift1 = shift0 + self._delta
                 for e in equipments:
-                    worktime = self._delta if self._rand is None or self._rand.random() < 0.9 else timedelta()
-                    result[e].append(PlannedWorkingShift(equipment=e, period=(shift0, shift0 + self._delta), worktime=worktime))
+                    worktime = self._delta if self._rand is None else self._working_hours_for_shift(e, shift0, shift1)
+                    result[e].append(PlannedWorkingShift(equipment=e, period=(shift0, shift1), worktime=worktime))
                 cnt += 1
         return result
+
+    # need to cache to ensure consistent results, at least for some time
+    @lru_cache(maxsize=8192)
+    def _working_hours_for_shift(self, equipment: int, start: datetime, end: datetime) -> timedelta:
+        return self._delta if self._rand.random() < 0.9 else timedelta()
 

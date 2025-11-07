@@ -55,11 +55,13 @@ class LotsBatchOptimizationJob:
         wait_cnt: int = 0
         while True:
             now = DatetimeUtils.now()
-            if next_planned_invocation > now:
+            while next_planned_invocation > now:
                 self._stopped.wait((next_planned_invocation-now).total_seconds())
                 if self._stopped.is_set():
                     break
                 now = DatetimeUtils.now()
+            if self._stopped.is_set():
+                break
             try:
                 start = next_planned_invocation - timedelta(minutes=5) if not (self._config.test and self._runs == 0) else now - timedelta(days=10*365)
                 snap = next(snaps_provider.snapshots(start, now, order="desc"))
@@ -80,6 +82,7 @@ class LotsBatchOptimizationJob:
             self._runs += 1
             next_planned_invocation = self._next_invocation(now)
             self._process(snap)
+        print("Lot creation batch job exiting")
 
     def stop(self):
         self._stopped.set()

@@ -13,8 +13,8 @@ class ShiftsProvider:
         self._url = url
         self._site = site
 
-    def load_all(self, start: datetime, end: datetime|None=None, limit: int|None=500, equipments: Sequence[int]|None=None) -> dict[int, Sequence[PlannedWorkingShift]]:
+    def load_all(self, start: datetime, end: datetime|None=None, limit: int|None=100, equipments: Sequence[int]|None=None) -> dict[int, Sequence[PlannedWorkingShift]]:
         raise Exception("not implemented")
 
-    def load(self, equipment: int, start: datetime, end: datetime|None=None, limit: int|None=500) -> Sequence[PlannedWorkingShift]:
+    def load(self, equipment: int, start: datetime, end: datetime|None=None, limit: int|None=100) -> Sequence[PlannedWorkingShift]:
         return self.load_all(start, end=end, limit=limit, equipments=(equipment, )).get(equipment)

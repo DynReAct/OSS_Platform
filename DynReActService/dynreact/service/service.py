@@ -4,7 +4,7 @@ import threading
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Iterator, Literal, Annotated
+from typing import Iterator, Literal, Annotated, Sequence
 
 from starlette.responses import PlainTextResponse
 
@@ -13,7 +13,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, \
     MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction, AggregatedStorageContent, \
-    AggregatedMaterial, Histogram, ServiceMetrics, PrimitiveMetric
+    AggregatedMaterial, Histogram, ServiceMetrics, PrimitiveMetric, PlannedWorkingShift
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.params import Path, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -448,6 +448,45 @@ def get_longtermplanning_result(
     targets, levels = results_ctrl.load_ltp(start, solution_id)
     return LongTermPlanningResults(targets=targets, storage_levels=levels)
 
+@fastapi_app.get("/planned-shifts",
+                tags=["dynreact"],
+                summary="Get working shifts by equipment id")
+def planned_shifts(
+        process: str|None = Query(None, description="Process steps to be included. Equipment for all processes will be included if not specified."),
+        equipment: list[int|str]|None = Query(None, description="Equipment ids to be included. All equipments will be included in the response if not specified (unless the process filter is set)"),
+        start: str|datetime|None = Query(None, description="Start time. If neither start nor end time are specified, "
+                                     + "start is set to now.",  examples=["now", "now-31d", "2023-04-25T00:00Z"], openapi_examples={
+                "now": {"description": "Get next month's planning", "value": "now"},
+                "now-31d": {"description": "Get last month's planning", "value": "now-31d"},
+                "2023-04-25T00:00Z": {"description": "A specific timestamp", "value": "2023-04-25T00:00Z"},
+            }),
+        end: str|datetime|None = Query(None, description="End time, optional.", examples=["now+31d", "2023-04-27T00:00Z"], openapi_examples={
+                "now+31d": {"description": "A month ahead of now", "value": "now+31d"},
+                "2023-04-27T00:00Z": {"description": "A specific timestamp", "value": "2023-04-27T00:00Z"},
+            }),
+        limit: int=100,
+        username = username) -> dict[int, Sequence[PlannedWorkingShift]]:
+    if isinstance(start, str):
+        start = parse_datetime_str(start)
+    if isinstance(end, str):
+        end = parse_datetime_str(end)
+    if start is None:
+        if end is None:
+            start = DatetimeUtils.now()
+        else:
+            start = end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            if end-start < timedelta(days=2):
+                start = (start - timedelta(days=5)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if equipment is not None:
+        equipment = [_get_equipment_id(e) for e in equipment]
+    if process:
+        plants = state.get_site().get_process_equipment(process)
+        if len(plants) == 0:
+            raise HTTPException(404, f"No equipment found for process {process}")
+        equipment_p = [p.id for p in plants if equipment is None or p.id in equipment]
+        equipment = equipment_p
+    return state.get_shifts_provider().load_all(start, end=end, limit=limit, equipments=equipment)
+
 
 @fastapi_app.get("/metrics",
                 tags=["dynreact"],
@@ -547,3 +586,14 @@ def parse_duration(d: str) -> timedelta:
     if unit == "s" or unit == "S":
         return timedelta(seconds=digit)
     raise HTTPException(status_code=400, detail="Unknown time unit " + unit)
+
+def _get_equipment_id(equipment: int|str) -> int:
+    if isinstance(equipment, str):
+        try:
+            equipment = int(equipment)
+        except ValueError:
+            equipment_obj = state.get_site().get_equipment_by_name(equipment, do_raise=False)
+            if equipment_obj is None:
+                raise HTTPException(status_code=404, detail=f"Equipment not found: {equipment}")
+            equipment = equipment_obj.id
+    return equipment

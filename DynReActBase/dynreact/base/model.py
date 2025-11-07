@@ -523,7 +523,8 @@ class Site(LabeledItem):
     def get_process(self, process: str, do_raise: bool=False) -> Process|None:
         if process is None:
             return None
-        proc = next((p for p in self.processes if p.name_short == process or p.synonyms is not None and process in p.synonyms), None)
+        process = process.upper()
+        proc = next((p for p in self.processes if p.name_short.upper() == process or p.synonyms is not None and any(s.upper() == process for s in p.synonyms)), None)
         if proc is None and do_raise:
             raise Exception("Process not found: " + str(process))
         return proc
@@ -547,13 +548,16 @@ class Site(LabeledItem):
     def get_equipment_by_name(self, plant_name: str, do_raise: bool=False) -> Equipment|None:
         if plant_name is None:
             return None
-        plant = next((p for p in self.equipment if p.name_short == plant_name), None)
+        plant_name = plant_name.upper()
+        plant = next((p for p in self.equipment if p.name_short is not None and p.name_short.upper() == plant_name), None)
         if plant is None and do_raise:
             raise Exception("Plant not found by name: " + str(plant_name))
         return plant
 
-    def get_process_equipment(self, process: str) -> list[Equipment]:
-        return [p for p in self.equipment if p.process == process]
+    def get_process_equipment(self, process: str, do_raise: bool=False) -> list[Equipment]:
+        proc = self.get_process(process, do_raise=do_raise)
+        process = process.upper() if proc is None else proc.name_short.upper()
+        return [p for p in self.equipment if p.process.upper() == process]
 
     def get_storage(self, storage: str, do_raise: bool=False) -> Storage|None:
         if storage is None:

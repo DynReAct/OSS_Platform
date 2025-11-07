@@ -12,6 +12,7 @@ from dynreact.base.LotsOptimizer import LotsOptimizationAlgo
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.ResultsPersistence import ResultsPersistence
+from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.AggregationPersistence import AggregationPersistence
 from dynreact.base.impl.AggregationProviderImpl import AggregationProviderImpl
@@ -36,6 +37,7 @@ class DynReActSrvState:
         self._ltp: LongTermPlanning | None = None
         self._results_persistence: ResultsPersistence | None = None
         self._availability_persistence: PlantAvailabilityPersistence|None = None
+        self._shifts_provider: ShiftsProvider|None = None
         self._auction_obj : Any|None=None  # auction.Auction | None = None
         self._stp: Any|None=None #ShortTermPlanning | None = None
 
@@ -102,6 +104,11 @@ class DynReActSrvState:
         if self._ltp is None:
             self._ltp = self._plugins.get_long_term_planning()
         return self._ltp
+
+    def get_shifts_provider(self) -> ShiftsProvider:
+        if self._shifts_provider is None:
+            self._shifts_provider = self._plugins.get_shifts_provider()
+        return self._shifts_provider
 
     def get_stp_context_params(self):
         if self._stp is None:

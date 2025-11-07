@@ -28,7 +28,7 @@ class DummyShiftsProvider(ShiftsProvider):
         self._start_hours: tuple[int, ...] = (0, 8, 16)  # TODO configurable
         self._delta: timedelta = timedelta(hours=self._start_hours[1] - self._start_hours[0])
 
-    def load_all(self, start: datetime, end: datetime|None=None, limit: int|None=500, equipments: Sequence[int]|None=None) -> dict[int, Sequence[PlannedWorkingShift]]:
+    def load_all(self, start: datetime, end: datetime|None=None, limit: int|None=100, equipments: Sequence[int]|None=None) -> dict[int, Sequence[PlannedWorkingShift]]:
         start_of_day = start.replace(hour=0, minute=0, second=0, microsecond=0)
         shift_starts = [start_of_day.replace(hour=s) for s in self._start_hours]
         #first_shift = max(s for s in shift_starts if s <= start)

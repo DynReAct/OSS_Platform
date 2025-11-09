@@ -30,7 +30,6 @@ ltp_thread_name = "long-term-planning"
 ltp_thread: threading.Thread|None = None
 
 allowed_shift_durations: list[int] = [1, 2, 4, 8, 12, 24, 48, 72, 168]
-local_timezone: tzinfo = datetime.now(timezone.utc).astimezone().tzinfo
 
 
 # TODO storage initialization from snapshot
@@ -489,7 +488,7 @@ def _get_start_end_time(start_time: datetime|str, horizon: str|int) -> tuple[dat
 
 
 def _date_range_to_datetime(start: date, end: date) -> tuple[datetime, datetime]:
-    return datetime.combine(start, datetime.min.time()).replace(tzinfo=local_timezone), datetime.combine(end, datetime.min.time()).replace(tzinfo=local_timezone)
+    return datetime.combine(start, datetime.min.time()).replace(tzinfo=state.get_time_zone()), datetime.combine(end, datetime.min.time()).replace(tzinfo=state.get_time_zone())
 
 
 

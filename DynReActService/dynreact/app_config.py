@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 
 class DynReActSrvConfig:
 
+    time_zone: str|None = None
+    "By default, the local timezone is used. Example: \"Europe/Berlin\", \"America/Los_Angeles\"."
     config_provider: str = "default+file:./data/site.json"
     snapshot_provider: str = "default+file:./data/snapshots"
     downtime_provider: str = "default+file:./data/downtimes.json"
@@ -81,8 +83,13 @@ class DynReActSrvConfig:
                  ldap_search_base: str | None = None,
                  ldap_query: str | None = None,
                  plant_performance_models: list[str]|None = None,
-                 stp_frontend: str|None = None):
+                 stp_frontend: str|None = None,
+                 time_zone: str | None = None
+                 ):
         load_dotenv()
+        if time_zone is None:
+            time_zone = os.getenv("TIME_ZONE")
+        self.time_zone = time_zone
         if config_provider is None:
             config_provider = os.getenv("CONFIG_PROVIDER", DynReActSrvConfig.config_provider)
         if snapshot_provider is None:

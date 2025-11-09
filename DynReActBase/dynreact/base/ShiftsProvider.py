@@ -13,6 +13,9 @@ class ShiftsProvider:
         self._url = url
         self._site = site
 
+    def id(self):
+        return self._url
+
     def load_all(self, start: datetime, end: datetime|None=None, limit: int|None=100, equipments: Sequence[int]|None=None) -> dict[int, Sequence[PlannedWorkingShift]]:
         raise Exception("not implemented")
 

@@ -432,7 +432,7 @@ def show_shifts():
         equipment = [e for e in equipment if e.process in proc_ids] if equipment is not None else [e for proc in proc_ids for plants in site.get_process_equipment(proc) for e in plants]
     all_shifts: dict[int, Sequence[PlannedWorkingShift]] = provider.load_all(start, end=end, equipments=[e.id for e in equipment], limit=args.limit)
     local_tz: timezone = datetime.now(timezone.utc).astimezone().tzinfo
-    print("Shifts:")
+    print(f"Shifts (provider {provider.id()}):")
     for plant, shifts in all_shifts.items():
         equip = site.get_equipment(plant)
         print(f"Equipment {equip.name_short or equip.id}:")

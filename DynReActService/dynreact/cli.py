@@ -30,8 +30,8 @@ class Boolean(str, Enum):
     false = "false"
 
 
-def _trafo_args(parser: argparse.ArgumentParser|None=None, include_snapshot: bool=True) -> argparse.ArgumentParser:
-    parser = parser if parser is not None else argparse.ArgumentParser()
+def _trafo_args(parser: argparse.ArgumentParser|None=None, include_snapshot: bool=True, description: str|None=None) -> argparse.ArgumentParser:
+    parser = parser if parser is not None else argparse.ArgumentParser(description=description)
     parser.add_argument("-cp", "--config-provider", help="Config provider id, such as", type=str, default=None)
     parser.add_argument("-snp", "--snapshot-provider", help="Snapshot provider id, such as", type=str, default=None)
     if include_snapshot:
@@ -408,7 +408,7 @@ def show_material():
 
 
 def show_shifts():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Show planned working shifts. Timestamps are displayed in the local timezone.")
     parser.add_argument("-p", "--process", help="Filter by process stage", type=str, default=None)
     parser.add_argument("-eq", "--equipment", help="Filter by equipment; separate multiple by commas.", type=str, default=None)
     parser.add_argument("-s", "--start", help="Start time", type=str, default=None)
@@ -431,6 +431,7 @@ def show_shifts():
         proc_ids = [p.name_short for p in procs]
         equipment = [e for e in equipment if e.process in proc_ids] if equipment is not None else [e for proc in proc_ids for plants in site.get_process_equipment(proc) for e in plants]
     all_shifts: dict[int, Sequence[PlannedWorkingShift]] = provider.load_all(start, end=end, equipments=[e.id for e in equipment], limit=args.limit)
+    local_tz: timezone = datetime.now(timezone.utc).astimezone().tzinfo
     print("Shifts:")
     for plant, shifts in all_shifts.items():
         equip = site.get_equipment(plant)
@@ -438,7 +439,9 @@ def show_shifts():
         for shift in shifts:
             hours = shift.worktime.total_seconds() / 3600
             hours = int(hours) if hours == int(hours) else round(hours, 1)
-            print(f"|  {DatetimeUtils.format(shift.period[0], use_zone=False).replace('T', ' ')}  |  {DatetimeUtils.format(shift.period[1], use_zone=False).replace('T', ' ')} | {hours} |")
+            start = shift.period[0].astimezone(local_tz)
+            end = shift.period[1].astimezone(local_tz)
+            print(f"|  {DatetimeUtils.format(start, use_zone=False).replace('T', ' ')}  |  {DatetimeUtils.format(end, use_zone=False).replace('T', ' ')} | {hours} |")
 
 
 def _field_for_order(o: Order|Material, field: str) -> Sequence[str]:

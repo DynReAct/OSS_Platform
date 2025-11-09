@@ -1,7 +1,7 @@
 import threading
 import traceback
 from calendar import monthrange  # , Day  # Python 3.12
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, tzinfo, timezone
 from typing import Any, Sequence
 
 import dash
@@ -30,6 +30,7 @@ ltp_thread_name = "long-term-planning"
 ltp_thread: threading.Thread|None = None
 
 allowed_shift_durations: list[int] = [1, 2, 4, 8, 12, 24, 48, 72, 168]
+local_timezone: tzinfo = datetime.now(timezone.utc).astimezone().tzinfo
 
 
 # TODO storage initialization from snapshot
@@ -487,6 +488,11 @@ def _get_start_end_time(start_time: datetime|str, horizon: str|int) -> tuple[dat
     return start, end_time.date()
 
 
+def _date_range_to_datetime(start: date, end: date) -> tuple[datetime, datetime]:
+    return datetime.combine(start, datetime.min.time()).replace(tzinfo=local_timezone), datetime.combine(end, datetime.min.time()).replace(tzinfo=local_timezone)
+
+
+
 @callback(Output("ltp-plant-availability", "data"),
         Output("ltp-plant-shifts", "data"),
         Input("ltp-selected_plant", "data"),           # user clicked on a plant node in the graph
@@ -508,8 +514,8 @@ def init_calendar(selected_plant: int|None, _, start_time: datetime|str, horizon
         return None, None
     av: list[EquipmentAvailability] = availabilities.load(selected_plant, start, end)
     av_json = TypeAdapter(list[EquipmentAvailability]).dump_json(av).decode("utf-8")
-    # TODO timezone
-    shifts = state.get_shifts_provider().load(selected_plant, datetime.combine(start, datetime.min.time()), end=datetime.combine(end, datetime.min.time()))
+    start_dt, end_dt = _date_range_to_datetime(start, end)
+    shifts = state.get_shifts_provider().load(selected_plant, start_dt, end_dt)
     shifts_by_days = {}
     for shift in shifts:
         day_start = shift.period[0].replace(hour=0, minute=0, second=0, microsecond=0)
@@ -617,7 +623,8 @@ def set_initial_availabilities(_: Any, start_time: datetime|str, horizon: str|in
         return "Not available"
     plants: dict[int, Equipment] = {p.id: p for p in state.get_site().equipment}
     plant_data: dict[int, list[EquipmentAvailability]] = persistence.load_all(start, end)
-    shifts = state.get_shifts_provider().load_all(datetime.combine(start, datetime.min.time()), end=datetime.combine(end, datetime.min.time()))
+    start_dt, end_dt = _date_range_to_datetime(start, end)
+    shifts = state.get_shifts_provider().load_all(start_dt, end_dt)
     hours_per_plant: dict[int, timedelta] = {pid: sum((s.worktime for s in shifts.get(pid)), start=timedelta()) if pid in shifts else timedelta() for pid in plants.keys() if pid not in plant_data}
     hours_per_plant.update({pid: ModelUtils.aggregate_availabilities(avail, start, end) for pid, avail in plant_data.items()})
     # sort according to plants array
@@ -730,7 +737,8 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
         if ltp_thread is None and total_amount is not None:
             levels = TypeAdapter(dict[str, StorageLevel]).validate_json(storage_levels)
             availabilities: dict[int, list[EquipmentAvailability]] = state.get_availability_persistence().load_all(start, end)
-            shifts: dict[int, Sequence[PlannedWorkingShift]] = state.get_shifts_provider().load_all(datetime.combine(start, datetime.min.time()), end=datetime.combine(end, datetime.min.time()))
+            start_dt, end_dt = _date_range_to_datetime(start, end)
+            shifts: dict[int, Sequence[PlannedWorkingShift]] = state.get_shifts_provider().load_all(start_dt, end_dt)
             availabilities_aggregated = PlantAvailabilityPersistence.aggregate([p.id for p in state.get_site().equipment], start, end, availabilities, shifts=shifts)
             run(DatetimeUtils.parse_date(start_time), horizon_weeks, shift_duration_hours, setpoints, total_production, levels, availabilities_aggregated)
     if "ltp-stop" in changed_ids and ltp_thread is not None:
@@ -826,6 +834,7 @@ def stop() -> bool:
         ltp_thread.kill()
         ltp_thread = None
     return ltp_thread is None
+
 
 
 

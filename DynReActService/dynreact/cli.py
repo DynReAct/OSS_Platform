@@ -429,7 +429,7 @@ def show_shifts():
     procs = _processes_for_ids(args.process, site)
     if procs is not None:
         proc_ids = [p.name_short for p in procs]
-        equipment = [e for e in equipment if e.process in proc_ids] if equipment is not None else [e for proc in proc_ids for plants in site.get_process_equipment(proc) for e in plants]
+        equipment = [e for e in equipment if e.process in proc_ids] if equipment is not None else [eq for proc in proc_ids for eq in site.get_process_equipment(proc)]
     all_shifts: dict[int, Sequence[PlannedWorkingShift]] = provider.load_all(start, end=end, equipments=[e.id for e in equipment], limit=args.limit)
     local_tz: timezone = datetime.now(timezone.utc).astimezone().tzinfo
     print(f"Shifts (provider {provider.id()}):")

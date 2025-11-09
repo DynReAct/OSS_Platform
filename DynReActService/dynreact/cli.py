@@ -438,7 +438,7 @@ def show_shifts():
         for shift in shifts:
             hours = shift.worktime.total_seconds() / 3600
             hours = int(hours) if hours == int(hours) else round(hours, 1)
-            print(f"|  {DatetimeUtils.format(shift.period[0], use_zone=False).replace("T", " ")}  |  {DatetimeUtils.format(shift.period[1], use_zone=False).replace("T", " ")} | {hours} |")
+            print(f"|  {DatetimeUtils.format(shift.period[0], use_zone=False).replace('T', ' ')}  |  {DatetimeUtils.format(shift.period[1], use_zone=False).replace('T', ' ')} | {hours} |")
 
 
 def _field_for_order(o: Order|Material, field: str) -> Sequence[str]:

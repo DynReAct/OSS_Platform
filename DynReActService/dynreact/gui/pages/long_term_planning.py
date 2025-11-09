@@ -33,8 +33,6 @@ allowed_shift_durations: list[int] = [1, 2, 4, 8, 12, 24, 48, 72, 168]
 
 
 # TODO storage initialization from snapshot
-# TODO pass plant availabilities to LTP
-# TODO test custom availabilities in conjunction with the new ShiftProvider
 def layout(*args, **kwargs):
     horizon_weeks: int = int(kwargs.get("weeks", 4))    # planning horizon in weeks
     total_production: float = kwargs.get("total", 100_000)

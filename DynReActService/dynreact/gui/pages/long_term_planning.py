@@ -625,6 +625,22 @@ def set_initial_availabilities(_: Any, start_time: datetime|str, horizon: str|in
     start_dt, end_dt = _date_range_to_datetime(start, end)
     shifts = state.get_shifts_provider().load_all(start_dt, end_dt)
     hours_per_plant: dict[int, timedelta] = {pid: sum((s.worktime for s in shifts.get(pid)), start=timedelta()) if pid in shifts else timedelta() for pid in plants.keys() if pid not in plant_data}
+    for eq, delta in dict(hours_per_plant).items():  # correction for shifts that only partially belong to the month (night shifts)
+        if eq not in shifts or len(shifts[eq]) == 0:
+            continue
+        eq_shifts = shifts[eq]
+        first = eq_shifts[0]
+        last = eq_shifts[-1]
+        surplus = timedelta()
+        if first.period[0] < start_dt:
+            share_in_month = (first.period[1] - start_dt).total_seconds()/(first.period[1] - first.period[0]).total_seconds()
+            if 0 < share_in_month < 1:
+                surplus += (1-share_in_month) * first.worktime
+        if last.period[1] > end_dt:
+            share_in_month = (end_dt - last.period[0])/(last.period[1] - last.period[0])
+            if 0 < share_in_month < 1:
+                surplus += (1-share_in_month) * last.worktime
+        hours_per_plant[eq] = hours_per_plant[eq] - surplus
     hours_per_plant.update({pid: ModelUtils.aggregate_availabilities(avail, start, end) for pid, avail in plant_data.items()})
     # sort according to plants array
     hours_per_plant = dict(sorted(hours_per_plant.items(), key=lambda key_val: next(idx for idx, pid in enumerate(plants.keys()) if pid == key_val[0])))
@@ -738,6 +754,20 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
             availabilities: dict[int, list[EquipmentAvailability]] = state.get_availability_persistence().load_all(start, end)
             start_dt, end_dt = _date_range_to_datetime(start, end)
             shifts: dict[int, Sequence[PlannedWorkingShift]] = state.get_shifts_provider().load_all(start_dt, end_dt)
+            for eq, eq_shifts in dict(shifts).items():  # correction for shifts that only partially belong to the month (night shifts)
+                if len(shifts[eq]) == 0:
+                    continue
+                first = eq_shifts[0]
+                last = eq_shifts[-1]
+                start_correction = first.period[0] < start_dt < first.period[1]
+                end_correction = last.period[0] < end_dt < last.period[1]
+                if start_correction or end_correction:
+                    new_first = PlannedWorkingShift(equipment=eq, period=(start_dt, first.period[1]), worktime=((first.period[1]-start_dt).total_seconds()/(first.period[1]-first.period[0]).total_seconds())*first.worktime) \
+                            if start_correction else first
+                    new_last = PlannedWorkingShift(equipment=eq, period=(last.period[0], end_dt), worktime=((end_dt - last.period[0]).total_seconds()/(last.period[1]-last.period[0]).total_seconds())*last.worktime) \
+                        if end_correction else last
+                    new_shifts = [new_first] + list(eq_shifts)[1:-1] + [new_last]
+                    shifts[eq] = new_shifts
             availabilities_aggregated = PlantAvailabilityPersistence.aggregate([p.id for p in state.get_site().equipment], start, end, availabilities, shifts=shifts)
             run(DatetimeUtils.parse_date(start_time), horizon_weeks, shift_duration_hours, setpoints, total_production, levels, availabilities_aggregated)
     if "ltp-stop" in changed_ids and ltp_thread is not None:

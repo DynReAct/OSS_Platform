@@ -30,6 +30,7 @@ class LongTermPlanning:
         Parameters:
             id0: a unique run id
             structure: the production targets for the optimization period
+            initial_storage_levels: initial storage levels by id. Not really optional XXX
             shifts: if shifts is not specified, it may be part of the optimization target, or a pre-defined
                 algorithm for shift creation can be used, depending on the implementation.
             plant_availabilities: information about plant availabilities. Keys: plant id, values: availability.

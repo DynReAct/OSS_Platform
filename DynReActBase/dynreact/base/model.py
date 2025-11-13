@@ -711,8 +711,6 @@ class LongTermTargets(Model):
     """
     total_production: float
     "Total production target in tons."
-    shifts: Sequence[PlannedWorkingShift]|None=None
-    "The working shifts in the planned period, if they are fixed already."
 
 
 class MidTermTargets(LongTermTargets):

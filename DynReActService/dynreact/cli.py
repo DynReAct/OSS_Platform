@@ -12,8 +12,11 @@ from pydantic import BaseModel
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.base.AggregationProvider import AggregationLevel
 from dynreact.base.CostProvider import CostProvider
+from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationState
+from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
+from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.AggregationPersistence import AggregationInternal
 from dynreact.base.impl.AggregationProviderImpl import AggregationProviderImpl
@@ -21,7 +24,8 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.impl.Scenarios import MidTermScenario, MidTermBenchmark
 from dynreact.base.model import Snapshot, Material, OrderAssignment, Order, EquipmentProduction, ProductionTargets, \
-    ProductionPlanning, ObjectiveFunction, Site, LabeledItem, Lot, Process, Equipment, PlannedWorkingShift
+    ProductionPlanning, ObjectiveFunction, Site, LabeledItem, Lot, Process, Equipment, PlannedWorkingShift, \
+    LongTermTargets, MaterialCategory, StorageLevel
 from dynreact.plugins import Plugins
 
 
@@ -442,6 +446,69 @@ def show_shifts():
             start = shift.period[0].astimezone(local_tz)
             end = shift.period[1].astimezone(local_tz)
             print(f"|  {DatetimeUtils.format(start, use_zone=False).replace('T', ' ')}  |  {DatetimeUtils.format(end, use_zone=False).replace('T', ' ')} | {hours} |")
+
+
+def run_ltp():
+    parser = argparse.ArgumentParser(description="Run the long term planning")
+    parser.add_argument("-s", "--start", help="Start time", type=str, default=None),
+    parser.add_argument("-sd", "--shift-duration", help="Shift duration in hours", type=int, default=8),
+    parser.add_argument("-p", "--production", type=float, default=100_000)
+    # parser.add_argument("-w", "--wide", help="Show wide cells, do not crop content", action="store_true")
+    args = parser.parse_args()
+    start: datetime | None = DatetimeUtils.parse_date(args.start)
+    if start is None:
+        start = DatetimeUtils.now()
+    # TODO timezone
+    start_of_month = start.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    start_of_month = (start_of_month + timedelta(days=32)).replace(day=1)
+    end = (start_of_month + timedelta(days=32)).replace(day=1)   # beginning of next month
+    period = (start_of_month, end)
+    shift_duration = timedelta(hours=args.shift_duration)
+    config = DynReActSrvConfig()
+    plugins = Plugins(config)
+    site = plugins.get_config_provider().site_config()
+    cats: list[MaterialCategory] = site.material_categories
+    mat_targets = {}
+    total_production = args.production
+    for cat in cats:
+        classes = cat.classes
+        with_default_share = [c for c in classes if c.default_share is not None]
+        without_default_share = [c for c in classes if c not in with_default_share]
+        for c in with_default_share:
+            mat_targets[c.id] = c.default_share * total_production
+        remaining_share = max(0, 1 - sum(c.default_share for c in with_default_share))
+        if len(without_default_share) > 0:
+            per_class = remaining_share/len(without_default_share)
+            for c in without_default_share:
+                mat_targets[c.id] = per_class * total_production
+    targets = LongTermTargets(period=period, production_targets=mat_targets, total_production=total_production, source="cli")
+    initial_storages = {stg.name_short: StorageLevel(storage=stg.name_short, filling_level=0.5, timestamp=start_of_month, material_levels={c: level/total_production/2 for c, level in mat_targets.items()}) for stg in site.storages }
+    ltp: LongTermPlanning = plugins.get_long_term_planning()
+    shifts_provider: ShiftsProvider = plugins.get_shifts_provider()
+    shifts = shifts_provider.load_all(start_of_month, end=end)
+    if len(shifts) > 0:
+        shifts0 = [s.period for s in shifts.get(next(iter(shifts.keys())))]
+    else:
+        estimated_num_shifts = int((end - start_of_month) / shift_duration)
+        shifts0 = [(start_of_month + i * shift_duration, start_of_month + (i+1) * shift_duration) for i in range(estimated_num_shifts)]
+    for eq, eq_shifts in dict(shifts).items():  # correction for shifts that only partially belong to the month (night shifts)
+        if len(shifts[eq]) == 0:
+            continue
+        first = eq_shifts[0]
+        last = eq_shifts[-1]
+        start_correction = first.period[0] < start_of_month < first.period[1]
+        end_correction = last.period[0] < end < last.period[1]
+        if start_correction or end_correction:
+            new_first = PlannedWorkingShift(equipment=eq, period=(start_of_month, first.period[1]), worktime=((first.period[1]-start_of_month).total_seconds()/(first.period[1]-first.period[0]).total_seconds())*first.worktime) \
+                    if start_correction else first
+            new_last = PlannedWorkingShift(equipment=eq, period=(last.period[0], end), worktime=((end - last.period[0]).total_seconds()/(last.period[1]-last.period[0]).total_seconds())*last.worktime) \
+                if end_correction else last
+            new_shifts = [new_first] + list(eq_shifts)[1:-1] + [new_last]
+            shifts[eq] = new_shifts
+    availabilities_aggregated = PlantAvailabilityPersistence.aggregate([p.id for p in site.equipment], start.date(), end.date(), {}, shifts=shifts)
+    mtp, levels = ltp.run(f"ltp_cli_{DatetimeUtils.format(DatetimeUtils.now(), use_zone=False)}", targets, initial_storage_levels=initial_storages,
+                          shifts=shifts0, plant_availabilities=availabilities_aggregated)
+    print("Results", mtp)
 
 
 def _field_for_order(o: Order|Material, field: str) -> Sequence[str]:

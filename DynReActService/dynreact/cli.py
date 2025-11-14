@@ -27,6 +27,7 @@ from dynreact.base.model import Snapshot, Material, OrderAssignment, Order, Equi
     ProductionPlanning, ObjectiveFunction, Site, LabeledItem, Lot, Process, Equipment, PlannedWorkingShift, \
     LongTermTargets, MaterialCategory, StorageLevel
 from dynreact.plugins import Plugins
+from dynreact.auth.authentication import authenticate
 
 
 class Boolean(str, Enum):
@@ -43,6 +44,18 @@ def _trafo_args(parser: argparse.ArgumentParser|None=None, include_snapshot: boo
     parser.add_argument("-cost", "--cost-provider", help="Cost provider id, such as", type=str, default=None)
     parser.add_argument("-d", "--details", help="Show details", action="store_true")
     return parser
+
+
+def auth_test():
+    parser = argparse.ArgumentParser(description="Test authentication")
+    parser.add_argument("user", help="Username", type=str)
+    parser.add_argument("pw", help="Password", type=str)
+    parser.add_argument("-v", "--verbose", help="Activate verbose mode", action="store_true")
+    args = parser.parse_args()
+    if args.verbose:
+        # TODO
+        verbose = True
+    authenticate(DynReActSrvConfig(), args.user, args.pw)
 
 
 # TODO option to aggregate by storage content

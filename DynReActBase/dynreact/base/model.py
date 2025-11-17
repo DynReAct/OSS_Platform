@@ -227,6 +227,7 @@ class PlanningData(Model):
     # lots: list[list[str]] TODO?
     transition_costs: float = 0.0
     logistic_costs: float = 0.0
+    assignment_costs: float = 0.0
     lots_count: int = 0
     lot_weights: list[float] = []
     "Lot weights in tons."
@@ -307,6 +308,9 @@ class ObjectiveFunction(Model, extra="allow"):
     "Penalty for deviating from the targeted material structure"
     priority_costs: float|None = None
     "Penalty for order priority"
+    assignment_costs: float|None = None
+    "Costs for unfavourable order to equipment assignments (see CostProvider.assignment_costs())"
+
 
     @model_validator(mode="after")
     def set_additive_costs(self):

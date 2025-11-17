@@ -442,7 +442,7 @@ class LotsAllocator:
             prev_order = self._previous_orders.get(plant_id)
             prev_obj = self._orders[prev_order] if self._orders is not None else self._snapshot.get_order(prev_order,
                                                                                                           do_raise=True)
-            start_costs = np.array([self._costs.transition_costs(plant, prev_obj, order) for order in orders])
+            start_costs = np.array([self._costs.transition_costs(plant, prev_obj, order) + self._costs.assignment_costs(plant, order) for order in orders])
             start_costs[np.isnan(start_costs)] = 50
         num_orders = len(orders)
         if bound_factor is None:

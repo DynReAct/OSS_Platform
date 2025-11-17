@@ -280,10 +280,12 @@ class LotsOptimizationAlgo:
         planning = costs.evaluate_order_assignments(process, assignments, targets=targets, snapshot=snapshot, previous_orders=previous_orders) if costs is not None else None
         return planning, targets
 
-    def _random_start_orders(self, plants: dict[int, Equipment], targets: ProductionTargets, orders: dict[str, Order],
+    def _random_start_orders(self, plants: dict[int, Equipment], targets: ProductionTargets, orders: dict[str, Order], snapshot: Snapshot,
                              snapshot_provider: SnapshotProvider, costs: CostProvider, start_orders: dict[int, str]|None, previous_orders: dict[int, str]|None) -> dict[int, str]:
         start_orders = start_orders or {}
+        all_prev_orders = previous_orders.values() if previous_orders is not None else tuple()
         if targets.material_weights is not None:
+            # TODO consider assignment costs in this path, too
             # try to assign start orders corresponding to different targeted material classes
             cats = self._site.material_categories
             total_targets_by_cat = {cat.id: sum(targets.material_weights[cl.id] for cl in cat.classes if cl.id in targets.material_weights
@@ -319,17 +321,18 @@ class LotsOptimizationAlgo:
         plants2 = [p for p in plants.keys() if p not in start_orders]
         for p in plants2:
             prev = previous_orders.get(p) if previous_orders is not None else None
+            plant_obj = plants[p]
             if prev is not None:
-                prev_obj = orders[prev]
-                plant_obj = plants[p]
-                transition_costs: dict[str, float] = {oid: costs.transition_costs(plant_obj, prev_obj, order) for oid, order in orders.items() if p in order.allowed_equipment}
+                prev_obj = snapshot.get_order(prev)
+                transition_costs: dict[str, float] = {oid: costs.transition_costs(plant_obj, prev_obj, order) + costs.assignment_costs(plant_obj, order) for oid, order in orders.items() if p in order.allowed_equipment}
                 if len(transition_costs) > 0:
                     lowest_transition_order: str = min(transition_costs, key=transition_costs.get)
                     start_orders[p] = lowest_transition_order
                     continue
-            random_order: Order | None = next((o for o in orders.values() if p in o.allowed_equipment and o.id not in start_orders.values()), None)
-            if random_order is not None:
-                start_orders[p] = random_order.id
+            ass_costs: dict[str, float] = {oid: costs.assignment_costs(plant_obj, order) for oid, order in orders.items() if oid not in start_orders.values() and p in order.allowed_equipment}
+            if len(ass_costs) > 0:
+                lowest_assignment_order: str = min(ass_costs, key=ass_costs.get)
+                start_orders[p] = lowest_assignment_order
         return start_orders
 
     def heuristic_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider, snapshot_provider: SnapshotProvider,
@@ -348,8 +351,9 @@ class LotsOptimizationAlgo:
         :param orders_custom_priority
         :return:
         """
+        all_prev_orders = previous_orders.values() if previous_orders is not None else tuple()
         # We remove orders from this dict as they are assigned to plants
-        order_objects: dict[str, Order] = {order.id: order for order in snapshot.orders if order.id in orders}
+        order_objects: dict[str, Order] = {order.id: order for order in snapshot.orders if order.id in orders and order.id not in all_prev_orders}
         # for faster access, remember assigned orders
         orders_done: dict[str, Order] = {}
         # We remove plants from this list as soon as there are no more orders available for them (by checking available_tons_per_plant[plant] > 0)
@@ -378,7 +382,7 @@ class LotsOptimizationAlgo:
                 if other_plant in available_tons_by_plant:
                     available_tons_by_plant[other_plant] = available_tons_by_plant[other_plant] - o.actual_weight
 
-        start_orders = self._random_start_orders(plants, targets, order_objects, snapshot_provider, costs, start_orders, previous_orders)
+        start_orders = self._random_start_orders(plants, targets, order_objects, snapshot, snapshot_provider, costs, start_orders, previous_orders)
         for plant in [plant for plant in plants.keys() if plant not in start_orders]:
             plants.pop(plant)
         for plant, order_id in start_orders.items():
@@ -404,6 +408,9 @@ class LotsOptimizationAlgo:
                     print("No valid transition to a new order found for plant", plant.id, "out of", applicable_orders_cnt, "applicable orders")
                 plants.pop(plant)
                 continue
+            assignment_costs = {o: costs.assignment_costs(plant_obj, order_objects[o]) for o in transition_costs.keys()}
+            if max(assignment_costs.values()) > 0:  # may be always 0
+                transition_costs = {oid: cost + assignment_costs[oid] for oid, cost in transition_costs.items()}
             lowest_transition_order: str = min(transition_costs, key=transition_costs.get)
             assign_to_plant(order_objects[lowest_transition_order], plant)
             if missing_tons_by_plant[plant] < 0.01:  # TODO configurable threshold

@@ -31,6 +31,21 @@ class CostProvider:
         """
         raise Exception("not implemented")
 
+    def assignment_costs(self, equipment: Equipment, order: Order) -> float:
+        """
+        Costs for assigning an order to a specific equipment. This cost component can be used to define
+        equipment preferences for specific orders at a given process stage. It must then be taken into consideration in
+        evaluate_equipment_assignments() and update_transition_costs().
+
+        Parameters:
+            equipment: equipment
+            order: order
+
+        Returns:
+            Costs (non-negative float)
+        """
+        return 0
+
     def logistic_costs(self, new_equipment: Equipment, order: Order, material: Material | None = None) -> float:
         """
         Calculates the transition costs for an order or individual material from an order to be transported to a new
@@ -42,9 +57,12 @@ class CostProvider:
                                    snapshot: Snapshot, total_priority: int|None = None, orders_custom_priority: dict[str, int]|None=None,
                                    previous_orders: dict[int, str]|None = None) -> ProductionPlanning:
         """
-        :param process:
-        :param assignments:
-        :return:
+
+        Parameters:
+            process:
+            assignments:
+
+        Returns:
         """
         #plants = [p for p in self._site.plants if p.process == process]
         plant_ids = list(targets.target_weight.keys())
@@ -101,16 +119,21 @@ class CostProvider:
         """
         Main function to be implemented in derived class taking into account global status.
         Note that this must set the PlantStatus.planning.target_fct value.
-        :param equipment:
-        :param assignments: order assignments; keys: order ids
-        :param target_weight:
-        :param snapshot:
-        :param current_coils: should only be present if the last order is not assumed to be processed entirely
-        :param track_structure:
-        :param main_category: only relevant if track_structure is true; used for nested structure targets
-        :param orders_custom_priority:
-        :param previous_order:
-        :return:
+
+        Parameters
+            equipment_targets:
+            process:
+            assignments: order assignments; keys: order ids
+            snapshot:
+            planning_period: the time interval
+            min_due_date:
+            track_structure:
+            main_category: only relevant if track_structure is true; used for nested structure targets
+            orders_custom_priority: user-defined custom priorities
+            previous_order:
+
+        Returns:
+            information about the equipment status, including the objective function value
         """
         raise Exception("Not implemented")
 

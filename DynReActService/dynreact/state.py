@@ -172,8 +172,8 @@ class DynReActSrvState:
             return updates[new_time]
         return snapshot
 
-    def transfer_lot(self, snapshot: Snapshot, sink: LotSink, lot: Lot, name: str, update_snapshot: bool=True) -> str:
-        new_lot_id = sink.transfer_new(lot, snapshot, external_id=name)
+    def transfer_lot(self, snapshot: Snapshot, sink: LotSink, lot: Lot, name: str, user: str|None, update_snapshot: bool=True) -> str:
+        new_lot_id = sink.transfer_new(lot, snapshot, external_id=name, user=user)
         updates = self._snapshot_updates
         if updates is not None and update_snapshot:
             lot = lot.copy(update={"id": new_lot_id})

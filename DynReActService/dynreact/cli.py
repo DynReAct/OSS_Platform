@@ -815,11 +815,15 @@ def transfer_lot():
     parser.add_argument("-ln", "--lot-name", help="Select a new lot name; only relevant if the \"lot\" parameter is not set", type=str, default=None)
     parser.add_argument("-e", "--equipment", help="Equipment name or id", type=str, default=None)
     parser.add_argument("-c", "--comment", help="Optional comment for lot", type=str, default=None)
+    parser.add_argument("-u", "--user", help="Specify a user name", type=str, default=None)
     parser = _trafo_args(parser=parser, include_snapshot=True)
     args = parser.parse_args()
     if args.lot is None and args.equipment is None:
         raise Exception("Must specify either \"equipment\" or \"lot\".")
     orders = [o for o in (o.strip() for o in args.order.split(",")) if len(o) > 0]
+    user = args.user
+    user = "cli" if user is None else f"{user} (cli)"
+    comment = args.comment
     config = DynReActSrvConfig(config_provider=args.config_provider, snapshot_provider=args.snapshot_provider, cost_provider=args.cost_provider)
     plugins = Plugins(config)
     site = plugins.get_config_provider().site_config()
@@ -839,9 +843,9 @@ def transfer_lot():
     name = args.lot if args.lot is not None else args.lot_name if args.lot_name is not None else "test"
     lot = Lot(id=name, equipment=plant.id, active=False, status=1, orders=orders, comment=args.comment)
     if args.lot is not None:
-        return lot_sink.transfer_append(lot, orders[0], snapshot)
+        return lot_sink.transfer_append(lot, orders[0], snapshot, user=user)
     else:
-        return lot_sink.transfer_new(lot, snapshot, external_id=name)
+        return lot_sink.transfer_new(lot, snapshot, external_id=name, comment=comment, user=user)
 
 def mtp_scenario():
     parser = argparse.ArgumentParser(description="Run a mid-term planning optimization benchmark scenario from a file.")

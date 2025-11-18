@@ -40,11 +40,14 @@ class FileLotSink(LotSink):
     def transfer_new(self, lot: Lot,
                  snapshot: Snapshot,
                  external_id: str|None = None,
-                 comment: str|None = None):
+                 comment: str|None = None,
+                 user: str|None = None):
         process = self._site.get_equipment(lot.equipment, do_raise=True).process
         FileLotSink._increase_stat(process, self._transfers)
         try:
             json_str = lot.model_dump_json(exclude_none=True, exclude_unset=True)
+            if user is not None:
+                json_str = json_str[:json_str.rindex("}")] + f", \"__user__\": \"{user}\"}}"
             id = external_id if external_id is not None else lot.id
             filename = PathUtils.to_valid_filename(id)
             filepath = os.path.join(self._folder, filename + ".json")
@@ -58,7 +61,8 @@ class FileLotSink(LotSink):
 
     def transfer_append(self, lot: Lot,
                         start_order: str,
-                        snapshot: Snapshot):
+                        snapshot: Snapshot,
+                        user: str|None = None):
         process = self._site.get_equipment(lot.equipment, do_raise=True).process
         FileLotSink._increase_stat(process, self._transfers)
         try:
@@ -69,6 +73,8 @@ class FileLotSink(LotSink):
                 existing_lot = Lot.model_validate_json(file.read())
             existing_lot.orders = existing_lot.orders + lot.orders[start_idx:]
             json_str = existing_lot.model_dump_json(exclude_none=True, exclude_unset=True)
+            if user is not None:
+                json_str = json_str[:json_str.rindex("}")] + f", \"__user__\": \"{user}\"}}"
             with open(filepath, mode="w") as file:
                 file.write(json_str)
             FileLotSink._increase_stat(process, self._lots_count)

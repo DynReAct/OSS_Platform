@@ -24,13 +24,15 @@ class LotSink:
                  lot: Lot,
                  snapshot: Snapshot,
                  external_id: str|None = None,
-                 comment: str|None = None) -> str:
+                 comment: str|None = None,
+                 user: str|None=None) -> str:
         raise Exception("not implemented")
 
     def transfer_append(self,
                         lot: Lot,
                         start_order: str,
-                        snapshot: Snapshot) -> str:
+                        snapshot: Snapshot,
+                        user: str|None=None) -> str:
         """
         :param lot:
         :param start_order: first order to be transferred

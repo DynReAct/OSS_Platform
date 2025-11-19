@@ -822,7 +822,7 @@ def transfer_lot():
         raise Exception("Must specify either \"equipment\" or \"lot\".")
     orders = [o for o in (o.strip() for o in args.order.split(",")) if len(o) > 0]
     user = args.user
-    user = "cli" if user is None else f"{user} (cli)"
+    user = "cli" if user is None else user
     comment = args.comment
     config = DynReActSrvConfig(config_provider=args.config_provider, snapshot_provider=args.snapshot_provider, cost_provider=args.cost_provider)
     plugins = Plugins(config)

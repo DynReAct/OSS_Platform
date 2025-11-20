@@ -13,7 +13,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, \
     MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction, AggregatedStorageContent, \
-    AggregatedMaterial, Histogram, ServiceMetrics, PrimitiveMetric, PlannedWorkingShift
+    AggregatedMaterial, Histogram, ServiceMetrics, PrimitiveMetric, PlannedWorkingShift, Lot
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.params import Path, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -181,6 +181,61 @@ def snapshot(response: Response, timestamp: str | datetime = Path(..., examples=
     else:
         response.headers["Cache-Control"] = "max-age=60"  # 1 minute
     return snapshot0
+
+@fastapi_app.get("/lots",
+                 tags=["dynreact"],
+                 response_model_exclude_unset=True,
+                 response_model_exclude_none=True,
+                 summary="Get lots from a specific snapshot")
+def lots(response: Response, snapshot: str|datetime|None = Query(None, description="Specify the snapshot id. If not set, the latest snapshot will be used", examples=[None, "now", "now-1d", "2023-12-04T23:59Z"],
+                                               openapi_examples={
+                "unset": {"description": "No snapshot timestamp specified, will use latest", "value": None},
+                "now": {"description": "Get the most recent snapshot", "value": "now"},
+                "now-1d": {"description": "Get yesterday's snapshot", "value": "now-1d"},
+                "2023-04-25T23:59Z": {"description": "A specific timestamp", "value": "2023-04-25T23:59Z"},
+            }), equipment: str|int|None = Query(None, description="Filter by equipment", examples=[None, 1, "PKL01"], openapi_examples={
+                "unset": {"description": "No equipment filter", "value": None},
+                "1": {"description": "Specify equipment by equipment id", "value": 1},
+                "PKL01": {"description": "Specify equipment by name", "value": "PKL01"}
+            }), process: str|int|None = Query(None, description="Filter by process stage", examples=[None, "PKL", 1], openapi_examples={
+                "unset": {"description": "No process filter", "value": None},
+                "PKL": {"description": "Specify process by name", "value": "PKL"},
+                "1": {"description": "Specify process by process id", "value": 1},
+            }), status: list[int]|None = Query(None, description="Lot status. Keys: 1: created; 2: blocked; 3: released; 4: in progress; 5: completed.",
+                    examples=[None, 1, 2, 3, 4, 5], openapi_examples={
+                "unset": {"description": "No status filter", "value": None},
+                "1": {"description": "Created", "value": [1]},
+            }), active: bool|None = Query(None, description="Filter on active/inactive lots"),
+            reschedulable: bool | None = Query(None, description="Filter on reschedulable lots"),
+            username = username) -> list[Lot]:
+    is_absolute_timestamp: bool = isinstance(snapshot, str) and not snapshot.startswith("now")
+    if isinstance(snapshot, str):
+        snapshot = None if snapshot == "" else parse_datetime_str(snapshot)
+    snap = state.get_snapshot(snapshot)
+    if equipment is not None:
+        equipment = None if equipment == "" else _get_equipment_id(equipment)
+    if process is not None:
+        process = None if process == "" else _get_process_name(process)
+    all_lots = snap.lots
+    if equipment is not None:
+        lots = all_lots.get(equipment, [])
+    elif process is not None:
+        equipments: list[int] = [p.id for p in state.get_site().get_process_equipment(process)]
+        lots = [lot for equip, eq_lots in all_lots.items() if equip in equipments for lot in eq_lots]
+    else:
+        lots = [lot for eq_lots in all_lots.values() for lot in eq_lots]
+    if is_absolute_timestamp:
+        response.headers["Cache-Control"] = "max-age=604800"  # 1 week
+    else:
+        response.headers["Cache-Control"] = "max-age=60"  # 1 minute
+    if status is not None:
+        lots = [l for l in lots if l.status in status]
+    if active is not None:
+        lots = [l for l in lots if l.active == active]
+    if reschedulable is not None:
+        sp = state.get_snapshot_provider()
+        lots = [l for l in lots if sp.is_lot_reschedulable(l) == reschedulable]
+    return lots
 
 
 @fastapi_app.get("/equipmentdowntimes",
@@ -597,3 +652,15 @@ def _get_equipment_id(equipment: int|str) -> int:
                 raise HTTPException(status_code=404, detail=f"Equipment not found: {equipment}")
             equipment = equipment_obj.id
     return equipment
+
+
+def _get_process_name(process: int|str) -> str:
+    if isinstance(process, int|float):
+        proc = next((p for p in state.get_site().processes if process in p.process_ids), None)
+    else:
+        process = process.upper()
+        proc = next((p for p in state.get_site().processes if p.name_short.upper() == process or (p.synonyms is not None and any(process == s.upper() for s in p.synonyms))), None)
+    if proc is None:
+        raise HTTPException(status_code=404, detail=f"Process not found: {process}")
+    return proc.name_short
+

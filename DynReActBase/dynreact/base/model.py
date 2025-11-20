@@ -209,6 +209,10 @@ class Lot(Model):
     comment: str|None = None
     weight: float|None = None
     "Convenience field for storing the total lot weight. Must be equal to the sum of the order weights. In tons."
+    start_time: datetime|None = None
+    "Planned start time for lot processing."
+    end_time: datetime|None = None
+    "Planned end time for lot processing."
 
 
 class MaterialOrderData(Model):

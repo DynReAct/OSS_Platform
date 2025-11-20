@@ -267,6 +267,53 @@ class SnapshotProvider:
             target_weights[plant_id] = total_weight
         return target_weights
 
+    def eligible_orders2(self,
+                         snapshot: Snapshot,
+                         process: str,
+                         planning_horizon: tuple[datetime, datetime]) -> list[str]:
+        """
+        Determine the orders eligible for planning/lot creation for a specific process.
+        This method can be overridden in a derived implementation.
+        :param snapshot:
+        :param process:
+        :param planning_horizon:
+        :return: list of eligible order ids
+        """
+        all_lots = snapshot.lots
+        plants: list[int] = [p.id for p in self._site.get_process_equipment(process)]
+        process_lots: dict[str, Lot] = {lot.id: lot for eq, eq_lots in all_lots.items() if eq in plants for lot in eq_lots}
+        previous_steps: list[Process] = [p for p in self._site.processes if p.next_steps is not None and process in p.next_steps]
+        previous_process_names = [p.name_short for p in previous_steps]
+        proc = self._site.get_process(process, do_raise=True)
+        current_process_ids = proc.process_ids
+        next_processes = [p for p in self._site.processes if p in proc.next_steps] if proc.next_steps is not None else []
+        next_process_ids = [pid for p in next_processes for pid in p.process_ids]
+        applicable_orders: list[str] = []
+        for order in snapshot.orders:
+            # step 1: check if order is already scheduled at the considered process stage
+            lot: Lot|None = None
+            if order.lots is not None:
+                current_lot = order.lots.get(process)
+                if current_lot is not None:
+                    lot = process_lots.get(current_lot)
+                    if lot is None or lot.processing_status in ("STARTED", "FINISHED") or not self.is_lot_reschedulable(lot):
+                        continue
+                    #applicable_orders0.add(o.id)  # first check if the order will be available in time
+                # step 2: check if order is scheduled at a predecessor process stage and will be finished in time for the considered planning interval
+                prev_proc = next((p for p in previous_process_names if p in order.lots), None)
+                prev_lot: Lot|None = order.lots.get(prev_proc, None)
+                if prev_lot is not None:
+                    if prev_lot.status < 3:  # not definitely scheduled yet
+                        continue
+                    if prev_lot.end_time is not None and prev_lot.end_time < planning_horizon[0]:  # TODO account for transport times?
+                        applicable_orders.append(order.id)
+                    continue
+            # step 3: check if order is available already at the considered process stage and not already at the next
+            if not any(p in current_process_ids for p in order.current_processes) or any(p in next_process_ids for p in order.current_processes):
+                continue
+            applicable_orders.append(order.id)
+        return applicable_orders
+
     def eligible_orders(self,
                         snapshot: Snapshot,
                         process: str,
@@ -282,6 +329,7 @@ class SnapshotProvider:
                         include_previous_processes_all: list[str] | None = None,
                         ) -> list[str]:
         """
+        @Deprecated
         Determine the orders eligible for planning/lot creation for a specific process.
         This method can be overridden in a derived implementation.
         TODO this is unfinished, will need more input data, such as predecessor stage planning, etc

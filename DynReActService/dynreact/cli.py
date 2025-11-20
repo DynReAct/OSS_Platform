@@ -116,7 +116,7 @@ def analyze_snapshot():
                 print(f"  {cat_obj.name or cat_obj.id if cat_obj is not None else cat}: {text}")
 
 def analyze_lots():
-    parser = _trafo_args()
+    parser = _trafo_args(description="Show lots")
     parser.add_argument("-e", "--equipment", help="Plant name or plant id", type=str, default=None)
     parser.add_argument("-p", "--process", help="Process(es), separated by \",\"", type=str, default=None)
     parser.add_argument("-so", "--skip-orders", help="Skip orders", action="store_true")
@@ -178,6 +178,7 @@ def analyze_lots():
             lot_line = f"    Lot {lot.id}, active={lot.active}, status={lot.status}, weight={total_weight:7.2f}t, order cnt={len(lot.orders):2}, material cnt={len(materials):2}"
             if hasattr(lot, "priority"):
                 lot_line += f", priority={getattr(lot, 'priority')}"
+            lot_line += f", start/end time: " + (f"{lot.start_time} - {lot.end_time}" if lot.start_time is not None and {lot.end_time is not None} else "unset")
             if not skip_comment and lot.comment is not None:
                 lot_line += f", comment={lot.comment}"
             if not args.skip_orders:
@@ -422,6 +423,49 @@ def show_material():
         all_mats = [m for m in snapshot.material if m.order == o_id]
         print(f"Order {o_id} has {len(all_mats)} materials and actual weight {sum(m.weight for m in all_mats):.2f}t.")
         _print_orders(mat, fields, wide=wide, equipment=eq)
+
+
+def eligible_orders():
+    parser = argparse.ArgumentParser(description="Show eligible orders for a rescheduling.")
+    parser.add_argument("process", help="Process step for planning", type=str)
+    parser.add_argument("-eq", "--equipment", help="Filter by equipment; separate multiple by commas.", type=str, default=None)
+    parser.add_argument("-s", "--snapshot", help="Snapshot id", type=str, default=None)
+    parser.add_argument("-hz", "--horizon", help="Time duration after snapshot timestamp for rescheduling. Example=1d (1 day)", default="1d")
+    parser.add_argument("-v", "--verbose", help="Print details", action="count", default=0)
+    parser.add_argument("-f", "--field", help="Select field(s) to be displayed. Separate multiple fields by \",\"", type=str, default=None)
+    parser.add_argument("-ef", "--equipment-fields", help="Select fields to be displayed based on the cost-relevant fields for the specified equipment", type=str, default=None)
+    parser.add_argument("-w", "--wide", help="Show wide cells, do not crop content", action="store_true")
+    args = parser.parse_args()
+    plugins = Plugins(DynReActSrvConfig())
+    site = plugins.get_config_provider().site_config()
+    process = _process_for_id(site.processes, args.process).name_short
+    snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
+    snapshot: Snapshot = plugins.get_snapshot_provider().load(time=snap)
+    start_delta: timedelta = DatetimeUtils.parse_duration(args.horizon)
+    planning = (snapshot.timestamp + start_delta, snapshot.timestamp + start_delta + timedelta(days=1))
+    equipment = _plants_for_ids(args.equipment, site)
+    o_by_id = {o.id: o for o in snapshot.orders}
+    eligible = plugins.get_snapshot_provider().eligible_orders2(snapshot, process, planning, equipment=[e.id for e in equipment] if equipment is not None else None)
+    eligible_orders = [o_by_id[o] for o in eligible]
+    eligible_weight = sum(o.actual_weight for o in eligible_orders)
+    print(f"Eligible orders {len(eligible)}, total weight: {eligible_weight:.2f}t.")
+    print(f"Order ids: {eligible}")
+    if args.verbose > 0:
+        fields = (f.strip() for f in args.field.split(",")) if args.field is not None else ["actual_weight", "lots", "current_equipment"]
+        first = eligible_orders[0]
+        fields = [f for flds in (_field_for_order(first, f) for f in fields) for f in flds] if fields is not None else None
+        if args.equipment_fields:
+            plant = _plant_for_id(site.equipment, args.equipment_fields)
+            relevant_fields: list[str] | None = plugins.get_cost_provider().relevant_fields(plant)
+            if relevant_fields is not None:
+                fields = fields if fields is not None else []
+                fields = fields + [f for f in relevant_fields if f not in fields]
+        if fields is not None and len(fields) == 0:
+            print("No matching field found for ", args.field)
+            return
+        filter_existing = args.field is None
+        wide: bool = args.wide or fields is not None and len(fields) < 4
+        _print_orders(eligible_orders, fields, wide=wide, filter_existent_properties=filter_existing)
 
 
 def show_shifts():

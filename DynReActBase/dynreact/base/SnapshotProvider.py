@@ -270,7 +270,8 @@ class SnapshotProvider:
     def eligible_orders2(self,
                          snapshot: Snapshot,
                          process: str,
-                         planning_horizon: tuple[datetime, datetime]) -> list[str]:
+                         planning_horizon: tuple[datetime, datetime],
+                         equipment: list[int]|None=None) -> list[str]:
         """
         Determine the orders eligible for planning/lot creation for a specific process.
         This method can be overridden in a derived implementation.
@@ -282,6 +283,7 @@ class SnapshotProvider:
         all_lots = snapshot.lots
         lots_by_ids: dict[str, Lot] = {lot.id: lot for lots in all_lots.values() for lot in lots}
         plants: list[int] = [p.id for p in self._site.get_process_equipment(process)]
+        equipment = equipment if equipment is not None else plants
         process_lots: dict[str, Lot] = {lot.id: lot for eq, eq_lots in all_lots.items() if eq in plants for lot in eq_lots}
         previous_steps: list[Process] = [p for p in self._site.processes if p.next_steps is not None and process in p.next_steps]
         previous_process_names = [p.name_short for p in previous_steps]
@@ -291,6 +293,9 @@ class SnapshotProvider:
         next_process_ids = [pid for p in next_processes for pid in p.process_ids]
         applicable_orders: list[str] = []
         for order in snapshot.orders:
+            # step 0: any equipment allowed at all?
+            if not any(e in equipment for e in order.allowed_equipment):
+                continue
             # step 1: check if order is already scheduled at the considered process stage
             lot: Lot|None = None
             if order.lots is not None:

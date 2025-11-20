@@ -280,6 +280,7 @@ class SnapshotProvider:
         :return: list of eligible order ids
         """
         all_lots = snapshot.lots
+        lots_by_ids: dict[str, Lot] = {lot.id: lot for lots in all_lots.values() for lot in lots}
         plants: list[int] = [p.id for p in self._site.get_process_equipment(process)]
         process_lots: dict[str, Lot] = {lot.id: lot for eq, eq_lots in all_lots.items() if eq in plants for lot in eq_lots}
         previous_steps: list[Process] = [p for p in self._site.processes if p.next_steps is not None and process in p.next_steps]
@@ -295,17 +296,18 @@ class SnapshotProvider:
             if order.lots is not None:
                 current_lot = order.lots.get(process)
                 if current_lot is not None:
-                    lot = process_lots.get(current_lot)
+                    lot = lots_by_ids.get(current_lot)
                     if lot is None or lot.processing_status in ("STARTED", "FINISHED") or not self.is_lot_reschedulable(lot):
                         continue
                     #applicable_orders0.add(o.id)  # first check if the order will be available in time
                 # step 2: check if order is scheduled at a predecessor process stage and will be finished in time for the considered planning interval
                 prev_proc = next((p for p in previous_process_names if p in order.lots), None)
-                prev_lot: Lot|None = order.lots.get(prev_proc, None)
+                prev_lot: str|None = order.lots.get(prev_proc, None)
                 if prev_lot is not None:
-                    if prev_lot.status < 3:  # not definitely scheduled yet
+                    lt = lots_by_ids.get(prev_lot)
+                    if lt is None or lt.status < 3:  # not definitely scheduled yet
                         continue
-                    if prev_lot.end_time is not None and prev_lot.end_time < planning_horizon[0]:  # TODO account for transport times?
+                    if lt.end_time is not None and lt.end_time < planning_horizon[0]:  # TODO account for transport times?
                         applicable_orders.append(order.id)
                     continue
             # step 3: check if order is available already at the considered process stage and not already at the next

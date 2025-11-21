@@ -699,6 +699,8 @@ class PlannedWorkingShift(Model):
     equipment: int
     period: tuple[datetime, datetime]
     worktime: timedelta
+    reason: str|None=None
+    "Reason for downtime, etc."
 
 
 class LongTermTargets(Model):

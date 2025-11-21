@@ -502,7 +502,8 @@ def show_shifts():
             hours = int(hours) if hours == int(hours) else round(hours, 1)
             start = shift.period[0].astimezone(local_tz)
             end = shift.period[1].astimezone(local_tz)
-            print(f"|  {DatetimeUtils.format(start, use_zone=False).replace('T', ' ')}  |  {DatetimeUtils.format(end, use_zone=False).replace('T', ' ')} | {hours} |")
+            reason = shift.reason or ""
+            print(f"|  {DatetimeUtils.format(start, use_zone=False).replace('T', ' ')}  |  {DatetimeUtils.format(end, use_zone=False).replace('T', ' ')} | {hours} | {reason} | ")
 
 
 def run_ltp():

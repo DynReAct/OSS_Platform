@@ -1,9 +1,10 @@
 class JsUtils {
 
-    static formatNumber(n, numDigits = 3) {
+    static formatNumber(n, numDigits = 3, expThreshold) {
         numDigits = numDigits || 3;
+        expThreshold = expThreshold || numDigits;
         const abs = Math.abs(n);
-        if (abs >= Math.exp(Math.log(10) * numDigits) || (abs < 0.01 && abs !== 0))
+        if (abs >= Math.exp(Math.log(10) * expThreshold) || (abs < 0.01 && abs !== 0))
             return n.toExponential(numDigits-1);
         return Intl.NumberFormat("en-US", { maximumSignificantDigits: numDigits }).format(n)
     }
@@ -15,7 +16,7 @@ class JsUtils {
                 + JsUtils._asTwoDigits(date.getHours()) + ":" + JsUtils._asTwoDigits(date.getMinutes());
     }
 
-    static format(value, numDigits) {
+    static format(value, numDigits, expThreshold) {
         if (value === undefined || value === null)
             return "";
         if (value instanceof Date)
@@ -24,7 +25,7 @@ class JsUtils {
         if (tp === "string")
             return value;
         if (tp === "number")
-            return JsUtils.formatNumber(value, numDigits);
+            return JsUtils.formatNumber(value, numDigits, expThreshold);
         if (tp === "object")
             return JSON.stringify(value);
         return value.toString();

@@ -156,7 +156,7 @@ class _SubSolver2(Generic[T]):
                         self._done += 1
                         continue
                 yield from self._find_subpath(next_route, next_state, np.delete(open_items, pos))  # [i for i in open_items if i != item])
-        if open_slots == 1 and self._done >= self._contingent:
+        if self._done >= self._contingent:
             passed = yield (self._permutation[self._best_route] if self._best_route is not None else None), self._best_state
             if passed is None:
                 raise Exception(f"Exception in solver {self._id}, no value sent!")
@@ -282,10 +282,12 @@ class _BBEnsembleScenario2(Generic[T]):
         timeout: bool = False
         start_time = time.time()
         generators = [s.run(self._batch_size, self._best_costs) for s in self._sub_solvers]
-        batch_sizes = [np.max([int((np.max([self._best_costs, 0.01])/c)**2 * self._batch_size), 10]) for c in self._init_costs]  # TODO or update in each iteration based on last costs for the generator?
         start = True
+        costs_by_solver = list(self._init_costs)
         while len(generators) > 0:
             for_removal = []
+            # update batch size in each iteration
+            batch_sizes = [np.max([int((np.max([self._best_costs, 0.01]) / c) ** 2 * self._batch_size), 10]) for c in costs_by_solver]
             for idx, g in enumerate(generators):
                 try:
                     if not start:
@@ -298,6 +300,9 @@ class _BBEnsembleScenario2(Generic[T]):
                             self._best_costs = costs
                             self._best_cost_obj = state
                             self._best_path = route
+                            batch_sizes[idx] = self._batch_size
+                        if costs < costs_by_solver[idx]:
+                            costs_by_solver[idx] = costs
                 except StopIteration:
                     for_removal.append(idx)
             if self._time_limit is not None and time.time() - start_time > self._time_limit:
@@ -305,7 +310,7 @@ class _BBEnsembleScenario2(Generic[T]):
                 break
             for idx in reversed(for_removal):
                 generators.pop(idx)
-                batch_sizes.pop(idx)
+                costs_by_solver.pop(idx)
             start = False
         return TspResult(self._best_path, self._best_cost_obj, timeout_reached=timeout)
 

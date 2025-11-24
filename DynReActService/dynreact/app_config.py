@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 
 class DynReActSrvConfig:
 
+    time_zone: str|None = None
+    "By default, the local timezone is used. Example: \"Europe/Berlin\", \"America/Los_Angeles\"."
     config_provider: str = "default+file:./data/site.json"
     snapshot_provider: str = "default+file:./data/snapshots"
     downtime_provider: str = "default+file:./data/downtimes.json"
@@ -22,6 +24,18 @@ class DynReActSrvConfig:
     lot_sinks: list[str] = ["default+file:./results"]
     max_snapshot_caches: int = 3
     max_snapshot_solutions_caches: int = 10
+    lots_batch_config: str = ""   # TODO option to specify initialization method
+    """
+    Configuration for periodic batch lot creation processes.
+    Format: <time of day>;<process id1>:<max_iterations>:<max duration>,<process id2>:<max duration>,...[;test] .
+    If the `test` flag is set, then the batch job will run once on startup, based on the latest snapshot available. 
+    Multiple configs to be separated by a single space. 
+    Examples: 
+        06:00;PROC1:1000:15m,PROC2:250:10m;
+        06:00;PROC1:1000:15m,PROC2:250:10m;test
+        
+    """
+    shifts_provider: str = "dummy:default"
     out_directory: str = "./out"
     cors: bool = False
     auth_method: Literal["dummy", "ldap", "ldap_simple"]|None = None
@@ -57,6 +71,8 @@ class DynReActSrvConfig:
                  out_directory: str|None = None,
                  max_snapshot_caches: int|None = None,
                  max_snapshot_solutions_caches: int|None = None,
+                 lots_batch_config: str|None = None,
+                 shifts_provider: str|None = None,
                  cors: bool|None = None,
                  auth_method: Literal["dummy", "ldap", "ldap_simple"]|None = None,
                  auth_max_user_length: int|None = None,
@@ -67,8 +83,13 @@ class DynReActSrvConfig:
                  ldap_search_base: str | None = None,
                  ldap_query: str | None = None,
                  plant_performance_models: list[str]|None = None,
-                 stp_frontend: str|None = None):
+                 stp_frontend: str|None = None,
+                 time_zone: str | None = None
+                 ):
         load_dotenv()
+        if time_zone is None:
+            time_zone = os.getenv("TIME_ZONE")
+        self.time_zone = time_zone
         if config_provider is None:
             config_provider = os.getenv("CONFIG_PROVIDER", DynReActSrvConfig.config_provider)
         if snapshot_provider is None:
@@ -101,6 +122,9 @@ class DynReActSrvConfig:
             lot_sinks = [sink.strip() for sink in os.getenv("LOT_SINKS", DynReActSrvConfig.lot_sinks[0]).split(",")]
         elif isinstance(lot_sinks, str):
             lot_sinks = [lot_sinks]
+        if lots_batch_config is None:
+            lots_batch_config = os.getenv("LOTS_BATCH_CONFIG", DynReActSrvConfig.lots_batch_config)
+        self.lots_batch_config = lots_batch_config
         self.config_provider: str = config_provider
         self.snapshot_provider: str = snapshot_provider
         self.downtime_provider = downtime_provider
@@ -111,6 +135,9 @@ class DynReActSrvConfig:
         self.availability_persistence = availability_persistence
         self.aggregation_persistence = aggregation_persistence
         self.lot_sinks = lot_sinks
+        if shifts_provider is None:
+            shifts_provider = os.getenv("SHIFTS_PROVIDER", DynReActSrvConfig.shifts_provider)
+        self.shifts_provider = shifts_provider
         if out_directory is None:
             out_directory = os.getenv("OUT_DIRECTORY", DynReActSrvConfig.out_directory)
         self.out_directory: str = out_directory

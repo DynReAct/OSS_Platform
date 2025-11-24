@@ -19,9 +19,10 @@ from dynreact.base.model import ProductionPlanning, EquipmentStatus, Lot, Order,
     ObjectiveFunction, MaterialCategory, ProductionTargets
 
 from dynreact.app import state, config
-from dynreact.auth.authentication import dash_authenticated
+from dynreact.auth.authentication import dash_authenticated, get_current_user
 from dynreact.gui.gui_utils import GuiUtils
 from dynreact.gui.pages.components import lots_view
+#from dynreact.gui.pages.session_state import selected_process, selected_snapshot
 
 dash.register_page(__name__, path="/lots/planned")
 translations_key = "lotsplanning"
@@ -33,13 +34,23 @@ lottransfer_results: dict[str, any] = {}
 
 
 def layout(*args, **kwargs):
-    process: str | None = kwargs.get("process")  # TODO use store from main layout instead(?)
+    initial_solution = kwargs.get("solution")
+    if initial_solution is not None and "process" not in kwargs:
+        sep_idx = next((idx for idx, c in enumerate(initial_solution) if c == "-" or c == "_" or c == ":"), -1)
+        if sep_idx > 0:
+            proc0 = initial_solution[:sep_idx].upper()
+            proc1 = next((proc.name_short for proc in state.get_site().processes if proc.name_short.upper().startswith(proc0)), None)
+            if proc1 is not None:
+                kwargs["process"] = proc1
+    #init_stores(*args, **kwargs)
+    process: str|None = kwargs.get("process")
     lot_size: str|None = kwargs.get("lotsize", "weight")   # constant, weight, orders, coils are allowed values
     site = state.get_site()
+    snap = GuiUtils.format_snapshot(kwargs["snapshot"], None) if "snapshot" in kwargs else None
     return html.Div([
         html.H1("Lots planning", id="lotsplanning-title"),
         html.Div([
-            html.Div([html.Div("Snapshot: "), html.Div(id="current_snapshot_lotplanning")]),
+            html.Div([html.Div("Snapshot: "), html.Div(snap, id="current_snapshot_lotplanning")]),
             html.Div([html.Div("Process: "), dcc.Dropdown(id="process-selector-lotplanning",
                                                           options=[{"value": p.name_short, "label": p.name_short,
                                                                     "title": p.name if p.name is not None else p.name_short}
@@ -106,7 +117,11 @@ def layout(*args, **kwargs):
                 )
             ),
             html.H2("Orders"),
-            html.Button("Download orders csv", id="download-orders-csv", className="dynreact-button"),
+            html.Div([html.Button("Download orders csv", id="download-orders-csv", className="dynreact-button"),
+                      html.Div("\U0001F6C8", title="Download a csv file. Note that the csv is based on English punctuation. " +
+                            "To import this file into Excel with non-English default settings, first open an empty sheet, go to the \"Data\" tab, select \"Get external data\" (leftmost button), " +
+                            "then \"Query options\" -> \"Current workbook\" - \"Regional settings\" -> Select \"English (Europe)\". Then import data \"From text/csv\" and select the downloaded file. " +
+                            "Otherwise Excel will transform fractional numbers into dates and other strange objects.")], className="lotplanning-button-info-row"),
             html.Br(),
             # this button is hidden, it needs to be activated via the browser console. Command:
             # document.querySelector("#lotplanning-download-scenario").hidden=false
@@ -142,6 +157,7 @@ def layout(*args, **kwargs):
             )
         ], id="planning-lots-table-wrapper", hidden=True),
         transfer_popup(),
+        dcc.Store(id="planning-initial_solution", data=initial_solution),  # str|None
         dcc.Store(id="planning-selected-solution"),  # str
         dcc.Store(id="planning-solution-data"),      # rowData, list of dicts, one row per lot
         dcc.Store(id="planning-selected-lot"),       # lot id; selected by clicking a row in the lots table
@@ -154,6 +170,7 @@ def layout(*args, **kwargs):
         dcc.Store(id="lotplanning-scenario-json"),        # for scenario download
 
         dcc.Interval(id="planning-interval", n_intervals=3_600_000),  # for polling when lot transfer is running
+        dcc.Interval(id="lotplanning-process-init", interval=100),
     ], id="lotsplanned")
 
 
@@ -187,6 +204,28 @@ def transfer_popup():
         id="lotplanning-transfer-dialog", className="dialog-filled lotplanning-transfer-dialog", open=False)
 
 
+# init the process, if not done yet
+@callback(Output("process-selector-lotplanning", "value"),
+          Output("lotplanning-process-init", "interval"),
+          Input("lotplanning-process-init", "n_intervals"),
+          State("selected-process", "data"),
+          State("process-selector-lotplanning", "value"))
+def proc_changed(update_cnt: int, process: str|None, old_process) -> tuple[str, float]:
+    if process is not None:
+        return process, 7_200_000
+    update_cnt = update_cnt or 0
+    # wait for up to 4 seconds for external initialization, then abort
+    interval = 7_200_00 if (old_process is not None and update_cnt > 5) or (process is None and update_cnt > 40) else dash.no_update
+    return dash.no_update, interval
+
+
+@callback(Output("lotplanning_process-selector", "data"),  # defined in session state => this will set the global process property
+          Input("process-selector-lotplanning", "value"),
+          config_prevent_initial_callbacks=True)
+def proc_changed2(process: str|None) -> str:
+    return process if process is not None else dash.no_update
+
+
 @callback(Output("current_snapshot_lotplanning", "children"),
           Input("selected-snapshot", "data"),
           Input("client-tz", "data")  # client timezone, global store
@@ -205,22 +244,27 @@ def update_link(snapshot: str|datetime|None, process: str|None) -> str:
     if not dash_authenticated(config):
         return url
     snapshot = DatetimeUtils.parse_date(snapshot)
-    if snapshot is None or process is None:
-        return url
-    url += "?process=" + process + "&snapshot=" + DatetimeUtils.format(snapshot)
+    added: bool=False
+    if snapshot is not None:
+        url += "?snapshot=" + DatetimeUtils.format(snapshot)
+        added = True
+    if process is not None:
+        url += ("?" if not added else "&") + "process=" + process
     return url
 
 
 @callback(
     Output("plan-solutions-table", "columnDefs"),
     Output("plan-solutions-table", "rowData"),
-    State("selected-snapshot", "data"),
+    Output("plan-solutions-table", "selectedRows"),
+    Input("selected-snapshot", "data"),
     Input("process-selector-lotplanning", "value"),
+    Input("planning-initial_solution", "data")
     #Input("create-existing-sols", "value"),
 )
-def solutions_table(snapshot: str|datetime|None, process: str|None):
+def solutions_table(snapshot: str|datetime|None, process: str|None, preselected_solution: str|None):
     if not dash_authenticated(config):
-        return []
+        return [], [], []
     snapshot = DatetimeUtils.parse_date(snapshot)
     value_formatter_object = {"function": "formatCell(params.value, 4)"}
     col_defs: list[dict[str, Any]] = [{"field": "id", "pinned": True},
@@ -239,7 +283,7 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
           "headerTooltip": "Plant performance models considered"},
     ]
     if snapshot is None or process is None:
-        return col_defs, []
+        return col_defs, [], []
     persistence = state.get_results_persistence()
     solutions: list[str] = sorted(persistence.solutions(snapshot, process), reverse=True)
     sol_objects: dict[str, LotsOptimizationState] = {sol: persistence.load(snapshot, process, sol) for sol in solutions}
@@ -292,12 +336,16 @@ def solutions_table(snapshot: str|datetime|None, process: str|None):
     },
        {key: (getattr(solution.best_objective_value, key) if hasattr(solution.best_objective_value, key) else 0) or 0 for key in objective_keys })
                 for sol_id, solution in sol_objects.items()]
-    return col_defs, row_data
+    selected_rows = []
+    if preselected_solution is not None and preselected_solution in sol_objects:
+        selected_rows.append({"id": preselected_solution})
+    return col_defs, row_data, selected_rows
 
 
 @callback(
     Output("planning-selected-solution", "data"),
     Input("plan-solutions-table", "selectedRows"),
+
 )
 def solution_selected(selected_rows: list[dict[str, any]]|None) -> str|None:
     if selected_rows is None or len(selected_rows) == 0:
@@ -415,10 +463,11 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         fields_0 = dict(sorted(props.model_fields.items(), key=lambda item: relevant_fields.index(item[0]) if item[0] in relevant_fields else len(relevant_fields))) \
                       if relevant_fields is not None else props.model_fields
 
+    value_formatter_object = {"function": "formatCell(params.value, 2, 4)"}
     fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True, "filter": "agTextColumnFilter"},
                 {"field": "equipment", "headerTooltip": "Current equipment location of the order"},
-                {"field": "costs", "headerTooltip": "Transition costs from previous order."},
-                {"field": "weight", "headerTooltip": "Order weight in tons." },
+                {"field": "costs", "headerTooltip": "Transition costs from previous order.", "valueFormatter": value_formatter_object},
+                {"field": "weight", "headerTooltip": "Order weight in tons.", "valueFormatter": value_formatter_object },
                 {"field": "due_date", "headerTooltip": "Order due date." },
                 {"field": "priority", "headerTooltip": "Order priority."}] + \
              [column_def_for_field(key, info) for key, info in fields_0.items()]
@@ -498,7 +547,7 @@ def export_data_as_csv(n_clicks, snapshot: str|None, process: str|None, solution
     filename = "lots_" + process + "_" + \
                DatetimeUtils.format(snapshot).replace("+0000","").replace(":", "").replace("-", "").replace("T", "") + \
                "_" + solution.replace("\\", "_").replace("/", "_").replace(":", "_") + ".csv"
-    options = {"fileName": filename, "columnSeparator": ";" }
+    options = {"fileName": filename, "columnSeparator": ";", "suppressQuotes": True }
     return True, options
 
 
@@ -519,8 +568,8 @@ def export_order_data_as_csv(n_clicks, snapshot: str|None, process: str|None, so
     filename = "orders_lots_" + process + "_" + \
                DatetimeUtils.format(snapshot).replace("+0000","").replace(":", "").replace("-", "").replace("T", "") + \
                "_" + solution.replace("\\", "_").replace("/", "_").replace(":", "_") + ".csv"
-    options = {"fileName": filename, "columnSeparator": ";"}
-    # TODO columns selector
+    options = {"fileName": filename, "columnSeparator": ";", "suppressQuotes":True}
+    # TODO columns selector?
     return True, options
 
 
@@ -751,7 +800,8 @@ def check_start_transfer(_, __, lot: str, new_lotname: str, orders: list[str] | 
     if is_start_command:
         orders = orders if not isinstance(orders, str) else [orders]
         update_snap: bool = len(update_snap_check) > 0
-        success: str|None = start_transfer0(lot, new_lotname, orders, snapshot, process, solution, transfer_target, update_snap) if orders is not None and len(orders) > 0 else None
+        user = get_current_user()
+        success: str|None = start_transfer0(lot, new_lotname, orders, snapshot, process, solution, transfer_target, update_snap, user) if orders is not None and len(orders) > 0 else None
         if success is not None:
             return 1_000, True, "Transfer active", success, transfer_alert_msg, transfer_alert_type
         else:
@@ -759,7 +809,7 @@ def check_start_transfer(_, __, lot: str, new_lotname: str, orders: list[str] | 
     return 3_600_000, btn_disabled, btn_title, dash.no_update, transfer_alert_msg, transfer_alert_type
 
 
-def start_transfer0(lot_id: str, new_lotname: str, orders: list[str], snapshot: datetime, process: str, solution: str, transfer_target: str, update_snap: bool) -> str|None:
+def start_transfer0(lot_id: str, new_lotname: str, orders: list[str], snapshot: datetime, process: str, solution: str, transfer_target: str, update_snap: bool, user: str|None) -> str|None:
     best_result: ProductionPlanning
     result: LotsOptimizationState = state.get_results_persistence().load(snapshot, process, solution)
     if result is None or result.best_solution is None:  # TODO error msg
@@ -776,17 +826,17 @@ def start_transfer0(lot_id: str, new_lotname: str, orders: list[str], snapshot: 
         return None
     if len(orders) != len(lot_obj.orders):
         lot_obj = lot_obj.copy(update={"orders": orders})
-    return transfer_internal(lot_obj, snapshot_obj, new_lotname, sink, update_snap)
+    return transfer_internal(lot_obj, snapshot_obj, new_lotname, sink, update_snap, user)
 
 
-def transfer_internal(lot: Lot, snapshot: Snapshot, name: str, sink: LotSink, update_snap: bool) -> str|None:
+def transfer_internal(lot: Lot, snapshot: Snapshot, name: str, sink: LotSink, update_snap: bool, user: str|None) -> str|None:
     global lottransfer_thread
     global lottransfer_result
     if lottransfer_thread is not None:
         return None
     lottransfer_result = None
     identifier = str(uuid.uuid4())
-    lottransfer_thread = LotTransferThread(lot, snapshot, name, sink, identifier, update_snap)
+    lottransfer_thread = LotTransferThread(lot, snapshot, name, sink, identifier, update_snap, user)
     lottransfer_thread.start()
     return identifier
 
@@ -822,7 +872,7 @@ clientside_callback(
 
 class LotTransferThread(threading.Thread):
 
-    def __init__(self, lot: Lot, snapshot: Snapshot, name: str, sink: LotSink, identifier: str, update_snap: bool):
+    def __init__(self, lot: Lot, snapshot: Snapshot, name: str, sink: LotSink, identifier: str, update_snap: bool, user: str|None):
         super().__init__(name=lottransfer_thread_name)
         self._lot = lot
         self._snapshot = snapshot
@@ -830,6 +880,7 @@ class LotTransferThread(threading.Thread):
         self._sink = sink
         self._identifier = identifier
         self._update_snap = update_snap
+        self._user = user
         self._result = None
         self._error = None
 
@@ -847,7 +898,7 @@ class LotTransferThread(threading.Thread):
 
     def run(self):
         try:
-            result = state.transfer_lot(self._snapshot, self._sink, self._lot, self._name, update_snapshot=self._update_snap)
+            result = state.transfer_lot(self._snapshot, self._sink, self._lot, self._name, self._user, update_snapshot=self._update_snap)
             # result = self._sink.transfer_new(self._lot, self._snapshot, external_id=self._name)
             result = "Successfully transferred: " + str(result) if result is not None else "Lot " + (self._name if self._name is not None else self._lot.id) + " successfully transferred"
             self._result = result

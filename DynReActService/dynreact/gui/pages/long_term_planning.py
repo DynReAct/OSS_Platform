@@ -1,8 +1,8 @@
 import threading
 import traceback
 from calendar import monthrange  # , Day  # Python 3.12
-from datetime import datetime, timedelta, date
-from typing import Any
+from datetime import datetime, timedelta, date, tzinfo, timezone
+from typing import Any, Sequence
 
 import dash
 from dash import html, dcc, callback, Output, Input, clientside_callback, ClientsideFunction, State
@@ -13,13 +13,14 @@ from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersiste
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
-from dynreact.base.model import LongTermTargets, EquipmentAvailability, StorageLevel, Storage, Equipment
+from dynreact.base.model import LongTermTargets, EquipmentAvailability, StorageLevel, Storage, Equipment, \
+    PlannedWorkingShift
 from pydantic import TypeAdapter
 
 from dynreact.app import state, config
 from dynreact.gui.gui_utils import GuiUtils
 from dynreact.gui.pages.plants_graph import plants_graph, default_stylesheet
-from dynreact.gui.pages.session_state import selected_snapshot, get_date_range
+from dynreact.gui.pages.session_state import get_date_range
 
 dash.register_page(__name__, path="/ltp")
 translations_key = "ltp"
@@ -32,7 +33,6 @@ allowed_shift_durations: list[int] = [1, 2, 4, 8, 12, 24, 48, 72, 168]
 
 
 # TODO storage initialization from snapshot
-# TODO pass plant availabilities to LTP
 def layout(*args, **kwargs):
     horizon_weeks: int = int(kwargs.get("weeks", 4))    # planning horizon in weeks
     total_production: float = kwargs.get("total", 100_000)
@@ -123,7 +123,7 @@ def layout(*args, **kwargs):
         # ======== Popups and hidden elements =========
         structure_portfolio_popup(total_production),
         plant_calendar_popup(),
-        storage_init_popup(),
+        storage_init_popup(kwargs.get("snapshot")),   # TODO better selection of snapshot
         # stores information about the last start time and horizon for which material properties have been set,
         # in the format {"startTime": startTime, "horizon": horizon}
         dcc.Store(id="ltp-material-settings"),
@@ -133,6 +133,8 @@ def layout(*args, **kwargs):
         # contains a list of json serialized PlantAvailability objects for the currently selected plant, or None,
         # as input for the calendar popup
         dcc.Store(id="ltp-plant-availability", storage_type="memory"),
+        # dict[date as string, e.g. "2023-12-01" => hours]
+        dcc.Store(id="ltp-plant-shifts", storage_type="memory"),
         # contains a json serialized PlantAvailability object for the currently selected plant, or None,
         # as output from the calendar popup
         dcc.Store(id="ltp-availability-buffer", storage_type="memory"),
@@ -181,9 +183,9 @@ def plant_calendar_popup():
         id="ltp-calendar-dialog", className="dialog-filled", open=False)
 
 
-def storage_init_popup():
+def storage_init_popup(snapshot: str|None):
     # TODO handle timezone
-    start_date, end_date, snap_options, selected_snap = get_date_range(selected_snapshot.data)  # : tuple[date, date, list[datetime], str]
+    start_date, end_date, snap_options, selected_snap = get_date_range(snapshot)  # : tuple[date, date, list[datetime], str]
     return html.Dialog(
         html.Div([
             html.H3("Storages status"),
@@ -485,7 +487,13 @@ def _get_start_end_time(start_time: datetime|str, horizon: str|int) -> tuple[dat
     return start, end_time.date()
 
 
+def _date_range_to_datetime(start: date, end: date) -> tuple[datetime, datetime]:
+    return datetime.combine(start, datetime.min.time()).replace(tzinfo=state.get_time_zone()), datetime.combine(end, datetime.min.time()).replace(tzinfo=state.get_time_zone())
+
+
+
 @callback(Output("ltp-plant-availability", "data"),
+        Output("ltp-plant-shifts", "data"),
         Input("ltp-selected_plant", "data"),           # user clicked on a plant node in the graph
         Input("ltp-calendar-clear", "n_clicks"),
         State("ltp-start-time", "value"),
@@ -493,19 +501,28 @@ def _get_start_end_time(start_time: datetime|str, horizon: str|int) -> tuple[dat
         config_prevent_initial_callbacks=True)
 def init_calendar(selected_plant: int|None, _, start_time: datetime|str, horizon: str|int):
     if selected_plant is None or start_time is None or horizon is None or not dash_authenticated(config):
-        return None
+        return None, None
     selected_plant = int(selected_plant)
     start, end = _get_start_end_time(start_time, horizon)
     if start is None or end is None:
-        return None
+        return None, None
     availabilities: PlantAvailabilityPersistence = state.get_availability_persistence()
     changed = GuiUtils.changed_ids()
     if "ltp-calendar-clear" in changed:
         availabilities.delete(selected_plant, start, end)
-        return None
+        return None, None
     av: list[EquipmentAvailability] = availabilities.load(selected_plant, start, end)
     av_json = TypeAdapter(list[EquipmentAvailability]).dump_json(av).decode("utf-8")
-    return av_json
+    start_dt, end_dt = _date_range_to_datetime(start, end)
+    shifts = state.get_shifts_provider().load(selected_plant, start_dt, end_dt)
+    shifts_by_days = {}
+    for shift in shifts:
+        day_start = shift.period[0].replace(hour=0, minute=0, second=0, microsecond=0)
+        if day_start not in shifts_by_days:
+            shifts_by_days[day_start] = 0
+        shifts_by_days[day_start] += shift.worktime.total_seconds()/3600
+    shifts_by_days = {day.strftime("%Y-%m-%d"): hours for day, hours in shifts_by_days.items()}
+    return av_json, shifts_by_days
 
 
 clientside_callback(
@@ -515,6 +532,7 @@ clientside_callback(
     ),
     Output("ltp-start-time", "title"),   # dummy
     Input("ltp-plant-availability", "data"),
+    Input("ltp-plant-shifts", "data"),
     State("ltp-selected_plant", "data"),
     State("ltp-start-time", "value"),
     State("ltp-horizon-weeks", "value"),
@@ -604,8 +622,25 @@ def set_initial_availabilities(_: Any, start_time: datetime|str, horizon: str|in
         return "Not available"
     plants: dict[int, Equipment] = {p.id: p for p in state.get_site().equipment}
     plant_data: dict[int, list[EquipmentAvailability]] = persistence.load_all(start, end)
-    days = end - start
-    hours_per_plant: dict[int, timedelta] = {pid: days for pid in plants.keys() if pid not in plant_data}
+    start_dt, end_dt = _date_range_to_datetime(start, end)
+    shifts = state.get_shifts_provider().load_all(start_dt, end_dt)
+    hours_per_plant: dict[int, timedelta] = {pid: sum((s.worktime for s in shifts.get(pid)), start=timedelta()) if pid in shifts else timedelta() for pid in plants.keys() if pid not in plant_data}
+    for eq, delta in dict(hours_per_plant).items():  # correction for shifts that only partially belong to the month (night shifts)
+        if eq not in shifts or len(shifts[eq]) == 0:
+            continue
+        eq_shifts = shifts[eq]
+        first = eq_shifts[0]
+        last = eq_shifts[-1]
+        surplus = timedelta()
+        if first.period[0] < start_dt:
+            share_in_month = (first.period[1] - start_dt).total_seconds()/(first.period[1] - first.period[0]).total_seconds()
+            if 0 < share_in_month < 1:
+                surplus += (1-share_in_month) * first.worktime
+        if last.period[1] > end_dt:
+            share_in_month = (end_dt - last.period[0])/(last.period[1] - last.period[0])
+            if 0 < share_in_month < 1:
+                surplus += (1-share_in_month) * last.worktime
+        hours_per_plant[eq] = hours_per_plant[eq] - surplus
     hours_per_plant.update({pid: ModelUtils.aggregate_availabilities(avail, start, end) for pid, avail in plant_data.items()})
     # sort according to plants array
     hours_per_plant = dict(sorted(hours_per_plant.items(), key=lambda key_val: next(idx for idx, pid in enumerate(plants.keys()) if pid == key_val[0])))
@@ -717,7 +752,23 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
         if ltp_thread is None and total_amount is not None:
             levels = TypeAdapter(dict[str, StorageLevel]).validate_json(storage_levels)
             availabilities: dict[int, list[EquipmentAvailability]] = state.get_availability_persistence().load_all(start, end)
-            availabilities_aggregated = PlantAvailabilityPersistence.aggregate([p.id for p in state.get_site().equipment], start, end, availabilities)
+            start_dt, end_dt = _date_range_to_datetime(start, end)
+            shifts: dict[int, Sequence[PlannedWorkingShift]] = state.get_shifts_provider().load_all(start_dt, end_dt)
+            for eq, eq_shifts in dict(shifts).items():  # correction for shifts that only partially belong to the month (night shifts)
+                if len(shifts[eq]) == 0:
+                    continue
+                first = eq_shifts[0]
+                last = eq_shifts[-1]
+                start_correction = first.period[0] < start_dt < first.period[1]
+                end_correction = last.period[0] < end_dt < last.period[1]
+                if start_correction or end_correction:
+                    new_first = PlannedWorkingShift(equipment=eq, period=(start_dt, first.period[1]), worktime=((first.period[1]-start_dt).total_seconds()/(first.period[1]-first.period[0]).total_seconds())*first.worktime) \
+                            if start_correction else first
+                    new_last = PlannedWorkingShift(equipment=eq, period=(last.period[0], end_dt), worktime=((end_dt - last.period[0]).total_seconds()/(last.period[1]-last.period[0]).total_seconds())*last.worktime) \
+                        if end_correction else last
+                    new_shifts = [new_first] + list(eq_shifts)[1:-1] + [new_last]
+                    shifts[eq] = new_shifts
+            availabilities_aggregated = PlantAvailabilityPersistence.aggregate([p.id for p in state.get_site().equipment], start, end, availabilities, shifts=shifts)
             run(DatetimeUtils.parse_date(start_time), horizon_weeks, shift_duration_hours, setpoints, total_production, levels, availabilities_aggregated)
     if "ltp-stop" in changed_ids and ltp_thread is not None:
         stop()
@@ -812,6 +863,7 @@ def stop() -> bool:
         ltp_thread.kill()
         ltp_thread = None
     return ltp_thread is None
+
 
 
 

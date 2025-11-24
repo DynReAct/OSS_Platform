@@ -11,31 +11,20 @@ from dynreact.app import state, config
 # Type: string ("en", "de")
 language = dcc.Store(id="lang", storage_type="local")
 
+# Those ones must not be changed from the pages, only from within dash_app
+site: dcc.Store = dcc.Store(id="site-store", storage_type="memory", data=state.get_site().model_dump(exclude_none=True, exclude_unset=True))
 # Type: datetime (the snapshot id)
-site: dcc.Store = dcc.Store(id="site-store", storage_type="memory")
-selected_snapshot: dcc.Store = dcc.Store(id="selected-snapshot", storage_type="memory")
-selected_snapshot_obj: dcc.Store = dcc.Store(id="selected-snapshot-obj", storage_type="memory")
-selected_process: dcc.Store = dcc.Store(id="selected-process", storage_type="memory")
+# FIXME session persistence is not working; but neither does local, it only stores the initial value, no updates
+selected_snapshot: dcc.Store = dcc.Store(id="selected-snapshot", storage_type="session")
+selected_snapshot_obj: dcc.Store = dcc.Store(id="selected-snapshot-obj", storage_type="session")
+selected_process: dcc.Store = dcc.Store(id="selected-process", storage_type="session")
 
-
-def init_stores(*args, **kwargs):   #-> tuple[dcc.Store, dcc.Store, dcc.Store, dcc.Store]:
-    global site
-    global selected_snapshot
-    global selected_snapshot_obj
-    global selected_process
-    if hasattr(site, "data") and site.data is not None:
-        return
-    site_obj = state.get_site().model_dump(exclude_none=True, exclude_unset=True)
-    process: str | None = kwargs.get("process")  # TODO alternatively, use store?
-    snapshot: datetime|None = DatetimeUtils.parse_date(kwargs.get("snapshot"))
-    snapshot_obj = state.get_snapshot(snapshot)
-    snapshot_serialized = snapshot_obj.model_dump(exclude_unset=True, exclude_none=True) if snapshot_obj is not None else None
-    site.data = site_obj
-    # Note: this implies dropping the seconds part!
-    selected_snapshot.data = DatetimeUtils.format(snapshot_obj.timestamp) if snapshot_obj is not None else None
-    selected_snapshot_obj.data = snapshot_serialized
-    selected_process.data=process
-
+# XXX this one is a bit ugly, but to be able to set the value of selected_snapshot from the snapshot page
+# and also from url params we need an intermediate second global store which is only manipulated by the snapshot page
+snapshot_page_selector: dcc.Store = dcc.Store(id="snapshot_selected-snapshot", storage_type="memory")
+# These are updated from the respective pages via the dropdown, and they update the global process selector
+lotcreation_process_selector: dcc.Store = dcc.Store(id="create_process-selector", storage_type="memory")
+lotplanning_process_selector: dcc.Store = dcc.Store(id="lotplanning_process-selector", storage_type="memory")
 
 # Type: str
 #selected_process = dcc.Store(id="selected-process", storage_type="session")

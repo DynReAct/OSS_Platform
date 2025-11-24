@@ -1,4 +1,3 @@
-import threading
 import traceback
 import types
 import typing
@@ -30,15 +29,17 @@ from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
 from dynreact.gui.gui_utils import GuiUtils
 from dynreact.gui.pages.components import prepare_lots_for_lot_view, lots_view
-from dynreact.gui.pages.optimization_listener import FrontendOptimizationListener
-
+#from dynreact.gui.pages.optimization_listener import FrontendOptimizationListener
+from dynreact.lots_optimization import FrontendOptimizationListener
 
 dash.register_page(__name__, path="/lots/create2")
 translations_key = "lots2"
 
+"""  # moved to OptimizationState (state.get_optimization_state())  # TODO use
 lot_creation_thread_name = "lot-creation"
 lot_creation_thread: threading.Thread|None = None
 lot_creation_listener: FrontendOptimizationListener|None = None
+"""
 
 
 # TODO option to record optimizaiton history including lots information and possibility to replay/step to specific optimization steps
@@ -46,7 +47,8 @@ lot_creation_listener: FrontendOptimizationListener|None = None
 # TODO swimlane visualization
 # TODO init method existing solution
 def layout(*args, **kwargs):
-    process: str|None = kwargs.get("process")  # TODO use store from main layout instead?
+    # init_stores(*args, **kwargs)
+    process: str|None = kwargs.get("process")  # should also trigger process selction via dash_app
     running, running_proc = check_running_optimization()
     if running:
         process = running_proc
@@ -63,11 +65,12 @@ def layout(*args, **kwargs):
     excluded_processes = [] if site.lot_creation is None or site.lot_creation.processes is None else \
             [proc for proc, config in site.lot_creation.processes.items() if config.plannable == False]
     procs = [p for p in site.processes if p.name_short not in excluded_processes]
+    snap = GuiUtils.format_snapshot(kwargs["snapshot"], None) if "snapshot" in kwargs else None
     layout = html.Div([
         html.H1("Lot creation", id="lots2-title"),
         # ======= Top row: snapshot and process selector =========
         html.Div([
-            html.Div([html.Div("Snapshot: "), html.Div(id="lots2-current_snapshot")]),
+            html.Div([html.Div("Snapshot: "), html.Div(snap, id="lots2-current_snapshot")]),
             html.Div([html.Div("Process: "), dcc.Dropdown(id="lots2-process-selector",
                         options=[{"value": p.name_short, "label": p.name_short,
                                   "title": p.name if p.name is not None else p.name_short} for p in procs],
@@ -124,6 +127,7 @@ def layout(*args, **kwargs):
         dcc.Store(id="lots2-objectives-history"),     # optimization results, objective function
         dcc.Store(id="lots2-target-weight", data=0),  # number in tons; updated only on tab change and process change
         dcc.Interval(id="lots2-interval", interval=3_600_000),  # for polling when optimization is running
+        dcc.Interval(id="lots2-process-init", interval=100),
         # ======== Popups  =========
         structure_portfolio_popup(111222),
         dcc.Store(id="lots2-material-setpoints", data=None),  # dictionary
@@ -399,6 +403,7 @@ def settings_tab(init_method: Literal["heuristic", "duedate", "snapshot", "resul
         html.Div(id="lots2-warning-message", className="lots2-message-field"),
         html.Div([
             html.Button("Start", id="lots2-start", className="dynreact-button", disabled=True),
+            html.Button("Continue", id="lots2-continue", className="dynreact-button", hidden=True),
             html.Button("Stop", id="lots2-stop", className="dynreact-button", disabled=True)
         ], id="lots2-control-btns", className="lots2-control-btns"),
     ]
@@ -460,12 +465,33 @@ def structure_portfolio_popup(initial_weight: float):
         ], title=""),
         id="lots2-structure-dialog", className="dialog-filled", open=False)
 
+# init the process, if not done yet
+@callback(Output("lots2-process-selector", "value"),
+          Output("lots2-process-init", "interval"),
+          Input("lots2-process-init", "n_intervals"),
+          State("selected-process", "data"),
+          State("lots2-process-selector", "value"))
+def proc_changed(update_cnt: int, process: str|None, old_process) -> tuple[str, float]:
+    if process is not None:
+        return process, 7_200_000
+    update_cnt = update_cnt or 0
+    # wait for up to 4 seconds for external initialization, then abort
+    interval = 7_200_00 if (old_process is not None and update_cnt > 5) or (process is None and update_cnt > 40) else dash.no_update
+    return dash.no_update, interval
+
+
+@callback(Output("create_process-selector", "data"),  # defined in session state => this will set the global process property
+          Input("lots2-process-selector", "value"),
+          config_prevent_initial_callbacks=True)
+def proc_changed2(process: str|None) -> str:
+    return process if process is not None else dash.no_update
 
 
 @callback(Output("lots2-current_snapshot", "children"),
           Input("selected-snapshot", "data"), #     selected-snapshot is a page-global store
           Input("client-tz", "data"))  # client timezone, global store
 def snapshot_changed(snapshot: datetime|None, tz: str|None) -> str:
+    #snapshot = selected_snapshot.data if hasattr(selected_snapshot, "data") else snapshot
     return GuiUtils.format_snapshot(snapshot, tz)
 
 
@@ -492,7 +518,7 @@ def toggle_settings_tabs_visibility(snapshot: str|datetime|None, process: str|No
           Input("lots2-tabbutton-settings", "n_clicks"),
           Input("lots2-tabsnav-prev", "n_clicks"),
           Input("lots2-tabsnav-next", "n_clicks"),
-          Input("lots2-process-selector", "value"),
+          Input("lots2-process-selector", "value")
 )
 def select_settings_tab(active_tab: Literal["targets", "orders", "settings"]|None,  _, __, ___, ____, _v, v) -> Literal["targets", "orders", "settings"]:
     if not dash_authenticated(config):
@@ -501,7 +527,7 @@ def select_settings_tab(active_tab: Literal["targets", "orders", "settings"]|Non
     if len(changed_ids) == 0:  # initial callback
         return active_tab  # must not return no_update here, because it blocks dependent callbacks
     button_id = next((bid for bid in changed_ids if bid.startswith("lots2-tabbutton-")), None)
-    if button_id is None and "lots2-process-selector" in changed_ids:
+    if button_id is None and "selected-process" in changed_ids:
         button_id = "lots2-tabbutton-targets"
     new_active_tab: Literal["targets", "orders", "settings"] = "targets"
     if button_id is not None:
@@ -556,7 +582,7 @@ def select_settings_tab(active_tab: Literal["targets", "orders", "settings"]|Non
     Input("lots2-active-tab", "data"),
     Input("lots2-orders-table", "selectedRows"),
     State("selected-snapshot", "data"),
-    State("lots2-process-selector", "value"),
+    State("lots2-process-selector", "value")
 )
 def show_structure_overview(active_tab: Literal["targets", "orders", "settings"]|None,
                             selected_rows: list[dict[str, any]] | None,
@@ -647,7 +673,7 @@ def ltp_table_opened(_, snapshot: str, process: str, horizon_hours: int):
 @callback(
     Output("lots2-material-setpoints", "clear_data"),
     Input("lots2-materials-clear", "n_clicks"),
-    Input("lots2-process-selector", "value"),
+    Input("lots2-process-selector", "value")
 )
 def clear_setpoints(n_click_clear, process: str|None) -> bool:
     if n_click_clear is not None and n_click_clear > 0:
@@ -680,7 +706,7 @@ def update_plants(snapshot: str,
                   use_lot_range0: list[Literal[""]]
                   ) -> tuple[list[Component], list[any], list[Literal[""]]]:
     changed = GuiUtils.changed_ids()
-    process_changed = "lots2-process-selector" in changed
+    process_changed = "selected-process" in changed
     use_lot_range: bool = len(use_lot_range0) > 0 and not process_changed
     init_lot_size_from_settings: bool = False
     site = state.get_site()
@@ -924,7 +950,7 @@ def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] 
     snapshot_obj = state.get_snapshot(snapshot)
     if snapshot_obj is None or len(snapshot_obj.orders) == 0:
         return {}, None, {}
-    process_changed = "lots2-process-selector" in GuiUtils.changed_ids()
+    process_changed = "selected-process" in GuiUtils.changed_ids()
     if active_tab != "orders" and not process_changed:
         return no_update, no_update, no_update
     update_selection: bool = selected_processes is None or process_changed or (order_data is not None and order_data.get("snapshot") != snapshot_serialized)
@@ -950,7 +976,7 @@ def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] 
     Output("lots2-orders-lots-order-total", "children"),
     Input("lots2-oders-lots-lots", "value"),
     Input("lots2-orders-table", "selectedRows"),
-    State("lots2-process-selector", "value"),
+    Input("lots2-process-selector", "value"),
     State("selected-snapshot", "data"),
     config_prevent_initial_callbacks=True
 )
@@ -1019,7 +1045,7 @@ def update_backlog_state(snapshot: str, process: str, rows: list[dict[str, any]]
             Input("selected-snapshot", "data"),
             Input("lots2-process-selector", "value"),
             Input("lots2-active-tab", "data"),
-Input("lots2-check-hide-released-lots", "value"),
+            Input("lots2-check-hide-released-lots", "value"),
             Input("lots2-orders-backlog-init", "n_clicks"),
             Input("lots2-orders-backlog-clear", "n_clicks"),
             Input("lots2-orders-select-visible", "n_clicks"),
@@ -1432,18 +1458,19 @@ clientside_callback(
     #Input("lots2-existing-sols", "value")
 )
 def update_solution_state(snapshot: str|datetime|None, process: str|None, _, selected_init_method: str|None):  # , selected_solution: str|None):
-    global lot_creation_listener
     selected_solution = None
     changed_ids: list[str] = GuiUtils.changed_ids()
     solution_selected: bool = selected_init_method == "result" and "lots2-existing-sols" in changed_ids  # TODO this is not implemented here yet
     history: list[float] | None = None
     solution: ProductionPlanning | None = None
+    opti_state = state.get_lot_creator()
     if solution_selected and snapshot is not None and process is not None and selected_solution is not None:
         snapshot = DatetimeUtils.parse_date(snapshot)
         optimization_state: LotsOptimizationState|None = state.get_results_persistence().load(snapshot, process, selected_solution)
         history = [h.total_value for h in optimization_state.history]
         solution = optimization_state.current_solution
-    elif lot_creation_listener is not None:
+    elif opti_state.listener() is not None: # lot_creation_listener is not None :
+        lot_creation_listener = opti_state.listener()
         history = lot_creation_listener.history()
         solution, _ = lot_creation_listener.solution()
     else:
@@ -1469,7 +1496,7 @@ def update_solution_state(snapshot: str|datetime|None, process: str|None, _, sel
     Input("lots2-objectives-history", "data")
 )
 def update_figure(history: list[float]|None):
-    global lot_creation_listener
+    lot_creation_listener = None if history is not None else state.get_lot_creator().listener()
     if history is None and lot_creation_listener is None:
         return px.line() #, False
     history = history if history is not None else lot_creation_listener.history()
@@ -1497,6 +1524,7 @@ def update_figure(history: list[float]|None):
 
 @callback(Output("lots2-start", "disabled"),
           Output("lots2-stop", "disabled"),
+          Output("lots2-continue", "hidden"),
           #Output("lots2-process-selector", "value"),  # causes a lot of problems
           Output("lots2-process-selector", "disabled"),
           #Output("lots2-iterations-value", "children"),
@@ -1544,6 +1572,7 @@ def update_figure(history: list[float]|None):
           Input("lots2-existing-sols", "value"),
           Input("lots2-start", "n_clicks"),
           Input("lots2-stop", "n_clicks"),
+          Input("lots2-continue", "n_clicks"),
           Input("lots2-interval", "n_intervals"),
 
           )
@@ -1568,9 +1597,8 @@ def process_changed(snapshot: datetime|None,
                     process: str,
                     selected_init_method: Literal["heuristic", "duedate", "snapshot", "result"]|None,
                     existing_solution: str|dash._callback.NoUpdate|None,
-                    _, __, ___,
+                    _, __, ___, _v,
                     ):
-    global lot_creation_listener
     warning_message = ""
 
     #process_out = dash.no_update  #default, process_out = process only if changed inside
@@ -1614,7 +1642,7 @@ def process_changed(snapshot: datetime|None,
     append_to_lots: bool = len(append_to_lots0) > 0
     interval = 3_600_000
     if not dash_authenticated(config):
-        return (True, True, #  process_out,
+        return (True, True, True, #  process_out,
                 True, iterations, iterations, iterations, True, selected_init_method, [],
                 existing_solution, True, "Not authenticated", interval, True, warning_message)
     store_results: bool = len(store_results0) > 0
@@ -1630,8 +1658,7 @@ def process_changed(snapshot: datetime|None,
         process = proc_running
         #if process != process_in:
         #    process_out = process
-    elif "lots2-process-selector" in changed_ids:  # ensure graph output is removed
-        lot_creation_listener = None
+    elif "selected-process" in changed_ids:  # ensure graph output is removed  # TODO
         existing_solution = None
         # update iterations
         lc = site.lot_creation
@@ -1654,13 +1681,13 @@ def process_changed(snapshot: datetime|None,
         #for result in results:  # TODO not working
         #    result["disabled"] = True
         #settings_trigger_hidden = selected_init_method == "result"
-        return (True, stop_disabled, #process_out,
+        return (True, stop_disabled, True, #process_out,
                 True, iterations, iterations, iterations, result_selector_hidden, selected_init_method, results,
                 existing_solution, selection_disabled, "Optimization running", interval, False, warning_message)
     if horizon_hours is None or iterations is None or process is None or snapshot is None:
         title = "Select a process first" if process is None else "Select a snapshot first" if snapshot is None else "Enter valid planning horizon"
         warning_message = warning_message if warning_message else title
-        return (True, stop_disabled, #process_out,
+        return (True, stop_disabled, True, #process_out,
                 False, iterations, iterations, iterations, True, selected_init_method, [], None,
                 selection_disabled, title, interval, True, warning_message)
     if selected_init_method is None:
@@ -1668,6 +1695,8 @@ def process_changed(snapshot: datetime|None,
             selected_init_method = "result"
         else:
             selected_init_method = "heuristic"
+    cntable, cnt_proc = continue_possible()
+    continue_hidden = not cntable or cnt_proc != process
     # TODO orders > 1 or orders > 0
     orders_unselected: bool = order_data is None or not order_data.get("orders_selected_cnt", 0) > 0 or \
                               order_data.get("process") != process or order_data.get("snapshot") != DatetimeUtils.format(snapshot)
@@ -1675,7 +1704,7 @@ def process_changed(snapshot: datetime|None,
     if orders_unselected or plant_targets_unset:
         title = "Select orders first" if orders_unselected else "Set plant targets first"
         warning_message = warning_message if warning_message else title
-        return (True, stop_disabled, #process_out,
+        return (True, stop_disabled, continue_hidden, #process_out,
                 False, iterations, iterations, iterations, True, selected_init_method, [], None,
                 selection_disabled, title, interval, True, warning_message)
     result_selector_hidden = selected_init_method != "result"
@@ -1685,12 +1714,19 @@ def process_changed(snapshot: datetime|None,
                 orders_custom_priority, selected_order_rows, create_comment, store_results, _tab)
     if len(warning_message) == 0 and info_msg is not None:
         warning_message = info_msg
+    continue_started = False
+    if not start_disabled:
+        continue_started, info_msg = continue_optimization(changed_ids, process, iterations, store_results)
+        if len(warning_message) == 0 and info_msg is not None:
+            warning_message = info_msg
+        if continue_started:
+            start_disabled = True
     if selected_init_method == "result" and existing_solution is None:
-        if start_disabled or len(existing_solutions) == 0 or "create-existing-sols" in changed_ids:  # trying to start the optimization, or explicitly deselected solution id
+        if start_disabled or len(existing_solutions) == 0 or "create-existing-sols" in changed_ids:  # trying to start the optimization, or explicitly deselected solution id # TODO check
             title = "Select an existing result" if len(results) > 0 else \
                         "No previous results avaialable, select a different initialization method."
             warning_message = warning_message if warning_message else title
-            return (True, stop_disabled, #process_out,
+            return (True, stop_disabled, True, #process_out,
                     False, iterations, iterations, iterations, False, selected_init_method, results, existing_solution,
                     selection_disabled, title, interval, True, warning_message)
         existing_solution = existing_solutions[-1]  # ?
@@ -1703,6 +1739,7 @@ def process_changed(snapshot: datetime|None,
         #    result["disabled"] = True
     process_selection_disabled = not stop_disabled
     running_indicator_hidden = not start_disabled
+    continue_hidden = continue_hidden or start_disabled
     #settings_trigger_hidden = selected_init_method == "result"
     #settings_trigger_disabled = start_disabled
 
@@ -1713,33 +1750,36 @@ def process_changed(snapshot: datetime|None,
     backlog_weight = order_data.get("orders_selected_weight", 0) if order_data is not None else 0
     if (warning_message is None or warning_message == "") and _tab == "settings" and target_weight is not None and target_weight > backlog_weight:
         warning_message = f"Order backlog of {backlog_weight:.1f}t does not cover the targeted {target_weight:.1f}t."
-    return (start_disabled, stop_disabled, #process_out,
+    return (start_disabled, stop_disabled, continue_hidden, #process_out,
             process_selection_disabled, iterations, iterations, iterations, result_selector_hidden,
             selected_init_method, results, existing_solution, selection_disabled, "Start/stop planning optimization", interval, running_indicator_hidden,
             warning_message)
 
+def continue_possible() -> tuple[bool, str|None]:
+    return state.get_lot_creator().continue_possible()
 
 def check_running_optimization() -> tuple[bool, str|None]:
-    global lot_creation_thread
-    if lot_creation_thread is not None:
-        if not lot_creation_thread.is_alive():
-            lot_creation_thread = None
-            if lot_creation_listener is not None:
-                lot_creation_listener.stop()
-        if lot_creation_thread is not None:
-            return True, lot_creation_thread.process()
-    return False, None
-
+    return state.get_lot_creator().is_running()
 
 def check_stop_optimization(changed_ids: list[str]) -> bool:
-    global lot_creation_thread
-    global lot_creation_listener
-    if "lots2-stop" in changed_ids and lot_creation_thread is not None:
-        lot_creation_thread.kill()
-        lot_creation_thread = None
-        if lot_creation_listener is not None:
-            lot_creation_listener.stop()
-    return lot_creation_thread is None
+    opti_state = state.get_lot_creator()
+    if "lots2-stop" in changed_ids:
+        opti_state.stop()
+        return True
+    return not opti_state.is_running()[0]
+
+
+def continue_optimization(changed_ids: list[str], process: str|None, iterations: int|None, store_results: bool) -> tuple[bool, str|None]:
+    try_continue: bool = "lots2-continue" in changed_ids
+    if not try_continue:
+        return False, None
+    opti_state = state.get_lot_creator()
+    cnt, proc = opti_state.continue_possible()
+    if not cnt:
+        return False, "Cannot continue optimization, " + ("still running or no optimization active")
+    if process != proc:
+        return False, f"Existing optimization was for a different process: {proc}"
+    return opti_state.continue_optimization(iterations, store_results)
 
 
 #TODO take into account planning horizon / horizon hours?
@@ -1762,15 +1802,14 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
         - str: an error message
         - str: user info message GUI
     """
-    global lot_creation_thread
-    global lot_creation_listener
+    is_running, _ = state.get_lot_creator().is_running()
     if process is None or snapshot is None:
-        return lot_creation_thread is not None, None, None
+        return is_running, None, None
     snapshot_obj = state.get_snapshot(snapshot)
     horizon = timedelta(hours=horizon_hours)
     period: tuple[datetime, datetime] = (snapshot_obj.timestamp, snapshot_obj.timestamp + horizon)
-    is_start_command = "lots2-start" in changed_ids and lot_creation_thread is None
-    if append_to_lots and lot_creation_thread is None and tab == "settings":  # only if tab is settings to avoid too frequent updates
+    is_start_command = "lots2-start" in changed_ids and not is_running
+    if append_to_lots and not is_running and tab == "settings":  # only if tab is settings to avoid too frequent updates
         # fail if there is a plant without selected lot
         plants = state.get_site().get_process_equipment(process)
         targets, targets_customized, predecessor_lots, info_msg = target_values_from_settings(process, period,[p.id for p in plants],use_lot_range, plant_target_components)
@@ -1819,7 +1858,7 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
 
                 targets, targets_customized, predecessor_lots, info_msg = target_values_from_settings(process, period, [p.id for p in plants], use_lot_range, plant_target_components)
                 if info_msg is not None:
-                    return lot_creation_thread is not None, None, info_msg
+                    return is_running, None, info_msg
                 if material_structure is not None and len(material_structure) > 0:
                     targets.material_weights = material_structure
                 perf_models = performance_models_from_elements(process, perf_model_components)
@@ -1869,23 +1908,17 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                     snapshot_obj, state.get_cost_provider(), targets=targets, initial_solution=initial_solution, min_due_date=None,
                     best_solution=best_solution, history=history, parameters=parameters, orders=orders, performance_models=perf_models,
                     orders_custom_priority=orders_custom_priority)   # TODO due date?
-            if lot_creation_thread is not None:  # FIXME rather abort operation?
-                lot_creation_thread.kill()
-            if lot_creation_listener is not None:
-                lot_creation_listener.stop()
-
-            lot_creation_thread = KillableOptimizationThread(process, snapshot, optimization, num_iterations=iterations)
+            # state.get_optimization_state().stop()  # TODO required?
             time_id: str = DatetimeUtils.format(DatetimeUtils.now(), use_zone=False).replace("-", "").replace(":", "").replace("T", "")
-            # millis_now = DatetimeUtils.to_millis(DatetimeUtils.now())
             lot_creation_listener = FrontendOptimizationListener(id=process + "_" + time_id if existing_solution is None else existing_solution,
-                            persistence=persistence, store_results=store_results, initial_state=optimization_state, parameters=parameters)
-            optimization.add_listener(lot_creation_listener)
-            lot_creation_thread.start()
+                persistence=persistence, store_results=store_results, optimization=optimization, initial_state=optimization_state, parameters=parameters)
+            running, err = state.get_lot_creator().start(process, snapshot, lot_creation_listener, optimization, iterations)
+            return running, err, None
         except Exception as e:
             traceback.print_exc()
             error_msg = str(e)
-            return lot_creation_thread is not None, error_msg, "Internal error: " + error_msg
-    return lot_creation_thread is not None, None, None
+            return state.get_lot_creator().is_running()[0], error_msg, "Internal error: " + error_msg
+    return state.get_lot_creator().is_running()[0], None, None
 
 
 # Swimlane related callbacks
@@ -2190,31 +2223,4 @@ def _lot_info(lot: Lot) -> str:
         result += f", comment={lot.comment}"
     result += "]"
     return result
-
-class KillableOptimizationThread(threading.Thread):
-
-    def __init__(self, process: str, snapshot: datetime, optimization: LotsOptimizer[any], num_iterations: int|None=None):
-        super().__init__(name=lot_creation_thread_name)
-        self._kill = threading.Event()
-        self.daemon = True  # Allow main to exit even if still running.
-        self._optimization = optimization
-        self._process: str = process
-        self._snapshot: datetime = snapshot
-        self._iterations: int = num_iterations
-
-    def kill(self):
-        self._kill.set()
-
-    def process(self):
-        return self._process
-
-    def snapshot(self):
-        return self._snapshot
-
-    def num_iterations(self):
-        return self._iterations
-
-    def run(self):
-        return self._optimization.run(max_iterations=self._iterations)
-
 

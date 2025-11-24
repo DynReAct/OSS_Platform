@@ -8,7 +8,8 @@ The classes defined in this module are serializable and can be made accessible v
 """
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone, date
-from typing import Any, TypeVar, Generic, Literal
+from numbers import Number
+from typing import Any, TypeVar, Generic, Literal, Sequence, Mapping
 
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 
@@ -208,6 +209,10 @@ class Lot(Model):
     comment: str|None = None
     weight: float|None = None
     "Convenience field for storing the total lot weight. Must be equal to the sum of the order weights. In tons."
+    start_time: datetime|None = None
+    "Planned start time for lot processing."
+    end_time: datetime|None = None
+    "Planned end time for lot processing."
 
 
 class MaterialOrderData(Model):
@@ -226,6 +231,7 @@ class PlanningData(Model):
     # lots: list[list[str]] TODO?
     transition_costs: float = 0.0
     logistic_costs: float = 0.0
+    assignment_costs: float = 0.0
     lots_count: int = 0
     lot_weights: list[float] = []
     "Lot weights in tons."
@@ -306,6 +312,9 @@ class ObjectiveFunction(Model, extra="allow"):
     "Penalty for deviating from the targeted material structure"
     priority_costs: float|None = None
     "Penalty for order priority"
+    assignment_costs: float|None = None
+    "Costs for unfavourable order to equipment assignments (see CostProvider.assignment_costs())"
+
 
     @model_validator(mode="after")
     def set_additive_costs(self):
@@ -370,9 +379,10 @@ class ProductionPlanning(Model, Generic[P]):
     "Initial conditions for the optimization"
 
     # TODO cache results?
-    def get_lots(self) -> dict[int, list[Lot]]:
+    def get_lots(self, orders: dict[str, Order]|None=None) -> dict[int, list[Lot]]:
         """
         :return: dictionary with keys = equipment ids, values = lots
+        If the orders field is provided, then the lot weights will be filled, as well (missing orders are ignored, however)
         """
         result: dict[int, dict[str, dict[int, str]]] = {}  # keys: equipment, lot_id, lot_idx, order
         for order, assignment in self.order_assignments.items():
@@ -391,10 +401,13 @@ class ProductionPlanning(Model, Generic[P]):
         for plant_id, lots in result.items():
             lots_sorted: list[str] = sorted(lots)
             plant_lots: list[Lot] = []
-            for lot_id in lots_sorted:  # TODO test
+            for lot_id in lots_sorted:
                 order_data: dict[int, str] = lots[lot_id]
                 lot_indices: list[int] = sorted(order_data)
-                lot = Lot(id=lot_id, equipment=plant_id, active=True, status=0, orders=[order_data[idx] for idx in lot_indices])
+                lot_weight = None
+                if orders is not None:
+                    lot_weight = sum(orders[order].actual_weight if order in orders else 0 for order in order_data.values())
+                lot = Lot(id=lot_id, equipment=plant_id, active=True, status=0, orders=[order_data[idx] for idx in lot_indices], weight=lot_weight)
                 plant_lots.append(lot)
             result_sorted[plant_id] = plant_lots
         return result_sorted
@@ -479,6 +492,20 @@ class ProcessLotCreationSettings(Model):
     default_iterations: int|None=None
     "Default number of iterations for the process step"
 
+    def get_equipment_targets(self, equipment_id: int, default_value: float|None=None) -> float|None:
+        if isinstance(self.total_size, Number):
+            return self.total_size
+        if isinstance(self.total_size, Mapping) and equipment_id in self.total_size:
+            return self.total_size[equipment_id]
+        return default_value
+
+    def get_equipment_lot_sizes(self, equipment_id: int, default_value: TargetLotSize|None=None) -> TargetLotSize|None:
+        if isinstance(self.lot_sizes, TargetLotSize):
+            return self.lot_sizes
+        if isinstance(self.lot_sizes, Mapping) and equipment_id in self.lot_sizes:
+            return self.lot_sizes[equipment_id]
+        return default_value
+
 
 class LotCreationSettings(Model):
     processes: dict[str, ProcessLotCreationSettings]
@@ -504,7 +531,8 @@ class Site(LabeledItem):
     def get_process(self, process: str, do_raise: bool=False) -> Process|None:
         if process is None:
             return None
-        proc = next((p for p in self.processes if p.name_short == process or p.synonyms is not None and process in p.synonyms), None)
+        process = process.upper()
+        proc = next((p for p in self.processes if p.name_short.upper() == process or p.synonyms is not None and any(s.upper() == process for s in p.synonyms)), None)
         if proc is None and do_raise:
             raise Exception("Process not found: " + str(process))
         return proc
@@ -528,13 +556,16 @@ class Site(LabeledItem):
     def get_equipment_by_name(self, plant_name: str, do_raise: bool=False) -> Equipment|None:
         if plant_name is None:
             return None
-        plant = next((p for p in self.equipment if p.name_short == plant_name), None)
+        plant_name = plant_name.upper()
+        plant = next((p for p in self.equipment if p.name_short is not None and p.name_short.upper() == plant_name), None)
         if plant is None and do_raise:
             raise Exception("Plant not found by name: " + str(plant_name))
         return plant
 
-    def get_process_equipment(self, process: str) -> list[Equipment]:
-        return [p for p in self.equipment if p.process == process]
+    def get_process_equipment(self, process: str, do_raise: bool=False) -> list[Equipment]:
+        proc = self.get_process(process, do_raise=do_raise)
+        process = process.upper() if proc is None else proc.name_short.upper()
+        return [p for p in self.equipment if p.process.upper() == process]
 
     def get_storage(self, storage: str, do_raise: bool=False) -> Storage|None:
         if storage is None:
@@ -664,6 +695,14 @@ class Snapshot(Model, Generic[MATERIAL_PROPERTIES]):
         return list(selected_coils.values())
 
 
+class PlannedWorkingShift(Model):
+    equipment: int
+    period: tuple[datetime, datetime]
+    worktime: timedelta
+    reason: str|None=None
+    "Reason for downtime, etc."
+
+
 class LongTermTargets(Model):
     """
     Long term production targets for different product categories, as input for the long-term
@@ -728,4 +767,26 @@ class ServiceHealth(Model):
     status: int
     "0: ok"
     running_since: datetime|None=None
+
+
+class Metric(Model):
+    id: str
+    labels: dict[str, str]|None=None
+
+
+class PrimitiveMetric(Metric):
+    value: float|int
+
+
+class Histogram(Metric):
+    data: list[float]
+    buckets: list[float]
+    include_infinity: bool=True
+
+
+class ServiceMetrics(Model):
+    service_id: str
+    metrics: Sequence[Metric]
+
+
 

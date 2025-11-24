@@ -3,18 +3,20 @@ The LotsOptimizer module contains the interface specification for the mid-term p
 algorithm. It is possible to provide a custom implementation, but the DynReAct software
 already contains an implementation (in the MidTermPlanning folder).
 """
-
+import time
 from datetime import timedelta, datetime
 from typing import Any, TypeVar, Generic, Sequence
 
 import numpy as np
+from pydantic import BaseModel
 
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import ProductionPlanning, PlanningData, ProductionTargets, Snapshot, OrderAssignment, Site, \
-    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction, MaterialClass
+    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction, MaterialClass, \
+    ServiceMetrics, Histogram
 
 
 class OptimizationListener:
@@ -37,6 +39,9 @@ class OptimizationListener:
     def is_done(self) -> bool:
         return self._done
 
+    def reset(self):
+        self._done = False
+
 
 P = TypeVar("P", bound=PlanningData)
 
@@ -58,6 +63,43 @@ class LotsOptimizationState(Generic[P]):
         "deprecated"
         self.history: list[ObjectiveFunction] = list(history) if history is not None else [current_objective_value]
         self.parameters: dict[str, Any]|None = parameters
+
+
+class OptimizationStatistics(BaseModel, use_attribute_docstrings=True):
+    """
+    Statistics about the mid term planning optimization.
+    """
+    process: str
+    runs: int = 0
+    target_production: list[float] = []
+    "Target production in tons per run"
+    backlog_count: list[int] = []
+    "Backlog count (number of orders) per run"
+    backlog_size: list[float] = []
+    "Backlog weight in tons per run"
+    iterations: list[int] = []
+    "Number of iterations per run"
+    durations_seconds: list[int] = []
+    """
+    Total duration in seconds. Should be divided by number of iterations to get meaningful information about the 
+    performance of the system, but also the target production and backlog size provide important context for this. 
+    """
+
+
+class _StatisticsListener(OptimizationListener):
+
+    def __init__(self, stats: OptimizationStatistics, idx: int):
+        super().__init__()
+        self._stats = stats
+        self._idx = idx
+        self._iterations = 0
+        self._start_time = time.time()
+
+    def update_solution(self, planning: ProductionPlanning, objective_value: ObjectiveFunction):
+        idx = self._idx
+        self._iterations += 1
+        self._stats.iterations[idx] += 1
+        self._stats.durations_seconds[idx] = int(time.time() - self._start_time)
 
 
 class LotsOptimizer(Generic[P]):
@@ -159,11 +201,17 @@ class LotsOptimizer(Generic[P]):
         self._base_assignments: dict[str, OrderAssignment]|None = {o: OrderAssignment(order=o, equipment=lot.equipment, lot=lot.id, lot_idx=idx+1)
                                                             for lot in base_lots.values() for idx, o in enumerate(lot.orders)} if base_lots is not None else None
 
+    def process(self) -> str:
+        return self._process
+
+    def snapshot(self) -> datetime:
+        return self._snapshot.timestamp
+
     def parameters(self) -> dict[str, Any]|None:
         return self._state.parameters
 
     # side effects on state
-    def run(self, max_iterations: int|None = None, debug: bool=False) -> LotsOptimizationState[P]:
+    def run(self, max_iterations: int|None = None, debug: bool=False, continued: bool=False) -> LotsOptimizationState[P]:
         raise Exception("Not implemented")
 
     def state(self) -> LotsOptimizationState[P]:
@@ -196,6 +244,7 @@ class LotsOptimizationAlgo:
 
     def __init__(self, site: Site):
         self._site = site
+        self._stats: dict[str, OptimizationStatistics] = {}
 
     # TODO clarify: should we consider the planning horizon here? => would need some information about planned lot execution time
     def snapshot_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider,
@@ -231,10 +280,12 @@ class LotsOptimizationAlgo:
         planning = costs.evaluate_order_assignments(process, assignments, targets=targets, snapshot=snapshot, previous_orders=previous_orders) if costs is not None else None
         return planning, targets
 
-    def _random_start_orders(self, plants: dict[int, Equipment], targets: ProductionTargets, orders: dict[str, Order],
-                             snapshot_provider: SnapshotProvider, start_orders: dict[int, str]|None) -> dict[int, str]:
+    def _random_start_orders(self, plants: dict[int, Equipment], targets: ProductionTargets, orders: dict[str, Order], snapshot: Snapshot,
+                             snapshot_provider: SnapshotProvider, costs: CostProvider, start_orders: dict[int, str]|None, previous_orders: dict[int, str]|None) -> dict[int, str]:
         start_orders = start_orders or {}
+        all_prev_orders = previous_orders.values() if previous_orders is not None else tuple()
         if targets.material_weights is not None:
+            # TODO consider assignment costs in this path, too
             # try to assign start orders corresponding to different targeted material classes
             cats = self._site.material_categories
             total_targets_by_cat = {cat.id: sum(targets.material_weights[cl.id] for cl in cat.classes if cl.id in targets.material_weights
@@ -269,9 +320,19 @@ class LotsOptimizationAlgo:
                         start_orders[plants1[0]] = o.id
         plants2 = [p for p in plants.keys() if p not in start_orders]
         for p in plants2:
-            random_order: Order | None = next((o for o in orders.values() if p in o.allowed_equipment and o.id not in start_orders.values()), None)
-            if random_order is not None:
-                start_orders[p] = random_order.id
+            prev = previous_orders.get(p) if previous_orders is not None else None
+            plant_obj = plants[p]
+            if prev is not None:
+                prev_obj = snapshot.get_order(prev)
+                transition_costs: dict[str, float] = {oid: costs.transition_costs(plant_obj, prev_obj, order) + costs.assignment_costs(plant_obj, order) for oid, order in orders.items() if p in order.allowed_equipment}
+                if len(transition_costs) > 0:
+                    lowest_transition_order: str = min(transition_costs, key=transition_costs.get)
+                    start_orders[p] = lowest_transition_order
+                    continue
+            ass_costs: dict[str, float] = {oid: costs.assignment_costs(plant_obj, order) for oid, order in orders.items() if oid not in start_orders.values() and p in order.allowed_equipment}
+            if len(ass_costs) > 0:
+                lowest_assignment_order: str = min(ass_costs, key=ass_costs.get)
+                start_orders[p] = lowest_assignment_order
         return start_orders
 
     def heuristic_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider, snapshot_provider: SnapshotProvider,
@@ -290,8 +351,9 @@ class LotsOptimizationAlgo:
         :param orders_custom_priority
         :return:
         """
+        all_prev_orders = previous_orders.values() if previous_orders is not None else tuple()
         # We remove orders from this dict as they are assigned to plants
-        order_objects: dict[str, Order] = {order.id: order for order in snapshot.orders if order.id in orders}
+        order_objects: dict[str, Order] = {order.id: order for order in snapshot.orders if order.id in orders and order.id not in all_prev_orders}
         # for faster access, remember assigned orders
         orders_done: dict[str, Order] = {}
         # We remove plants from this list as soon as there are no more orders available for them (by checking available_tons_per_plant[plant] > 0)
@@ -320,7 +382,7 @@ class LotsOptimizationAlgo:
                 if other_plant in available_tons_by_plant:
                     available_tons_by_plant[other_plant] = available_tons_by_plant[other_plant] - o.actual_weight
 
-        start_orders = self._random_start_orders(plants, targets, order_objects, snapshot_provider, start_orders)
+        start_orders = self._random_start_orders(plants, targets, order_objects, snapshot, snapshot_provider, costs, start_orders, previous_orders)
         for plant in [plant for plant in plants.keys() if plant not in start_orders]:
             plants.pop(plant)
         for plant, order_id in start_orders.items():
@@ -346,6 +408,9 @@ class LotsOptimizationAlgo:
                     print("No valid transition to a new order found for plant", plant.id, "out of", applicable_orders_cnt, "applicable orders")
                 plants.pop(plant)
                 continue
+            assignment_costs = {o: costs.assignment_costs(plant_obj, order_objects[o]) for o in transition_costs.keys()}
+            if max(assignment_costs.values()) > 0:  # may be always 0
+                transition_costs = {oid: cost + assignment_costs[oid] for oid, cost in transition_costs.items()}
             lowest_transition_order: str = min(transition_costs, key=transition_costs.get)
             assign_to_plant(order_objects[lowest_transition_order], plant)
             if missing_tons_by_plant[plant] < 0.01:  # TODO configurable threshold
@@ -448,9 +513,22 @@ class LotsOptimizationAlgo:
                 initial_solution = initial_solution0
             if targets is None:
                 targets = targets0
-        return self._create_instance_internal(process, snapshot, targets, cost_provider, initial_solution, min_due_date=min_due_date,
+        instance = self._create_instance_internal(process, snapshot, targets, cost_provider, initial_solution, min_due_date=min_due_date,
                                               best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
                                               orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots)
+        if process not in self._stats:
+            self._stats[process] = OptimizationStatistics(process=process)
+        stats = self._stats[process]
+        stats.runs += 1
+        stats.target_production.append(sum(w.total_weight for w in targets.target_weight.values()))
+        stats.backlog_count.append(len(initial_solution.order_assignments))
+        stats.backlog_size.append(0.)  # TODO somewhat expensive calculation
+        stats.iterations.append(0)
+        stats.durations_seconds.append(0)
+        stats_index = len(stats.target_production)-1
+        listener: _StatisticsListener = _StatisticsListener(self._stats[process], stats_index)
+        instance.add_listener(listener)
+        return instance
 
     def _create_instance_internal(self, process: str, snapshot: Snapshot, targets: ProductionTargets,
                                   cost_provider: CostProvider, initial_solution: ProductionPlanning, min_due_date: datetime|None = None,
@@ -463,3 +541,23 @@ class LotsOptimizationAlgo:
                                   base_lots: dict[int, Lot] | None = None
                                   ) -> LotsOptimizer:
         raise Exception("not implemented")
+
+    def stats(self) -> dict[str, OptimizationStatistics]:
+        return {p: stats.model_copy(deep=True) for p, stats in self._stats.items()}
+
+    def metrics(self) -> ServiceMetrics:
+        """
+         result += _to_histogram(f"{service_prefix}midtermplanning_iterations_total", stats.iterations, [10, 100, 1000], labels={"process": proc})
+            result += _to_histogram(f"{service_prefix}midtermplanning_backlog_count", stats.backlog_count, [10, 75, 200], labels={"process": proc})
+            result += _to_histogram(f"{service_prefix}midtermplanning_backlog_weight", stats.backlog_size, [500, 5000], labels={"process": proc})
+            result += _to_histogram(f"{service_prefix}midtermplanning_iteration_duration_seconds", [int(d / i) for d, i in zip(stats.durations_seconds, stats.iterations)],
+                                    [4, 15, 60], labels={"process": proc})"""
+        metrics = []
+        for proc, stats in self._stats.items():
+            if len(stats.iterations) > 0:
+                metrics.append(Histogram(id="iterations_total", labels={"process": proc}, data=stats.iterations, buckets=[10, 100, 1000])),
+                metrics.append(Histogram(id="backlog_count", labels={"process": proc}, data=stats.backlog_count, buckets=[10, 75, 200])),
+                metrics.append(Histogram(id="backlog_weight", labels={"process": proc}, data=stats.backlog_size, buckets=[500, 5000])),
+                metrics.append(Histogram(id="iteration_duration_seconds", labels={"process": proc},
+                                         data=[int(d / i) for d, i in zip(stats.durations_seconds, stats.iterations)], buckets=[4, 15, 60])),
+        return ServiceMetrics(service_id="midtermplanning", metrics=metrics)

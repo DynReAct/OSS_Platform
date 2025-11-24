@@ -13,8 +13,10 @@ from dynreact.base.LotsOptimizer import LotsOptimizationAlgo
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.ResultsPersistence import ResultsPersistence
+from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.AggregationPersistence import AggregationPersistence
+from dynreact.base.impl.DummyShiftsProvider import DummyShiftsProvider
 from dynreact.base.impl.FileAggregationPersistence import FileAggregationPersistence
 from dynreact.base.impl.FileAvailabilityPersistence import FileAvailabilityPersistence
 from dynreact.base.impl.FileConfigProvider import FileConfigProvider
@@ -41,6 +43,7 @@ class Plugins:
         self._lots_optimizer: LotsOptimizationAlgo|None = None
         self._long_term_planning: LongTermPlanning|None = None
         self._short_term_planning: Any| None = None
+        self._shifts_provider: ShiftsProvider|None = None
         self._results_persistence: ResultsPersistence|None = None
         self._availability_persistence: PlantAvailabilityPersistence|None = None
         self._plant_performance_models: list[PlantPerformanceModel]|None = None
@@ -151,8 +154,8 @@ class Plugins:
                     raise Exception("Aggregation persistence not found " + self._config.aggregation_persistence)
         return self._aggregation_persistence
 
-    def get_lot_sinks(self) -> dict[str, LotSink]:
-        if self._lot_sinks is None:
+    def get_lot_sinks(self, if_exists: bool=False) -> dict[str, LotSink]:
+        if self._lot_sinks is None and not if_exists:
             site = self.get_config_provider().site_config()
             sinks = {}
             for sink_config in self._config.lot_sinks:
@@ -164,6 +167,18 @@ class Plugins:
                     sinks[sink.id()] = sink
             self._lot_sinks = sinks
         return self._lot_sinks
+
+    def get_shifts_provider(self, if_exists: bool=False) -> ShiftsProvider:
+        if self._shifts_provider is None and not if_exists:
+            site = self.get_config_provider().site_config()
+            if self._config.shifts_provider.startswith("dummy:"):
+                self._shifts_provider = DummyShiftsProvider(self._config.shifts_provider, site)
+            else:
+                self._shifts_provider = Plugins._load_module("dynreact.shifts.ShiftProviderImpl",
+                                                             ShiftsProvider, self._config.shifts_provider, site)
+                if self._shifts_provider is None:
+                    raise Exception("Shifts provider not found " + self._config.shifts_provider)
+        return self._shifts_provider
 
     def get_plant_performance_models(self) -> list[PlantPerformanceModel]:
         if self._plant_performance_models is None:

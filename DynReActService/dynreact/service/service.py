@@ -1,16 +1,19 @@
 import random
 import sys
 import threading
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Iterator, Literal, Annotated
+from typing import Iterator, Literal, Annotated, Sequence
 
-from dynreact.base.LotsOptimizer import LotsOptimizer
+from starlette.responses import PlainTextResponse
+
+from dynreact.base.LotsOptimizer import LotsOptimizer, LotsOptimizationAlgo, OptimizationStatistics
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, \
     MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction, AggregatedStorageContent, \
-    AggregatedMaterial
+    AggregatedMaterial, Histogram, ServiceMetrics, PrimitiveMetric, PlannedWorkingShift, Lot
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.params import Path, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -56,6 +59,7 @@ if config.cors:
     )
 
 username = fastapi_authentication(config)
+start = time.time()
 
 
 @fastapi_app.get("/site",
@@ -177,6 +181,61 @@ def snapshot(response: Response, timestamp: str | datetime = Path(..., examples=
     else:
         response.headers["Cache-Control"] = "max-age=60"  # 1 minute
     return snapshot0
+
+@fastapi_app.get("/lots",
+                 tags=["dynreact"],
+                 response_model_exclude_unset=True,
+                 response_model_exclude_none=True,
+                 summary="Get lots from a specific snapshot")
+def lots(response: Response, snapshot: str|datetime|None = Query(None, description="Specify the snapshot id. If not set, the latest snapshot will be used", examples=[None, "now", "now-1d", "2023-12-04T23:59Z"],
+                                               openapi_examples={
+                "unset": {"description": "No snapshot timestamp specified, will use latest", "value": None},
+                "now": {"description": "Get the most recent snapshot", "value": "now"},
+                "now-1d": {"description": "Get yesterday's snapshot", "value": "now-1d"},
+                "2023-04-25T23:59Z": {"description": "A specific timestamp", "value": "2023-04-25T23:59Z"},
+            }), equipment: str|int|None = Query(None, description="Filter by equipment", examples=[None, 1, "PKL01"], openapi_examples={
+                "unset": {"description": "No equipment filter", "value": None},
+                "1": {"description": "Specify equipment by equipment id", "value": 1},
+                "PKL01": {"description": "Specify equipment by name", "value": "PKL01"}
+            }), process: str|int|None = Query(None, description="Filter by process stage", examples=[None, "PKL", 1], openapi_examples={
+                "unset": {"description": "No process filter", "value": None},
+                "PKL": {"description": "Specify process by name", "value": "PKL"},
+                "1": {"description": "Specify process by process id", "value": 1},
+            }), status: list[int]|None = Query(None, description="Lot status. Keys: 1: created; 2: blocked; 3: released; 4: in progress; 5: completed.",
+                    examples=[None, 1, 2, 3, 4, 5], openapi_examples={
+                "unset": {"description": "No status filter", "value": None},
+                "1": {"description": "Created", "value": [1]},
+            }), active: bool|None = Query(None, description="Filter on active/inactive lots"),
+            reschedulable: bool | None = Query(None, description="Filter on reschedulable lots"),
+            username = username) -> list[Lot]:
+    is_absolute_timestamp: bool = isinstance(snapshot, str) and not snapshot.startswith("now")
+    if isinstance(snapshot, str):
+        snapshot = None if snapshot == "" else parse_datetime_str(snapshot)
+    snap = state.get_snapshot(snapshot)
+    if equipment is not None:
+        equipment = None if equipment == "" else _get_equipment_id(equipment)
+    if process is not None:
+        process = None if process == "" else _get_process_name(process)
+    all_lots = snap.lots
+    if equipment is not None:
+        lots = all_lots.get(equipment, [])
+    elif process is not None:
+        equipments: list[int] = [p.id for p in state.get_site().get_process_equipment(process)]
+        lots = [lot for equip, eq_lots in all_lots.items() if equip in equipments for lot in eq_lots]
+    else:
+        lots = [lot for eq_lots in all_lots.values() for lot in eq_lots]
+    if is_absolute_timestamp:
+        response.headers["Cache-Control"] = "max-age=604800"  # 1 week
+    else:
+        response.headers["Cache-Control"] = "max-age=60"  # 1 minute
+    if status is not None:
+        lots = [l for l in lots if l.status in status]
+    if active is not None:
+        lots = [l for l in lots if l.active == active]
+    if reschedulable is not None:
+        sp = state.get_snapshot_provider()
+        lots = [l for l in lots if sp.is_lot_reschedulable(l) == reschedulable]
+    return lots
 
 
 @fastapi_app.get("/equipmentdowntimes",
@@ -444,6 +503,89 @@ def get_longtermplanning_result(
     targets, levels = results_ctrl.load_ltp(start, solution_id)
     return LongTermPlanningResults(targets=targets, storage_levels=levels)
 
+@fastapi_app.get("/planned-shifts",
+                tags=["dynreact"],
+                summary="Get working shifts by equipment id")
+def planned_shifts(
+        process: str|None = Query(None, description="Process steps to be included. Equipment for all processes will be included if not specified."),
+        equipment: list[int|str]|None = Query(None, description="Equipment ids to be included. All equipments will be included in the response if not specified (unless the process filter is set)"),
+        start: str|datetime|None = Query(None, description="Start time. If neither start nor end time are specified, "
+                                     + "start is set to now.",  examples=["now", "now-31d", "2023-04-25T00:00Z"], openapi_examples={
+                "now": {"description": "Get next month's planning", "value": "now"},
+                "now-31d": {"description": "Get last month's planning", "value": "now-31d"},
+                "2023-04-25T00:00Z": {"description": "A specific timestamp", "value": "2023-04-25T00:00Z"},
+            }),
+        end: str|datetime|None = Query(None, description="End time, optional.", examples=["now+31d", "2023-04-27T00:00Z"], openapi_examples={
+                "now+31d": {"description": "A month ahead of now", "value": "now+31d"},
+                "2023-04-27T00:00Z": {"description": "A specific timestamp", "value": "2023-04-27T00:00Z"},
+            }),
+        limit: int=100,
+        username = username) -> dict[int, Sequence[PlannedWorkingShift]]:
+    if isinstance(start, str):
+        start = parse_datetime_str(start)
+    if isinstance(end, str):
+        end = parse_datetime_str(end)
+    if start is None:
+        if end is None:
+            start = DatetimeUtils.now()
+        else:
+            start = end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            if end-start < timedelta(days=2):
+                start = (start - timedelta(days=5)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if equipment is not None:
+        equipment = [_get_equipment_id(e) for e in equipment]
+    if process:
+        plants = state.get_site().get_process_equipment(process)
+        if len(plants) == 0:
+            raise HTTPException(404, f"No equipment found for process {process}")
+        equipment_p = [p.id for p in plants if equipment is None or p.id in equipment]
+        equipment = equipment_p
+    return state.get_shifts_provider().load_all(start, end=end, limit=limit, equipments=equipment)
+
+
+@fastapi_app.get("/metrics",
+                tags=["dynreact"],
+                summary="Prometheus metrics for the DynReAct service")
+def metrics(username = username) -> PlainTextResponse:
+    result = ""
+    service_prefix = "dynreact_"
+    result += f"{service_prefix}uptime_seconds {int(time.time()-start)}\n"
+    result += _print_service_metrics(state.get_lots_optimization().metrics())
+    result += _print_service_metrics(state.get_snapshot_provider().metrics())
+    lot_sinks = state.get_lot_sinks(if_exists=True)
+    if lot_sinks is not None:
+        for sink in lot_sinks.values():
+            result += _print_service_metrics(sink.metrics())
+    return PlainTextResponse(result)
+
+def _print_service_metrics(metrics: ServiceMetrics) -> str:
+    prefix = "dynreact_" + metrics.service_id + "_"
+    result = ""
+    for metric in metrics.metrics:
+        if isinstance(metric, Histogram):
+            result += _print_histogram(metric, prefix)
+        elif isinstance(metric, PrimitiveMetric):
+            labels_agg_str = "" if metric.labels is None or len(metric.labels) == 0 else "{" + ",".join([k + "=\"" + v + "\"" for k, v in metric.labels.items()]) + "}"
+            result += f"{prefix + metric.id}{labels_agg_str} {metric.value}\n"
+    return result
+
+def _print_histogram(histogram: Histogram, prefix: str) -> str:
+    result = ""
+    if len(histogram.data) == 0:
+        return result
+    labels = histogram.labels
+    metric = prefix + histogram.id
+    data = histogram.data
+    labels_str = "" if labels is None or len(labels) == 0 else ",".join([k + "=\"" + v + "\"" for k, v in labels.items()]) + ","
+    for bucket in histogram.buckets:
+        result += f"{metric}_bucket{{{labels_str}le=\"{bucket}\"}} {sum(1 for d in data if d <= bucket)}\n"
+    if histogram.include_infinity:
+        result += f"{metric}_bucket{{{labels_str}le=\"+Inf\"}} {len(data)}\n"
+    labels_agg_str = "" if labels is None or len(labels) == 0 else "{" + ",".join([k + "=\"" + v + "\"" for k, v in labels.items()]) + "}"
+    result += f"{metric}_count{labels_agg_str} {len(data)}\n"
+    result += f"{metric}_sum{labels_agg_str} {sum(data)}\n"
+    return result
+
 
 def parse_datetime_str(dt: str) -> datetime:
     attempt = DatetimeUtils.parse_date(dt)
@@ -499,3 +641,26 @@ def parse_duration(d: str) -> timedelta:
     if unit == "s" or unit == "S":
         return timedelta(seconds=digit)
     raise HTTPException(status_code=400, detail="Unknown time unit " + unit)
+
+def _get_equipment_id(equipment: int|str) -> int:
+    if isinstance(equipment, str):
+        try:
+            equipment = int(equipment)
+        except ValueError:
+            equipment_obj = state.get_site().get_equipment_by_name(equipment, do_raise=False)
+            if equipment_obj is None:
+                raise HTTPException(status_code=404, detail=f"Equipment not found: {equipment}")
+            equipment = equipment_obj.id
+    return equipment
+
+
+def _get_process_name(process: int|str) -> str:
+    if isinstance(process, int|float):
+        proc = next((p for p in state.get_site().processes if process in p.process_ids), None)
+    else:
+        process = process.upper()
+        proc = next((p for p in state.get_site().processes if p.name_short.upper() == process or (p.synonyms is not None and any(process == s.upper() for s in p.synonyms))), None)
+    if proc is None:
+        raise HTTPException(status_code=404, detail=f"Process not found: {process}")
+    return proc.name_short
+

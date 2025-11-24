@@ -3,7 +3,7 @@ import glob
 import json
 import os.path
 import time
-import typing
+from typing import Sequence, Mapping, Any
 from datetime import timedelta, datetime, timezone
 from enum import Enum
 
@@ -12,8 +12,11 @@ from pydantic import BaseModel
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.base.AggregationProvider import AggregationLevel
 from dynreact.base.CostProvider import CostProvider
+from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationState
+from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
+from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.AggregationPersistence import AggregationInternal
 from dynreact.base.impl.AggregationProviderImpl import AggregationProviderImpl
@@ -21,8 +24,10 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.impl.Scenarios import MidTermScenario, MidTermBenchmark
 from dynreact.base.model import Snapshot, Material, OrderAssignment, Order, EquipmentProduction, ProductionTargets, \
-    ProductionPlanning, ObjectiveFunction, Site, LabeledItem, Lot, Process, Equipment
+    ProductionPlanning, ObjectiveFunction, Site, LabeledItem, Lot, Process, Equipment, PlannedWorkingShift, \
+    LongTermTargets, MaterialCategory, StorageLevel
 from dynreact.plugins import Plugins
+from dynreact.auth.authentication import authenticate
 
 
 class Boolean(str, Enum):
@@ -30,8 +35,8 @@ class Boolean(str, Enum):
     false = "false"
 
 
-def _trafo_args(parser: argparse.ArgumentParser|None=None, include_snapshot: bool=True) -> argparse.ArgumentParser:
-    parser = parser if parser is not None else argparse.ArgumentParser()
+def _trafo_args(parser: argparse.ArgumentParser|None=None, include_snapshot: bool=True, description: str|None=None) -> argparse.ArgumentParser:
+    parser = parser if parser is not None else argparse.ArgumentParser(description=description)
     parser.add_argument("-cp", "--config-provider", help="Config provider id, such as", type=str, default=None)
     parser.add_argument("-snp", "--snapshot-provider", help="Snapshot provider id, such as", type=str, default=None)
     if include_snapshot:
@@ -39,6 +44,18 @@ def _trafo_args(parser: argparse.ArgumentParser|None=None, include_snapshot: boo
     parser.add_argument("-cost", "--cost-provider", help="Cost provider id, such as", type=str, default=None)
     parser.add_argument("-d", "--details", help="Show details", action="store_true")
     return parser
+
+
+def auth_test():
+    parser = argparse.ArgumentParser(description="Test authentication")
+    parser.add_argument("user", help="Username", type=str)
+    parser.add_argument("pw", help="Password", type=str)
+    parser.add_argument("-v", "--verbose", help="Activate verbose mode", action="store_true")
+    args = parser.parse_args()
+    if args.verbose:
+        # TODO
+        verbose = True
+    authenticate(DynReActSrvConfig(), args.user, args.pw)
 
 
 # TODO option to aggregate by storage content
@@ -99,7 +116,7 @@ def analyze_snapshot():
                 print(f"  {cat_obj.name or cat_obj.id if cat_obj is not None else cat}: {text}")
 
 def analyze_lots():
-    parser = _trafo_args()
+    parser = _trafo_args(description="Show lots")
     parser.add_argument("-e", "--equipment", help="Plant name or plant id", type=str, default=None)
     parser.add_argument("-p", "--process", help="Process(es), separated by \",\"", type=str, default=None)
     parser.add_argument("-so", "--skip-orders", help="Skip orders", action="store_true")
@@ -161,6 +178,7 @@ def analyze_lots():
             lot_line = f"    Lot {lot.id}, active={lot.active}, status={lot.status}, weight={total_weight:7.2f}t, order cnt={len(lot.orders):2}, material cnt={len(materials):2}"
             if hasattr(lot, "priority"):
                 lot_line += f", priority={getattr(lot, 'priority')}"
+            lot_line += f", start/end time: " + (f"{lot.start_time} - {lot.end_time}" if lot.start_time is not None and {lot.end_time is not None} else "unset")
             if not skip_comment and lot.comment is not None:
                 lot_line += f", comment={lot.comment}"
             if not args.skip_orders:
@@ -407,7 +425,151 @@ def show_material():
         _print_orders(mat, fields, wide=wide, equipment=eq)
 
 
-def _field_for_order(o: Order|Material, field: str) -> typing.Sequence[str]:
+def eligible_orders():
+    parser = argparse.ArgumentParser(description="Show eligible orders for a rescheduling.")
+    parser.add_argument("process", help="Process step for planning", type=str)
+    parser.add_argument("-eq", "--equipment", help="Filter by equipment; separate multiple by commas.", type=str, default=None)
+    parser.add_argument("-s", "--snapshot", help="Snapshot id", type=str, default=None)
+    parser.add_argument("-hz", "--horizon", help="Time duration after snapshot timestamp for rescheduling. Example=1d (1 day)", default="1d")
+    parser.add_argument("-v", "--verbose", help="Print details", action="count", default=0)
+    parser.add_argument("-f", "--field", help="Select field(s) to be displayed. Separate multiple fields by \",\"", type=str, default=None)
+    parser.add_argument("-ef", "--equipment-fields", help="Select fields to be displayed based on the cost-relevant fields for the specified equipment", type=str, default=None)
+    parser.add_argument("-w", "--wide", help="Show wide cells, do not crop content", action="store_true")
+    args = parser.parse_args()
+    plugins = Plugins(DynReActSrvConfig())
+    site = plugins.get_config_provider().site_config()
+    process = _process_for_id(site.processes, args.process).name_short
+    snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
+    snapshot: Snapshot = plugins.get_snapshot_provider().load(time=snap)
+    start_delta: timedelta = DatetimeUtils.parse_duration(args.horizon)
+    planning = (snapshot.timestamp + start_delta, snapshot.timestamp + start_delta + timedelta(days=1))
+    equipment = _plants_for_ids(args.equipment, site)
+    o_by_id = {o.id: o for o in snapshot.orders}
+    eligible = plugins.get_snapshot_provider().eligible_orders2(snapshot, process, planning, equipment=[e.id for e in equipment] if equipment is not None else None)
+    eligible_orders = [o_by_id[o] for o in eligible]
+    eligible_weight = sum(o.actual_weight for o in eligible_orders)
+    print(f"Eligible orders {len(eligible)}, total weight: {eligible_weight:.2f}t.")
+    print(f"Order ids: {eligible}")
+    if args.verbose > 0:
+        fields = (f.strip() for f in args.field.split(",")) if args.field is not None else ["actual_weight", "lots", "current_equipment"]
+        first = eligible_orders[0]
+        fields = [f for flds in (_field_for_order(first, f) for f in fields) for f in flds] if fields is not None else None
+        if args.equipment_fields:
+            plant = _plant_for_id(site.equipment, args.equipment_fields)
+            relevant_fields: list[str] | None = plugins.get_cost_provider().relevant_fields(plant)
+            if relevant_fields is not None:
+                fields = fields if fields is not None else []
+                fields = fields + [f for f in relevant_fields if f not in fields]
+        if fields is not None and len(fields) == 0:
+            print("No matching field found for ", args.field)
+            return
+        filter_existing = args.field is None
+        wide: bool = args.wide or fields is not None and len(fields) < 4
+        _print_orders(eligible_orders, fields, wide=wide, filter_existent_properties=filter_existing)
+
+
+def show_shifts():
+    parser = argparse.ArgumentParser(description="Show planned working shifts. Timestamps are displayed in the local timezone.")
+    parser.add_argument("-p", "--process", help="Filter by process stage", type=str, default=None)
+    parser.add_argument("-eq", "--equipment", help="Filter by equipment; separate multiple by commas.", type=str, default=None)
+    parser.add_argument("-s", "--start", help="Start time", type=str, default=None)
+    parser.add_argument("-e", "--end", help="End time", type=str, default=None)
+    parser.add_argument("-l", "--limit", help="Limit, max number of shifts to show", type=int, default=100)
+    parser.add_argument("-cp", "--config-provider", help="Config provider id, such as", type=str, default=None)
+    #parser.add_argument("-w", "--wide", help="Show wide cells, do not crop content", action="store_true")
+    args = parser.parse_args()
+    start: datetime | None = DatetimeUtils.parse_date(args.start)
+    end: datetime | None = DatetimeUtils.parse_date(args.end)
+    if start is None:
+        start = DatetimeUtils.now()
+    config = DynReActSrvConfig(config_provider=args.config_provider)
+    plugins = Plugins(config)
+    site = plugins.get_config_provider().site_config()
+    provider = plugins.get_shifts_provider()
+    equipment: list[Equipment]|None = _plants_for_ids(args.equipment, site)
+    procs = _processes_for_ids(args.process, site)
+    if procs is not None:
+        proc_ids = [p.name_short for p in procs]
+        equipment = [e for e in equipment if e.process in proc_ids] if equipment is not None else [eq for proc in proc_ids for eq in site.get_process_equipment(proc)]
+    all_shifts: dict[int, Sequence[PlannedWorkingShift]] = provider.load_all(start, end=end, equipments=[e.id for e in equipment], limit=args.limit)
+    local_tz: timezone = datetime.now(timezone.utc).astimezone().tzinfo
+    print(f"Shifts (provider {provider.id()}):")
+    for plant, shifts in all_shifts.items():
+        equip = site.get_equipment(plant)
+        print(f"Equipment {equip.name_short or equip.id}:")
+        for shift in shifts:
+            hours = shift.worktime.total_seconds() / 3600
+            hours = int(hours) if hours == int(hours) else round(hours, 1)
+            start = shift.period[0].astimezone(local_tz)
+            end = shift.period[1].astimezone(local_tz)
+            reason = shift.reason or ""
+            print(f"|  {DatetimeUtils.format(start, use_zone=False).replace('T', ' ')}  |  {DatetimeUtils.format(end, use_zone=False).replace('T', ' ')} | {hours} | {reason} | ")
+
+
+def run_ltp():
+    parser = argparse.ArgumentParser(description="Run the long term planning")
+    parser.add_argument("-s", "--start", help="Start time", type=str, default=None),
+    parser.add_argument("-sd", "--shift-duration", help="Shift duration in hours", type=int, default=8),
+    parser.add_argument("-p", "--production", type=float, default=100_000)
+    # parser.add_argument("-w", "--wide", help="Show wide cells, do not crop content", action="store_true")
+    args = parser.parse_args()
+    start: datetime | None = DatetimeUtils.parse_date(args.start)
+    if start is None:
+        start = DatetimeUtils.now()
+    # TODO timezone
+    start_of_month = start.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    start_of_month = (start_of_month + timedelta(days=32)).replace(day=1)
+    end = (start_of_month + timedelta(days=32)).replace(day=1)   # beginning of next month
+    period = (start_of_month, end)
+    shift_duration = timedelta(hours=args.shift_duration)
+    config = DynReActSrvConfig()
+    plugins = Plugins(config)
+    site = plugins.get_config_provider().site_config()
+    cats: list[MaterialCategory] = site.material_categories
+    mat_targets = {}
+    total_production = args.production
+    for cat in cats:
+        classes = cat.classes
+        with_default_share = [c for c in classes if c.default_share is not None]
+        without_default_share = [c for c in classes if c not in with_default_share]
+        for c in with_default_share:
+            mat_targets[c.id] = c.default_share * total_production
+        remaining_share = max(0, 1 - sum(c.default_share for c in with_default_share))
+        if len(without_default_share) > 0:
+            per_class = remaining_share/len(without_default_share)
+            for c in without_default_share:
+                mat_targets[c.id] = per_class * total_production
+    targets = LongTermTargets(period=period, production_targets=mat_targets, total_production=total_production, source="cli")
+    initial_storages = {stg.name_short: StorageLevel(storage=stg.name_short, filling_level=0.5, timestamp=start_of_month, material_levels={c: level/total_production/2 for c, level in mat_targets.items()}) for stg in site.storages }
+    ltp: LongTermPlanning = plugins.get_long_term_planning()
+    shifts_provider: ShiftsProvider = plugins.get_shifts_provider()
+    shifts = shifts_provider.load_all(start_of_month, end=end)
+    if len(shifts) > 0:
+        shifts0 = [s.period for s in shifts.get(next(iter(shifts.keys())))]
+    else:
+        estimated_num_shifts = int((end - start_of_month) / shift_duration)
+        shifts0 = [(start_of_month + i * shift_duration, start_of_month + (i+1) * shift_duration) for i in range(estimated_num_shifts)]
+    for eq, eq_shifts in dict(shifts).items():  # correction for shifts that only partially belong to the month (night shifts)
+        if len(shifts[eq]) == 0:
+            continue
+        first = eq_shifts[0]
+        last = eq_shifts[-1]
+        start_correction = first.period[0] < start_of_month < first.period[1]
+        end_correction = last.period[0] < end < last.period[1]
+        if start_correction or end_correction:
+            new_first = PlannedWorkingShift(equipment=eq, period=(start_of_month, first.period[1]), worktime=((first.period[1]-start_of_month).total_seconds()/(first.period[1]-first.period[0]).total_seconds())*first.worktime) \
+                    if start_correction else first
+            new_last = PlannedWorkingShift(equipment=eq, period=(last.period[0], end), worktime=((end - last.period[0]).total_seconds()/(last.period[1]-last.period[0]).total_seconds())*last.worktime) \
+                if end_correction else last
+            new_shifts = [new_first] + list(eq_shifts)[1:-1] + [new_last]
+            shifts[eq] = new_shifts
+    availabilities_aggregated = PlantAvailabilityPersistence.aggregate([p.id for p in site.equipment], start.date(), end.date(), {}, shifts=shifts)
+    mtp, levels = ltp.run(f"ltp_cli_{DatetimeUtils.format(DatetimeUtils.now(), use_zone=False)}", targets, initial_storage_levels=initial_storages,
+                          shifts=shifts0, plant_availabilities=availabilities_aggregated)
+    print("Results", mtp)
+
+
+def _field_for_order(o: Order|Material, field: str) -> Sequence[str]:
     if hasattr(o, field):
         return (field, )
     if isinstance(o, Order) and hasattr(o.material_properties, field):
@@ -415,8 +577,8 @@ def _field_for_order(o: Order|Material, field: str) -> typing.Sequence[str]:
     if "*" in field:
         start_wildcard: bool = field.startswith("*")
         end_wildcard: bool = field.endswith("*")
-        new_field = field.upper()
         if start_wildcard:
+            new_field = field.upper()
             new_field = new_field[1:]
         if end_wildcard:
             new_field = new_field[:-1]
@@ -425,6 +587,13 @@ def _field_for_order(o: Order|Material, field: str) -> typing.Sequence[str]:
                                 (end_wildcard or key.upper().endswith(new_field))] if isinstance(o, Order) and o.material_properties is not None and isinstance(o.material_properties, BaseModel) else [])
         return fields
     return ()
+
+
+def _processes_for_ids(process_arg: str|None, site: Site) -> list[Process]|None:
+    if not process_arg:
+        return None
+    process_ids = [p for p in (p.strip() for p in process_arg.split(",")) if p != ""]
+    return [_process_for_id(site.processes, p) for p in process_ids]
 
 
 def _process_for_id(processes: list[Process], process_id0: str) -> Process:
@@ -438,6 +607,12 @@ def _process_for_id(processes: list[Process], process_id0: str) -> Process:
     return proc
 
 
+def _plants_for_ids(equipment_arg: str|None, site: Site) -> list[Equipment]|None:
+    if not equipment_arg:
+        return None
+    plant_ids = [p for p in (p.strip() for p in equipment_arg.split(",")) if p != ""]
+    return [_plant_for_id(site.equipment, p) for p in plant_ids]
+
 def _plant_for_id(plants: list[Equipment], plant_id0: str) -> Equipment:
     plant = next((p for p in plants if str(p.id) == plant_id0), None)
     if plant is not None:
@@ -449,7 +624,7 @@ def _plant_for_id(plants: list[Equipment], plant_id0: str) -> Equipment:
     return plant
 
 
-def _print_field_name(f: str, wide:bool=False, values: list[typing.Any] | None=None) -> str:
+def _print_field_name(f: str, wide:bool=False, values: list[Any] | None=None) -> str:
     if "." in f:
         dot = f.rindex(".")
         f = f[dot+1:]
@@ -471,14 +646,14 @@ def _value_for_col(order: Order, f: str, equipment: list[Equipment]|None=None) -
         f = f[idx+1:]
         obj = getattr(obj, first, None)
     obj = getattr(obj, f, None) if obj is not None else None
-    if equipment is not None and (f == "current_equipment" or f == "allowed_equipment") and isinstance(obj, typing.Sequence):
+    if equipment is not None and (f == "current_equipment" or f == "allowed_equipment") and isinstance(obj, Sequence):
         obj = [next((f"{e.name_short} ({e.id})" for e in equipment if e.id == p and e.name_short is not None), str(p)) for p in obj]
     return obj
 
 def _format_value(v: float|int|str|None, l: int, wide: bool=False) -> str:
     if v is None:
         return "".join([" " for _ in range(l+2)])
-    if isinstance(v, typing.Mapping) or isinstance(v, typing.Sequence):
+    if isinstance(v, Mapping) or isinstance(v, Sequence):
         v = str(v)
     if isinstance(v, str):
         return (" {:" + str(l) + "." + str(l) + "s} ").format(v) if not wide else (" {:" + str(l) + "s} ").format(v)
@@ -685,11 +860,15 @@ def transfer_lot():
     parser.add_argument("-ln", "--lot-name", help="Select a new lot name; only relevant if the \"lot\" parameter is not set", type=str, default=None)
     parser.add_argument("-e", "--equipment", help="Equipment name or id", type=str, default=None)
     parser.add_argument("-c", "--comment", help="Optional comment for lot", type=str, default=None)
+    parser.add_argument("-u", "--user", help="Specify a user name", type=str, default=None)
     parser = _trafo_args(parser=parser, include_snapshot=True)
     args = parser.parse_args()
     if args.lot is None and args.equipment is None:
         raise Exception("Must specify either \"equipment\" or \"lot\".")
     orders = [o for o in (o.strip() for o in args.order.split(",")) if len(o) > 0]
+    user = args.user
+    user = "cli" if user is None else user
+    comment = args.comment
     config = DynReActSrvConfig(config_provider=args.config_provider, snapshot_provider=args.snapshot_provider, cost_provider=args.cost_provider)
     plugins = Plugins(config)
     site = plugins.get_config_provider().site_config()
@@ -709,9 +888,9 @@ def transfer_lot():
     name = args.lot if args.lot is not None else args.lot_name if args.lot_name is not None else "test"
     lot = Lot(id=name, equipment=plant.id, active=False, status=1, orders=orders, comment=args.comment)
     if args.lot is not None:
-        return lot_sink.transfer_append(lot, orders[0], snapshot)
+        return lot_sink.transfer_append(lot, orders[0], snapshot, user=user)
     else:
-        return lot_sink.transfer_new(lot, snapshot, external_id=name)
+        return lot_sink.transfer_new(lot, snapshot, external_id=name, comment=comment, user=user)
 
 def mtp_scenario():
     parser = argparse.ArgumentParser(description="Run a mid-term planning optimization benchmark scenario from a file.")

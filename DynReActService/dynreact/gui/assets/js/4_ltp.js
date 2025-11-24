@@ -32,14 +32,14 @@
         return materialGrid?.getSetpoints();
     }
 
-    globalThis.dash_clientside.ltp.initCalendar = function(plantAvailabilities, plant, startTime, horizonWeeks, divId) {
+    globalThis.dash_clientside.ltp.initCalendar = function(plantAvailabilities, shifts, plant, startTime, horizonWeeks, divId) {
         if (!globalThis.customElements.get(plantCalendarTag))
             globalThis.customElements.define(plantCalendarTag, PlantCalendar);
         const parent = document.querySelector("div#" + divId);
         JsUtils.clear(parent);
         const el = JsUtils.createElement(plantCalendarTag, {parent: parent});
         plantAvailabilities = plantAvailabilities ? JSON.parse(plantAvailabilities) : undefined;
-        el.setAvailabilities(startTime, horizonWeeks, plantAvailabilities, plant);
+        el.setAvailabilities(startTime, horizonWeeks, plantAvailabilities, shifts, plant);
     }
 
     globalThis.dash_clientside.ltp.getAvailabilities = function(_, divId) {

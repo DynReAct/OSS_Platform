@@ -3,7 +3,7 @@ from typing import Literal
 from zoneinfo import ZoneInfo
 
 import dash
-from dash import html, dcc, callback, Output, Input
+from dash import html, dcc, callback, Output, Input, State
 import dash_ag_grid as dash_ag
 from pydantic import BaseModel
 
@@ -14,13 +14,14 @@ from pydantic.fields import FieldInfo
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
-from dynreact.gui.pages.session_state import selected_snapshot, get_date_range
+from dynreact.gui.pages.session_state import get_date_range
 
 dash.register_page(__name__, path="/")
 translations_key = "snapshot"
 
 
 def layout(*args, **kwargs):
+    #init_stores(*args, **kwargs)
     categories = state.get_site().material_categories
     return html.Div([
         #selected_snapshot,  # in dash_app layout
@@ -69,6 +70,7 @@ def layout(*args, **kwargs):
             columnSize="responsiveSizeToFit"
             # "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
         ),
+        dcc.Interval(id="snapshot-init-interval", interval=100),  # snapshot selector init
     ], id="snapshot")
 
 def _material_overview(categories: list[MaterialCategory]):
@@ -107,30 +109,33 @@ def _material_overview(categories: list[MaterialCategory]):
     Output("snapshots-selector", "value"),
     Output("snapshots-date-range", "start_date"),
     Output("snapshots-date-range", "end_date"),
-    Input("client-tz", "data")  # client timezone, defined in dash_app
+    Output("snapshot-init-interval", "interval"),
+    Input("client-tz", "data"),  # client timezone, defined in dash_app
+    Input("snapshot-init-interval", "n_intervals"),
+    # this would best be an input, but we need to avoid the circular dependency, since it is updated by snapshots-selector.value
+    State("selected-snapshot", "data")
 )
-def set_snapshot_options(tz: str|None):
+def set_snapshot_options(tz: str|None, _, snapshot: str|None):
+    if not dash_authenticated(config):
+        return dash.no_update, dash.no_update,dash.no_update,dash.no_update, 30_000
+    if snapshot is None:
+        return dash.no_update, dash.no_update,dash.no_update,dash.no_update,dash.no_update
     zi = None
     try:
         zi = ZoneInfo(tz)
     except:
         pass
-    start_date, end_date, snap_options, selected_snap = get_date_range(selected_snapshot.data, zi=zi)
-    return snap_options, selected_snap, start_date, end_date
-
+    start_date, end_date, snap_options, selected_snap = get_date_range(snapshot, zi=zi)
+    return snap_options, selected_snap, start_date, end_date, 7_200_000
 
 
 @callback(
-    Output("selected-snapshot", "data"),
-    Output("selected-snapshot-obj", "data"),
-    Input("snapshots-selector", "value")
+    Output("snapshot_selected-snapshot", "data"),  # defined in session_state
+    Input("snapshots-selector", "value"),
+    config_prevent_initial_callbacks=True
 )
 def set_snapshot(snapshot_id: str):
-    timestamp = DatetimeUtils.parse_date(snapshot_id)
-    snap = state.get_snapshot(timestamp)
-    if snap is None:
-        return None, None
-    return timestamp, snap.model_dump(exclude_unset=True, exclude_none=True)
+    return snapshot_id
 
 
 @callback(

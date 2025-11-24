@@ -1,4 +1,4 @@
-from dynreact.base.model import Lot, Site, Snapshot
+from dynreact.base.model import Lot, Site, Snapshot, ServiceMetrics
 
 
 class LotSink:
@@ -24,13 +24,15 @@ class LotSink:
                  lot: Lot,
                  snapshot: Snapshot,
                  external_id: str|None = None,
-                 comment: str|None = None) -> str:
+                 comment: str|None = None,
+                 user: str|None=None) -> str:
         raise Exception("not implemented")
 
     def transfer_append(self,
                         lot: Lot,
                         start_order: str,
-                        snapshot: Snapshot) -> str:
+                        snapshot: Snapshot,
+                        user: str|None=None) -> str:
         """
         :param lot:
         :param start_order: first order to be transferred
@@ -38,4 +40,10 @@ class LotSink:
         :return: lot id
         """
         raise Exception("not implemented")
+
+    def metrics(self) -> ServiceMetrics:
+        # Overwrite in derived sink; it is recommended to have at least the following metrics (counters):
+        # transfers_total, lots_transferred_total, transfer_errors_total
+        # use labels to distinguish different types of lot sinks
+        return ServiceMetrics(service_id="midtermplanning_lotsink", metrics=[])
 

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone, tzinfo
 from typing import Any
 
 from dynreact.SnapshotUpdate import SnapshotUpdate
@@ -12,10 +12,12 @@ from dynreact.base.LotsOptimizer import LotsOptimizationAlgo
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.ResultsPersistence import ResultsPersistence
+from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.AggregationPersistence import AggregationPersistence
 from dynreact.base.impl.AggregationProviderImpl import AggregationProviderImpl
 from dynreact.base.model import Snapshot, Site, ProductionPlanning, ProductionTargets, Material, Lot
+from dynreact.lots_optimization import LotCreator
 
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.plugins import Plugins
@@ -24,6 +26,11 @@ from dynreact.plugins import Plugins
 class DynReActSrvState:
 
     def __init__(self, config: DynReActSrvConfig, plugins: Plugins):
+        if config.time_zone:
+            from zoneinfo import ZoneInfo
+            self._time_zone = ZoneInfo(config.time_zone)
+        else:
+            self._time_zone = datetime.now(timezone.utc).astimezone().tzinfo
         self._config = config
         self._plugins = plugins
         self._config_provider: ConfigurationProvider|None = None
@@ -35,6 +42,7 @@ class DynReActSrvState:
         self._ltp: LongTermPlanning | None = None
         self._results_persistence: ResultsPersistence | None = None
         self._availability_persistence: PlantAvailabilityPersistence|None = None
+        self._shifts_provider: ShiftsProvider|None = None
         self._auction_obj : Any|None=None  # auction.Auction | None = None
         self._stp: Any|None=None #ShortTermPlanning | None = None
 
@@ -49,6 +57,18 @@ class DynReActSrvState:
         self._stp_page = None
         self._aggregation: AggregationProvider|None = None
         self._aggregation_persistence: AggregationPersistence|None = None
+        self._optimization_state = LotCreator()
+        self._lots_batch_job = None
+
+    def start(self):
+        from dynreact.batch import LotsBatchOptimizationJob
+        self._lots_batch_job = LotsBatchOptimizationJob(self._config, self)
+
+    def get_time_zone(self) -> tzinfo:
+        return self._time_zone
+
+    def get_lot_creator(self) -> LotCreator:
+        return self._optimization_state
 
     def get_snapshot_provider(self) -> SnapshotProvider:
         if self._snapshot_provider is None:
@@ -93,6 +113,11 @@ class DynReActSrvState:
             self._ltp = self._plugins.get_long_term_planning()
         return self._ltp
 
+    def get_shifts_provider(self) -> ShiftsProvider:
+        if self._shifts_provider is None:
+            self._shifts_provider = self._plugins.get_shifts_provider()
+        return self._shifts_provider
+
     def get_stp_context_params(self):
         if self._stp is None:
             self._stp = self._plugins.get_stp_config_params()
@@ -129,11 +154,13 @@ class DynReActSrvState:
             return updates[time]
         if time in self._snapshots_cache:
             return self._snapshots_cache[time]
+        if time is not None and recurse:
+            matches = list(self.get_snapshot_provider().snapshots(time - timedelta(minutes=10), time + timedelta(minutes=10)))
+            matches_sorted = sorted(matches, key=lambda m: abs((m-time).total_seconds()))
+            if len(matches_sorted) > 0:
+                return self.get_snapshot(time=matches_sorted[0], recurse=False)
         snapshot = self.get_snapshot_provider().load(time=time)
         if snapshot is None:
-            if time is not None and recurse:
-                for time0 in self.get_snapshot_provider().snapshots(time - timedelta(minutes=5), time + timedelta(minutes=5)):
-                    return self.get_snapshot(time=time0, recurse=False)
             return snapshot
         new_time = snapshot.timestamp
         if new_time not in self._snapshots_cache:  # or time not in self._snapshots_cache:
@@ -145,8 +172,8 @@ class DynReActSrvState:
             return updates[new_time]
         return snapshot
 
-    def transfer_lot(self, snapshot: Snapshot, sink: LotSink, lot: Lot, name: str, update_snapshot: bool=True) -> str:
-        new_lot_id = sink.transfer_new(lot, snapshot, external_id=name)
+    def transfer_lot(self, snapshot: Snapshot, sink: LotSink, lot: Lot, name: str, user: str|None, update_snapshot: bool=True) -> str:
+        new_lot_id = sink.transfer_new(lot, snapshot, external_id=name, user=user)
         updates = self._snapshot_updates
         if updates is not None and update_snapshot:
             lot = lot.copy(update={"id": new_lot_id})
@@ -207,7 +234,7 @@ class DynReActSrvState:
     def get_plant_performance_models(self) -> list[PlantPerformanceModel]:
         return self._plugins.get_plant_performance_models()
 
-    def get_lot_sinks(self) -> dict[str, LotSink]:
+    def get_lot_sinks(self, if_exists: bool=False) -> dict[str, LotSink]:
         return self._plugins.get_lot_sinks()
 
     def get_stp_page(self):

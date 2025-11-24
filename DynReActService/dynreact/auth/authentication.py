@@ -39,3 +39,10 @@ def dash_authenticated(config: DynReActSrvConfig) -> bool:
     from flask_login import current_user
     return current_user.is_authenticated
 
+
+def get_current_user() -> str|None:
+    try:
+        from flask_login import current_user
+        return current_user.get_id()
+    except:
+        return None

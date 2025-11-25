@@ -207,6 +207,7 @@ def lots(response: Response, snapshot: str|datetime|None = Query(None, descripti
                 "1": {"description": "Created", "value": [1]},
             }), active: bool|None = Query(None, description="Filter on active/inactive lots"),
             reschedulable: bool | None = Query(None, description="Filter on reschedulable lots"),
+            complete: bool | None = Query(None, description="Filter on complete lots, i.e. those ready to be processed"),
             username = username) -> list[Lot]:
     is_absolute_timestamp: bool = isinstance(snapshot, str) and not snapshot.startswith("now")
     if isinstance(snapshot, str):
@@ -232,17 +233,61 @@ def lots(response: Response, snapshot: str|datetime|None = Query(None, descripti
         lots = [l for l in lots if l.status in status]
     if active is not None:
         lots = [l for l in lots if l.active == active]
+    sp = state.get_snapshot_provider()
     if reschedulable is not None:
-        sp = state.get_snapshot_provider()
         lots = [l for l in lots if sp.is_lot_reschedulable(l) == reschedulable]
+    if complete is not None:
+        lots = [l for l in lots if sp.is_lot_complete(l) == complete]
     return lots
+
+@fastapi_app.get("/planning-horizon",
+                 tags=["dynreact"],
+                 response_model_exclude_unset=True,
+                 response_model_exclude_none=True,
+                 summary="Get the planning horizon by equipment id based on scheduled lots")
+def planning_horizon(response: Response, snapshot: str|datetime|None = Query(None, description="Specify the snapshot id. If not set, the latest snapshot will be used", examples=[None, "now", "now-1d", "2023-12-04T23:59Z"],
+                                               openapi_examples={
+                "unset": {"description": "No snapshot timestamp specified, will use latest", "value": None},
+                "now": {"description": "Get the most recent snapshot", "value": "now"},
+                "now-1d": {"description": "Get yesterday's snapshot", "value": "now-1d"},
+                "2023-04-25T23:59Z": {"description": "A specific timestamp", "value": "2023-04-25T23:59Z"},
+            }), equipment: list[str|int]|None = Query(None, description="Filter by equipment", examples=[None, 1, "PKL01"], openapi_examples={
+                "unset": {"description": "No equipment filter", "value": None},
+                "1": {"description": "Specify equipment by equipment id", "value": [1]},
+                "PKL01": {"description": "Specify equipment by name", "value": ["PKL01"]}
+            }), process: str|int|None = Query(None, description="Filter by process stage", examples=[None, "PKL", 1], openapi_examples={
+                "unset": {"description": "No process filter", "value": None},
+                "PKL": {"description": "Specify process by name", "value": "PKL"},
+                "1": {"description": "Specify process by process id", "value": 1},
+            }),
+            username = username) -> dict[int|str, datetime]:
+    is_absolute_timestamp: bool = isinstance(snapshot, str) and not snapshot.startswith("now")
+    if isinstance(snapshot, str):
+        snapshot = None if snapshot == "" else parse_datetime_str(snapshot)
+    snap = state.get_snapshot(snapshot)
+    if equipment is not None:
+        equipment = [_get_equipment_id(e) for e in equipment]   # convert to all ints
+    if process is not None:
+        process = None if process == "" else _get_process_name(process)
+    if process is not None:
+        plants = state.get_site().get_process_equipment(process, do_raise=True)
+        equipment = [p.id for p in plants if equipment is None or p.id in equipment]
+    if equipment is None:
+        equipment = [e.id for e in state.get_site().equipment]
+    horizons = {e: state.get_snapshot_provider().planning_horizon(snap, e) for e in equipment}
+    if is_absolute_timestamp:
+        response.headers["Cache-Control"] = "max-age=604800"  # 1 week
+    else:
+        response.headers["Cache-Control"] = "max-age=60"  # 1 minute
+    return {"snapshot": snap.timestamp}|horizons
 
 
 @fastapi_app.get("/equipmentdowntimes",
                  tags=["dynreact"],
+                 deprecated=True,
                  response_model_exclude_unset=True,
                  response_model_exclude_none=True,
-                 summary="Get a specific snapshot; the one with largest timestamp <= the provided timestamp")
+                 summary="Get plant downtimes. Deprecated, use planned-shifts instead.")
 def plant_downtimes(
         start:  str|datetime|None = Query(None, description="Start time. If neither start nor end time are specified, "
                         + "start is set to now", examples=["now", "now+1d", "2023-04-25T00:00Z"], openapi_examples={

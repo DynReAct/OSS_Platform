@@ -602,6 +602,30 @@ def eligible_orders():
         _print_orders(eligible_orders, fields, wide=wide, filter_existent_properties=filter_existing)
 
 
+def show_snapshots():
+    parser = argparse.ArgumentParser(description="Show available snapshots.")
+    parser.add_argument("-s", "--start", help="Start time", type=str, default=None)
+    parser.add_argument("-e", "--end", help="End time", type=str, default=None)
+    parser.add_argument("-l", "--limit", help="Limit, max number of shifts to show", type=int, default=10)
+    parser.add_argument("-a", "--asc", help="Ascending", action="store_true")
+    parser.add_argument("-cp", "--config-provider", help="Config provider id, such as", type=str, default=None)
+    args = parser.parse_args()
+    start: datetime | None = DatetimeUtils.parse_date(args.start)
+    end: datetime | None = DatetimeUtils.parse_date(args.end)
+    if end is None:
+        end = DatetimeUtils.now()
+    if start is None:
+        start = end - timedelta(days=365 * 100)
+    config = DynReActSrvConfig(config_provider=args.config_provider)
+    plugins = Plugins(config)
+    order = "asc" if args.asc else "desc"
+    snaps = plugins.get_snapshot_provider().snapshots(start, end, order=order)
+    print("Snapshots:")
+    print("==============")
+    for snap in snaps:
+        print(snap)
+
+
 def show_shifts():
     parser = argparse.ArgumentParser(description="Show planned working shifts. Timestamps are displayed in the local timezone.")
     parser.add_argument("-p", "--process", help="Filter by process stage", type=str, default=None)

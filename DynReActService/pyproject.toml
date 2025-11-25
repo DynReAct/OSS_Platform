@@ -41,6 +41,7 @@ show-gantt = "dynreact.cli:show_gantt"
 show-material = "dynreact.cli:show_material"
 show-orders = "dynreact.cli:show_orders"
 show-shifts = "dynreact.cli:show_shifts"
+show-snapshots = "dynreact.cli:show_snapshots"
 transition-costs = "dynreact.cli:transition_costs"
 transfer-lot = "dynreact.cli:transfer_lot"
 

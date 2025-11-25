@@ -622,8 +622,13 @@ def show_snapshots():
     snaps = plugins.get_snapshot_provider().snapshots(start, end, order=order)
     print("Snapshots:")
     print("==============")
+    limit = args.limit
+    cnt = 0
     for snap in snaps:
         print(snap)
+        cnt += 1
+        if cnt >= limit:
+            break
 
 
 def show_shifts():

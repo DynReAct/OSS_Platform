@@ -6,7 +6,7 @@ for more complex use cases.
 
 import enum
 from datetime import datetime, timezone
-from typing import Iterator, Literal, Iterable, Any
+from typing import Iterator, Literal, Iterable, Any, Sequence
 
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Snapshot, Site, Lot, Process, Material, Order, MaterialCategory, MaterialClass, \
@@ -165,6 +165,15 @@ class SnapshotProvider:
         """
         return lot.status <= 1
 
+    def is_lot_complete(self, lot: Lot) -> bool:
+        """
+        This method is used to check if a lot is complete and can be scheduled.
+        The methhod can be overwritten by subclasses. By default, lots with status >= 3 and start and end time set are considered complete.
+        :param lot:
+        :return:
+        """
+        return lot.status >= 3 and lot.start_time is not None and lot.end_time is not None
+
     def material_class_for_order(self, order: Order, category: MaterialCategory) -> MaterialClass|None:
         """
         Overwrite this method in derived class to provide a custom material class mapping
@@ -266,6 +275,17 @@ class SnapshotProvider:
             total_weight = sum(o.target_weight for o in orders.values())
             target_weights[plant_id] = total_weight
         return target_weights
+
+    def planning_horizon(self, snapshot: Snapshot, equipment: int, lots: Sequence[Lot]|None=None) -> datetime:
+        if lots is None:
+            lots = snapshot.lots.get(equipment, [])
+            lots = [lt for lt in lots if self.is_lot_complete(lt)]
+        end_times = [lt.end_time for lt in lots if lt.end_time is not None]  # by default only lots with end time set are included
+        return max(end_times) if len(end_times) > 0 else snapshot.timestamp
+
+    def planning_horizon_proc(self, snapshot: Snapshot, process: str, lots: Sequence[Lot]|None=None) -> datetime:
+        horizons = [self.planning_horizon(snapshot, p.id, lots=[lt for lt in lots if lt.equipment == p.id] if lots is not None else None) for p in self._site.get_process_equipment(process)]
+        return min(horizons)
 
     def eligible_orders2(self,
                          snapshot: Snapshot,

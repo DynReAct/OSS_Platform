@@ -121,6 +121,7 @@ def analyze_lots():
     parser.add_argument("-p", "--process", help="Process(es), separated by \",\"", type=str, default=None)
     parser.add_argument("-so", "--skip-orders", help="Skip orders", action="store_true")
     parser.add_argument("-lt", "--lot", help="Filter by lot id; separate multiple by \",\"", type=str, default=None)
+    parser.add_argument("-cmp", "--complete", help="Filter for complete lots", action="store_true")
     parser.add_argument("-ls", "--lot-status", help="Filter by lot status", type=int, default=None)  # TODO can we allow for a list as well?
     parser.add_argument("-la", "--lot-active", help="Filter by lot active status", type=Boolean, default=None, choices=[b.value for b in Boolean])
     parser.add_argument("-sc", "--skip-comment", help="Hide lot comment", action="store_true")
@@ -139,6 +140,7 @@ def analyze_lots():
     site = plugins.get_config_provider().site_config()
     snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
     snapshot: Snapshot = plugins.get_snapshot_provider().load(time=snap)
+    sp = plugins.get_snapshot_provider()
     plant_ids = list(snapshot.lots.keys())
     processes = [p.name_short for p in site.processes]
     plants = [site.get_equipment(p, do_raise=True) for p in plant_ids]
@@ -146,13 +148,13 @@ def analyze_lots():
     orders = {o.id: o for o in snapshot.orders}
     material: dict[str, list[Material]] = {}  # keys: order ids
     lot_filter = [l.strip().upper() for l in args.lot.split(",")] if args.lot is not None else None
+    complete_lots_only: bool = args.complete
     for m in snapshot.material:
         if m.order not in material:
             material[m.order] = []
         material[m.order].append(m)
     for plant in plants:
         plant_id = plant.id
-        plant = site.get_equipment(plant_id, do_raise=True)
         if equipment is not None and (plant.name_short is None or plant.name_short.upper() not in equipment) and str(plant_id) not in equipment:
             continue
         if process is not None and plant.process.upper() not in process:
@@ -164,6 +166,8 @@ def analyze_lots():
         aggregated_tons = 0
         for lot in lots:
             if lot_filter is not None and lot.id.upper() not in lot_filter:
+                continue
+            if complete_lots_only and not sp.is_lot_complete(lot):
                 continue
             lot_orders = [orders.get(o) for o in lot.orders]
             total_weight = sum(o.actual_weight for o in lot_orders)
@@ -189,6 +193,108 @@ def analyze_lots():
         print(f"  Plant {plant.name_short} [id={plant.id}, process={plant.process}, active lots weight={aggregated_tons:7.1f}t]:")
         for lot_line in lines:
             print(lot_line)
+
+def show_gantt():
+    parser = _trafo_args(description="Show gantt chart of lots")
+    parser.add_argument("-e", "--equipment", help="Plant name or plant id", type=str, default=None)
+    parser.add_argument("-p", "--process", help="Process(es), separated by \",\"", type=str, default=None)
+    parser.add_argument("-lt", "--lot", help="Filter by lot id; separate multiple by \",\"", type=str, default=None)
+    parser.add_argument("-w", "--width", help="Set the width", type=int, default=None)
+    args = parser.parse_args()
+    config = DynReActSrvConfig(config_provider=args.config_provider, snapshot_provider=args.snapshot_provider)
+    equipment = args.equipment
+    if equipment is not None:
+        equipment = [e.strip().upper() for e in equipment.split(",")]
+    plugins = Plugins(config)
+    site = plugins.get_config_provider().site_config()
+    processes = [p.name_short for p in site.processes]
+    if args.process is not None:
+        process_ids = [p for p in (p.strip() for p in args.process.split(",")) if p != ""] if args.process is not None else None
+        processes = [_process_for_id(site.processes, p).name_short for p in process_ids]
+    snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
+    snapshot: Snapshot = plugins.get_snapshot_provider().load(time=snap)
+    sp = plugins.get_snapshot_provider()
+    plant_ids = list(snapshot.lots.keys())
+    plants = [p for p in (site.get_equipment(p, do_raise=True) for p in plant_ids) if p.process in processes]
+    plants.sort(key=lambda p: (processes.index(p.process), p.name_short or str(p.id)))
+    start_time = snapshot.timestamp
+    lot_filter = [l.strip().upper() for l in args.lot.split(",")] if args.lot is not None else None
+    lots_by_plants = {}
+    for plant in plants:
+        plant_id = plant.id
+        if equipment is not None and (plant.name_short is None or plant.name_short.upper() not in equipment) and str(plant_id) not in equipment:
+            continue
+        lots = [lot for lot in snapshot.lots[plant_id] if sp.is_lot_complete(lot) and lot.end_time is not None and lot.start_time is not None and lot.end_time > start_time]
+        if lot_filter is not None:
+            lots = [lot for lot in lots if lot.id.upper() in lot_filter]
+        lots.sort(key=lambda lot: lot.start_time)
+        lots_by_plants[plant_id] = lots
+    max_lots_cnt = max(len(lots) for lots in lots_by_plants.values())
+    recommended_min_width = max_lots_cnt * 25
+    width = args.width if args.width is not None else min(150, recommended_min_width)
+    all_lots = [lot for lots in lots_by_plants.values() for lot in lots]
+    end_time = max(lot.end_time for lot in all_lots)
+
+    delta = end_time - start_time
+    for plant, lots in lots_by_plants.items():
+        plant_obj = site.get_equipment(plant, do_raise=True)
+        name = plant_obj.name_short or str(plant_obj.id)
+        line = list(" " * width)
+        dates_line = list(" " * width)
+        for lot in lots:
+            start_idx = int((lot.start_time - start_time) / delta * width)
+            if 0 <= start_idx < width:
+                line[start_idx] = "|"
+            elif start_idx == -1:
+                line[0] = "|"
+            end_idx = int((lot.end_time - start_time) / delta * width)
+            if 0 <= end_idx < width:
+                line[end_idx] = "|"
+            elif end_idx == width:
+                line[end_idx - 1] = "|"
+            interval = (max(0, start_idx) + 1, min(width, end_idx) -1)
+            space = interval[1] - interval[0]
+            if space >= 1:
+                lot_id = lot.id
+                if len(lot_id) > space:
+                    lot_id = lot_id.replace(name + ".", "").replace(name, "")
+                    if len(lot_id) > space and "." in lot_id:
+                        lot_id = lot_id[lot_id.rindex(".")+1:]
+                    if len(lot_id) > space:
+                        lot_id = lot_id[-space:]
+                diff = int((space - len(lot_id))/2)
+                for idx in range(min(len(lot_id), width-interval[0]-diff-1)):
+                    line[interval[0] + diff + idx] = lot_id[idx]
+            elif interval[1] > interval[0] + 1:
+                line[interval[0]+1] = "~"
+        print(f" {name:6s}    |", "".join(line))
+        print("           |")
+    line = list("-" * width)
+    dates_line = list(" " * width)
+    line[0] = "|"
+    line[-1] = "|"
+    local_tz: timezone = datetime.now(timezone.utc).astimezone().tzinfo
+    t0 = DatetimeUtils.format(start_time.astimezone(local_tz), use_zone=False)
+    dates_line[0:len(t0)] = t0
+    t1 = DatetimeUtils.format(end_time.astimezone(local_tz), use_zone=False)
+    dates_line[-len(t1):] = t1
+    t = start_time
+    prev_idx = len(t0)
+    last_idx = width - len(t1)
+    while True:
+        t = t.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        if t >= end_time:
+            break
+        idx = int((t-start_time)/delta * width)
+        if idx <= prev_idx + 6:
+            continue
+        if idx >= last_idx - 6:
+            break
+        line[idx] = "|"
+        tm = t.strftime("%d/%m")
+        dates_line[idx-2:idx-2+len(tm)] = tm
+    print("           |", "".join(line))
+    print("           |", "".join(dates_line))
 
 
 def analyze_site():
@@ -423,6 +529,34 @@ def show_material():
         all_mats = [m for m in snapshot.material if m.order == o_id]
         print(f"Order {o_id} has {len(all_mats)} materials and actual weight {sum(m.weight for m in all_mats):.2f}t.")
         _print_orders(mat, fields, wide=wide, equipment=eq)
+
+
+def planning_horizon():
+    parser = argparse.ArgumentParser(description="Show planning horizon for one or many equipments.")
+    parser.add_argument("-e", "--equipment", help="Filter equipment to be included. Separate multiple by commas.", type=str, default=None)
+    parser.add_argument("-p", "--process", help="Filter equipment by process stage", type=str, default=None)
+    parser.add_argument("-s", "--snapshot", help="Snapshot id. Default: latest.", type=str, default=None)
+    args = parser.parse_args()
+    plugins = Plugins(DynReActSrvConfig())
+    site = plugins.get_config_provider().site_config()
+    process = _process_for_id(site.processes, args.process).name_short if args.process is not None else None
+    equipment = _plants_for_ids(args.equipment, site)
+    snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
+    snapshot: Snapshot = plugins.get_snapshot_provider().load(time=snap)
+    if equipment is None:
+        if process is not None:
+            equipment = site.get_process_equipment(process)
+        else:
+            equipment = site.equipment
+    local_tz: timezone = datetime.now(timezone.utc).astimezone().tzinfo
+    # TODO show also number of lots?
+    print(f"Planning horizons for snapshot {DatetimeUtils.format(snapshot.timestamp.astimezone(local_tz), use_zone=False)}:")
+    print()
+    print("|  Equipment   |     Horizon      |")
+    print("|--------------|------------------|")
+    for equip in equipment:
+        dt = plugins.get_snapshot_provider().planning_horizon(snapshot, equip.id).astimezone(local_tz)
+        print(f"|    {equip.name_short or equip.id:9s} | {DatetimeUtils.format(dt, use_zone=False)} |")
 
 
 def eligible_orders():

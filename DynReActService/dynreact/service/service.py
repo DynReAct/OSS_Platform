@@ -207,6 +207,7 @@ def lots(response: Response, snapshot: str|datetime|None = Query(None, descripti
                 "1": {"description": "Created", "value": [1]},
             }), active: bool|None = Query(None, description="Filter on active/inactive lots"),
             reschedulable: bool | None = Query(None, description="Filter on reschedulable lots"),
+            complete: bool | None = Query(None, description="Filter on complete lots, i.e. those ready to be processed"),
             username = username) -> list[Lot]:
     is_absolute_timestamp: bool = isinstance(snapshot, str) and not snapshot.startswith("now")
     if isinstance(snapshot, str):
@@ -232,9 +233,11 @@ def lots(response: Response, snapshot: str|datetime|None = Query(None, descripti
         lots = [l for l in lots if l.status in status]
     if active is not None:
         lots = [l for l in lots if l.active == active]
+    sp = state.get_snapshot_provider()
     if reschedulable is not None:
-        sp = state.get_snapshot_provider()
         lots = [l for l in lots if sp.is_lot_reschedulable(l) == reschedulable]
+    if complete is not None:
+        lots = [l for l in lots if sp.is_lot_complete(l) == complete]
     return lots
 
 

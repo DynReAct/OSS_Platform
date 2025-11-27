@@ -480,6 +480,7 @@ def show_material():
     parser.add_argument("-e", "--equipment", help="Filter orders by current equipment", type=str, default=None)
     parser.add_argument("-f", "--field", help="Select field(s) to be displayed. Separate multiple fields by \",\"", type=str, default=None)
     parser.add_argument("-w", "--wide", help="Show wide cells, do not crop content", action="store_true")
+    parser.add_argument("-l", "--limit", help="Limit number of material to be shown", type=int, default=None)
     # parser.add_argument("-sen", "--skip-equipment-name", help="Show only equipment ids, no names, for fields involving equipment references", action="store_true")
     args = parser.parse_args()
     config = DynReActSrvConfig(config_provider=args.config_provider)
@@ -525,10 +526,15 @@ def show_material():
     fields = [f for flds in (_field_for_order(first, f) for f in fields) for f in flds] if fields is not None else None
     wide=args.wide
     eq = site.equipment
+    cnt = 0
+    limit = args.limit
     for o_id, mat in material.items():
         all_mats = [m for m in snapshot.material if m.order == o_id]
         print(f"Order {o_id} has {len(all_mats)} materials and actual weight {sum(m.weight for m in all_mats):.2f}t.")
         _print_orders(mat, fields, wide=wide, equipment=eq)
+        cnt += len(mat)
+        if limit is not None and cnt >= limit:
+            break
 
 
 def planning_horizon():

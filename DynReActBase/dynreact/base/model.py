@@ -147,6 +147,8 @@ class Material(Model):
     "Process id, cf. field Process#process_ids"
     current_process_name: str|None = None
     "Process stage"
+    quality_lock: bool = False
+    "Indicates that the material cannot be further processed for the time being."
     properties: PROPERTIES|None = None
     "Material-specific properties."
 

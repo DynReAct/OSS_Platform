@@ -637,6 +637,28 @@ def show_snapshots():
             break
 
 
+def evaluate_split_orders():
+    parser = argparse.ArgumentParser(description="Analyze orders split between multiple lots.")
+    parser.add_argument("-p", "--process", help="Process step(s)", type=str)
+    parser.add_argument("-s", "--snapshot", help="Snapshot id", type=str, default=None)
+    args = parser.parse_args()
+    plugins = Plugins(DynReActSrvConfig())
+    site = plugins.get_config_provider().site_config()
+    snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
+    snapshot: Snapshot = plugins.get_snapshot_provider().load(time=snap)
+    processes = [_process_for_id(proc.strip(), args.process) for proc in args.process.split(",")]  if args.process is not None else site.processes
+    all_lots: dict[int, list[Lot]] = snapshot.lots
+    print("Multiple lots per process stage:")
+    for proc in processes:
+        eq: list[int] = [p.id for p in site.get_process_equipment(proc.name_short)]
+        eq_lots = [lot for e, lots in all_lots.items() if e in eq for lot in lots]
+        orders = [o for lot in eq_lots for o in lot.orders]
+        duplicates = [o for idx, o in enumerate(orders) if orders.index(o) != idx]
+        print(f" {proc.name_short}:")
+        for order in duplicates:
+            print(f"  Order {order}, lots: {[lot.id for lot in eq_lots if order in lot.orders]}")
+
+
 def show_shifts():
     parser = argparse.ArgumentParser(description="Show planned working shifts. Timestamps are displayed in the local timezone.")
     parser.add_argument("-p", "--process", help="Filter by process stage", type=str, default=None)

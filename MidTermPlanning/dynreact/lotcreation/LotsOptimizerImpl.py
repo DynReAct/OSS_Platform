@@ -872,11 +872,11 @@ class CTabuWorker:
                 # adapt existing assignments, not needed any more
                 assignments: dict[str, OrderAssignment] = {}
                 plant_status = {}
-                for p, lots in final_lots.items():
-                    for lot in lots:
-                        for idx, ord in enumerate(lot.orders):
-                            assignments[ord] = OrderAssignment(order=ord, equipment=p, lot=lot.id, lot_idx=idx+1)
-                    equipment_targets = targets.target_weight.get(p, EquipmentProduction(equipment=p, total_weight=0.0))
+                for p, equipment_targets in targets.target_weight.items():
+                    if p in final_lots:
+                        for lot in final_lots.get(p):
+                            for idx, ord in enumerate(lot.orders):
+                                assignments[ord] = OrderAssignment(order=ord, equipment=p, lot=lot.id, lot_idx=idx + 1)
                     start_order = previous_orders.get(p) if previous_orders is not None else None
                     new_status: EquipmentStatus = costs.evaluate_equipment_assignments(equipment_targets, planning.process, assignments, snapshot, targets.period,
                                         track_structure=track_structure, main_category=main_category, orders_custom_priority=orders_custom_priority, previous_order=start_order)

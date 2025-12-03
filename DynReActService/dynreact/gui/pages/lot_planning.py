@@ -1,3 +1,4 @@
+import logging
 import threading
 import traceback
 from datetime import datetime, date
@@ -320,22 +321,28 @@ def solutions_table(snapshot: str|datetime|None, process: str|None, preselected_
     def merge_dicts(d1: dict, d2: dict) -> dict:
         d1.update(d2)
         return d1
-    row_data = [merge_dicts({
-        "id": sol_id,
-        "comment": params[sol_id].get("comment"),
-        "target_production": params[sol_id].get("target_production"),
-        "initialization": params[sol_id].get("initialization"),
-        "target_fct": solution.best_objective_value.total_value,
-        "iterations": len(solution.history),
-        "orders_considered": len(best_planning[sol_id].order_assignments),
-        "lots": sum(status.planning.lots_count if status.planning is not None else 0 for status in plant_statuses[sol_id]),
-        "plants": [site.get_equipment(status.targets.equipment).name_short for status in plant_statuses[sol_id]],
-        #"transition_costs": sum(status.planning.transition_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
-        #"weight_costs": sum(status.planning.delta_weight * delta_weight_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
-        "performance_models": params[sol_id].get("performance_models")
-    },
-       {key: (getattr(solution.best_objective_value, key) if hasattr(solution.best_objective_value, key) else 0) or 0 for key in objective_keys })
-                for sol_id, solution in sol_objects.items()]
+
+    def solution_to_dict(sol_id: str, solution: LotsOptimizationState):
+        try:
+            return {
+                "id": sol_id,
+                "comment": params[sol_id].get("comment"),
+                "target_production": params[sol_id].get("target_production"),
+                "initialization": params[sol_id].get("initialization"),
+                "target_fct": solution.best_objective_value.total_value,
+                "iterations": len(solution.history),
+                "orders_considered": len(best_planning[sol_id].order_assignments),
+                "lots": sum(status.planning.lots_count if status.planning is not None else 0 for status in plant_statuses[sol_id]),
+                "plants": [site.get_equipment(status.targets.equipment).name_short for status in plant_statuses[sol_id]],
+                #"transition_costs": sum(status.planning.transition_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
+                #"weight_costs": sum(status.planning.delta_weight * delta_weight_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
+                "performance_models": params[sol_id].get("performance_models")
+            } | {key: (getattr(solution.best_objective_value, key) if hasattr(solution.best_objective_value, key) else 0) or 0 for key in objective_keys }
+        except:
+            logging.exception(f"Failed to parse solution {sol_id}")
+            return None
+
+    row_data = [s for s in (solution_to_dict(sol_id, solution) for sol_id, solution in sol_objects.items()) if s is not None]
     selected_rows = []
     if preselected_solution is not None and preselected_solution in sol_objects:
         selected_rows.append({"id": preselected_solution})

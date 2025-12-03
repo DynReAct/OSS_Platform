@@ -31,6 +31,7 @@ class EligibleOrdersTest(unittest.TestCase):
         proc1_plants: list[Equipment] = site.get_process_equipment(process_names[0])
         proc2_plants: list[Equipment] = site.get_process_equipment(process_names[1])
         proc3_plants: list[Equipment] = site.get_process_equipment(process_names[2])
+        all_equipment = [e.id for e in equipments]
         lots: dict[int, list[Lot]] = {}
         orders = []
         material = []
@@ -46,7 +47,7 @@ class EligibleOrdersTest(unittest.TestCase):
                     lt: str = lot_ids[rand.randint(0, len(lot_ids)-1)]
                     o_lots = {e.process: lt}
                     pos = len(e_lots[lt])
-                    o = _create_order(f"o_{e.name_short}_{i+1}", [e.id], [proc_ids[0]], lots=o_lots, lot_positions={lt: pos+1})
+                    o = _create_order(f"o_{e.name_short}_{i+1}", all_equipment, [proc_ids[0]], lots=o_lots, lot_positions={lt: pos+1})
                     e_lots[lt].append(o.id)
                     orders.append(o)
                     m = _create_material_for_order(o, proc_ids[0])

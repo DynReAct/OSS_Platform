@@ -328,6 +328,7 @@ def analyze_site():
 def evaluate_lot():
     parser = argparse.ArgumentParser()
     parser.add_argument("lot", help="Lot id", type=str)
+    parser.add_argument("-f", "--field", help="Select field(s) to be displayed. Separate multiple fields by \",\"", type=str, default=None)
     parser = _trafo_args(parser=parser)
     args = parser.parse_args()
     config = DynReActSrvConfig(config_provider=args.config_provider, snapshot_provider=args.snapshot_provider, cost_provider=args.cost_provider)
@@ -351,11 +352,24 @@ def evaluate_lot():
     result: ProductionPlanning = costs.evaluate_order_assignments(equipment.process, order_assignments, targets, snapshot)
     #objectives: ObjectiveFunction = costs.objective_function(result.equipment_status[equipment_id])
     #total_weight = sum(t.total_weight for t in targets.target_weight.values())
-    _print_planning(result, snapshot, site, costs)
+    fields = (f.strip() for f in args.field.split(",")) if args.field is not None else None
+    first = next(iter(lot_orders.values()))
+    fields = [f for flds in (_field_for_order(first, f) for f in fields) for f in flds] if fields is not None else None
+    #if args.equipment_fields:
+    #    plant = _plant_for_id(site.equipment, args.equipment_fields)
+    #    relevant_fields: list[str]|None = plugins.get_cost_provider().relevant_fields(plant)
+    #    if relevant_fields is not None:
+    #        fields = fields if fields is not None else []
+    #        fields = fields + [f for f in relevant_fields if f not in fields]
+    if fields is not None and len(fields) == 0:
+        print("No matching field found for ", args.field)
+        return
+    _print_planning(result, snapshot, site, costs, included_fields=fields)
 
 
 def create_lots():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Run the mid-term planning to create some lots")
+    parser.add_argument("-s", "--snapshot", help="Snapshot timestamp", type=str, default=None)
     parser.add_argument("-l", "--lot", help="Use all orders from one or multiple existing lot(s), separated by \",\"", type=str)
     parser.add_argument("-o", "--order", help="Specify orders to include in the backlog, separated by \",\"", type=str)
     parser.add_argument("-t", "--tons", help="Target weight to be scheduled. If not specified but the \"--lot\" parameter is set, then the size of the lot it used instead. Otherwise it is set to the overall size of the order backlog.", type=float, default=None)
@@ -852,16 +866,15 @@ def _format_value(v: float|int|str|None, l: int, wide: bool=False) -> str:
         return (" {:" + str(l) + "d} ").format(v)
     return (" {:" + str(l) + ".2f} ").format(v)  # if not wide else (" {:" + str(l) + "f} ").format(v)
 
-def _print_planning(sol: ProductionPlanning, snapshot: Snapshot, site: Site, costs: CostProvider, filter_existent_properties: bool = True):
+def _print_planning(sol: ProductionPlanning, snapshot: Snapshot, site: Site, costs: CostProvider, filter_existent_properties: bool = True,
+                    included_fields: list[str]|None=None):
     equipment = next(iter(sol.equipment_status.keys()))
     plant = site.get_equipment(equipment, do_raise=True)
-    relevant_fields: list[str] | None = costs.relevant_fields(plant)
+    relevant_fields: list[str] | None = included_fields if included_fields is not None else costs.relevant_fields(plant)
     orders: list[Order] = [snapshot.get_order(assign.order, do_raise=True) for assign in sol.order_assignments.values()]
     if relevant_fields is not None:
         order_values = [[_value_for_col(o, f) for f in relevant_fields] for o in orders]
-        cols_included: list[int] = [idx for idx in range(len(relevant_fields)) if any(
-            ov[idx] is not None for ov in order_values)] if filter_existent_properties else list(
-            range(len(relevant_fields)))
+        cols_included: list[int] = [idx for idx in range(len(relevant_fields)) if any(ov[idx] is not None for ov in order_values)] if filter_existent_properties else list(range(len(relevant_fields)))
         relevant_fields = [f for idx, f in enumerate(relevant_fields) if idx in cols_included]
         field_names = [_print_field_name(f) for f in relevant_fields]
         order_values = [[v for idx, v in enumerate(ov) if idx in cols_included] for ov in order_values]

@@ -568,7 +568,7 @@ class Site(LabeledItem):
 
     def get_process_equipment(self, process: str, do_raise: bool=False) -> list[Equipment]:
         proc = self.get_process(process, do_raise=do_raise)
-        process = process.upper() if proc is None else proc.name_short.upper()
+        process = (process.upper() if process is not None else None) if proc is None else proc.name_short.upper()
         return [p for p in self.equipment if p.process.upper() == process]
 
     def get_storage(self, storage: str, do_raise: bool=False) -> Storage|None:

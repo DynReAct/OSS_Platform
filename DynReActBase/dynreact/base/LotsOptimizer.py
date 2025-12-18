@@ -141,9 +141,9 @@ class LotsOptimizer(Generic[P]):
         zombie_plant_status = next((p for p in status_plants if p not in target_plants), None)
         if zombie_plant_status is not None:
             raise Exception("Plant " + str(zombie_plant_status) + " has a status but no defined target value")
-        self._plants: list[Equipment] = [site.get_equipment(p, do_raise=True) for p in target_plants]
+        self._plants: dict[int, Equipment] = {p: site.get_equipment(p, do_raise=True) for p in target_plants}
         self._plant_ids: list[int] = target_plants
-        invalid_plant = next((plant for plant in self._plants if plant.process != process), None)
+        invalid_plant = next((plant for plant in self._plants.values() if plant.process != process), None)
         if invalid_plant is not None:
             raise Exception("Configured plant " + str(invalid_plant.name_short if invalid_plant.name_short is not None else invalid_plant.id)  \
                             + " belongs to process " + str(invalid_plant.process) + ", not " + process)

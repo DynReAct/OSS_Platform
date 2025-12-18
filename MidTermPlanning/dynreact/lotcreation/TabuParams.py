@@ -14,6 +14,8 @@ class TabuParams:
     "Number of TabuSearch Iterations, if not explicitly specified via the run(max_iterations=...) parameter."
     Expiration: int = 10
     "Tabu List expiration"
+    ExpirationAfterShuffle: int = 4
+    "Tabu List expiration after reshuffle"
     NMinUntilShuffle: int = 5
     "number of local minima to be reached until shuffeling"
     NParallel: int = min(mp.cpu_count(), 8)
@@ -73,6 +75,7 @@ class TabuParams:
     def __init__(self,
                  ntotal: int|None = None,
                  Expiration: int|None = None,
+                 ExpirationAfterShuffle: int|None = None,
                  NMinUntilShuffle: int|None = None,
                  NParallel: int|None = None,
                  TAllowed: float|None = None,
@@ -95,6 +98,9 @@ class TabuParams:
             Expiration = int(os.getenv("TABU_LIST_EXPIRATION", TabuParams.Expiration))
         self.Expiration = Expiration
         "Tabu List expiration"
+        if ExpirationAfterShuffle is None:
+            ExpirationAfterShuffle = int(os.getenv("TABU_LIST_EXPIRATION_AFTER_SHUFFLE", TabuParams.ExpirationAfterShuffle))
+        self.ExpirationAfterShuffle = ExpirationAfterShuffle
         if NMinUntilShuffle is None:
             NMinUntilShuffle = int(os.getenv("TABU_LOCAL_MIN_UNTIL_SHUFFEL") or os.getenv("TABU_LOCAL_MIN_UNTIL_SHUFFLE") or TabuParams.NMinUntilShuffle)
         self.NMinUntilShuffle = NMinUntilShuffle

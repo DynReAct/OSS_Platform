@@ -15,6 +15,7 @@ if ldap_query_pw is None:
     ldap_query_pw = os.getenv("LDAP_QUERY_PW")
     if ldap_query_pw is None:
         raise Exception("LDAP_QUERY_PW not specified")
+ldap_use_ssl: bool = config.ldap_use_ssl
 
 
 def ldap_auth(username: str, password: str):
@@ -35,7 +36,7 @@ def ldap_auth(username: str, password: str):
 
 def _ldap_auth_internal(username: str, password: str, server: str):
     try:
-        server = Server(f"ldap://{server}", get_info="NO_INFO")
+        server = Server(f"ldap://{server}", get_info="NO_INFO", use_ssl=ldap_use_ssl)
         conn = Connection(server, user=str(config.ldap_query_user), password=ldap_query_pw, auto_bind=True)
         # bind (authenticate) the user
         conn.bind()

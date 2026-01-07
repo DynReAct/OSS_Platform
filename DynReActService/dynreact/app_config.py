@@ -48,6 +48,7 @@ class DynReActSrvConfig:
     ldap_query_pw: str|None = None
     ldap_search_base: str|None = None
     ldap_query: str = "(sAMAccountName={user})"
+    ldap_use_ssl: bool = False
     # expected format: ["dynreact.custom.SomePlantPerformanceModel:uri"],
     # where the first component identifies a class name (sub class of PlantPerformanceModel) and uri may contain
     # model-specific initialization data
@@ -82,6 +83,7 @@ class DynReActSrvConfig:
                  ldap_query_pw: str | None = None,
                  ldap_search_base: str | None = None,
                  ldap_query: str | None = None,
+                 ldap_use_ssl: bool|None = None,
                  plant_performance_models: list[str]|None = None,
                  stp_frontend: str|None = None,
                  time_zone: str | None = None
@@ -169,6 +171,8 @@ class DynReActSrvConfig:
                         ldap_search_base = os.getenv("LDAP_SEARCH_BASE")
                     if ldap_query is None:
                         ldap_query = os.getenv("LDAP_QUERY", DynReActSrvConfig.ldap_query)
+                if ldap_use_ssl is None:
+                    ldap_use_ssl = os.getenv("LDAP_SSL") is not None and os.getenv("LDAP_SSL").lower() != "false"
         elif auth_method == "none":
             auth_method = None
         self.auth_method = auth_method
@@ -181,6 +185,7 @@ class DynReActSrvConfig:
         self.ldap_query_pw = ldap_query_pw
         self.ldap_query = ldap_query
         self.ldap_search_base = ldap_search_base
+        self.ldap_use_ssl = ldap_use_ssl
         idx = 0
         if plant_performance_models is None:
             plant_performance_models = []

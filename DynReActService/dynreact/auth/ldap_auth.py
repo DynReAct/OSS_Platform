@@ -36,7 +36,8 @@ def ldap_auth(username: str, password: str):
 
 def _ldap_auth_internal(username: str, password: str, server: str):
     try:
-        server = Server(f"ldap://{server}", get_info="NO_INFO", use_ssl=ldap_use_ssl)
+        protocol = "ldap" if not ldap_use_ssl else "ldaps"
+        server = Server(f"{protocol}://{server}", get_info="NO_INFO", use_ssl=ldap_use_ssl)
         conn = Connection(server, user=str(config.ldap_query_user), password=ldap_query_pw, auto_bind=True)
         # bind (authenticate) the user
         conn.bind()

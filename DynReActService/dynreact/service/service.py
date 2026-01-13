@@ -13,7 +13,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, \
     MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction, AggregatedStorageContent, \
-    AggregatedMaterial, Histogram, ServiceMetrics, PrimitiveMetric, PlannedWorkingShift, Lot
+    AggregatedMaterial, Histogram, ServiceMetrics, PrimitiveMetric, PlannedWorkingShift, Lot, LotTimes
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.params import Path, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -239,6 +239,48 @@ def lots(response: Response, snapshot: str|datetime|None = Query(None, descripti
     if complete is not None:
         lots = [l for l in lots if sp.is_lot_complete(l) == complete]
     return lots
+
+@fastapi_app.get("/lot-times",
+                 tags=["dynreact"],
+                 response_model_exclude_unset=True,
+                 response_model_exclude_none=True,
+                 summary="Get anticipated processing times for either orders or material from a specific snapshot. Returns a map order/material id -> process -> lot times")
+def lot_times(snapshot: str|datetime|None = Query(None, description="Specify the snapshot id. If not set, the latest snapshot will be used",
+                                examples=[None, "now", "now-1d", "2023-12-04T23:59Z"], openapi_examples={
+                "unset": {"description": "No snapshot timestamp specified, will use latest", "value": None},
+                "now": {"description": "Get the most recent snapshot", "value": "now"},
+                "now-1d": {"description": "Get yesterday's snapshot", "value": "now-1d"},
+                "2023-04-25T23:59Z": {"description": "A specific timestamp", "value": "2023-04-25T23:59Z"},
+            }),
+            mode: Literal["order", "material"]|None = Query(None, description="Query lot times for orders or material. If none is selected but an id is provided, "
+                    + "the service decides according to whether an order or material id has been provided. Otherwise, orders are used by default."),
+            id: list[str]|None = Query(None, description="Filter by  order id or material id", examples=["123456"]),
+            process: str|int|None = Query(None, description="Filter by process stage", examples=[None, "PKL", 1], openapi_examples={
+                "unset": {"description": "No process filter", "value": None},
+                "PKL": {"description": "Specify process by name", "value": "PKL"},
+                "1": {"description": "Specify process by process id", "value": 1},
+            }),
+            username = username) -> dict[str, dict[str, LotTimes]]:
+    if isinstance(snapshot, str):
+        snapshot = None if snapshot == "" else parse_datetime_str(snapshot)
+    sp = state.get_snapshot_provider()
+    if mode is None and id is not None and len(id) > 0:
+        snap = sp.load(snapshot=snapshot)
+        if snap is None:
+            raise HTTPException(status_code=404, detail=f"Snapshot not found: {snapshot}")
+        for item_id in id:
+            mat = snap.get_material(item_id, do_raise=False)
+            order = None if mat is not None else snap.get_order(item_id, do_raise=False)
+            if mat is not None or order is not None:
+                mode = "material" if mat is not None else "order"
+                break
+        if mode is None:
+            raise HTTPException(status_code=404, detail=f"None of the ids {id} have been found in the snapshot from {snap.timestamp}.")
+    result = sp.get_material_lot_times(snapshot=snapshot, material=id) if mode == "material" else sp.get_order_lot_times(snapshot=snapshot, order=id)
+    process = None if process is None or process == "" else _get_process_name(process)
+    if process is not None:
+        result = {oid: {process: dct[process]} for oid, dct in result.items() if process in dct}
+    return result
 
 @fastapi_app.get("/planning-horizon",
                  tags=["dynreact"],

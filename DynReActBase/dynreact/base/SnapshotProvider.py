@@ -10,7 +10,7 @@ from typing import Iterator, Literal, Iterable, Any, Sequence
 
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Snapshot, Site, Lot, Process, Material, Order, MaterialCategory, MaterialClass, \
-    ServiceMetrics
+    ServiceMetrics, LotTimes
 
 
 # Note: requires Python >= 3.11
@@ -286,6 +286,14 @@ class SnapshotProvider:
     def planning_horizon_proc(self, snapshot: Snapshot, process: str, lots: Sequence[Lot]|None=None) -> datetime:
         horizons = [self.planning_horizon(snapshot, p.id, lots=[lt for lt in lots if lt.equipment == p.id] if lots is not None else None) for p in self._site.get_process_equipment(process)]
         return min(horizons)
+
+    def get_order_lot_times(self, snapshot: datetime | None = None, order: str|Sequence[str]|None=None) -> dict[str, dict[str, LotTimes]]|None:
+        """Returns a dictionary order id -> process id -> lot data"""
+        raise Exception("not implemented")
+
+    def get_material_lot_times(self, snapshot: datetime | None = None, material: str|Sequence[str]|None=None) -> dict[str, dict[str, LotTimes]]|None:
+        """Returns a dictionary material id -> process id -> lot data"""
+        raise Exception("not implemented")
 
     def eligible_orders2(self,
                          snapshot: Snapshot,

@@ -203,6 +203,11 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
 
 
 class Lot(Model):
+    """
+    A lot contains the production schedule for specific equipment, consisting of a list of production orders to be produced in a sequence.
+    Usually, within a lot no excessive setup operations should be necessary between orders, otherwise the lot should be split into two.
+    """
+
     id: str
     equipment: int
     active: bool
@@ -217,6 +222,23 @@ class Lot(Model):
     "Planned start time for lot processing."
     end_time: datetime|None = None
     "Planned end time for lot processing."
+
+
+class LotTimes(Model):
+    """
+    Provides information about the estimated processing time for an order or material at a specific processing stage.
+    """
+
+    id: str
+    "Either an order id or a material id"
+    process: str
+    "Process id"
+    start: datetime
+    "Estimated processing start time for order or material"
+    end: datetime
+    "Estimated processing end time for order or material"
+    processing_time: timedelta|None=None
+    "Processing duration"
 
 
 class MaterialOrderData(Model):

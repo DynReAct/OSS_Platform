@@ -112,6 +112,14 @@ class Material(Agent):
             material_params=self.params, equipment_status=equipment_status, previous_price=previous_price
         )
         if bidding_price is not None:
+            # --- START: New log message informing about the structure of the payload ---
+            if self.verbose > 3:
+                self.write_log(
+                    msg=f"Sending COUNTERBID to {equipment_id} with material_params payload: {self.params}",
+                    identifier="3a0c1b9f-4f2a-4a8e-8b1e-7f6d5c6b7a8d",
+                    to_stdout=True # Also print to docker container stdout
+                )
+            # --- END: New log message ---            
             sendmsgtopic(
                 producer=self.producer,
                 tsend=topic,

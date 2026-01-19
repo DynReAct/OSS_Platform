@@ -25,7 +25,7 @@ from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.impl.Scenarios import MidTermScenario, MidTermBenchmark
 from dynreact.base.model import Snapshot, Material, OrderAssignment, Order, EquipmentProduction, ProductionTargets, \
     ProductionPlanning, ObjectiveFunction, Site, LabeledItem, Lot, Process, Equipment, PlannedWorkingShift, \
-    LongTermTargets, MaterialCategory, StorageLevel
+    LongTermTargets, MaterialCategory, StorageLevel, LotTimes
 from dynreact.plugins import Plugins
 from dynreact.auth.authentication import authenticate
 
@@ -193,6 +193,73 @@ def analyze_lots():
         print(f"  Plant {plant.name_short} [id={plant.id}, process={plant.process}, active lots weight={aggregated_tons:7.1f}t]:")
         for lot_line in lines:
             print(lot_line)
+
+
+def planned_processing_time():
+    parser = _trafo_args(description="Show planned processing times for order or material or lot")
+    parser.add_argument("-o", "--order", help="Order id. Separate multiple ids by \",\".", type=str, default=None)
+    parser.add_argument("-m", "--material", help="Material id. Separate multiple ids by \",\".", type=str, default=None)
+    parser.add_argument("-e", "--equipment", help="Plant name or plant id", type=str, default=None)
+    parser.add_argument("-p", "--process", help="Process(es), separated by \",\"", type=str, default=None)
+    parser.add_argument("-lt", "--lot", help="Filter by lot id; separate multiple by \",\"", type=str, default=None)
+    parser.add_argument("-sm", "--show-material", action="store_true",
+                        help="Show material processing times instead of order times. This is true by default if the \"material\" parameter is set.")
+    args = parser.parse_args()
+    show_material: bool = args.show_material or args.material is not None
+    config = DynReActSrvConfig(config_provider=args.config_provider, snapshot_provider=args.snapshot_provider)
+    plugins = Plugins(config)
+    site = plugins.get_config_provider().site_config()
+    processes: list[str]|None = None
+    equipment = _plants_for_ids(args.equipment, site)
+    if args.process is not None or equipment is not None:
+        process_ids = [p for p in (p.strip() for p in args.process.split(",")) if p != ""] if args.process is not None else [p.name_short for p in site.processes]
+        processes = [_process_for_id(site.processes, p).name_short for p in process_ids]
+        if equipment is not None:
+            processes = [p for p in processes if any(e.process.upper() in processes for e in equipment)]
+    snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
+    sp = plugins.get_snapshot_provider()
+    snapshot: Snapshot = sp.load(time=snap)
+    items = snapshot.orders if not show_material else snapshot.material
+    orders = None
+    material = None
+    if args.order is not None:
+        orders = [o for o in (o.strip() for o in args.order.split(",")) if o != ""]
+        if len(orders) == 0:
+            orders = None
+    if args.material is not None:
+        material = [m for m in (m.strip() for m in args.material.split(",")) if m != ""]
+        if len(material) == 0:
+            material = None
+    if material is not None or (orders is not None and not show_material):
+        ids = orders if not show_material else material
+        items = [i for i in items if i.id in ids]
+    if show_material and orders is not None:
+        items = [mat for mat in items if mat.order in orders]
+    orders = items if not show_material else [o for o in snapshot.orders if any(mat.order == o.id for mat in items)]
+    find_order = lambda itm: next((o for o in orders if o.id == itm), None) if not show_material else next((o for o in orders if o.id == next(i for i in items if i.id == itm).order), None)
+    item_ids = [i.id for i in items] if material is not None or orders is not None else None
+    times: dict[str, dict[str, LotTimes]] = sp.get_order_lot_times(snapshot=snapshot.timestamp, order=item_ids) if not show_material \
+                else sp.get_material_lot_times(snapshot=snapshot.timestamp, material=item_ids)
+    if processes is not None:
+        times = {item: {p: item_times[p] for p in item_times.keys() if p in processes} for item, item_times in times.items()}
+    lots = None
+    if args.lot is not None:
+        lots = [l for l in (l.strip().lower() for l in args.lot.split(",")) if l != ""]
+    if equipment is not None:
+        lot_objects: list[Lot] = [lt for eq, eq_lots in snapshot.lots.items() if any(e.id == eq for e in equipment) for lt in eq_lots]
+        lot_ids = [lt.id.lower() for lt in lot_objects]
+        lots = [l for l in lots if l in lot_ids] if lots is not None else lot_ids
+    # TODO option to sort by processing times, or lot id, or process?
+    print(f"|  {'Order' if not show_material else 'Material'}  |  Process |    Start time    |     End time     |    Lot    |")
+    for item, item_times in times.items():
+        for p, proc_time in item_times.items():
+            order = find_order(item)
+            lot = (order.lots or {}).get(p)
+            if lots is not None and (lot is None or lot.lower() not in lots):
+                continue
+            print(f"| {item} |  {p:7s} | {DatetimeUtils.format(proc_time.start, use_zone=False).replace("T", " ")} | {DatetimeUtils.format(proc_time.end, use_zone=False).replace("T", " ")} |  {lot} |")
+
+
 
 def show_gantt():
     parser = _trafo_args(description="Show gantt chart of lots")

@@ -423,7 +423,7 @@ def plant_status(equipment_id: int, snapshot_timestamp: datetime | str = Path(..
                  unit: Literal["material", "order"] = Query("order", description="Treat materials as basic unit or orders (default)?"),
                  planning_horizon: Annotated[timedelta|str|None, Query(openapi_examples={"2d": {"value": "2d", "description": "A duration of two days"}},
                      # not working, need to use planning_horizon
-                    validation_alias=AliasChoices("planning-horizon", "planning_horizon", "planningHorizon"))] = timedelta(days=1),
+                     validation_alias=AliasChoices("planning-horizon", "planning_horizon", "planningHorizon"))] = timedelta(days=1),
                  # how to determine this? default throughput per plant; long term planning results; ...?
                  target_weight: Annotated[float|None, Query(description="Target weight. If not specified, it is determined from the snapshot")] = None,
                  current: str|None = Query(None, description="Order id or material id; determined from snapshot by default"),
@@ -474,13 +474,13 @@ def target_function_update(transition: EquipmentTransitionStateful, username = u
     next_coil: Material | None = None
     current_order: Order | None = snapshot.get_order(transition.current_order)
     next_order: Order | None = snapshot.get_order(transition.next_order)
-    if next_order is None or current_order is None:
-        raise HTTPException(status_code=404, detail="Current or next order " + str(transition.current_order) + "/" + str(transition.next_order) + " not found")
+    if next_order is None or current_order is None:   # FIXME current_order should be allowed None
+        raise HTTPException(status_code=404, detail=f"Current or next order {transition.current_order}/{transition.next_order} not found")
     if transition.next_material is not None:
         current_coil = snapshot.get_material(transition.current_material)
         next_coil = snapshot.get_material(transition.next_material)
         if current_coil is None or next_coil is None:
-            raise HTTPException(status_code=404, detail="Current/Next coil " + str(transition.current_material) + "/" + str(transition.next_material) + " not found")
+            raise HTTPException(status_code=404, detail=f"Current/Next coil {transition.current_material}/{transition.next_material} not found")
     # this is actually allowed at the beginning
     #if current_order is None and current_coil is None:
     #    raise HTTPException(status_code=404, detail="Current coil or order " + str(transition.current) + " not found")

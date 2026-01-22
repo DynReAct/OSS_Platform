@@ -48,6 +48,7 @@ class LotsBatchOptimizationJob:
         if config.lots_batch_config:
             self._config = LotsBatchOptimizationJob._parse_config(config.lots_batch_config.strip())
             self._thread = threading.Thread(name="batch-lot-creation", target=self.run)
+            self._thread.daemon = True
             self._thread.start()
 
     def run(self):
@@ -103,7 +104,7 @@ class LotsBatchOptimizationJob:
         planning_horizon: timedelta = self._config.period
         now = DatetimeUtils.now()
         # this is the generic period, but we'll adapt it further for each process stage depending on the horizon of existing lots
-        period = (now, now + planning_horizon)  # TODO consider current lots horizon per plant/process!!!--!!!
+        period = (now, now + planning_horizon)
         default_tons = 1000     # FIXME would need to depend on process; better fail if no setting available?
         lot_size_to_tuple = lambda x: x if x is None else (x.min, x.max)
         all_orders = {o.id: o for o in snap.orders}
@@ -114,7 +115,7 @@ class LotsBatchOptimizationJob:
                 settings = proc_settings.get(proc.process) or ProcessLotCreationSettings(total_size=default_tons)    # XXX?
                 equipment = site.get_process_equipment(proc.process)
                 equipment_ids = [e.id for e in equipment]
-                existing_lots: list[Lot] = [lot for eq, lots in snap.lots if eq in equipment_ids for lot in lots if   # TODO lot status filter correct?
+                existing_lots: list[Lot] = [lot for eq, lots in snap.lots.items() if eq in equipment_ids for lot in lots if   # TODO lot status filter correct?
                         (lot.status > 1 and lot.start_time is not None and lot.end_time is not None and lot.start_time < period[1] and lot.end_time > period[0])]
                 lots_horizon, equipment_horizons, last_orders = ModelUtils.lots_horizon(equipment_ids, existing_lots)
                 if lots_horizon is not None and lots_horizon >= period[1]:

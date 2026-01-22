@@ -61,8 +61,9 @@ class DynReActSrvState:
         self._lots_batch_job = None
 
     def start(self):
-        from dynreact.batch import LotsBatchOptimizationJob
-        self._lots_batch_job = LotsBatchOptimizationJob(self._config, self)
+        if self._config.lots_batch_config:
+            from dynreact.batch import LotsBatchOptimizationJob
+            self._lots_batch_job = LotsBatchOptimizationJob(self._config, self)
 
     def get_time_zone(self) -> tzinfo:
         return self._time_zone

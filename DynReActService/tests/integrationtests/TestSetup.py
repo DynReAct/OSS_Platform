@@ -17,7 +17,7 @@ ConfigProvider.config = DynReActSrvConfig(
     out_directory="./tests_out",
     max_snapshot_caches=3,
     cors=False,
-    auth_method="none",
+    auth_method=None,
 )
 
 
@@ -27,15 +27,18 @@ class TestSetup:
     def set_test_providers(site: Site, snapshot: Snapshot, transition_costs: dict[str, dict[str, float]],
                            missing_weight_costs=1, surplus_weight_costs=3, new_lot_costs=10):
         """
-        This method must be executed before importing the app modules, as well
+        This method must be executed before importing the app modules
         """
-        from dynreact.app import plugins
-        plugins._config_provider = StaticConfigurationProvider(site)
-        plugins._snapshot_provider = StaticSnapshotProvider(site, snapshot)
-        # maybe pass cost provider itself instead?
-        plugins._cost_provider = SimpleCostProvider("simple:costs", site, transition_costs=transition_costs, missing_weight_costs=missing_weight_costs,
+        from dynreact.app_config import DynReActSrvConfig
+        config = DynReActSrvConfig()
+        config.lots_batch_config = ""
+        config.config_provider = StaticConfigurationProvider(site)
+        config.snapshot_provider = StaticSnapshotProvider(site, snapshot)
+        config.cost_provider = SimpleCostProvider("simple:costs", site, transition_costs=transition_costs, missing_weight_costs=missing_weight_costs,
                                                 surplus_weight_costs=surplus_weight_costs, new_lot_costs=new_lot_costs)
-        # TODO downtime provider
+        from dynreact.app_config import ConfigProvider
+        ConfigProvider.config = config
+
 
     @staticmethod
     def create_order(id: str, plants: list[int], weight: float, due_date: datetime|None=None):

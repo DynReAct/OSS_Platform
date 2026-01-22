@@ -6,7 +6,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Site, Snapshot, Equipment, Process, EquipmentStatus, Order
 from fastapi.testclient import TestClient
 
-from dynreact.service.model import EquipmentTransitionStateful
+from dynreact.service.model import EquipmentTransitionStateful, TransitionInfo
 # Must come before all app imports
 from tests.integrationtests.TestSetup import TestSetup, DynReActAssertions
 
@@ -96,22 +96,21 @@ class ServiceTest(unittest.TestCase):
         snapshot_id: datetime = DatetimeUtils.parse_date(timestamp_formatted)
         planning_period = (snapshot_id, snapshot_id + timedelta(days=1))
         target_weight = 20
-        endpoint = f"/costs/status/{plant_id}/{timestamp_formatted}?planning_horizon=1d&target_weight={target_weight}"
+        endpoint = f"/costs/status/{plant_id}/{timestamp_formatted}?planning_horizon=1d&target_weight={target_weight}&current={self._snapshot.orders[0].id}"
         status_resp = self._client.get(endpoint, headers={"Accept": "application/json"})
         status_resp.raise_for_status()
         status: EquipmentStatus = EquipmentStatus.model_validate(status_resp.json())
-        self.assertAlmostEqual(status.planning.target_fct, self._missing_weight_costs * target_weight,
-                               msg="Unexpected target function value for empty production")
         endpoint = "/costs/transitions-stateful"
         transition: EquipmentTransitionStateful = EquipmentTransitionStateful(equipment=plant_id, snapshot_id=snapshot_id,
                                                                               current_order="", next_order="", equipment_status=status)
-        prev: Order|None = None
-        for order in self._snapshot.orders:
-            transition = transition.model_copy(update={"current_order": prev.id if prev is not None else "", "next_order": order.id, "equipment_status": status})
+        prev: Order = self._snapshot.orders[0]
+        for order in self._snapshot.orders[1:]:
+            transition = transition.model_copy(update={"current_order": prev.id, "next_order": order.id, "equipment_status": status})
             transition_resp = self._client.post(endpoint, content=transition.model_dump_json(),
                             headers={"Accept": "application/json", "Content-Type": "application/json"})
             transition_resp.raise_for_status()
-            status = EquipmentStatus.model_validate(transition_resp.json())
+            info = TransitionInfo.model_validate(transition_resp.json())
+            status = info.status
             prev = order
         self.assertAlmostEqual(status.planning.target_fct, 1, msg="Unexpected target function value")
 

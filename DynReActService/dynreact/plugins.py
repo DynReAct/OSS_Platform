@@ -53,7 +53,9 @@ class Plugins:
     def get_snapshot_provider(self) -> SnapshotProvider:
         if self._snapshot_provider is None:
             site = self.get_config_provider().site_config()
-            if self._config.snapshot_provider.startswith("default+file:"):
+            if isinstance(self._config.snapshot_provider, SnapshotProvider):
+                self._snapshot_provider =  self._config.snapshot_provider
+            elif self._config.snapshot_provider.startswith("default+file:"):
                 self._snapshot_provider = FileSnapshotProvider(self._config.snapshot_provider, site)
             else:
                 self._snapshot_provider = Plugins._load_snapshot_provider(self._config.snapshot_provider, site)
@@ -63,7 +65,9 @@ class Plugins:
 
     def get_config_provider(self) -> ConfigurationProvider:
         if self._config_provider is None:
-            if self._config.config_provider.startswith("default+file:"):
+            if isinstance(self._config.config_provider, ConfigurationProvider):
+                self._config_provider = self._config.config_provider
+            elif self._config.config_provider.startswith("default+file:"):
                 self._config_provider = FileConfigProvider(self._config.config_provider)
             else:
                 self._config_provider = Plugins._load_module("dynreact.config.ConfigurationProviderImpl", ConfigurationProvider, self._config.config_provider)
@@ -84,10 +88,13 @@ class Plugins:
 
     def get_cost_provider(self) -> CostProvider:
         if self._cost_provider is None:
-            site = self.get_config_provider().site_config()
-            self._cost_provider = Plugins._load_cost_provider(self._config.cost_provider, site)
-            if self._cost_provider is None:
-                raise Exception("Cost provider not found " + str(self._config.cost_provider))
+            if isinstance(self._config.cost_provider, CostProvider):
+                self._cost_provider = self._config.cost_provider
+            else:
+                site = self.get_config_provider().site_config()
+                self._cost_provider = Plugins._load_cost_provider(self._config.cost_provider, site)
+                if self._cost_provider is None:
+                    raise Exception("Cost provider not found " + str(self._config.cost_provider))
         return self._cost_provider
 
     def get_lots_optimization(self) -> LotsOptimizationAlgo:

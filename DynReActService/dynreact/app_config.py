@@ -9,7 +9,9 @@ class DynReActSrvConfig:
     time_zone: str|None = None
     "By default, the local timezone is used. Example: \"Europe/Berlin\", \"America/Los_Angeles\"."
     config_provider: str = "default+file:./data/site.json"
+    "Config provider id. Alternatively, it is also admissible to set this field to the config provider itself (for testing)"
     snapshot_provider: str = "default+file:./data/snapshots"
+    "Snapshot provider id. Alternatively, it is also admissible to set this field to the snapshot provider itself (for testing)"
     downtime_provider: str = "default+file:./data/downtimes.json"
     cost_provider: str|None = None  # needs to be specified
     "If None, an arbitrary cost provider will be used, if available"

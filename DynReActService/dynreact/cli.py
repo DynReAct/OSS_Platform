@@ -490,6 +490,27 @@ def create_lots():
     _print_planning(sol, snapshot, site, costs)
 
 
+def evaluate_alternative_lots():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-s", "--snapshot", help="Snapshot timestamp", type=str, default=None)
+    parser.add_argument("-l", "--lot", help="Use all orders from one or multiple existing lot(s), separated by \",\"", type=str)
+    parser.add_argument("-o", "--order", help="Specify orders to include in the backlog, separated by \",\"", type=str)
+    parser.add_argument("-t", "--tons", help="Target weight to be scheduled. If not specified but the \"--lot\" parameter is set, then the size of the lot it used instead. Otherwise it is set to the overall size of the order backlog.", type=float, default=None)
+    parser.add_argument("-e", "--equipment", help="Specify the equipment for which the lot will be created. Can be skipped if the \"--lot\" parameter is set.", type=str, default=None)
+    parser.add_argument("-it", "--iterations", help="Specify number of optimization iterations. Default: 100.", type=int, default=100)
+    parser.add_argument("-se", "--start-existing", help="If the flag is set and an existing lot is specified via \"--lot\", then the algorithm will start from the configuration of the existing lot, otherwise it will start from an empty configuration", action="store_true")
+    parser.add_argument("-fao", "--force-all-orders", help="Enforce that all orders are assigned to a lot", action="store_true")
+    parser.add_argument("-fo", "--force-orders", help="Enforce that specific orders are assigned to a lot", type=str)
+    args = parser.parse_args()
+    config = DynReActSrvConfig(config_provider=args.config_provider, snapshot_provider=args.snapshot_provider, cost_provider=args.cost_provider)
+
+    plugins = Plugins(config)
+    site = plugins.get_config_provider().site_config()
+    snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
+    snapshot: Snapshot = plugins.get_snapshot_provider().load(time=snap)
+    costs = plugins.get_cost_provider()
+
+
 def show_orders():
     parser = argparse.ArgumentParser(description="The fields to be shown can be selected either by means of the -f/--field parameter (supports initial or final wildcard '*'), or the "+
                             "-ef/--equipment-fields parameter. In the latter case, the cost-relevant fields for the specified equipment are shown. \n" +

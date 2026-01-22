@@ -9,7 +9,9 @@ from dynreact.app import state
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.base.SnapshotProvider import OrderInitMethod
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import Snapshot, ProcessLotCreationSettings, ProductionTargets, EquipmentProduction
+from dynreact.base.impl.ModelUtils import ModelUtils
+from dynreact.base.model import Snapshot, ProcessLotCreationSettings, ProductionTargets, EquipmentProduction, Lot, \
+    MidTermTargets
 from dynreact.lots_optimization import FrontendOptimizationListener
 from dynreact.state import DynReActSrvState
 
@@ -100,7 +102,8 @@ class LotsBatchOptimizationJob:
         proc_settings: dict[str, ProcessLotCreationSettings] = site.lot_creation.processes if site.lot_creation is not None else {}
         planning_horizon: timedelta = self._config.period
         now = DatetimeUtils.now()
-        period = (now, now + planning_horizon)  # TODO consider current lots horizon per plant/process
+        # this is the generic period, but we'll adapt it further for each process stage depending on the horizon of existing lots
+        period = (now, now + planning_horizon)  # TODO consider current lots horizon per plant/process!!!--!!!
         default_tons = 1000     # FIXME would need to depend on process; better fail if no setting available?
         lot_size_to_tuple = lambda x: x if x is None else (x.min, x.max)
         all_orders = {o.id: o for o in snap.orders}
@@ -111,26 +114,39 @@ class LotsBatchOptimizationJob:
                 settings = proc_settings.get(proc.process) or ProcessLotCreationSettings(total_size=default_tons)    # XXX?
                 equipment = site.get_process_equipment(proc.process)
                 equipment_ids = [e.id for e in equipment]
+                existing_lots: list[Lot] = [lot for eq, lots in snap.lots if eq in equipment_ids for lot in lots if   # TODO lot status filter correct?
+                        (lot.status > 1 and lot.start_time is not None and lot.end_time is not None and lot.start_time < period[1] and lot.end_time > period[0])]
+                lots_horizon, equipment_horizons, last_orders = ModelUtils.lots_horizon(equipment_ids, existing_lots)
+                if lots_horizon is not None and lots_horizon >= period[1]:
+                    continue
+                process_period: tuple[datetime, datetime] = period if lots_horizon is None or lots_horizon <= period[0] else (lots_horizon, period[1])
                 target_weights: dict[int, EquipmentProduction] = {equ: EquipmentProduction(equipment=equ, total_weight=settings.get_equipment_targets(equ, default_value=default_tons),
                                                                                 lot_weight_range=lot_size_to_tuple(settings.get_equipment_lot_sizes(equ))) for equ in equipment_ids}
                 # TODO option to set material structure settings
                 targets = ProductionTargets(process=proc.process, period=period, target_weight=target_weights)
+                sub_targets = {proc.process: [targets]}
+                total_production = sum(t.total_weight for t in targets.target_weight.values())
+                # these are the targets for the complete period (not process specific)
+                full_targets = MidTermTargets(period=period, sub_periods=[period], production_sub_targets=sub_targets, total_production=total_production, production_targets={})
+                final_targets: ProductionTargets = ModelUtils.mid_term_targets_from_ltp_result(full_targets, proc.process, process_period[0], process_period[1], existing_lots=existing_lots)
+                final_total_production = sum(t.total_weight for t in final_targets.target_weight.values())
+                if final_total_production <= 0:  # process already covered completely
+                    continue
                 # TODO: tbd
                 method = [OrderInitMethod.ACTIVE_PROCESS, OrderInitMethod.OMIT_RELEASED_LOTS, OrderInitMethod.OMIT_ACTIVE_LOTS]
                 # TODO: the planning horizon is currently not taken into account. For this purpose, also the range of the existing planning should be considered (period depending on process),
                 #  in order to consider orders from the previous process stage which will be available for planning  => new OrderInitMethod?
-                eligible_orders: list[str] = self._snapshot_provider.eligible_orders(snap, proc.process, period, method=method)
+                eligible_orders: list[str] = self._snapshot_provider.eligible_orders(snap, proc.process, process_period, method=method)
                 eligible_orders = [o for o in eligible_orders if o in all_orders and any(e in equipment_ids for e in all_orders[o].allowed_equipment)]
                 available_material = sum(all_orders[o].actual_weight for o in eligible_orders)
-                total_targets = sum(w.total_weight for w in target_weights.values())
                 if len(eligible_orders) <= 2:   # TODO configurable, maybe also minimum amount of material
                     print(f"Batch lot creation job for process {proc.process} has only {len(eligible_orders)} eligible orders, skipping it.")
                     continue
-                if total_targets > available_material:
-                    print(f"Batch lot creation for {proc.process}: available order backlog of {available_material}t does not cover the target of {total_targets}t.")
-                # TODO start orders
-                initial_solution, _ = algo.heuristic_solution(proc.process, snap, period[1]-period[0], costs, self._snapshot_provider, targets, eligible_orders)
-                opti = algo.create_instance(proc.process, snap, costs, targets=targets, initial_solution=initial_solution, orders=eligible_orders)
+                if final_total_production > available_material:
+                    print(f"Batch lot creation for {proc.process}: available order backlog of {available_material}t does not cover the target of {final_total_production}t.")
+                # TODO start orders(?)
+                initial_solution, _ = algo.heuristic_solution(proc.process, snap, process_period[1]-process_period[0], costs, self._snapshot_provider, final_targets, eligible_orders)
+                opti = algo.create_instance(proc.process, snap, costs, targets=final_targets, initial_solution=initial_solution, orders=eligible_orders)
                 # TODO parameters
                 time_id: str = DatetimeUtils.format(DatetimeUtils.now(), use_zone=False).replace("-", "").replace(":","").replace("T", "")
                 listener = FrontendOptimizationListener(proc.process + "_" + time_id + "_batch", persistence, True, opti, timeout=proc.max_duration)
@@ -146,7 +162,7 @@ class LotsBatchOptimizationJob:
                     lots_cnt = len(all_lots)
                     lots_weight = sum(lot.weight or 0 for lot in all_lots)
                     orders_assigned = sum(len(lot.orders) for lot in all_lots)
-                    print(f"  Objective value: {objective}, lots: {lots_cnt}, orders assigned: {orders_assigned}, total lot weights: {lots_weight}t (targeted: {total_targets}t).")
+                    print(f"  Objective value: {objective}, lots: {lots_cnt}, orders assigned: {orders_assigned}, total lot weights: {lots_weight}t (targeted: {final_total_production}t).")
             except:
                 print(f"Error in lots batch job for proc {proc.process}")
                 traceback.print_exc()

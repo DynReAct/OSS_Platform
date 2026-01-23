@@ -1,6 +1,8 @@
 # This file must be imported before all app files by the tests
 from datetime import datetime
+from typing import Sequence
 
+from dynreact.base.impl.MemoryResultsPersistence import MemoryResultsPersistence
 from dynreact.base.impl.SimpleCostProvider import SimpleCostProvider
 from dynreact.base.impl.StaticConfigurationProvider import StaticConfigurationProvider
 from dynreact.base.impl.StaticSnapshotProvider import StaticSnapshotProvider
@@ -25,28 +27,29 @@ class TestSetup:
 
     @staticmethod
     def set_test_providers(site: Site, snapshot: Snapshot, transition_costs: dict[str, dict[str, float]],
-                           missing_weight_costs=1, surplus_weight_costs=3, new_lot_costs=10):
+                           missing_weight_costs=1, surplus_weight_costs=3, new_lot_costs=10, batch_config: str=""):
         """
         This method must be executed before importing the app modules
         """
         from dynreact.app_config import DynReActSrvConfig
         config = DynReActSrvConfig()
-        config.lots_batch_config = ""
+        config.lots_batch_config = batch_config
         config.config_provider = StaticConfigurationProvider(site)
         config.snapshot_provider = StaticSnapshotProvider(site, snapshot)
         config.cost_provider = SimpleCostProvider("simple:costs", site, transition_costs=transition_costs, missing_weight_costs=missing_weight_costs,
                                                 surplus_weight_costs=surplus_weight_costs, new_lot_costs=new_lot_costs)
+        config.results_persistence = MemoryResultsPersistence("memory:1", site)
         from dynreact.app_config import ConfigProvider
         ConfigProvider.config = config
 
 
     @staticmethod
-    def create_order(id: str, plants: list[int], weight: float, due_date: datetime|None=None):
+    def create_order(id: str, plants: Sequence[int], weight: float, due_date: datetime|None=None):
         return Order(id=id, allowed_equipment=plants, target_weight=weight, actual_weight=weight, due_date=due_date, material_properties=TestMaterial(material_id="test"),
                      current_processes=[], active_processes={})
 
     @staticmethod
-    def create_coils_for_orders(orders: list[Order], process: int) -> list[Material]:  # one coil per order
+    def create_coils_for_orders(orders: Sequence[Order], process: int) -> list[Material]:  # one coil per order
         return [Material(id=o.id + "1", order=o.id, weight=o.actual_weight, order_position=1, current_process=process) for o in orders]
 
 

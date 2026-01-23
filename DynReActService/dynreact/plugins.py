@@ -127,14 +127,17 @@ class Plugins:
 
     def get_results_persistence(self) -> ResultsPersistence:
         if self._results_persistence is None:
-            site = self.get_config_provider().site_config()
-            if self._config.results_persistence.startswith("default+file:"):
-                self._results_persistence = FileResultsPersistence(self._config.results_persistence, site)
+            if isinstance(self._config.results_persistence, ResultsPersistence):
+                self._results_persistence = self._config.results_persistence
             else:
-                self._results_persistence = Plugins._load_module("dynreact.results.ResultsPersistenceImpl",
-                        ResultsPersistence, self._config.results_persistence, site)
-                if self._results_persistence is None:
-                    raise Exception("Results persistence not found " + self._config.results_persistence)
+                site = self.get_config_provider().site_config()
+                if self._config.results_persistence.startswith("default+file:"):
+                    self._results_persistence = FileResultsPersistence(self._config.results_persistence, site)
+                else:
+                    self._results_persistence = Plugins._load_module("dynreact.results.ResultsPersistenceImpl",
+                            ResultsPersistence, self._config.results_persistence, site)
+                    if self._results_persistence is None:
+                        raise Exception("Results persistence not found " + self._config.results_persistence)
         return self._results_persistence
 
     def get_availability_persistence(self) -> PlantAvailabilityPersistence:

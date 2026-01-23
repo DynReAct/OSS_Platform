@@ -18,6 +18,7 @@ class DynReActSrvConfig:
     long_term_provider: str = "default:8h"
     short_term_planning: str = "default+file:./data/stp_context.json"
     results_persistence: str = "default+file:./results"
+    "Results persistence id. Alternatively, it is also admissible to set this field to the persistence provider itself (for testing)"
     availability_persistence: str = "default+file:./config"
     aggregation: bool = False
     aggregation_persistence: str = "default+file:./aggregation"

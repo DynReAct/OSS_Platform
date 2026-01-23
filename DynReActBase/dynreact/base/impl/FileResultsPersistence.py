@@ -167,7 +167,7 @@ class FileResultsPersistence(ResultsPersistence):
         return True
 
     @functools.lru_cache(maxsize=32)
-    def load_ltp(self, start_time: datetime, solution_id: str) -> MidTermTargets:
+    def load_ltp(self, start_time: datetime, solution_id: str) -> tuple[MidTermTargets, list[dict[str, StorageLevel]]|None]:
         file = self._get_file_longterm(start_time, solution_id)
         if not os.path.isfile(file):
             raise Exception(f"Solution {solution_id} does not exist for start time {start_time}, no such file: {file}")

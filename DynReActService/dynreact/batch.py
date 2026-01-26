@@ -1,3 +1,4 @@
+from __future__ import annotations
 import threading
 import time
 import traceback
@@ -5,11 +6,10 @@ from datetime import timedelta, datetime
 from typing import Sequence
 
 import numpy as np
+import pandas as pd
 from pydantic import BaseModel
 
-from dynreact.app import state
 from dynreact.app_config import DynReActSrvConfig
-from dynreact.base.SnapshotProvider import OrderInitMethod
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Snapshot, ProcessLotCreationSettings, ProductionTargets, EquipmentProduction, Lot, \
@@ -27,14 +27,13 @@ class ProcessConfig(BaseModel, frozen=True, use_attribute_docstrings=True):
 class BatchConfig(BaseModel, frozen=True, use_attribute_docstrings=True):
     time: datetime
     processes: list[ProcessConfig]
-    period: timedelta = timedelta(days=1)   # TODO configurable
+    period: timedelta = timedelta(days=1)
     test: bool=False
     "If set to true, a batch job will be run on startup"
 
 
 class LotsBatchOptimizationJob:
     """
-    TODO order backlog initialization based on expected available orders at the planned period start
     TODO timezone handling
     TODO metrics reporting
     TODO use logging over print
@@ -96,12 +95,13 @@ class LotsBatchOptimizationJob:
         return self._thread is not None and not self._stopped.is_set()
 
     def _process(self, snapshot: datetime):
-        snap: Snapshot = self._state.get_snapshot(snapshot)
-        algo = self._state.get_lots_optimization()
-        costs = self._state.get_cost_provider()
+        state = self._state
+        snap: Snapshot = state.get_snapshot(snapshot)
+        algo = state.get_lots_optimization()
+        costs = state.get_cost_provider()
         opti_state = state.get_lot_creator()
         persistence = state.get_results_persistence()
-        shifts_provider = self._state.get_shifts_provider()
+        shifts_provider = state.get_shifts_provider()
         site = state.get_site()
         proc_settings: dict[str, ProcessLotCreationSettings] = site.lot_creation.processes if site.lot_creation is not None else {}
         reference_duration: timedelta = site.lot_creation.duration if site.lot_creation is not None else timedelta(days=1)
@@ -171,7 +171,7 @@ class LotsBatchOptimizationJob:
                 if final_total_production > available_material:
                     print(f"Batch lot creation for {proc.process}: available order backlog of {available_material}t does not cover the target of {final_total_production}t.")
                 # TODO start orders(?)
-                initial_solution, _ = algo.heuristic_solution(proc.process, snap, process_period[1]-process_period[0], costs, self._snapshot_provider, final_targets, eligible_orders)
+                initial_solution, _ = algo.heuristic_solution(proc.process, snap, process_period[1]-process_period[0], costs, self._snapshot_provider, final_targets, eligible_orders, previous_orders=last_orders)
                 opti = algo.create_instance(proc.process, snap, costs, targets=final_targets, initial_solution=initial_solution, orders=eligible_orders)
                 # TODO parameters
                 time_id: str = DatetimeUtils.format(DatetimeUtils.now(), use_zone=False).replace("-", "").replace(":","").replace("T", "")
@@ -182,13 +182,14 @@ class LotsBatchOptimizationJob:
                 seconds = time.time() - t0
                 history = listener.history()
                 sol, objective = listener.best_solution()
-                print(f"Batch lot creation job finished for process {proc.process} with {len(eligible_orders)} orders after {len(history)} iterations and {int(seconds/60)} minutes.")
+                print(f"Batch lot creation job finished for process {proc.process} with {len(eligible_orders)} orders after {len(history)} iterations and {int(seconds/60)} minutes. Id: {listener._id}")
                 if sol is not None:
                     all_lots = [lot for lots in sol.get_lots(orders=all_orders).values() for lot in lots]
                     lots_cnt = len(all_lots)
                     lots_weight = sum(lot.weight or 0 for lot in all_lots)
                     orders_assigned = sum(len(lot.orders) for lot in all_lots)
-                    print(f"  Objective value: {objective}, lots: {lots_cnt}, orders assigned: {orders_assigned}, total lot weights: {lots_weight}t (targeted: {final_total_production}t).")
+                    print(f"  Objective value: {objective}, lots: {lots_cnt}, orders assigned: {orders_assigned}/{len(eligible_orders)}, " +
+                          f"total lot weights: {lots_weight}t (targeted: {final_total_production}t).")
             except:
                 print(f"Error in lots batch job for proc {proc.process}")
                 traceback.print_exc()
@@ -199,19 +200,20 @@ class LotsBatchOptimizationJob:
     def _parse_config(cfg: str) -> BatchConfig:
         """
         Examples:
-            06:00;PROC1:1000:15m,PROC2:250:10m
-            06:00;PROC1:1000:15m,PROC2:250:10m;test
+            06:00;P1D;PROC1:1000:15m,PROC2:250:PT10M
+            06:00;P1D;PROC1:1000:15m,PROC2:250:PT10M;test
         """
         if any(c.isspace() for c in cfg):
             raise Exception("Multiple batch configs not supported yet")
         cmps = cfg.split(";")
-        if len(cmps) <= 1:
+        if len(cmps) <= 2:
             raise Exception(f"Invalid config {cfg}")
         dt: datetime = datetime.strptime(cmps[0], "%H:%M")
-        processes: list[tuple[str, int, timedelta]] = [(prc[0], int(prc[1]), DatetimeUtils.parse_duration(prc[2])) for prc in (prc.split(":") for prc in cmps[1].split(","))]
+        planning_duration = pd.Timedelta(cmps[1]).to_pytimedelta()
+        processes: list[tuple[str, int, timedelta]] = [(prc[0], int(prc[1]), pd.Timedelta(prc[2]).to_pytimedelta()) for prc in (prc.split(":") for prc in cmps[2].split(","))]
         procs = [ProcessConfig(process=p[0], max_iterations=p[1], max_duration=p[2]) for p in processes]
-        test = len(cmps) > 2 and cmps[2].strip().lower() == "test"
-        config = BatchConfig(time=dt, processes=procs, test=test)
+        test = len(cmps) > 3 and cmps[3].strip().lower() == "test"
+        config = BatchConfig(time=dt, processes=procs, test=test, period=planning_duration)
         return config
 
     def _next_invocation(self, now: datetime) -> datetime:

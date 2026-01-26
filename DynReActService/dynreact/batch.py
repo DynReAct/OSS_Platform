@@ -2,7 +2,7 @@ from __future__ import annotations
 import threading
 import time
 import traceback
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 from typing import Sequence
 
 import numpy as np
@@ -221,10 +221,12 @@ class LotsBatchOptimizationJob:
     def _next_invocation(self, now: datetime) -> datetime:
         if self._config.test and self._runs == 0:
             return now
+        now = now.astimezone()  # convert to local time
         tm = self._config.time
         nxt = now.replace(hour=tm.hour, minute=tm.minute, second=0, microsecond=0)
         while nxt < now:
             nxt = nxt + timedelta(days=1)
+        nxt = nxt.astimezone(tz=timezone.utc)
         return nxt
 
 

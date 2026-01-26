@@ -248,7 +248,7 @@ class ModelUtils:
         :param lots:
         :return:
             - The common planning horizon of all equipments, i.e., the time until which all equipments are covered by lots.
-                None if some equipment has no applicable lots at all.
+                None if some equipment has no applicable lots at all. Note that the horizon may be earlier than the current timestamp.
             - Horizon by equipment id
             - last order id scheduled by equipment id.
         """
@@ -263,6 +263,7 @@ class ModelUtils:
             if lot.equipment in horizons and horizons[lot.equipment] >= lot.end_time:
                 continue
             horizons[lot.equipment] = lot.end_time
+            last_orders[lot.equipment] = lot.orders[-1]
         common_horizon = None if any(e not in horizons for e in equipment) else min(horizons.values())
         return common_horizon, horizons, last_orders
 

@@ -118,8 +118,9 @@ class LotsBatchOptimizationJob:
                 settings = proc_settings.get(proc.process) if proc_settings is not None else None
                 equipment = site.get_process_equipment(proc.process)
                 equipment_ids = [e.id for e in equipment]
+                # Here the hours=8 offset in the lot.end_time condition is added to ensure that the last order of an existing lot that is about to be finished can be considered
                 existing_lots: list[Lot] = [lot for eq, lots in snap.lots.items() if eq in equipment_ids for lot in lots if   # TODO lot status filter correct?
-                        (lot.status > 1 and lot.start_time is not None and lot.end_time is not None and lot.start_time < period[1] and lot.end_time > period[0])]
+                        (lot.status > 1 and lot.start_time is not None and lot.end_time is not None and lot.start_time < period[1] and lot.end_time > period[0] - timedelta(hours=8))]
                 lots_horizon, equipment_horizons, last_orders = ModelUtils.lots_horizon(equipment_ids, existing_lots)
                 if lots_horizon is not None and lots_horizon >= period[1]:
                     continue
@@ -129,6 +130,7 @@ class LotsBatchOptimizationJob:
                 fractions_available: dict[int, float] = {e: sum((s.worktime for s in shift), start=timedelta())/planning_duration if len(shift) > 0 else 0 for e, shift in shifts.items()}
                 equipment_ids = [e for e, frac in fractions_available.items() if frac > 0]
                 if len(equipment_ids) == 0:
+                    print(f"No equipment available for process {proc.process} (or available equipment already covered by lots).")
                     continue
                 targets_weights0: dict[int, float] = {}
                 for e in equipment_ids:

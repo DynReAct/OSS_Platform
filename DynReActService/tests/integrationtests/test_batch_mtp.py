@@ -6,13 +6,14 @@ from typing import Sequence, Callable
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.base.LotsOptimizer import LotsOptimizationState
 from dynreact.base.ResultsPersistence import ResultsPersistence
+from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MemoryResultsPersistence import MemoryResultsPersistence
 from dynreact.base.impl.SimpleCostProvider import SimpleCostProvider
 from dynreact.base.impl.StaticConfigurationProvider import StaticConfigurationProvider
 from dynreact.base.impl.StaticSnapshotProvider import StaticSnapshotProvider
 from dynreact.base.model import Site, Snapshot, Equipment, Process, Order, LotCreationSettings, \
-    ProcessLotCreationSettings, Lot
+    ProcessLotCreationSettings, Lot, PlannedWorkingShift
 from dynreact.plugins import Plugins
 from dynreact.state import DynReActSrvState
 from tests.integrationtests.TestSetup import TestSetup
@@ -31,6 +32,7 @@ class BatchMtpTest(unittest.TestCase):
 
     @staticmethod
     def _init_for_tests(process: str, orders: int|Sequence[Order], order_weight: float=10, num_plants: int=1, transition_costs: dict[str, dict[str, float]]|None=None,
+                        shifts: dict[datetime, tuple[timedelta, timedelta]]|None=None,
                         lots: dict[int, list[Lot]]|None=None, surplus_weight_costs=3, new_lot_costs=10,
                         missing_weight_costs: float=1, batch_config: str="", lot_creation: LotCreationSettings|None=None) -> tuple[DynReActSrvState, Snapshot]:
         process_id = 0
@@ -47,9 +49,27 @@ class BatchMtpTest(unittest.TestCase):
             transition_costs = {o.id: {o2.id: 1 if o != o2 else 0 for o2 in orders} for o in orders}
         cost_provider = SimpleCostProvider("simple:costs", test_site, transition_costs=transition_costs,missing_weight_costs=missing_weight_costs,
                                            surplus_weight_costs=surplus_weight_costs, new_lot_costs=new_lot_costs)
+        shifts_provider = None
+        if shifts is not None:
+            shifts_provider = ShiftsProvider("test_shifts:1", test_site)
+
+            def load_all(start: datetime, end: datetime|None=None, limit: int|None=100, equipments: Sequence[int]|None=None) -> dict[int, Sequence[PlannedWorkingShift]]:
+                equipments = [e for e in equipments if any(p.id == e for p in plants)] if equipments is not None else [p.id for p in plants]
+                result: dict[int, Sequence[PlannedWorkingShift]] = {}
+                for e in equipments:
+                    e_shifts: list[PlannedWorkingShift] = []
+                    for sh_start, (duration, working_time) in shifts.items():
+                        sh_end = sh_start + duration
+                        if sh_end <= start or (end is not None and sh_start >= end):
+                            continue
+                        e_shifts.append(PlannedWorkingShift(equipment=e, period=(sh_start, sh_end), worktime=working_time))
+                    result[e] = e_shifts
+                return result
+            shifts_provider.load_all = load_all
         # not in line with annotated types, but explicitly allowed for test purposes
         cfg = DynReActSrvConfig(config_provider=StaticConfigurationProvider(test_site), lots_batch_config=batch_config,
                                 snapshot_provider=StaticSnapshotProvider(test_site, snapshot), cost_provider=cost_provider,
+                                shifts_provider=shifts_provider,
                                 results_persistence=MemoryResultsPersistence("memory:1", test_site))
         plugins = Plugins(cfg)
         state = DynReActSrvState(cfg, plugins)
@@ -132,9 +152,29 @@ class BatchMtpTest(unittest.TestCase):
 
         BatchMtpTest._wait_for_solution(_check_solution, results_persistence, snapshot.timestamp, process, seconds=10)
 
-    # TODO
-    #def test_batch_mtp_respects_equipment_availability(self):
-    #    pass
+    def test_batch_mtp_respects_equipment_availability(self):
+        """
+        Here we specify that the equipment only produces part-time, therefore less material can be assigned to it
+        :return:
+        """
+        num_orders = 10
+        order_weight = 20
+        process = BatchMtpTest.process_id()
+        total_weight = num_orders * order_weight   # normally we'd want to produce all orders, but the equipment is only available half of the time
+        lot_creation_settings = LotCreationSettings(processes={process: ProcessLotCreationSettings(total_size=total_weight)}, duration=timedelta(days=1))
+        now = DatetimeUtils.now()
+        shifts = {now + timedelta(hours=8*idx): (timedelta(hours=8), timedelta(hours=4)) for idx in range(3)}
+        state, snapshot = BatchMtpTest._init_for_tests(process, num_orders, order_weight=order_weight, shifts=shifts,
+                                                       batch_config=f"00:00;P1D;{process}:50:PT1M;test", lot_creation=lot_creation_settings)
+        results_persistence = state.get_results_persistence()
+
+        def _check_solution(sol_id: str, result: LotsOptimizationState):
+            assert result is not None, "Result is None"
+            assert result.best_solution is not None, "Best solution is None"
+            orders_assigned = [o for o, ass in result.best_solution.order_assignments.items() if ass.equipment >= 0]
+            assert len(orders_assigned) == num_orders/2, f"Unexpected number of orders assigned, wanted {num_orders/2}, got {len(orders_assigned)}"
+
+        BatchMtpTest._wait_for_solution(_check_solution, results_persistence, snapshot.timestamp, process, seconds=10)
 
     # TODO
     #def test_batch_mtp_respects_existing_lots(self):

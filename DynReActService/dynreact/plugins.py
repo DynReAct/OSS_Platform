@@ -180,14 +180,17 @@ class Plugins:
 
     def get_shifts_provider(self, if_exists: bool=False) -> ShiftsProvider:
         if self._shifts_provider is None and not if_exists:
-            site = self.get_config_provider().site_config()
-            if self._config.shifts_provider.startswith("dummy:"):
-                self._shifts_provider = DummyShiftsProvider(self._config.shifts_provider, site)
+            if isinstance(self._config.shifts_provider, ShiftsProvider):
+                self._shifts_provider = self._config.shifts_provider
             else:
-                self._shifts_provider = Plugins._load_module("dynreact.shifts.ShiftProviderImpl",
-                                                             ShiftsProvider, self._config.shifts_provider, site)
-                if self._shifts_provider is None:
-                    raise Exception("Shifts provider not found " + self._config.shifts_provider)
+                site = self.get_config_provider().site_config()
+                if self._config.shifts_provider.startswith("dummy:"):
+                    self._shifts_provider = DummyShiftsProvider(self._config.shifts_provider, site)
+                else:
+                    self._shifts_provider = Plugins._load_module("dynreact.shifts.ShiftProviderImpl",
+                                                                 ShiftsProvider, self._config.shifts_provider, site)
+                    if self._shifts_provider is None:
+                        raise Exception("Shifts provider not found " + self._config.shifts_provider)
         return self._shifts_provider
 
     def get_plant_performance_models(self) -> list[PlantPerformanceModel]:

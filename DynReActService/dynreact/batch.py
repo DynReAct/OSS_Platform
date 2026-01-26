@@ -133,11 +133,10 @@ class LotsBatchOptimizationJob:
                 final_total_production = sum(t.total_weight for t in final_targets.target_weight.values())
                 if final_total_production <= 0:  # process already covered completely
                     continue
-                # TODO: tbd
-                method = [OrderInitMethod.ACTIVE_PROCESS, OrderInitMethod.OMIT_RELEASED_LOTS, OrderInitMethod.OMIT_ACTIVE_LOTS]
-                # TODO: the planning horizon is currently not taken into account. For this purpose, also the range of the existing planning should be considered (period depending on process),
-                #  in order to consider orders from the previous process stage which will be available for planning  => new OrderInitMethod?
-                eligible_orders: list[str] = self._snapshot_provider.eligible_orders(snap, proc.process, process_period, method=method)
+                # eligible_orders: list[str] = self._snapshot_provider.eligible_orders(snap, proc.process, process_period, method=method)
+                fixed_transport_duration = timedelta(hours=4)
+                transport_times = lambda eq1, eq2: fixed_transport_duration    # TODO configurable transport times
+                eligible_orders: list[str] = self._snapshot_provider.eligible_orders2(snap, proc.process, process_period, equipment=equipment_ids, transport_times=transport_times)
                 eligible_orders = [o for o in eligible_orders if o in all_orders and any(e in equipment_ids for e in all_orders[o].allowed_equipment)]
                 available_material = sum(all_orders[o].actual_weight for o in eligible_orders)
                 if len(eligible_orders) <= 2:   # TODO configurable, maybe also minimum amount of material

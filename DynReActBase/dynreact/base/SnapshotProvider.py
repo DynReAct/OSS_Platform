@@ -5,8 +5,8 @@ for more complex use cases.
 """
 
 import enum
-from datetime import datetime, timezone
-from typing import Iterator, Literal, Iterable, Any, Sequence
+from datetime import datetime, timezone, timedelta
+from typing import Iterator, Literal, Iterable, Any, Sequence, Callable
 
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Snapshot, Site, Lot, Process, Material, Order, MaterialCategory, MaterialClass, \
@@ -299,13 +299,17 @@ class SnapshotProvider:
                          snapshot: Snapshot,
                          process: str,
                          planning_horizon: tuple[datetime, datetime],
-                         equipment: list[int]|None=None) -> list[str]:
+                         equipment: Sequence[int]|None=None,
+                         transport_times: Callable[[int, int], timedelta]|None=None) -> list[str]:
         """
         Determine the orders eligible for planning/lot creation for a specific process.
         This method can be overridden in a derived implementation.
         :param snapshot:
         :param process:
         :param planning_horizon:
+        :param transport_times: a function that determines the minimum transport time between equipment that needs to be respected
+                after processing of any material at some equipment before it can be scheduled at the next equipment. Signature:
+                    (previous_equipment: int, next_equipment: int) -> timedelta
         :return: list of eligible order ids
         """
         all_lots = snapshot.lots
@@ -340,9 +344,24 @@ class SnapshotProvider:
                     lt = lots_by_ids.get(prev_lot)
                     if lt is None or lt.status < 3:  # not definitely scheduled yet
                         continue
-                    if lt.end_time is not None and lt.end_time < planning_horizon[0]:  # TODO account for transport times?
-                        applicable_orders.append(order.id)
-                    continue
+                    first_start_time = lt.end_time   # first we check the overall lot time
+                    if first_start_time is not None:
+                        trsp = min(transport_times(lt.equipment, e) for e in equipment) if transport_times is not None else timedelta()
+                        first_start_time = first_start_time + trsp
+                        if first_start_time <= planning_horizon[0]:   # case 1: the complete lot is expected to be done
+                            applicable_orders.append(order.id)
+                        elif lt.start_time is not None and lt.start_time + trsp < planning_horizon[1]:  # case 2: look at order-specific execution time, if the lot starts in time to be considered, at least
+                            try:
+                                times_dct = self.get_order_lot_times(snapshot=snapshot.timestamp, order=order.id)
+                                if times_dct is not None:
+                                    times: LotTimes = times_dct.get(order.id).get(process)
+                                    first_start_time = times.end + trsp
+                                    if first_start_time <= planning_horizon[0]:
+                                        applicable_orders.append(order.id)
+                            except:
+                                pass  # method not implemented or order data not available
+
+                        continue
             # step 3: check if order is available already at the considered process stage and not already at the next
             if not any(p in current_process_ids for p in order.current_processes) or any(p in next_process_ids for p in order.current_processes):
                 continue

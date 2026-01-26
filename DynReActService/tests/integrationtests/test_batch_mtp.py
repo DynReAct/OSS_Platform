@@ -1,16 +1,11 @@
-import math
 import time
 import unittest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Sequence
 
 from dynreact.base.LotsOptimizer import LotsOptimizationState
-from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import Site, Snapshot, Equipment, Process, EquipmentStatus, Order
-from fastapi.testclient import TestClient
-
-from dynreact.service.model import EquipmentTransitionStateful, TransitionInfo
-from tests.integrationtests.TestSetup import TestSetup, DynReActAssertions
+from dynreact.base.model import Site, Snapshot, Equipment, Process,Order
+from tests.integrationtests.TestSetup import TestSetup
 
 
 class BatchMtpTest(unittest.TestCase):
@@ -26,7 +21,7 @@ class BatchMtpTest(unittest.TestCase):
             processes=[Process(name_short=BatchMtpTest.process, process_ids=[process_id])], equipment=plants,
             storages=[], material_categories=[]
         )
-        orders = orders if not isinstance(orders, int) else [TestSetup.create_order(f"order_{o}", range(num_plants), order_weight) for o in range(orders)]
+        orders = orders if not isinstance(orders, int) else [TestSetup.create_order(f"order_{o}", range(num_plants), order_weight, current_processes=(process_id, )) for o in range(orders)]
         snapshot = Snapshot(timestamp=datetime(2024, 5, 1, tzinfo=timezone.utc),
                             orders=orders, material=TestSetup.create_coils_for_orders(orders, process_id),
                             inline_material={}, lots={})
@@ -34,18 +29,15 @@ class BatchMtpTest(unittest.TestCase):
             transition_costs = {o.id: {o2.id: 1 if o != o2 else 0 for o2 in orders} for o in orders}
         # Must come before all app imports
         TestSetup.set_test_providers(test_site, snapshot, transition_costs, missing_weight_costs=missing_weight_costs, batch_config=batch_config)
-        from dynreact.app import state
-        # TODO return other things... among others, would need some way to access the batch created mtp solutions
-        # => need a test solution persistence provider! ... => DONE
         return test_site, snapshot
 
     def test_batch_mtp_works_basic(self):
         num_orders = 5
         order_weight = 50
         total_weight = 3 * order_weight
-        # TODO how to specify the target values for the batch job?
+        # TODO how to specify the target values for the batch job? => need to evaluate plant availability and capacity
         site, snapshot = BatchMtpTest._init_for_tests(4, batch_config=f"00:00;{BatchMtpTest.process}:10:1m;test")
-        from dynreact.app import state
+        from dynreact.app import state  # start dynreact app
         results_persistence = state.get_results_persistence()
         existing_solutions = []
         for idx in range(100):

@@ -538,6 +538,8 @@ class LotCreationSettings(Model):
     "Settings per process step"
     default_iterations: int | None = None
     "Default number of iterations if no process-specific number is specified"
+    duration: timedelta = timedelta(days=1)
+    "The reference duration these settings apply to. E.g., one shift of eight hours, or one day."
 
 
 class Site(LabeledItem):

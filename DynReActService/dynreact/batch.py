@@ -2,7 +2,9 @@ import threading
 import time
 import traceback
 from datetime import timedelta, datetime
+from typing import Sequence
 
+import numpy as np
 from pydantic import BaseModel
 
 from dynreact.app import state
@@ -11,7 +13,7 @@ from dynreact.base.SnapshotProvider import OrderInitMethod
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Snapshot, ProcessLotCreationSettings, ProductionTargets, EquipmentProduction, Lot, \
-    MidTermTargets
+    MidTermTargets, PlannedWorkingShift
 from dynreact.lots_optimization import FrontendOptimizationListener
 from dynreact.state import DynReActSrvState
 
@@ -99,20 +101,21 @@ class LotsBatchOptimizationJob:
         costs = self._state.get_cost_provider()
         opti_state = state.get_lot_creator()
         persistence = state.get_results_persistence()
+        shifts_provider = self._state.get_shifts_provider()
         site = state.get_site()
         proc_settings: dict[str, ProcessLotCreationSettings] = site.lot_creation.processes if site.lot_creation is not None else {}
+        reference_duration: timedelta = site.lot_creation.duration if site.lot_creation is not None else timedelta(days=1)
         planning_horizon: timedelta = self._config.period
         now = DatetimeUtils.now()
         # this is the generic period, but we'll adapt it further for each process stage depending on the horizon of existing lots
         period = (now, now + planning_horizon)
-        default_tons = 1000     # FIXME would need to depend on process; better fail if no setting available?
         lot_size_to_tuple = lambda x: x if x is None else (x.min, x.max)
         all_orders = {o.id: o for o in snap.orders}
         for proc in self._config.processes:
             if self._stopped.is_set():
                 break
             try:
-                settings = proc_settings.get(proc.process) or ProcessLotCreationSettings(total_size=default_tons)    # XXX?
+                settings = proc_settings.get(proc.process) if proc_settings is not None else None
                 equipment = site.get_process_equipment(proc.process)
                 equipment_ids = [e.id for e in equipment]
                 existing_lots: list[Lot] = [lot for eq, lots in snap.lots.items() if eq in equipment_ids for lot in lots if   # TODO lot status filter correct?
@@ -121,8 +124,31 @@ class LotsBatchOptimizationJob:
                 if lots_horizon is not None and lots_horizon >= period[1]:
                     continue
                 process_period: tuple[datetime, datetime] = period if lots_horizon is None or lots_horizon <= period[0] else (lots_horizon, period[1])
-                target_weights: dict[int, EquipmentProduction] = {equ: EquipmentProduction(equipment=equ, total_weight=settings.get_equipment_targets(equ, default_value=default_tons),
-                                                                                lot_weight_range=lot_size_to_tuple(settings.get_equipment_lot_sizes(equ))) for equ in equipment_ids}
+                planning_duration = process_period[1] - process_period[0]
+                shifts: dict[int, Sequence[PlannedWorkingShift]] = shifts_provider.load_all(process_period[0], process_period[1], limit=None, equipments=equipment_ids)
+                fractions_available: dict[int, float] = {e: sum((s.worktime for s in shift), start=timedelta())/planning_duration if len(shift) > 0 else 0 for e, shift in shifts.items()}
+                equipment_ids = [e for e, frac in fractions_available.items() if frac > 0]
+                if len(equipment_ids) == 0:
+                    continue
+                targets_weights0: dict[int, float] = {}
+                for e in equipment_ids:
+                    # these are targets per shift, or per day, for instance.
+                    targets_0 = settings.get_equipment_targets(e) if settings is not None else None
+                    if targets_0 is None or np.isnan(targets_0):
+                        capacity_tons_per_hour: float | None = next(eq for eq in equipment if eq.id == e).throughput_capacity
+                        if capacity_tons_per_hour is not None:
+                            hours: float = planning_duration.total_seconds()/3_600
+                            targets_0 = capacity_tons_per_hour * hours
+                    else:
+                        duration_factor: float = planning_duration / reference_duration
+                        targets_0 = duration_factor * targets_0
+                    if targets_0 is not None and not np.isnan(targets_0):
+                        targets_weights0[e] = fractions_available[e] * targets_0
+                if len(targets_weights0) == 0:
+                    print(f"Batch MTP: no plants available or no configuration found for process {proc.process}")
+                    continue
+                target_weights: dict[int, EquipmentProduction] = {equ: EquipmentProduction(equipment=equ, total_weight=weight, lot_weight_range=lot_size_to_tuple(settings.get_equipment_lot_sizes(equ)))
+                                                                  for equ, weight in targets_weights0.items()}
                 # TODO option to set material structure settings
                 targets = ProductionTargets(process=proc.process, period=period, target_weight=target_weights)
                 sub_targets = {proc.process: [targets]}

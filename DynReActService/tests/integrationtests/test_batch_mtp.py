@@ -1,10 +1,11 @@
 import time
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Sequence
 
 from dynreact.base.LotsOptimizer import LotsOptimizationState
-from dynreact.base.model import Site, Snapshot, Equipment, Process,Order
+from dynreact.base.model import Site, Snapshot, Equipment, Process, Order, LotCreationSettings, \
+    ProcessLotCreationSettings
 from tests.integrationtests.TestSetup import TestSetup
 
 
@@ -14,12 +15,12 @@ class BatchMtpTest(unittest.TestCase):
 
     @staticmethod
     def _init_for_tests(orders: int|Sequence[Order], order_weight: float=10, num_plants: int=1, transition_costs: dict[str, dict[str, float]]|None=None,
-                        missing_weight_costs: float=1, batch_config: str="") -> tuple[Site, Snapshot]:
+                        missing_weight_costs: float=1, batch_config: str="", lot_creation: LotCreationSettings|None=None) -> tuple[Site, Snapshot]:
         process_id = 0
         plants = [Equipment(id=p, name_short="Plant" + str(p), process=BatchMtpTest.process) for p in range(num_plants)]
         test_site = Site(
             processes=[Process(name_short=BatchMtpTest.process, process_ids=[process_id])], equipment=plants,
-            storages=[], material_categories=[]
+            storages=[], material_categories=[], lot_creation=lot_creation
         )
         orders = orders if not isinstance(orders, int) else [TestSetup.create_order(f"order_{o}", range(num_plants), order_weight, current_processes=(process_id, )) for o in range(orders)]
         snapshot = Snapshot(timestamp=datetime(2024, 5, 1, tzinfo=timezone.utc),
@@ -35,8 +36,8 @@ class BatchMtpTest(unittest.TestCase):
         num_orders = 5
         order_weight = 50
         total_weight = 3 * order_weight
-        # TODO how to specify the target values for the batch job? => need to evaluate plant availability and capacity
-        site, snapshot = BatchMtpTest._init_for_tests(4, batch_config=f"00:00;{BatchMtpTest.process}:10:1m;test")
+        lot_creation_settings = LotCreationSettings(processes={BatchMtpTest.process: ProcessLotCreationSettings(total_size=total_weight)}, duration=timedelta(days=1))
+        site, snapshot = BatchMtpTest._init_for_tests(num_orders, order_weight=order_weight, batch_config=f"00:00;{BatchMtpTest.process}:10:1m;test", lot_creation=lot_creation_settings)
         from dynreact.app import state  # start dynreact app
         results_persistence = state.get_results_persistence()
         existing_solutions = []
@@ -50,3 +51,17 @@ class BatchMtpTest(unittest.TestCase):
         result: LotsOptimizationState = results_persistence.load(snapshot.timestamp, BatchMtpTest.process, existing_solutions[0])
         assert result is not None, "Result is None"
         assert result.best_solution is not None, "Best solution is None"
+
+    # TODO
+    # def test_batch_mtp_scales_tons_to_duration(self):
+    #    pass
+
+    # TODO
+    #def test_batch_mtp_respects_start_orders(self):
+    #    pass
+
+    # TODO
+    #def test_batch_mtp_respects_equipment_availability(self):
+    #    pass
+
+

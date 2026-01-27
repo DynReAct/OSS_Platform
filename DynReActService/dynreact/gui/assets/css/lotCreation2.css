@@ -261,6 +261,14 @@
     align-items: center;
 }
 
+.lots2-orders-init-menu2 {
+    display: grid;
+    column-gap: 1em;
+    row-gap: 0.5em;
+    justify-items: start;
+    grid-template-columns: auto auto 1fr;
+}
+
 .lots2-orders-init-method {
     min-width: 12em;
 }

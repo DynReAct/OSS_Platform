@@ -4,7 +4,6 @@ import typing
 from datetime import datetime, timedelta, date
 from typing import Literal, Any
 import json
-from zoneinfo import ZoneInfo
 
 import dash
 import pandas as pd
@@ -206,6 +205,18 @@ def orders_tab():
         html.Fieldset([
             html.Legend("Initialize orders"),
             html.Div([
+                html.Div("Select all available orders:", title="Add available orders to backlog"),
+                html.Div(html.Button("Init", id="lots2-orders-backlog-init2", className="dynreact-button dynreact-button-small"), title="Add available orders to backlog"),
+                html.Div(),
+                html.Div("Clear backlog:", title="Clear order backlog"),
+                html.Div(html.Button("Clear", id="lots2-orders-backlog-clear2", className="dynreact-button dynreact-button-small"), title="Clear order backlog"),
+                html.Div(),
+            ], className="lots2-orders-init-menu2"),
+        ]),
+
+        html.Fieldset([
+            html.Legend("Initialize orders"),
+            html.Div([
                 html.Div("Method:"),
                 dcc.Dropdown(id="lots2-orders-init-method", className="lots2-orders-init-method", options=[
                     {"value": "active_process", "label": "Process", "title": "Select all orders at the selected processing stage"},
@@ -244,7 +255,7 @@ def orders_tab():
                 html.Div(html.Button("Init", id="lots2-orders-backlog-init", className="dynreact-button dynreact-button-small"), title="Initialize orders from backlog"),
                 html.Div(html.Button("Clear", id="lots2-orders-backlog-clear", className="dynreact-button dynreact-button-small"), title="Clear order backlog"),
             ], className="lots2-orders-init-buttons")
-        ], className="lots2-orders-grouped-menu"),
+        ], className="lots2-orders-grouped-menu", hidden=True),
 
         # TODO hideable?, use icon (https://wiki.selfhtml.org/wiki/SVG/Tutorials/Icons)
         html.Fieldset([
@@ -1047,7 +1058,9 @@ def update_backlog_state(snapshot: str, process: str, rows: list[dict[str, any]]
             Input("lots2-active-tab", "data"),
             Input("lots2-check-hide-released-lots", "value"),
             Input("lots2-orders-backlog-init", "n_clicks"),
+            Input("lots2-orders-backlog-init2", "n_clicks"),
             Input("lots2-orders-backlog-clear", "n_clicks"),
+            Input("lots2-orders-backlog-clear2", "n_clicks"),
             Input("lots2-orders-select-visible", "n_clicks"),
             Input("lots2-orders-deselect-visible", "n_clicks"),
             Input("lots2-orders-backlog-add-logs", "n_clicks"),
@@ -1068,7 +1081,7 @@ def update_backlog_state(snapshot: str, process: str, rows: list[dict[str, any]]
             State("lots2-details-plants", "children"),
 )
 def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: list[Literal["hide_released", "hide_next_procs"]],
-                  _1, _2, _3, _4, _5, _6,
+                  _1, _2, _3, _4, _5, _6, _7, _8,
                   orders_data: dict[str, str]|None, selected_lots: list[str],
                   selected_rows: list[dict[str, any]]|None, filtered_rows: list[dict[str, any]]|None, horizon_hours: int,
                   init_method: Literal["active_process", "active_plant", "inactive_lots", "active_lots", "current_planning"]|None,
@@ -1085,8 +1098,9 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     tab_changed = "lots2-active-tab" in changed_ids
     if tab_changed and tab != "orders":
         return dash.no_update, dash.no_update, dash.no_update, "sizeToFit"
-    is_clear_command: bool = "lots2-orders-backlog-clear" in changed_ids
+    is_clear_command: bool = "lots2-orders-backlog-clear" in changed_ids or "lots2-orders-backlog-clear2" in changed_ids
     is_init_command: bool = "lots2-orders-backlog-init" in changed_ids
+    is_init_command2: bool = "lots2-orders-backlog-init2" in changed_ids
     update_selection: bool = orders_data is None or orders_data.get("process") != process \
                              or orders_data.get("snapshot") != snapshot_serialized
     if update_selection:
@@ -1190,7 +1204,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     current_process_plants: list[int] = process_plants[current_process_index]
 
     period: tuple[datetime, datetime] = (snapshot_obj.timestamp, snapshot_obj.timestamp + timedelta(hours=horizon_hours))
-    plant_targets, _1, _2, _3 = target_values_from_settings(process, period, current_process_plants, False, plants_components)
+    plant_targets, _1, previous_lot_by_plant, _3 = target_values_from_settings(process, period, current_process_plants, False, plants_components)
     current_process_plants = [p for p in plant_targets.target_weight.keys()] if plant_targets is not None else []
     if len(current_process_plants) == 0:
         return None, None, None, "sizeToFit"
@@ -1199,7 +1213,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     orders_sorted = sorted(orders_filtered, key=process_index_for_order)
     order_ids = [o.id for o in orders_sorted]
     new_selected_rows = {"ids": []}
-    if is_init_command:  # TODO set appropriate method flags in eligibile_orders method
+    if is_init_command:
         if init_method is None:
             return no_update, no_update, no_update, no_update, no_update, no_update
         if init_method == "active_process":
@@ -1229,6 +1243,26 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
         # filter orders matching for selected process
         eligible_orders = [o for o in eligible_orders if o in order_ids]
 
+        new_selected_rows = {"ids": eligible_orders}
+    elif is_init_command2:
+        # adapt planning start time according to frozen lots
+        plant_start_times: dict[int, datetime] = {plant: snapshot for plant in current_process_plants}
+        if previous_lot_by_plant is not None and len(previous_lot_by_plant) > 0:
+            for plant, lot in previous_lot_by_plant.items():
+                pred_lot: Lot|None = next((l for l in snapshot_obj.lots.get(plant, tuple()) if l.id == lot), None)
+                if pred_lot is not None and pred_lot.end_time is not None and pred_lot.end_time > snapshot:
+                    plant_start_times[plant] = pred_lot.end_time
+        actual_start_time = min(plant_start_times.values()) if len(plant_start_times) > 0 else snapshot
+        end_time = snapshot + timedelta(hours=horizon_hours)
+        if actual_start_time >= end_time:
+            return dash.no_update, dash.no_update, dash.no_update, "sizeToFit"
+        # TODO transport times
+        eligible_orders = state.get_snapshot_provider().eligible_orders2(snapshot_obj, process, (actual_start_time, end_time),
+                                            equipment=current_process_plants, transport_times=None)
+        if not update_selection and selected_rows is not None:
+            eligible_orders = eligible_orders + [row for row in (row0["id"] if isinstance(row0, dict) else row0 for row0 in selected_rows) if row not in eligible_orders]
+        # filter orders matching for selected process
+        eligible_orders = [o for o in eligible_orders if o in order_ids]
         new_selected_rows = {"ids": eligible_orders}
     elif not update_selection and not is_clear_command:
         new_selected_rows = {"ids": [row["id"] if isinstance(row, dict) else row for row in selected_rows] if selected_rows is not None else []}
@@ -2140,7 +2174,7 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
         else:
             targets: dict[int, EquipmentProduction] = {plant: EquipmentProduction(equipment=plant, total_weight=value,
                                                     lot_weight_range=None) for plant, value in target_values.items()}
-
+        targets = {plant: prod for plant, prod in targets.items() if prod.total_weight > 0}
         changed_plants = [plant for plant, c in component_by_plant.items() if
                           c.get("props").get("children").get("props").get("value") != c.get("props").get("data-default")
                           and plant_active[plant]]

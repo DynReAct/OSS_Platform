@@ -7,6 +7,7 @@ from typing import Sequence, Mapping, Any
 from datetime import timedelta, datetime, timezone
 from enum import Enum
 
+import pandas as pd
 from pydantic import BaseModel
 
 from dynreact.app_config import DynReActSrvConfig
@@ -257,7 +258,9 @@ def planned_processing_time():
             lot = (order.lots or {}).get(p)
             if lots is not None and (lot is None or lot.lower() not in lots):
                 continue
-            print(f"| {item} |  {p:7s} | {DatetimeUtils.format(proc_time.start, use_zone=False).replace("T", " ")} | {DatetimeUtils.format(proc_time.end, use_zone=False).replace("T", " ")} |  {lot} |")
+            start = DatetimeUtils.format(proc_time.start, use_zone=False).replace("T", " ")
+            end = DatetimeUtils.format(proc_time.end, use_zone=False).replace("T", " ")
+            print(f"| {item} |  {p:7s} | {start} | {end} |  {lot} |")
 
 
 
@@ -672,7 +675,7 @@ def eligible_orders():
     parser.add_argument("process", help="Process step for planning", type=str)
     parser.add_argument("-eq", "--equipment", help="Filter by equipment; separate multiple by commas.", type=str, default=None)
     parser.add_argument("-s", "--snapshot", help="Snapshot id", type=str, default=None)
-    parser.add_argument("-hz", "--horizon", help="Time duration after snapshot timestamp for rescheduling. Example=1d (1 day)", default="1d")
+    parser.add_argument("-hz", "--horizon", help="Time duration after snapshot timestamp for rescheduling. Example=P1D (1 day)", default="P1D")
     parser.add_argument("-v", "--verbose", help="Print details", action="count", default=0)
     parser.add_argument("-f", "--field", help="Select field(s) to be displayed. Separate multiple fields by \",\"", type=str, default=None)
     parser.add_argument("-ef", "--equipment-fields", help="Select fields to be displayed based on the cost-relevant fields for the specified equipment", type=str, default=None)
@@ -683,7 +686,7 @@ def eligible_orders():
     process = _process_for_id(site.processes, args.process).name_short
     snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
     snapshot: Snapshot = plugins.get_snapshot_provider().load(time=snap)
-    start_delta: timedelta = DatetimeUtils.parse_duration(args.horizon)
+    start_delta: timedelta = pd.Timedelta(args.horizon).to_pytimedelta()  # DatetimeUtils.parse_duration(args.horizon)
     planning = (snapshot.timestamp + start_delta, snapshot.timestamp + start_delta + timedelta(days=1))
     equipment = _plants_for_ids(args.equipment, site)
     o_by_id = {o.id: o for o in snapshot.orders}

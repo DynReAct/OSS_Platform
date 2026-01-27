@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone, tzinfo
+from threading import Lock
 from typing import Any
 
 from dynreact.SnapshotUpdate import SnapshotUpdate
@@ -59,6 +60,7 @@ class DynReActSrvState:
         self._aggregation_persistence: AggregationPersistence|None = None
         self._optimization_state = LotCreator()
         self._lots_batch_job = None
+        self._snapshot_locks: dict[datetime, Lock] = {}
 
     def start(self):
         if self._config.lots_batch_config:
@@ -160,18 +162,32 @@ class DynReActSrvState:
             matches_sorted = sorted(matches, key=lambda m: abs((m-time).total_seconds()))
             if len(matches_sorted) > 0:
                 return self.get_snapshot(time=matches_sorted[0], recurse=False)
-        snapshot = self.get_snapshot_provider().load(time=time)
-        if snapshot is None:
-            return snapshot
-        new_time = snapshot.timestamp
-        if new_time not in self._snapshots_cache:  # or time not in self._snapshots_cache:
-            while len(self._snapshots_cache) >= self._max_snapshot_caches:
-                first_ts = sorted(list(self._snapshots_cache.keys()))[0]
-                self._snapshots_cache.pop(first_ts)
-            self._snapshots_cache[new_time] = snapshot
+        lock = self._get_snapshot_lock(time)
+        # this locking method does not entirely rule out that the same snapshot be loaded multiple times, but makes it improbable
+        with lock:
+            if time in self._snapshots_cache:
+                return self._snapshots_cache[time]
+            snapshot = self.get_snapshot_provider().load(time=time)
+            if snapshot is None:
+                return snapshot
+            new_time = snapshot.timestamp
+            if new_time not in self._snapshots_cache:  # or time not in self._snapshots_cache:
+                while len(self._snapshots_cache) >= self._max_snapshot_caches:
+                    first_ts = sorted(list(self._snapshots_cache.keys()))[0]
+                    self._snapshots_cache.pop(first_ts)
+                self._snapshots_cache[new_time] = snapshot
         if updates is not None and new_time in updates:
             return updates[new_time]
         return snapshot
+
+    def _get_snapshot_lock(self, time: datetime):
+        if time not in self._snapshot_locks:
+            if len(self._snapshot_locks) > 10:
+                keys_to_remove = list(self._snapshot_locks.keys())[0:4]
+                for key in keys_to_remove:
+                    self._snapshot_locks.pop(key)
+            self._snapshot_locks[time] = Lock()
+        return self._snapshot_locks.get(time)
 
     def transfer_lot(self, snapshot: Snapshot, sink: LotSink, lot: Lot, name: str, user: str|None, update_snapshot: bool=True) -> str:
         new_lot_id = sink.transfer_new(lot, snapshot, external_id=name, user=user)

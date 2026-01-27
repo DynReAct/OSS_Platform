@@ -52,6 +52,8 @@ def get_date_range(current_snapshot: str|datetime|None, zi: ZoneInfo|None = None
         cnt += 1
     dates = sorted(dates, reverse=True)
     if len(dates) == 0:
+        if current_snapshot is not None:
+            return get_date_range(None, zi=zi)
         return None, None, [], None
     if current_initial is not None:
         if dates[0] < current_initial - timedelta(minutes=1):

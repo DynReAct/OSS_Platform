@@ -75,7 +75,7 @@ def site(response: Response, username = username) -> Site:
         raise HTTPException(status_code=502, detail="Information not available")
 
 
-def _get_snapshot_plant(snapshot_id: str|datetime, plant_id: int) -> tuple[Snapshot, Equipment]:
+def _get_snapshot_plant(snapshot_id: str|datetime|None, plant_id: int) -> tuple[Snapshot, Equipment]:
     if isinstance(snapshot_id, str):
         snapshot_id = parse_datetime_str(snapshot_id)
     site0 = state.get_site()
@@ -408,6 +408,26 @@ def logistics_cost(transfer_data: MaterialTransfer, username = username) -> floa
             raise HTTPException(status_code=404, detail=f"Current coil {transfer_data.material} not found or not provided")
     costs: float = state.get_cost_provider().logistic_costs(new_equipment=plant, order=order, material=coil)
     return costs
+
+
+@fastapi_app.get("/costs/assignment/{equipment_id}",
+                tags=["dynreact"],
+                response_model_exclude_unset=True,
+                response_model_exclude_none=True,
+                summary="Equipment assignment costs for individual orders.")
+def assignment_cost(equipment_id: int=Path(..., description="Equipment id"),
+                    order: list[str] = Query(..., description="Order ids"),
+                    snapshot_id: str|None = Query(None, description="Snapshot id"),
+                    username = username) -> dict[str, float]:
+    snap, equipment = _get_snapshot_plant(snapshot_id, equipment_id)
+    orders = {o: snap.get_order(o) for o in order}
+    none_orders = [oid for oid, o in orders.items() if o is None]
+    if len(none_orders) > 0:
+        raise HTTPException(404, f"Orders not found in snapshot {snapshot_id}: {none_orders}")
+    cost_provider = state.get_cost_provider()
+    costs: dict[str, float] = {oid: cost_provider.assignment_costs(equipment, o) for oid, o in orders.items()}
+    return costs
+
 
 @fastapi_app.get("/costs/status/{equipment_id}/{snapshot_timestamp}",
                 tags=["dynreact"],

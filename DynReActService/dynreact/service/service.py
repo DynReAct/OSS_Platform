@@ -515,6 +515,18 @@ def target_function_update(transition: EquipmentTransitionStateful, username = u
     return TransitionInfo(status=new_status, costs=new_objective)
 
 
+@fastapi_app.get("/costs/relevant-fields/{equipment_id}",
+                tags=["dynreact"],
+                response_model_exclude_unset=True,
+                response_model_exclude_none=True,
+                summary="Query order fields relevant to the transition cost function")
+def relevant_fields(equipment_id: int=Path(..., description="Equipment id"), username = username) -> list[str]:
+    equipment = state.get_site().get_equipment(equipment_id)
+    if equipment is None:
+        raise HTTPException(status_code=404, detail=f"No such equipment: {equipment_id}")
+    return state.get_cost_provider().relevant_fields(equipment)
+
+
 lots_optimization: tuple[int, LotsOptimizationListener]|None = None
 
 

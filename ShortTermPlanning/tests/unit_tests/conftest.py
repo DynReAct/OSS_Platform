@@ -1,5 +1,6 @@
 import pytest
 import re
+from datetime import datetime
 from unittest.mock import patch, MagicMock
 
 
@@ -25,7 +26,8 @@ def mock_load_url_json_get(url, *args, **kwargs):
     elif re.search("/costs/status/*", url) is None:
         return {"default": "response"}
     else:
-        raise Exception(f"URL is not defined: {url}")
+        dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+        raise Exception(f"{dt} | ERROR: URL is not defined: {url}")
 
 # ================ MATERIAL ================
 

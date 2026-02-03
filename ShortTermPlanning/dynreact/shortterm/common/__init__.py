@@ -1,14 +1,14 @@
 import json
 import argparse
+from datetime import datetime
 import os
 import traceback
 
 from confluent_kafka import Producer, OFFSET_END, TopicPartition
 from confluent_kafka.admin import AdminClient
+from flatdict import FlatDict
 
-TOPIC_GEN = os.environ.get("TOPIC_GEN", "DynReact-Gen")
-TOPIC_CALLBACK = os.environ.get("TOPIC_CALLBACK", "DynReact-Callback")
-SMALL_WAIT = 5
+from dynreact.shortterm.shorttermtargets import ShortTermTargets
 
 def _compute_partition_topic(topic_name: str, admin_client: AdminClient):
     """
@@ -39,7 +39,7 @@ def purge_topics(topics: list):
     returns: list of purged topics.
     """
 
-    admin_client = AdminClient({"bootstrap.servers": "138.100.82.173:9092"})
+    admin_client = AdminClient({"bootstrap.servers": KeySearch.search_for_value("KAFKA_IP")})
 
     topics_partitions = []
     for topic in topics:
@@ -51,7 +51,148 @@ def purge_topics(topics: list):
         try:
             f.result()  # Raises exception if delete failed
         except Exception as e:
-            raise Exception(f"Failed: {tp} with error {e}")
+            dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+            raise Exception(f"{dt} | ERROR: Failed: {tp} with error {e}")
+
+def delete_topics(topics: list, silent=False):
+    """
+    Function to delete list of topics.
+
+    :param str topics: Topic names to search partitions for.
+
+    returns: list of purged topics.
+    """
+
+    admin_client = AdminClient({"bootstrap.servers": KeySearch.search_for_value("KAFKA_IP")})
+
+    topics_partitions = []
+    for topic in topics:
+        topics_partitions.extend(_compute_partition_topic(topic, admin_client))
+
+    topics = admin_client.delete_topics(topics=topics)
+
+    for tp, f in topics.items():
+        try:
+            f.result()  # Raises exception if delete failed
+        except Exception as e:
+            if not silent:
+                dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+                raise Exception(f"{dt} | ERROR: Failed: {tp} with error {e}")
+
+class KeySearch:
+    _global_config: ShortTermTargets = None
+
+    @classmethod
+    def is_initialized(cls):
+        """
+        Returns if the class has been initialized.
+
+        returns: boolean True or False.
+        """
+        return cls._global_config is not None
+
+    @classmethod
+    def dump_model(cls):
+        """
+        Dump the class information to a dict, assigning values from the config and environment.
+
+        :return: dict The model assigned.
+        """
+
+        dump_model = cls._global_config.model_copy()
+        update = {}
+
+        for field_name in dump_model.model_fields.keys():
+
+            current_val = cls._get_value(field_name)
+
+            if current_val is None and field_name in os.environ:
+                raw_val = os.environ[field_name]
+                update[field_name] = raw_val
+
+        return dump_model.model_copy(update=update).model_dump()
+
+    @classmethod
+    def assign_value(cls, key: str, value: str):
+        """
+        Assign new single value to a key.
+
+        :param str key: Key values to assign.
+        :param str value: New value.
+
+        :return: None.
+        """
+        if cls._global_config is None:
+            raise RuntimeError("KeySearch global config has not been set. Call KeySearch.set_global() first.")
+
+        cls._global_config = cls._global_config.model_copy(update={key: value})
+
+    @classmethod
+    def assign_values(cls, new_values: dict):
+        """
+        Assign new values to keys (batch).
+
+        :param dict new_values: Key values to assign.
+        :return: None.
+        """
+        if cls._global_config is None:
+            raise RuntimeError("KeySearch global config has not been set. Call KeySearch.set_global() first.")
+
+        cls._global_config = cls._global_config.model_copy(update=new_values)
+
+    @classmethod
+    def set_global(cls, config_provider: ShortTermTargets):
+        """
+        Function to update the config provider.
+
+        :param str config_provider: The configuration provider with the set values
+        """
+        cls._global_config = config_provider
+
+    @classmethod
+    def _get_value(cls, key_name: str, default_value=None):
+        """
+        Retrieve the value associated with a flattened key segment from the configuration.
+
+        :param key_name: The segment of the flattened key to match.
+        :param default_value: Value to return if no match is found.
+        :return: Matched value or the default.
+        """
+        cfg = cls._global_config.model_dump()
+
+        flatten_cfg = FlatDict(cfg, delimiter='.')
+        look_function = (value for key, value in flatten_cfg.items() if key_name == key.split(".")[-1])
+
+        deep_search = next(look_function, default_value)
+
+        return default_value if deep_search is None else deep_search
+
+    @classmethod
+    def search_for_value(cls, key_name, default_value=None):
+        """
+        Function to check for a given key name between env and context including recursive structure.
+
+        Priority list:
+
+            - Environment value
+            - STP Context/Config definition
+
+        :param str key_name: Key name to search for
+        :param str default_value: Default value in case not found
+
+        returns: value of key otherwise null or default value.
+        """
+
+        if cls._global_config is None:
+            raise RuntimeError("KeySearch global config has not been set. Call KeySearch.set_global() first.")
+
+        if key_name in os.environ:
+            return os.environ[key_name]
+
+        if cls._global_config:
+            return cls._get_value(key_name, default_value)
+
+        return default_value
 
 class VAction(argparse.Action):
     """

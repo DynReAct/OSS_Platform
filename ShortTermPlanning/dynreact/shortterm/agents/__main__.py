@@ -5,24 +5,25 @@ from pathlib import Path
 
 from dynreact.shortterm.agents.log import Log
 import platform
-import configparser
 import os
 
 from dynreact.shortterm.agents.equipment import Equipment
 from dynreact.shortterm.agents.material import Material
-from dynreact.shortterm.common import VAction, TOPIC_GEN, TOPIC_CALLBACK
+from dynreact.shortterm.common import VAction, KeySearch
+from dynreact.shortterm.shorttermtargets import ShortTermTargets
 
-def log_base(verbose: int):
+
+def log_base(verbose: int, kafka_ip: str):
 
     if verbose > 0:
         print(f"Running log agent with {verbose=}")
 
     # Global configuration - assign the values to the global variables using the information above
-    config = configparser.ConfigParser()
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    config.read(os.path.join(current_dir, "dynreact", "shortterm", "config.cnf"))
-    kafka_ip = config['DEFAULT']['IP']
-    left_path = config['DEFAULT']['LogFilePath']
+    KeySearch.set_global(config_provider=ShortTermTargets(VB=verbose, KAFKA_IP=kafka_ip))
+
+    left_path = KeySearch.search_for_value('LOG_FILE_PATH')
+    topic_gen = KeySearch.search_for_value('TOPIC_GEN')
+    topic_callback = KeySearch.search_for_value('TOPIC_CALLBACK')
 
     folder_path = Path(left_path)
 
@@ -31,51 +32,47 @@ def log_base(verbose: int):
         folder_path.mkdir(parents=True)
 
     # Creation of the main log file
-    now = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
-    log_file = f"{TOPIC_GEN}-{now}.log"
+    log_file = f"{topic_gen}.log"
     if platform.system() == 'Windows':
         log_file = log_file.replace(":", "_")
     log_file = os.path.join(left_path, log_file)
-    agent_gen = 'LOG:' + TOPIC_GEN
+    agent_gen = 'LOG:' + topic_gen
 
     main_log = Log(
-        topic=TOPIC_GEN, agent=agent_gen, kafka_ip=kafka_ip, left_path=left_path, log_file=log_file, verbose=verbose
+        topic=topic_gen, agent=agent_gen, log_file=log_file
     )
 
     # Creates Callback topic!
-    main_log.callback_on_topic_not_available(TOPIC_CALLBACK)
+    main_log.callback_on_topic_not_available(topic_callback)
 
     return main_log
 
-def equipment_base(verbose: int):
+def equipment_base(verbose: int, kafka_ip: str):
     if verbose > 0:
         print(f"Running equipment agent with {verbose=}")
 
     # Global configuration - assign the values to the global variables using the information above
-    config = configparser.ConfigParser()
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    config.read(os.path.join(current_dir, "dynreact", "shortterm", "config.cnf"))
-    kafka_ip = config['DEFAULT']['IP']
+    KeySearch.set_global(config_provider=ShortTermTargets(VB=verbose, KAFKA_IP=kafka_ip))
+
+    topic_gen = KeySearch.search_for_value('TOPIC_GEN')
 
     main_equipment = Equipment(
-        topic=TOPIC_GEN, agent=f"EQUIPMENT:{TOPIC_GEN}", status=dict(), kafka_ip=kafka_ip,
-        counterbid_wait=15, verbose=verbose
+        topic=topic_gen, agent=f"EQUIPMENT:{topic_gen}", status=dict(),
     )
 
     return main_equipment
 
-def material_base(verbose: int):
+def material_base(verbose: int, kafka_ip: str):
     if verbose > 0:
         print(f"Running material agent with {verbose=}")
 
     # Global configuration - assign the values to the global variables using the information above
-    config = configparser.ConfigParser()
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    config.read(os.path.join(current_dir, "dynreact", "shortterm", "config.cnf"))
-    kafka_ip = config['DEFAULT']['IP']
+    KeySearch.set_global(config_provider=ShortTermTargets(VB=verbose, KAFKA_IP=kafka_ip))
+
+    topic_gen = KeySearch.search_for_value('TOPIC_GEN')
 
     main_material = Material(
-        topic=TOPIC_GEN, agent=f"MATERIAL:{TOPIC_GEN}", params=dict(), kafka_ip=kafka_ip, verbose=verbose
+        topic=topic_gen, agent=f"MATERIAL:{topic_gen}", params=dict()
     )
 
     return  main_material
@@ -84,6 +81,7 @@ def material_base(verbose: int):
 
 def main():
     print("Starting agent")
+
     parser = argparse.ArgumentParser(description="Select an agent to run.")
 
     subparsers = parser.add_subparsers(dest="agent", required=True, help="Choose an agent to run")
@@ -97,6 +95,7 @@ def main():
     parser_log_base = subparsers_log.add_parser("base", help="Run the base log agent")
     parser_log_base.add_argument("-v", "--verbose", default=0, nargs='?', action=VAction,
                     dest='verbose', help="Option for printing detailed information")
+    parser_log_base.add_argument("-k", "--kafka-ip", type=str, required=True, help="Kafka broker IP address")
 
     # Log Agent - Replica Mode
     parser_log_replica = subparsers_log.add_parser("replica", help="Run the replica log agent")
@@ -104,13 +103,8 @@ def main():
     # Required string arguments
     parser_log_replica.add_argument("-t", "--topic", type=str, required=True, help="Topic name")
     parser_log_replica.add_argument("-a", "--agent-name", type=str, required=True, help="Agent name")
-    parser_log_replica.add_argument("-k", "--kafka-ip", type=str, required=True, help="Kafka broker IP address")
-    parser_log_replica.add_argument("-p", "--left-path", type=str, required=True, help="Path to the left file")
     parser_log_replica.add_argument("-l", "--log-file", type=str, required=True, help="Path to the log file")
-
-    # Optional integer argument with default value
-    parser_log_replica.add_argument("-v", "--verbose", default=0, nargs='?', action=VAction,
-                                 dest='verbose', help="Option for printing detailed information")
+    parser_log_replica.add_argument("-v", "--variables", type=str, required=True, help="Dynamic values from the KeySearch dump model")
 
     # ------------------------
     # Instance Equipment Subparser
@@ -121,7 +115,7 @@ def main():
     parser_equipment_base = subparsers_equipment.add_parser("base", help="Run the base equipment agent")
     parser_equipment_base.add_argument("-v", "--verbose", default=0, nargs='?', action=VAction,
                                  dest='verbose', help="Option for printing detailed information")
-
+    parser_equipment_base.add_argument("-k", "--kafka-ip", type=str, required=True, help="Kafka broker IP address")
 
     # Equipment Agent - Replica Mode
     parser_equipment_replica = subparsers_equipment.add_parser("replica", help="Run the replica equipment agent")
@@ -130,12 +124,8 @@ def main():
     parser_equipment_replica.add_argument("-t", "--topic", type=str, required=True, help="Topic name")
     parser_equipment_replica.add_argument("-a", "--agent-name", type=str, required=True, help="Agent name")
     parser_equipment_replica.add_argument("-s", "--status", type=str, required=True, help="Equipment Status")
-    parser_equipment_replica.add_argument("-k", "--kafka-ip", type=str, required=True, help="Kafka broker IP address")
-    parser_equipment_replica.add_argument("-cw", "--counter-wait", type=int, required=True, help="Amount of time to wait to counterbid")
+    parser_equipment_replica.add_argument("-v", "--variables", type=str, required=True, help="Dynamic values from the KeySearch dump model")
 
-    # Optional integer argument with default value
-    parser_equipment_replica.add_argument("-v", "--verbose", default=0, nargs='?', action=VAction,
-                                    dest='verbose', help="Option for printing detailed information")
 
     # ------------------------
     # Instance Material Subparser
@@ -147,6 +137,7 @@ def main():
     parser_material_base = subparsers_material.add_parser("base", help="Run the base equipment agent")
     parser_material_base.add_argument("-v", "--verbose", default=0, nargs='?', action=VAction,
                                        dest='verbose', help="Option for printing detailed information")
+    parser_material_base.add_argument("-k", "--kafka-ip", type=str, required=True, help="Kafka broker IP address")
 
 
     # Material Agent - Replica Mode
@@ -156,11 +147,7 @@ def main():
     parser_material_replica.add_argument("-t", "--topic", type=str, required=True, help="Topic name")
     parser_material_replica.add_argument("-a", "--agent-name", type=str, required=True, help="Agent name")
     parser_material_replica.add_argument("-p", "--params", type=str, required=True, help="Materials parameters relevant to the configuration of the agent.")
-    parser_material_replica.add_argument("-k", "--kafka-ip", type=str, required=True, help="Kafka broker IP address")
-
-    # Optional integer argument with default value
-    parser_material_replica.add_argument("-v", "--verbose", default=0, nargs='?', action=VAction,
-                                          dest='verbose', help="Option for printing detailed information")
+    parser_material_replica.add_argument("-v", "--variables", type=str, required=True, help="Dynamic values from the KeySearch dump model")
 
     # ------------------------
 
@@ -171,41 +158,49 @@ def main():
 
     if args.agent == "log":
         if args.type == "base":
-            agent = log_base(verbose = args.verbose)
+            agent = log_base(verbose=args.verbose, kafka_ip=args.kafka_ip)
         elif args.type == "replica":
-            agent = Log(topic=args.topic,
+
+            variables = json.loads(args.variables)
+            short_term_targets = ShortTermTargets().model_copy(update=variables)
+            KeySearch.set_global(config_provider=short_term_targets)
+
+            agent = Log(
+                topic=args.topic,
                 agent=args.agent_name,
-                kafka_ip=args.kafka_ip,
-                left_path=args.left_path,
                 log_file=args.log_file,
-                verbose=args.verbose,
                 manager=False
             )
 
     elif args.agent == "equipment":
         if args.type == "base":
-            agent = equipment_base(verbose=args.verbose)
+            agent = equipment_base(verbose=args.verbose, kafka_ip=args.kafka_ip)
         elif args.type == "replica":
+
+            variables = json.loads(args.variables)
+            short_term_targets = ShortTermTargets().model_copy(update=variables)
+            KeySearch.set_global(config_provider=short_term_targets)
+
             agent = Equipment(
                 topic=args.topic,
                 agent=args.agent_name,
-                kafka_ip=args.kafka_ip,
-                counterbid_wait=args.counter_wait,
                 status=json.loads(args.status),
-                verbose=args.verbose,
                 manager=False
             )
 
     elif args.agent == "material":
         if args.type == "base":
-            agent = material_base(verbose=args.verbose)
+            agent = material_base(verbose=args.verbose, kafka_ip=args.kafka_ip)
         elif args.type == "replica":
+
+            variables = json.loads(args.variables)
+            short_term_targets = ShortTermTargets().model_copy(update=variables)
+            KeySearch.set_global(config_provider=short_term_targets)
+
             agent = Material(
                 topic=args.topic,
                 agent=args.agent_name,
-                kafka_ip=args.kafka_ip,
                 params=json.loads(args.params),
-                verbose=args.verbose,
                 manager=False
             )
     else:

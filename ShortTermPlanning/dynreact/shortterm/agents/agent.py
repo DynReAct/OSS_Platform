@@ -2,9 +2,28 @@ import json
 import re
 import time
 import sys
-from confluent_kafka import Producer, Consumer
-from dynreact.shortterm.common import sendmsgtopic
+
+from confluent_kafka import Producer, Consumer, KafkaError
+from dynreact.shortterm.common import sendmsgtopic, KeySearch
 import traceback
+
+current_partitions = 0
+
+def on_assign(consumer, partitions):
+    global current_partitions
+    print("Partitions assigned:", partitions)
+    current_partitions = len(partitions)
+    consumer.assign(partitions)
+
+def on_revoke(consumer, partitions):
+    global current_partitions
+    print("Partitions revoked:", partitions)
+
+    if len(partitions) == current_partitions:
+        print("ERROR: Change on topic partition, shutting down", BaseException("No partitions left"))
+        sys.exit(1)
+    else:
+        consumer.unassign()
 
 class Agent:
     """
@@ -20,20 +39,20 @@ class Agent:
        https://google.github.io/styleguide/pyguide.html
     """
 
-    def __init__(self, topic: str, agent: str, kafka_ip: str, verbose: int = 1):
+    def __init__(self, topic: str, agent: str):
         """
            Constructor function for the Log Class
 
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
-        :param str kafka_ip: IP address and TCP port of the broker.
-        :param int verbose: Level of details being saved.
         """
 
         self.topic = topic
         self.agent = agent
-        self.kafka_ip = kafka_ip
-        self.verbose = verbose
+        self.topic_callback = KeySearch.search_for_value("TOPIC_CALLBACK")
+        self.topic_gen = KeySearch.search_for_value("TOPIC_GEN")
+        self.verbose = KeySearch.search_for_value("VB", 1)
+        self.kafka_ip = KeySearch.search_for_value("KAFKA_IP")
 
         self.iter_no_msg = 0
         self.min_verbose = 1
@@ -45,9 +64,14 @@ class Agent:
         # the message consumed by one AGENT can also be consumed by other AGENTs
         self.producer = Producer({"bootstrap.servers": self.kafka_ip})
         self.consumer = Consumer(
-            {"bootstrap.servers": self.kafka_ip, "group.id": self.agent, "auto.offset.reset": "earliest"}
+            {
+                "bootstrap.servers": self.kafka_ip,
+                "group.id": self.agent,
+                "auto.offset.reset": "earliest",
+                'error_cb': self.kafka_error_callback
+            }
         )
-        self.consumer.subscribe([self.topic])
+        self.consumer.subscribe([self.topic], on_assign=on_assign, on_revoke=on_revoke)
 
     def write_log(self, msg: str, identifier: str, to_stdout: bool = False):
         """
@@ -157,6 +181,11 @@ class Agent:
         """
         pass
 
+    def kafka_error_callback(self, err: KafkaError):
+        if err.UNKNOWN_TOPIC_OR_PART or err._UNKNOWN_PARTITION:
+            print("ERROR: Change on topic partition, shutting down", err)
+            sys.exit(1)
+
     def read_message(self) -> str:
         """
         Poll and read a Kafka message
@@ -212,9 +241,9 @@ class Agent:
             # End of partition event
             if self.verbose > 1:
                 self.write_log("Error encountered.", "41e40c2f-f4fb-4903-aa32-1931e8fb0d40")
-            sys.stderr.write('%% %s [%d] reached end at offset %d\n' %
+            sys.stderr.write('%% %s [%d] reached end at offset %d with code %s\n' %
                              (message_obj.topic(), message_obj.partition(),
-                              message_obj.offset()))
+                              message_obj.offset(), message_obj.error().code()))
 
         # If the destinations of the message do not include this AGENT, go to the next iteration
         dctmsg = json.loads(vals)
@@ -266,3 +295,4 @@ class Agent:
         self.consumer.close()
         if self.verbose > 1:
             self.write_log(f"Ending spawned process for agent {self.agent} in topic {self.topic}.", "8dc03f6b-dce4-4a52-a427-900547dd7a5a")
+

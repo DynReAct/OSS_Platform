@@ -6,8 +6,6 @@ This module runs the setup code necessary to quickly run the functions.
 Note:
     These variables should be computed only once.
 """
-import os
-
 from dynreact.shortterm.common.data.load_url import load_url_json_get, URL_SNAPSHOTS, URL_SNAPSHOT_DATA
 
 class DataSetup:

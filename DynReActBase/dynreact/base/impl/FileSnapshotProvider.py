@@ -46,11 +46,11 @@ class FileSnapshotProvider(SnapshotProvider):
         except (ValueError, TypeError):
             return None
 
-    def snapshots(self, start_time: datetime, end_time: datetime, order: Literal["asc", "desc"] = "asc") -> Iterator[datetime]:
+    def snapshots(self, start_time: datetime, end_time: datetime, order: Literal["asc", "desc"] = "asc") -> Iterator[
+        datetime]:
         if len(self._snapshot_ids) > 0:
             return iter(self._snapshot_ids.values())
-        file_types = ",".join(FileSnapshotProvider._FILE_TYPES)
-        matches = [f for f in (f.replace("\\", "/") for f in sorted(glob.glob(os.path.join(self._folder, f"*.[{file_types}]*"), recursive=False),
+        matches = [f for f in (f.replace("\\", "/") for f in  sorted(glob.glob(os.path.join(self._folder, "*.[json,pickle]*"), recursive=False),
                                       reverse=order == "desc")) if "snapshot" in f and ("/" not in f or f.rindex("/") < f.rindex("snapshot"))]
         num_matches: int = len(matches)
         if num_matches == 1:
@@ -67,7 +67,7 @@ class FileSnapshotProvider(SnapshotProvider):
         return iter(self._snapshot_ids.values())
 
     def load(self, *args, time: datetime | None = None, **kwargs) -> Snapshot | None:
-        timestamp = self.previous(time=time)
+        timestamp = self.previous(time=time) if time is not None else self.previous()
         if timestamp is None:
             return None
         if len(self._snapshots) > 0:
@@ -91,9 +91,11 @@ class FileSnapshotProvider(SnapshotProvider):
         return snapshot
 
     def _read_csv(self, file: str, timestamp: datetime) -> Snapshot:
-        frame: pd.DataFrame = pd.read_csv(file, sep=";", dtype={"id": str, "order": str, "process": "Int64", "order_position": "Int64"})
+        frame: pd.DataFrame = pd.read_csv(file, sep=";", dtype={"id": str, "order": str,
+                                                "process": "Int64", "order_position": "Int64"})
         col_names = frame.columns
-        material_cols: dict[str, int] = {c[len("material_"):]: idx for idx, c in enumerate(col_names) if c.startswith("material_")}
+        material_cols: dict[str, int] = {c[len("material_"):]: idx for idx, c in enumerate(col_names) \
+                                         if c.startswith("material_")}
         plants: dict[str, Equipment] = {p.name_short: p for p in self._site.equipment}
         processes: list[Process] = self._site.processes
         coils: list[Material] = []

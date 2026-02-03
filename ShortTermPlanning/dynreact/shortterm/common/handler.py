@@ -2,8 +2,9 @@ import json
 import os
 import shlex
 import docker
+from datetime import datetime
 
-from dynreact.shortterm.common import TOPIC_CALLBACK, TOPIC_GEN
+from dynreact.shortterm.common import KeySearch
 
 
 class DockerManager:
@@ -18,7 +19,7 @@ class DockerManager:
         self.max_allowed = max_allowed
         self.tracked_containers = []
 
-    def launch_container(self, name:str, agent:str, mode:str, params:dict, auto_remove=False):
+    def launch_container(self, name:str, agent:str, mode:str, params:dict, envs: dict = None, auto_remove=False):
         """
         Launch a new Docker container and tag it with the instance's unique identifier.
 
@@ -26,6 +27,7 @@ class DockerManager:
         :param agent: Name of the agent (log, equipment, material9.
         :param mode: Is the agent running a replica or the manager.
         :param params: Dictionary of python params.
+        :param envs: Dictionary of environment variables.
         :param auto_remove: Remove container after execution
         :return: The container object.
         """
@@ -35,30 +37,43 @@ class DockerManager:
         try:
 
             # Get updated list of containers before launching
-            self.list_tracked_containers()
+            all_containers = self.list_tracked_containers()
 
             command_str = f"python -m shortterm {agent} {mode} {dict_to_cli_params(params)}".strip()
 
             print(f"Launching with {command_str}")
 
+            container_prefix = os.environ.get('CONTAINER_NAME_PREFIX', False)
+
             if self.max_allowed == -1 or (len(self.tracked_containers) + 1) <= self.max_allowed:
+
+                environment_variables = {
+                  "IS_DOCKER": "true",
+                  "TOPIC_GEN": KeySearch.search_for_value("TOPIC_GEN"),
+                  "TOPIC_CALLBACK": KeySearch.search_for_value("TOPIC_CALLBACK")
+                }
+
+                if envs:
+                    environment_variables.update(envs)
+
+                name = f"{container_prefix + '_' if container_prefix else ''}{agent.upper()}_{name}"
+
+                if any((d['name'] == name and d['status'] == "exited") for d in all_containers):
+                    print("Container with the same name found, auto removing")
+                    self.clean_container(name)
+
                 container = self.client.containers.run(
                     image=f"{os.environ.get("LOCAL_REGISTRY", "")}dynreact-shortterm:{os.environ.get("IMAGE_TAG", "latest")}",
-                    name=f"{agent.upper()}_{name}",
+                    name=name,
                     detach=True,
                     auto_remove=auto_remove,
                     command=command_str,
-                    environment={
-                      "IS_DOCKER": "true",
-                      "TOPIC_GEN": TOPIC_GEN,
-                      "TOPIC_CALLBACK": TOPIC_CALLBACK
-                    },
-                    entrypoint="/usr/local/bin/entrypoint.sh",
+                    environment=environment_variables,
                     volumes={
                         "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
                         "/var/log/dynreact-logs": {
                             "bind": "/var/log/dynreact-logs",
-                            "mode": "rw,rshared",
+                            "mode": "rw",
                         }
                     },
                     labels={"owner": self.tag} if self.tag else []  # Use a label to track ownership
@@ -72,7 +87,8 @@ class DockerManager:
             else:
                 print("Unable to provision container, container limit reached!")
         except Exception as e:
-            raise Exception(f"Error launching container: {e}")
+            dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+            raise Exception(f"{dt} | ERROR: Error launching container: {e}")
 
     def stop_tracked_containers(self):
         """
@@ -112,6 +128,27 @@ class DockerManager:
         except Exception as e:
             print(f"Error cleaning containers: {e}")
 
+    def clean_container(self, container_name: str):
+        """
+        Stop and remove all containers launched by this instance (using the tag).
+
+        :param container_name: Container name
+        :return: The container object.
+        """
+        try:
+            result  = self.client.containers.prune(filters={"name": container_name})
+            deleted_containers = result.get("ContainersDeleted", [])
+
+            if not deleted_containers:
+                print("No tracked containers found.")
+                return
+
+            for container_name in deleted_containers:
+                print(f"Container '{container_name}' removed.")
+
+        except Exception as e:
+            print(f"Error cleaning containers: {e}")
+
     def stop_tracked_container(self, container_id: str):
         """
         Stop and remove one container by container ID.
@@ -147,9 +184,11 @@ class DockerManager:
         else:
             print(f"\nTracked Containers for tag '{self.tag}':")
             for container in containers:
+                container.reload()
                 self.tracked_containers.append({
                     "id": container.id,
                     "status": container.status,
+                    "name": container.name
                 })
                 print(f"ID: {container.short_id} | Name: {container.name} | Status: {container.status}")
 

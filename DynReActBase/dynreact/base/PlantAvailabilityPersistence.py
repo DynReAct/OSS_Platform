@@ -1,7 +1,6 @@
 from datetime import date, timedelta
-from typing import Sequence
 
-from dynreact.base.model import Site, EquipmentAvailability, PlannedWorkingShift
+from dynreact.base.model import Site, EquipmentAvailability
 
 
 class PlantAvailabilityPersistence:
@@ -42,8 +41,7 @@ class PlantAvailabilityPersistence:
 
     @staticmethod
     def aggregate(equipment: list[int], start: date, end: date, availabilities: dict[int, list[EquipmentAvailability]],
-                  shifts: dict[int, Sequence[PlannedWorkingShift]]|None=None,
-                  default_daily_baseline: timedelta = timedelta(days=1)) -> dict[int, EquipmentAvailability]:
+                        default_daily_baseline: timedelta = timedelta(days=1)) -> dict[int, EquipmentAvailability]:
         result = {}
         if end <= start:
             return {}
@@ -86,19 +84,5 @@ class PlantAvailabilityPersistence:
                     end1 = start_cr + one_day
                     all_deltas[start_cr] = delta_base
                     start_cr = end1
-            if shifts is not None and plant in shifts:
-                shifts0 = shifts[plant]
-                shift_deltas = {}
-                for sh in shifts0:
-                    delta = sh.worktime - (sh.period[1] - sh.period[0])
-                    if delta.total_seconds() != 0:
-                        dt = sh.period[0].date()
-                        if dt not in shift_deltas:
-                            shift_deltas[dt] = timedelta()
-                        shift_deltas[dt] += delta
-                for dt, delta in shift_deltas.items():
-                    if delta.total_seconds() == 0 or dt in all_deltas:
-                        continue
-                    all_deltas[dt] = delta
             result[plant] = EquipmentAvailability(equipment=plant, period=period, daily_baseline=daily_baseline, deltas=all_deltas if len(all_deltas) > 0 else None)
         return result

@@ -13,7 +13,6 @@ Note:
     The program accepts two input parameters:
 
         - Verbose (-v): Verbosity Level 1-5
-        - Base (-b): Base configuration file
         - RunAgents (-g): 0 => General agents are not launched; 100 => Material ; 010 => Equipment; 001 => Log;
 
     Example:
@@ -21,14 +20,14 @@ Note:
         To replace all base agents run: python3 replace_base.py -v 3  -b . -g 111
 """
 
-import os
 import argparse
 import time
 
 from confluent_kafka import Producer
-import configparser
-from dynreact.shortterm.common import VAction
+from dynreact.shortterm.common import VAction, KeySearch
 from dynreact.shortterm.short_term_planning import clean_agents
+from dynreact.shortterm.shorttermtargets import ShortTermTargets
+
 
 def main():
     """
@@ -53,10 +52,10 @@ def main():
     verbose = args["verbose"]
     rungagnts = str(args['rungagents'])
 
-    config = configparser.ConfigParser()
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    config.read(os.path.join(current_dir, "dynreact", "shortterm", "config.cnf"))
-    kafka_ip = config['DEFAULT']['IP']
+    # Class method
+    KeySearch.set_global(config_provider=ShortTermTargets(VB=verbose))
+
+    kafka_ip = KeySearch.search_for_value("KAFKA_IP")
 
     if verbose > 0:
         print( f"Running program with {verbose=}, {rungagnts=} ")

@@ -8,10 +8,9 @@ The classes defined in this module are serializable and can be made accessible v
 """
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone, date
-from numbers import Number
-from typing import Any, TypeVar, Generic, Literal, Sequence, Mapping
+from typing import Any, TypeVar, Generic, Literal
 
-from pydantic import BaseModel, Field, ConfigDict, model_validator
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class Model(BaseModel):
@@ -65,7 +64,7 @@ class Equipment(LabeledItem, ProcessInformation):
     storage_out: str = None
     "Default storage locations of material processed by this equipment"
 
-    def get_equipment_name(self, idp: int):
+    def get_equipment_name(self):
         return self.name_short
 
     def get_equipment_id(self):
@@ -147,8 +146,6 @@ class Material(Model):
     "Process id, cf. field Process#process_ids"
     current_process_name: str|None = None
     "Process stage"
-    quality_lock: bool = False
-    "Indicates that the material cannot be further processed for the time being."
     properties: PROPERTIES|None = None
     "Material-specific properties."
 
@@ -173,8 +170,6 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
     "Target weight in t"
     actual_weight: float
     "Sum of individual material weights in t"
-    material_count: int = 0
-    "Number of units in this order"
     material_classes: dict[str, str] = {}
     "Keys: material category id, values: material class ids"
     allowed_equipment: list[int]   # TODO dict[process, list[int]]?
@@ -193,8 +188,6 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
     "DEPRECATED: use lot_positions instead. (1-based index of order in lot)"
     lot_positions: dict[str, int]|None = None
     "1-based index of order in lots, by process step"
-    lot_start_end_times: dict[str, tuple[datetime, datetime]]|None=None
-    "Scheduled start and end times by process step; typically, these will only be present if there is a corresponding entry in the lots field."
     # FIXME this dict type with arbitrary_types_allowed is just a temporary workaround, need to find a better solution...
     material_properties: dict[str, Any] | MATERIAL_PROPERTIES
     "Use-case specific material characteristics."
@@ -203,11 +196,6 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
 
 
 class Lot(Model):
-    """
-    A lot contains the production schedule for specific equipment, consisting of a list of production orders to be produced in a sequence.
-    Usually, within a lot no excessive setup operations should be necessary between orders, otherwise the lot should be split into two.
-    """
-
     id: str
     equipment: int
     active: bool
@@ -218,27 +206,6 @@ class Lot(Model):
     comment: str|None = None
     weight: float|None = None
     "Convenience field for storing the total lot weight. Must be equal to the sum of the order weights. In tons."
-    start_time: datetime|None = None
-    "Planned start time for lot processing."
-    end_time: datetime|None = None
-    "Planned end time for lot processing."
-
-
-class LotTimes(Model):
-    """
-    Provides information about the estimated processing time for an order or material at a specific processing stage.
-    """
-
-    id: str
-    "Either an order id or a material id"
-    process: str
-    "Process id"
-    start: datetime
-    "Estimated processing start time for order or material"
-    end: datetime
-    "Estimated processing end time for order or material"
-    processing_time: timedelta|None=None
-    "Processing duration"
 
 
 class MaterialOrderData(Model):
@@ -257,7 +224,6 @@ class PlanningData(Model):
     # lots: list[list[str]] TODO?
     transition_costs: float = 0.0
     logistic_costs: float = 0.0
-    assignment_costs: float = 0.0
     lots_count: int = 0
     lot_weights: list[float] = []
     "Lot weights in tons."
@@ -303,14 +269,6 @@ class EquipmentStatus(Model, Generic[P]):
     "Internal state of the optimization"
 
 
-class EquipmentProduction(Model):
-
-    equipment: int
-    total_weight: float
-    lot_weight_range: tuple[float, float] | None = None
-    "Weight restriction for lots in t"
-
-
 class ObjectiveFunction(Model, extra="allow"):
     """
     Note that this class may have use-case dependent extra fields
@@ -318,12 +276,6 @@ class ObjectiveFunction(Model, extra="allow"):
 
     total_value: float
     "The overall objective function value"
-    additive_costs: float|None=None
-    """
-    The sum of individual components that are monotonously increasing with respect to adding orders; excluding for instance the 
-    weight_deviation, lot_size_deviation and structure_deviation components, but potentially also certain custom parts.
-    If unset, the mentioned values are subtracted from total_value.
-    """
     lots_count: float|None=None
     "Penalty for number of lots"
     transition_costs: float|None=None
@@ -338,16 +290,14 @@ class ObjectiveFunction(Model, extra="allow"):
     "Penalty for deviating from the targeted material structure"
     priority_costs: float|None = None
     "Penalty for order priority"
-    assignment_costs: float|None = None
-    "Costs for unfavourable order to equipment assignments (see CostProvider.assignment_costs())"
 
 
-    @model_validator(mode="after")
-    def set_additive_costs(self):
-        if self.additive_costs is None:
-            self.additive_costs = self.total_value - (self.lot_size_deviation or 0) - (self.weight_deviation or 0) - \
-                                  (self.structure_deviation or 0) - (self.priority_costs or 0)
-        return self
+class EquipmentProduction(Model):
+
+    equipment: int
+    total_weight: float
+    lot_weight_range: tuple[float, float] | None = None
+    "Weight restriction for lots in t"
 
 
 SUM_MATERIAL: str = "_sum"
@@ -405,10 +355,9 @@ class ProductionPlanning(Model, Generic[P]):
     "Initial conditions for the optimization"
 
     # TODO cache results?
-    def get_lots(self, orders: dict[str, Order]|None=None) -> dict[int, list[Lot]]:
+    def get_lots(self) -> dict[int, list[Lot]]:
         """
         :return: dictionary with keys = equipment ids, values = lots
-        If the orders field is provided, then the lot weights will be filled, as well (missing orders are ignored, however)
         """
         result: dict[int, dict[str, dict[int, str]]] = {}  # keys: equipment, lot_id, lot_idx, order
         for order, assignment in self.order_assignments.items():
@@ -427,13 +376,10 @@ class ProductionPlanning(Model, Generic[P]):
         for plant_id, lots in result.items():
             lots_sorted: list[str] = sorted(lots)
             plant_lots: list[Lot] = []
-            for lot_id in lots_sorted:
+            for lot_id in lots_sorted:  # TODO test
                 order_data: dict[int, str] = lots[lot_id]
                 lot_indices: list[int] = sorted(order_data)
-                lot_weight = None
-                if orders is not None:
-                    lot_weight = sum(orders[order].actual_weight if order in orders else 0 for order in order_data.values())
-                lot = Lot(id=lot_id, equipment=plant_id, active=True, status=0, orders=[order_data[idx] for idx in lot_indices], weight=lot_weight)
+                lot = Lot(id=lot_id, equipment=plant_id, active=True, status=0, orders=[order_data[idx] for idx in lot_indices])
                 plant_lots.append(lot)
             result_sorted[plant_id] = plant_lots
         return result_sorted
@@ -518,28 +464,12 @@ class ProcessLotCreationSettings(Model):
     default_iterations: int|None=None
     "Default number of iterations for the process step"
 
-    def get_equipment_targets(self, equipment_id: int, default_value: float|None=None) -> float|None:
-        if isinstance(self.total_size, Number):
-            return self.total_size
-        if isinstance(self.total_size, Mapping) and equipment_id in self.total_size:
-            return self.total_size[equipment_id]
-        return default_value
-
-    def get_equipment_lot_sizes(self, equipment_id: int, default_value: TargetLotSize|None=None) -> TargetLotSize|None:
-        if isinstance(self.lot_sizes, TargetLotSize):
-            return self.lot_sizes
-        if isinstance(self.lot_sizes, Mapping) and equipment_id in self.lot_sizes:
-            return self.lot_sizes[equipment_id]
-        return default_value
-
 
 class LotCreationSettings(Model):
     processes: dict[str, ProcessLotCreationSettings]
     "Settings per process step"
     default_iterations: int | None = None
     "Default number of iterations if no process-specific number is specified"
-    duration: timedelta = timedelta(days=1)
-    "The reference duration these settings apply to. E.g., one shift of eight hours, or one day."
 
 
 class Site(LabeledItem):
@@ -559,8 +489,7 @@ class Site(LabeledItem):
     def get_process(self, process: str, do_raise: bool=False) -> Process|None:
         if process is None:
             return None
-        process = process.upper()
-        proc = next((p for p in self.processes if p.name_short.upper() == process or p.synonyms is not None and any(s.upper() == process for s in p.synonyms)), None)
+        proc = next((p for p in self.processes if p.name_short == process or p.synonyms is not None and process in p.synonyms), None)
         if proc is None and do_raise:
             raise Exception("Process not found: " + str(process))
         return proc
@@ -584,16 +513,13 @@ class Site(LabeledItem):
     def get_equipment_by_name(self, plant_name: str, do_raise: bool=False) -> Equipment|None:
         if plant_name is None:
             return None
-        plant_name = plant_name.upper()
-        plant = next((p for p in self.equipment if p.name_short is not None and p.name_short.upper() == plant_name), None)
+        plant = next((p for p in self.equipment if p.name_short == plant_name), None)
         if plant is None and do_raise:
             raise Exception("Plant not found by name: " + str(plant_name))
         return plant
 
-    def get_process_equipment(self, process: str, do_raise: bool=False) -> list[Equipment]:
-        proc = self.get_process(process, do_raise=do_raise)
-        process = (process.upper() if process is not None else None) if proc is None else proc.name_short.upper()
-        return [p for p in self.equipment if p.process.upper() == process]
+    def get_process_equipment(self, process: str) -> list[Equipment]:
+        return [p for p in self.equipment if p.process == process]
 
     def get_storage(self, storage: str, do_raise: bool=False) -> Storage|None:
         if storage is None:
@@ -723,14 +649,6 @@ class Snapshot(Model, Generic[MATERIAL_PROPERTIES]):
         return list(selected_coils.values())
 
 
-class PlannedWorkingShift(Model):
-    equipment: int
-    period: tuple[datetime, datetime]
-    worktime: timedelta
-    reason: str|None=None
-    "Reason for downtime, etc."
-
-
 class LongTermTargets(Model):
     """
     Long term production targets for different product categories, as input for the long-term
@@ -795,26 +713,4 @@ class ServiceHealth(Model):
     status: int
     "0: ok"
     running_since: datetime|None=None
-
-
-class Metric(Model):
-    id: str
-    labels: dict[str, str]|None=None
-
-
-class PrimitiveMetric(Metric):
-    value: float|int
-
-
-class Histogram(Metric):
-    data: list[float]
-    buckets: list[float]
-    include_infinity: bool=True
-
-
-class ServiceMetrics(Model):
-    service_id: str
-    metrics: Sequence[Metric]
-
-
 

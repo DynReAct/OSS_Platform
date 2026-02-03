@@ -7,7 +7,8 @@ Version History:
 - 1.0 (2024-03-09): Initial version developed by Rodrigo Castro Freibott.
 """
 
-from dynreact.shortterm.common import sendmsgtopic
+from datetime import datetime
+from dynreact.shortterm.common import sendmsgtopic, KeySearch
 from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
 from dynreact.shortterm.common.functions import calculate_bidding_price
 from dynreact.shortterm.agents.agent import Agent
@@ -22,23 +23,17 @@ class Material(Agent):
         topic     (str): Topic driving the relevant converstaion.
         agent     (str): Name of the agent creating the object.
         params   (dict): parameters relevant to the configuration of the agent.
-        kafka_ip  (str): IP address and TCP port of the broker.
-        verbose   (int): Level of details being saved.
-
-         
-
     """
-    def __init__(self, topic: str, agent: str, params: dict, kafka_ip: str, verbose: int = 1, manager=True):
+    def __init__(self, topic: str, agent: str, params: dict, manager=True):
 
-        super().__init__(topic=topic, agent=agent, kafka_ip=kafka_ip, verbose=verbose)
+        super().__init__(topic=topic, agent=agent)
         """
            Constructor function for the Log Class
 
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
         :param dict params: Parameters relevant to the configuration of the agent.
-        :param str kafka_ip: IP address and TCP port of the broker.
-        :param int verbose: Level of details being saved.
+        :param str manager: Is this instance a base.
         """
 
         self.action_methods.update({
@@ -72,16 +67,18 @@ class Material(Agent):
             material = payload['id']
             agent = f"MATERIAL:{topic}:{material}"
             params = payload['params']
+            variables = payload['variables']
+
+            KeySearch.assign_values(new_values=variables)
     
             init_kwargs = {
                 "topic": topic, 
                 "agent": agent,
                 "params": params,
-                "kafka-ip": self.kafka_ip,
-                "verbose": self.verbose
+                "variables": KeySearch.dump_model()
             }
 
-            self.handler.launch_container(name=f"{topic}_{material}", agent="material", mode="replica", params=init_kwargs)
+            self.handler.launch_container(name=f"{topic}_{material}", agent="material", mode="replica", params=init_kwargs, auto_remove=True)
 
             if self.verbose > 1:
                 self.write_log(f"Creating material with configuration {init_kwargs}...", "ffac4444-ec23-4f00-af6a-f4300e3af7a7")
@@ -90,7 +87,8 @@ class Material(Agent):
 
         else:
             self.write_log(f"Refuse to create material replica from another replica instance.", "c891fe14-041f-48b7-8de9-aa0d201e7083")
-            raise Exception("Replicas can't create new instances. Only managers can")
+            dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+            raise Exception(f"{dt} | ERROR: Replicas can't create new instances. Only managers can")
 
     def handle_bid_action(self, dctmsg: dict) -> str:
         """
@@ -112,14 +110,6 @@ class Material(Agent):
             material_params=self.params, equipment_status=equipment_status, previous_price=previous_price
         )
         if bidding_price is not None:
-            # --- START: New log message informing about the structure of the payload ---
-            if self.verbose > 3:
-                self.write_log(
-                    msg=f"Sending COUNTERBID to {equipment_id} with material_params payload: {self.params}",
-                    identifier="3a0c1b9f-4f2a-4a8e-8b1e-7f6d5c6b7a8d",
-                    to_stdout=True # Also print to docker container stdout
-                )
-            # --- END: New log message ---            
             sendmsgtopic(
                 producer=self.producer,
                 tsend=topic,
@@ -154,6 +144,7 @@ class Material(Agent):
         """
         topic = dctmsg['topic']
         equipment = dctmsg['payload']['id']
+        costs = dctmsg['payload']['costs']
         sendmsgtopic(
             producer=self.producer,
             tsend=topic,
@@ -161,7 +152,7 @@ class Material(Agent):
             source=self.agent,
             dest=equipment,
             action="CONFIRM",
-            payload=dict(id=self.agent, material_params=self.params),
+            payload=dict(id=self.agent, material_params=self.params, costs=costs),
             vb=self.verbose
         )
 

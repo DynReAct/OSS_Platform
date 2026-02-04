@@ -23,8 +23,10 @@ class Material(Agent):
         topic     (str): Topic driving the relevant converstaion.
         agent     (str): Name of the agent creating the object.
         params   (dict): parameters relevant to the configuration of the agent.
+        transport_times (dict): Dictionary with the transport times for each equipment expressed in seconds.
+        coil_lengths (list): List with the coil lengths for each equipment expressed in meters.
     """
-    def __init__(self, topic: str, agent: str, params: dict, manager=True):
+    def __init__(self, topic: str, agent: str, params: dict, transport_times: dict[str, int], coil_lengths: list[float] = None, manager=True):
 
         super().__init__(topic=topic, agent=agent)
         """
@@ -33,6 +35,8 @@ class Material(Agent):
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
         :param dict params: Parameters relevant to the configuration of the agent.
+        :param dict transport_times: Dictionary with the transport times for each equipment expressed in seconds.
+        :param list coil_lengths: List with the coil lengths for each equipment expressed in meters.
         :param str manager: Is this instance a base.
         """
 
@@ -47,6 +51,8 @@ class Material(Agent):
 
         self.assigned_equipment = ""
         self.params = params
+        self.transport_times = transport_times
+        self.coil_lengths = coil_lengths if coil_lengths is not None else [0.0]
         if self.verbose > 1:
             self.write_log(msg=f"Finished creating the agent {self.agent} with parameters {self.params}.",
                            identifier="ddea8374-6149-41e1-b86f-4cc147580d13",
@@ -67,6 +73,8 @@ class Material(Agent):
             material = payload['id']
             agent = f"MATERIAL:{topic}:{material}"
             params = payload['params']
+            transport_times = payload['transport_times']
+            coil_lengths = payload['coil_length']
             variables = payload['variables']
 
             KeySearch.assign_values(new_values=variables)
@@ -75,6 +83,8 @@ class Material(Agent):
                 "topic": topic, 
                 "agent": agent,
                 "params": params,
+                "transport_times": transport_times,
+                "coil_lengths": coil_lengths,
                 "variables": KeySearch.dump_model()
             }
 
@@ -104,30 +114,43 @@ class Material(Agent):
         equipment_id = payload['id']
         equipment_status = payload['status']
         previous_price = payload['previous_price']
+        auction_start_time = payload['start_time']
 
-        # Calculate the bidding price based on EQUIPMENT status and MATERIAL parameters
-        bidding_price = calculate_bidding_price(
-            material_params=self.params, equipment_status=equipment_status, previous_price=previous_price
-        )
-        if bidding_price is not None:
-            sendmsgtopic(
-                producer=self.producer,
-                tsend=topic,
-                topic=topic,
-                source=self.agent,
-                dest=equipment_id,
-                action="COUNTERBID",
-                payload=dict(id=self.agent, material_params=self.params, price=bidding_price),
-                vb=self.verbose
+        time_to_equipment = self.transport_times[equipment_id] # This is a timedelta
+        material_start_time = datetime.now() + time_to_equipment
+
+        if material_start_time <= auction_start_time:
+            # Calculate the bidding price based on EQUIPMENT status and MATERIAL parameters
+            bidding_price = calculate_bidding_price(
+                material_params=self.params, equipment_status=equipment_status, previous_price=previous_price
             )
-            if self.verbose > 2:
-                self.write_log(f"Instructed {equipment_id} to counterbid", "1df48bc3-a57f-40fa-a2db-effca1d2d40b")
+            if bidding_price is not None:
+                sendmsgtopic(
+                    producer=self.producer,
+                    tsend=topic,
+                    topic=topic,
+                    source=self.agent,
+                    dest=equipment_id,
+                    action="COUNTERBID",
+                    payload=dict(id=self.agent, material_params=self.params, price=bidding_price),
+                    vb=self.verbose
+                )
+                if self.verbose > 2:
+                    self.write_log(f"Instructed {equipment_id} to counterbid", "1df48bc3-a57f-40fa-a2db-effca1d2d40b")
+            else:
+                if self.verbose > 1:
+                    self.write_log(
+                        f"Rejected offer from {equipment_id}. "
+                        f"This equipment is not among the allowed equipments for the material",
+                        "8c068331-38bf-4b1f-acd4-f9659c8c7be7"
+                    )
         else:
             if self.verbose > 1:
                 self.write_log(
-                    f"Rejected offer from {equipment_id}. "
-                    f"This equipment is not among the allowed equipments for the material",
-                    "8c068331-38bf-4b1f-acd4-f9659c8c7be7"
+                    f"Material can't reach the equipment {equipment_id} in time."
+                    f"Start of the auction: {auction_start_time.strftime('%H:%M:%S %d/%m/%Y')}"
+                    f"Material time of arrival: {material_start_time.strftime('%H:%M:%S %d/%m/%Y')}",
+                    "4a2e5658-3f55-4f2d-9b47-7737cc4f9517"
                 )
 
         return 'CONTINUE'
@@ -152,7 +175,7 @@ class Material(Agent):
             source=self.agent,
             dest=equipment,
             action="CONFIRM",
-            payload=dict(id=self.agent, material_params=self.params, costs=costs),
+            payload=dict(id=self.agent, material_params=self.params, order_length=self.calculate_order_length(), costs=costs),
             vb=self.verbose
         )
 
@@ -199,3 +222,9 @@ class Material(Agent):
         if self.verbose > 1:
             self.write_log(f"Informed all equipments (except {self.assigned_equipment}) that {self.agent} is ASSIGNED.", "bc8c9681-f990-47e5-90ff-5b0b782ff1ac")
         return 'CONTINUE'
+
+    def calculate_order_length(self) -> float:
+        """
+        Calculates the total length of the order by summing up all the individual coil lengths.
+        """
+        return sum(self.coil_lengths)

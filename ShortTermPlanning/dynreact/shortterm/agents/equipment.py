@@ -26,9 +26,12 @@ class Equipment(Agent):
         topic     (str): Topic driving the relevant converstaion.
         agent     (str): Name of the agent creating the object.
         status   (dict): Status of the equipment
+        operation_speed (float): Operation speed of the equipment in m/s.
+        start_time (datetime): Start time of the auction for the equipment.
+        current_order_length (float): The total length of the current assigned order in meters.
 
     """
-    def __init__(self, topic: str, agent: str, status: dict, manager=True):
+    def __init__(self, topic: str, agent: str, status: dict, operation_speed: float, start_time: datetime = None, current_order_length: float = None, manager=True):
 
         super().__init__(topic=topic, agent=agent)
         """
@@ -36,7 +39,10 @@ class Equipment(Agent):
 
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
-        :param dict status: Status of the equipment
+        :param dict status: Status of the equipment.
+        :param float operation_speed: Operation speed of the equipment in m/s.
+        :param datetime start_time: Start time of the auction for the equipment.
+        :param float current_order_length: The total length of the current assigned order in meters.
         :param str manager: Is this instance a base.
         """
         self.action_methods.update({
@@ -48,6 +54,7 @@ class Equipment(Agent):
         if manager:
             self.handler = DockerManager(tag=f"equipment{DOCKER_REPLICA}")
 
+        self.operation_speed = operation_speed
         self.round_number = 0
         self.status = status
         self.equipment = 0
@@ -56,6 +63,8 @@ class Equipment(Agent):
         self.last_bid_time = None
         self.bid_to_confirm = dict()
         self.previous_price = None
+        self.start_time = start_time if start_time is not None else datetime.now()
+        self.current_order_length = current_order_length
 
         if self.verbose > 1:
             self.write_log(msg=f"Finished creating the agent {self.agent} with status {self.status}.",
@@ -80,6 +89,7 @@ class Equipment(Agent):
         self.bids = []
         self.last_bid_time = None
         self.bid_to_confirm = dict()
+        self.current_order_length = None
 
         full_msg = dict(
             source=self.agent, dest=self.agent, topic=self.topic, action='START',
@@ -111,6 +121,8 @@ class Equipment(Agent):
 
             equipment = payload['id']
             snapshot = payload['snapshot']
+            operation_speed = payload['operation_speed']
+            start_time = payload['start_time']
             agent = f"EQUIPMENT:{topic}:{equipment}:0"
             status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)
             self.equipment = equipment
@@ -119,6 +131,8 @@ class Equipment(Agent):
                 "topic": topic,
                 "agent": agent,
                 "status": status,
+                "operation_speed": float(operation_speed),
+                "start_time": start_time,
                 "variables": KeySearch.dump_model(),
             }
 
@@ -155,7 +169,7 @@ class Equipment(Agent):
             source=self.agent,
             dest="MATERIAL:" + topic + ":.*",
             action="BID",
-            payload=dict(id=self.agent, status=self.status, previous_price=previous_price),
+            payload=dict(id=self.agent, status=self.status, start_time=self.start_time, previous_price=previous_price),
             vb=self.verbose
         )
         if self.verbose > 2:
@@ -241,6 +255,7 @@ class Equipment(Agent):
         payload = dctmsg['payload']
         material = payload['id']
         material_params = payload['material_params']
+        self.current_order_length = payload['order_length']
 
         if material != self.bid_to_confirm['material']:
             error_msg = (

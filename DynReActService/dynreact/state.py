@@ -124,14 +124,16 @@ class DynReActSrvState:
     def get_stp_context_params(self):
         if self._stp is None:
             self._stp = self._plugins.get_stp_config_params()
-        return (self._stp._stpConfigParams.IP,self._stp._stpConfigParams.TOPIC_GEN,
+        return (self._stp._stpConfigParams.KAFKA_IP,self._stp._stpConfigParams.TOPIC_GEN,
                 self._stp._stpConfigParams.VB)
     
     def get_stp_context_timing(self):
         if self._stp is None:
             self._stp = self._plugins.get_stp_config_params()
-        return (self._stp._stpConfigParams.TimeDelays.AW,self._stp._stpConfigParams.TimeDelays.BW,
-                self._stp._stpConfigParams.TimeDelays.CW,self._stp._stpConfigParams.TimeDelays.EW,
+        return (self._stp._stpConfigParams.TimeDelays.AUCTION_WAIT,
+                self._stp._stpConfigParams.TimeDelays.COUNTERBID_WAIT,
+                self._stp._stpConfigParams.TimeDelays.CLONING_WAIT,
+                self._stp._stpConfigParams.TimeDelays.EXIT_WAIT,
                 self._stp._stpConfigParams.TimeDelays.SMALL_WAIT)
 
     def get_results_persistence(self) -> ResultsPersistence:

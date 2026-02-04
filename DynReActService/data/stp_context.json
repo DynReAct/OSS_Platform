@@ -1,14 +1,23 @@
 {
-  "IP": "192.168.111.173:9092",
-  "LogFilePath": "/var/log/dynreact-logs/",
-  "REST_URL": "http://192.168.111.11:5016",
+  "KAFKA_IP": "192.168.111.173:9092",
+  "LOG_FILE_PATH": "/var/log/dynreact-logs/",
+  "REST_URL": "http://192.168.111.11:5026",
   "TOPIC_GEN": "DynReact-Gen",
+  "TOPIC_CALLBACK": "DynReact-Callback",
+  "PERF_URL": "http://192.168.111.11:5027",
   "VB": 1,
   "TimeDelays": {
-     "AW": 7,
-     "BW": 5,
-     "CW": 3,
-     "EW": 2,
+     "AUCTION_WAIT": 7,
+     "COUNTERBID_WAIT": 5,
+     "CLONING_WAIT": 3,
+     "EXIT_WAIT": 2,
+     "RUNNING_WAIT": 10,
      "SMALL_WAIT": 5
-  }
+  },
+  "TableMappings": [
+    {"headerName":  "ID", "path":  "id", "pinned":  true},
+    {"headerName":  "Date", "path":  "due_date"},
+    {"headerName":  "Surface", "path":  "material_classes.surfaceTreatment"},
+    {"headerName":  "Current Equipment", "path":  "current_equipment.[0]"}
+  ]
 }

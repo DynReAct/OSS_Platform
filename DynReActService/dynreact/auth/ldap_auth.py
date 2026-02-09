@@ -97,13 +97,13 @@ def _ldap_has_permission(username: str, permission_dist_name: str, server: str):
         if not bind_success:
             return False
         search_filter = config.ldap_query.replace("{user}", username)
-        search_filter = f"(&{search_filter}(memberOf={permission_dist_name})"
+        search_filter = f"(&{search_filter}(memberOf={permission_dist_name}))"
         search_result = conn.search(search_base=config.ldap_search_base, search_filter=search_filter, size_limit=1)
         if not search_result or len(conn.response) == 0:
             return False
-        return True
+        result = conn.response[0]
+        return "dn" in result and "type" in result and result["type"] == "searchResEntry"
     except:
-        print("Authentication failed at server", server, "user", username)
         return False
     finally:
         try:

@@ -53,6 +53,8 @@ class DynReActSrvConfig:
     ldap_search_base: str|None = None
     ldap_query: str = "(sAMAccountName={user})"
     ldap_use_ssl: bool = False
+    ldap_permissions: dict[str, str]|None=None
+    "Mapping permission name => group distinguished name"
     # expected format: ["dynreact.custom.SomePlantPerformanceModel:uri"],
     # where the first component identifies a class name (sub class of PlantPerformanceModel) and uri may contain
     # model-specific initialization data
@@ -88,6 +90,7 @@ class DynReActSrvConfig:
                  ldap_search_base: str | None = None,
                  ldap_query: str | None = None,
                  ldap_use_ssl: bool|None = None,
+                 ldap_permissions: dict[str, str]|None=None,
                  plant_performance_models: list[str]|None = None,
                  stp_frontend: str|None = None,
                  time_zone: str | None = None
@@ -177,6 +180,13 @@ class DynReActSrvConfig:
                         ldap_query = os.getenv("LDAP_QUERY", DynReActSrvConfig.ldap_query)
                 if ldap_use_ssl is None:
                     ldap_use_ssl = os.getenv("LDAP_SSL") is not None and os.getenv("LDAP_SSL").lower() != "false"
+                if ldap_permissions is None:
+                    ldap_permissions0 = os.getenv("LDAP_PERMISSIONS")
+                    if ldap_permissions0 is not None and ldap_permissions0.strip() != "":
+                        permissions: list[tuple[str, str]] = [perms for perms in ((perm[0:perm.index("=")], perm[perm.index("=")+1:])for perm in ldap_permissions0.split(";") if len(perm) > 0)]
+                        if any(len(perms) != 2 for perms in permissions):
+                            raise Exception("Invalid LDAP permissions configuration, need pairs of the form \"PERM_1=DIST_NAME1,PERM_2=DIST_NAME2\", etc")
+                        ldap_permissions = {arr[0]: arr[1] for arr in permissions}
         elif auth_method == "none":
             auth_method = None
         self.auth_method = auth_method
@@ -190,6 +200,8 @@ class DynReActSrvConfig:
         self.ldap_query = ldap_query
         self.ldap_search_base = ldap_search_base
         self.ldap_use_ssl = ldap_use_ssl
+        self.ldap_permissions = ldap_permissions
+
         idx = 0
         if plant_performance_models is None:
             plant_performance_models = []

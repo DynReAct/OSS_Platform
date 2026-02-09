@@ -1,6 +1,9 @@
+from typing import Callable
+
 from fastapi.params import Depends
 
 from dynreact.app_config import DynReActSrvConfig
+from dynreact.base.PermissionManager import PermissionManager
 
 
 def fastapi_authentication(config: DynReActSrvConfig) -> Depends|None:
@@ -46,3 +49,54 @@ def get_current_user() -> str|None:
         return current_user.get_id()
     except:
         return None
+
+
+def get_permission_manager(config: DynReActSrvConfig) -> PermissionManager:
+    if config.auth_method is None or config.auth_method in ("dummy", "ldap_simple"):
+        return _DummyPermissions()
+    perm_check = None
+    if config.auth_method == "ldap":
+        from dynreact.auth.ldap_auth import ldap_has_permission
+        perm_check = ldap_has_permission
+    else:
+        raise Exception(f"Unsupported auth scheme {config.auth_method}")
+    return _PermissionManagerImpl(perm_check)
+
+
+class _DummyPermissions(PermissionManager):
+
+    def is_logged_in(self) -> bool:
+        return get_current_user() is not None
+
+    def check_permission(self, permission: str, user: str | None = None) -> bool:
+        return True
+
+
+class _PermissionManagerImpl(PermissionManager):
+
+    def __init__(self, perm_check: Callable[[str, str], bool]):
+        self._perm_check = perm_check
+        #self._config = config
+
+    def is_logged_in(self) -> bool:
+        return get_current_user() is not None
+
+    def check_permission(self, permission: str, user: str|None=None) -> bool:
+
+        """
+        Check a permission for a user. If the user can be determined from the context, e.g., as the logged-in user in
+        a web request, it need not be specified explicitly.
+
+        Parameters:
+            permission:
+            user
+
+        Returns:
+             true or false
+        """
+        if user is None:
+            user = get_current_user()
+            if user is None:
+                return False
+        return self._perm_check(permission, user)
+

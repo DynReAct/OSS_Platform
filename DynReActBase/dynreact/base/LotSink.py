@@ -1,3 +1,4 @@
+from dynreact.base.PermissionManager import PermissionManager
 from dynreact.base.model import Lot, Site, Snapshot, ServiceMetrics
 
 
@@ -7,9 +8,10 @@ class LotSink:
     Implementation expected in dynreact.lots.LotSinkImpl
     """
 
-    def __init__(self, url: str, site: Site):
+    def __init__(self, url: str, site: Site, permissions: PermissionManager):
         self._url = url
         self._site = site
+        self._permissions = permissions
 
     def id(self) -> str:
         raise Exception("not implemented")
@@ -40,6 +42,9 @@ class LotSink:
         :return: lot id
         """
         raise Exception("not implemented")
+
+    def required_permission(self) -> str|None:
+        return None
 
     def metrics(self) -> ServiceMetrics:
         # Overwrite in derived sink; it is recommended to have at least the following metrics (counters):

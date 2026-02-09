@@ -2,14 +2,15 @@ import os
 
 from dynreact.base.LotSink import LotSink
 from dynreact.base.NotApplicableException import NotApplicableException
+from dynreact.base.PermissionManager import PermissionManager
 from dynreact.base.impl.PathUtils import PathUtils
 from dynreact.base.model import Site, Lot, Snapshot, ServiceMetrics, PrimitiveMetric
 
 
 class FileLotSink(LotSink):
 
-    def __init__(self, uri: str, site: Site):
-        super().__init__(uri, site)
+    def __init__(self, uri: str, site: Site, permissions: PermissionManager):
+        super().__init__(uri, site, permissions)
         uri_lower = uri.lower()
         if not uri_lower.startswith("default+file:"):
             raise NotApplicableException("Unexpected URI for file file lot sink: " + str(uri))

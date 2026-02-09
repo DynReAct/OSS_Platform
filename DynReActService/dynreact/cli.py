@@ -51,12 +51,22 @@ def auth_test():
     parser = argparse.ArgumentParser(description="Test authentication")
     parser.add_argument("user", help="Username", type=str)
     parser.add_argument("pw", help="Password", type=str)
+    parser.add_argument("-p", "--permission", help="Check if user has a specific permission", type=str)
     parser.add_argument("-v", "--verbose", help="Activate verbose mode", action="store_true")
     args = parser.parse_args()
     if args.verbose:
         # TODO
         verbose = True
-    authenticate(DynReActSrvConfig(), args.user, args.pw)
+    auth: bool = authenticate(DynReActSrvConfig(), args.user, args.pw)
+    print(f"Authenticated: {auth}")
+    if auth and args.permission:
+        perm = args.permission
+        config = DynReActSrvConfig()
+        plugins = Plugins(config)
+        perm_manager = plugins.get_permission_manager()
+        success = perm_manager.check_permission(perm, user=args.user)
+        success_text = "granted" if success else "denied"
+        print(f"Permission {perm} {success_text}")
 
 
 # TODO option to aggregate by storage content

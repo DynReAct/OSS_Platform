@@ -10,6 +10,7 @@ from dynreact.base.DowntimeProvider import DowntimeProvider
 from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo
+from dynreact.base.PermissionManager import PermissionManager
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.ResultsPersistence import ResultsPersistence
@@ -247,6 +248,9 @@ class DynReActSrvState:
             self._coils_by_orders_cache.pop(first_ts)
         self._coils_by_orders_cache[snapshot] = coils_by_order
         return dict(coils_by_order)
+
+    def get_permission_manager(self) -> PermissionManager:
+        return self._plugins.get_permission_manager()
 
     def get_plant_performance_models(self) -> list[PlantPerformanceModel]:
         return self._plugins.get_plant_performance_models()

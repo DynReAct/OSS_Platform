@@ -44,6 +44,8 @@ class DynReActSrvConfig:
     cors: bool = False
     auth_method: Literal["dummy", "ldap", "ldap_simple"]|None = None
     auth_max_user_length: int = 20
+    auth_view_permission: str|None=None
+    "Permission required for accessing the frontend"
     ldap_address: str|list[str] = "ldap://localhost:1389"
     # for ldap_simple mode
     ldap_user_extension: str | None = None
@@ -83,6 +85,7 @@ class DynReActSrvConfig:
                  cors: bool|None = None,
                  auth_method: Literal["dummy", "ldap", "ldap_simple"]|None = None,
                  auth_max_user_length: int|None = None,
+                 auth_view_permission: str|None = None,
                  ldap_user_extension: str | None = None,
                  ldap_address: str|list[str] | None = None,
                  ldap_query_user: str | None = None,
@@ -163,6 +166,8 @@ class DynReActSrvConfig:
             auth_method = os.getenv("AUTH_METHOD", DynReActSrvConfig.auth_method)
         if auth_max_user_length is None:
             auth_max_user_length = int(os.getenv("AUTH_MAX_USER_LENGTH", DynReActSrvConfig.auth_max_user_length))
+        if auth_method is not None and auth_view_permission is None:
+            auth_view_permission = os.getenv("AUTH_VIEW_PERMISSION")
         if auth_method is not None:
             auth_method = auth_method.lower()
             if auth_method.startswith("ldap"):
@@ -190,6 +195,7 @@ class DynReActSrvConfig:
         elif auth_method == "none":
             auth_method = None
         self.auth_method = auth_method
+        self.auth_view_permission = auth_view_permission
         self.auth_max_user_length = auth_max_user_length
         self.ldap_user_extension = ldap_user_extension
         if ldap_address is not None and "," in ldap_address:

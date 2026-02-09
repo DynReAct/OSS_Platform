@@ -45,7 +45,7 @@ class DummyShiftsProvider(ShiftsProvider):
             start_of_day = start_of_day + one_day
             for hour in self._start_hours:
                 shift0 = start_of_day.replace(hour=hour)
-                if shift0 < start:
+                if shift0 <= start - self._delta:
                     continue
                 if (end is not None and shift0 >= end) or (limit is not None and cnt >= limit):
                     done = True

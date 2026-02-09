@@ -324,7 +324,7 @@ class LotsOptimizationAlgo:
             plant_obj = plants[p]
             if prev is not None:
                 prev_obj = snapshot.get_order(prev)
-                transition_costs: dict[str, float] = {oid: costs.transition_costs(plant_obj, prev_obj, order) + costs.assignment_costs(plant_obj, order) for oid, order in orders.items() if p in order.allowed_equipment}
+                transition_costs: dict[str, float] = {oid: costs.transition_costs(plant_obj, prev_obj, order) + costs.assignment_costs(plant_obj, order) for oid, order in orders.items() if p in order.allowed_equipment and oid not in start_orders.values()}
                 if len(transition_costs) > 0:
                     lowest_transition_order: str = min(transition_costs, key=transition_costs.get)
                     start_orders[p] = lowest_transition_order

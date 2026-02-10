@@ -9,8 +9,8 @@ from dynreact.base.PermissionManager import PermissionManager
 def fastapi_authentication(config: DynReActSrvConfig) -> Depends|None:
     username = None
     if config.auth_method == "ldap":
-        from dynreact.auth.ldap_auth import ldap_protection
-        username = ldap_protection
+        from dynreact.auth.ldap_auth import get_ldap_protection
+        username = get_ldap_protection(config)
     elif config.auth_method == "ldap_simple":
         from dynreact.auth.ldap_auth_simple import ldap_simple_protection
         username = ldap_simple_protection
@@ -25,8 +25,8 @@ def authenticate(config: DynReActSrvConfig, user: str, password: str) -> bool:
         return False
     auth_method = None
     if config.auth_method == "ldap":
-        from dynreact.auth.ldap_auth import ldap_auth
-        auth_method = ldap_auth
+        from dynreact.auth.ldap_auth import get_ldap_auth
+        auth_method = get_ldap_auth(config)
     elif config.auth_method == "ldap_simple":
         from dynreact.auth.ldap_auth_simple import ldap_auth_simple
         auth_method = ldap_auth_simple
@@ -56,8 +56,8 @@ def get_permission_manager(config: DynReActSrvConfig) -> PermissionManager:
         return _DummyPermissions()
     perm_check = None
     if config.auth_method == "ldap":
-        from dynreact.auth.ldap_auth import ldap_has_permission
-        perm_check = ldap_has_permission
+        from dynreact.auth.ldap_auth import get_permissions_check
+        perm_check = get_permissions_check(config)
     else:
         raise Exception(f"Unsupported auth scheme {config.auth_method}")
     return _PermissionManagerImpl(perm_check)

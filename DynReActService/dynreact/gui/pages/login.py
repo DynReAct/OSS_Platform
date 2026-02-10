@@ -37,7 +37,10 @@ def login_button_click(n_clicks, username: str, password: str, lang: str):
     if username is not None and authenticate(config, username, password):
         success = True
         if config.auth_view_permission is not None:
-            success = state.get_permission_manager().check_permission(config.auth_view_permission, user=username)
+            perm = config.auth_view_permission
+            if isinstance(perm, str):
+                perm = [perm]
+            success = any(state.get_permission_manager().check_permission(p, user=username) for p in perm)
             if not success:
                 login_failed_msg = f"User {username} does not have the view permission."
         if success:

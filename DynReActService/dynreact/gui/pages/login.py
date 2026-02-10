@@ -35,16 +35,18 @@ def layout(*args, **kwargs):
 def login_button_click(n_clicks, username: str, password: str, lang: str):
     login_failed_msg = None
     if username is not None and authenticate(config, username, password):
+        success = True
         if config.auth_view_permission is not None:
             success = state.get_permission_manager().check_permission(config.auth_view_permission, user=username)
             if not success:
                 login_failed_msg = f"User {username} does not have the view permission."
-        from flask_login import login_user
-        from dynreact.gui.pages.session_state import User
-        success = login_user(User(username))
-        # redirect
         if success:
-            return None, "/dash"  # "Login successful", "/dash"
+            from flask_login import login_user
+            from dynreact.gui.pages.session_state import User
+            success = login_user(User(username))
+            # redirect
+            if success:
+                return None, "/dash"  # "Login successful", "/dash"
     if login_failed_msg is None:
         translation: dict[str, str] | None = Localization.get_translation(lang, translations_key)
         login_failed_msg = Localization.get_value(translation, "login_failed", "Login failed")

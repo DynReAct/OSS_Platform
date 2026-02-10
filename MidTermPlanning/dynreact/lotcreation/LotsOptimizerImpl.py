@@ -555,7 +555,7 @@ class LotsAllocator:
             if targets is not None and targets.lot_weight_range is not None:
                 min_lot, max_lot = targets.lot_weight_range
                 if max_lot is not None and max_lot > 0:
-                    LotsAllocator._adapt_lot_sizes(lots, orders, min_lot, max_lot, plant_id, "LC" + self._plants[plant_id].name_short)
+                    LotsAllocator._adapt_lot_sizes(lots, orders, min_lot, max_lot, plant_id, "LC_" + self._plants[plant_id].name_short)
             result[plant_id] = lots
 
         if self._base_lots is not None:  # in this case we only want to extend the existing lots

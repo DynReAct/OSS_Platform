@@ -754,6 +754,8 @@ def update_plants(snapshot: str,
     target_weights: dict[int, float] = {plant: t.total_weight for plant, t in targets.target_weight.items()} if targets is not None else \
                 targets0 if isinstance(targets0, typing.Mapping) else {plant.id: targets0 for plant in plants}
     lots: dict[int, list[Lot]] = snapshot_obj.lots
+    sp = state.get_snapshot_provider()
+    now = DatetimeUtils.now()
     for plant in plants:
         if components is not None and not re_init:
             # get vals from components
@@ -801,12 +803,19 @@ def update_plants(snapshot: str,
         div = html.Div(dcc.Input(type="number", min="0", value=str(target), placeholder="Target production in t"),
                        title="Target production in t", className="create-plant-input", **{"data-plant": str(plant.id), "data-default": str(target) })
         elements.append(div)
-        # TODO find lots for plant
-        current_lots = lots.get(plant.id)
+        current_lots: list[Lot] = lots.get(plant.id)
         if current_lots is not None and len(current_lots) > 0:
+            # sort by completeness and lot end time
+            lot_entries: list[tuple[Lot, bool, datetime|None]] = sorted([(lot, sp.is_lot_complete(lot), lot.end_time) for lot in current_lots],
+                                                                        key=lambda tp: (-1 if tp[1] else 0, now - tp[2] if tp[2] is not None else None))
+            value = lot_entries[0][0].id if lot_entries[0][1] else None  # preselect the last lot
+            # This should also work, but it does not => leads to an infinite loop => WHY? => this would allow us to style options differently depending on whether the lot is complete or not
+            # "label": html.Span([lot[0].id], title=_lot_info(lot[0]), className="lots2-option-grey" if not lot[1] else "")
             prev_lot = html.Div(
                 dcc.Dropdown(placeholder="Select a lot",
-                             options=[{"value": "", "label": "", "title": "No predecessor defined."}]+[{"value": lot.id, "label": lot.id, "title": _lot_info(lot)} for lot in current_lots]
+                             options=[{"value": "", "label": "", "title": "No predecessor defined."}]+
+                                     [{"value": lot[0].id, "label": [lot[0].id], "title": _lot_info(lot[0])} for lot in lot_entries],
+                             value=value
                 ),
                 title="The previous lot defines the starting point for the lot creation.",
                 className="lots2-order-lots-prevlot",
@@ -838,7 +847,8 @@ def update_plants(snapshot: str,
     # TODO display total tonnes
     # my_parent_classname for formatting purpose
     # todo if input-selector HAS CHANGED ??
-    return elements, my_parent_classname, ([""] if use_lot_range else []) if process_changed else no_update
+    checked_use_lot_range = ([""] if use_lot_range else []) if process_changed else no_update
+    return elements, my_parent_classname, checked_use_lot_range
 
 
 def _targets_from_ltp(selected_row: dict[str, any], process: str, start_time: datetime, horizon_hours: int) -> ProductionTargets:
@@ -2249,6 +2259,8 @@ def performance_models_from_elements(process: str, components: list[Component]|N
 
 def _lot_info(lot: Lot) -> str:
     result = f"{lot.id} [status={lot.status}, active={lot.active}"
+    if lot.status > 1 and lot.end_time is not None:
+        result += f", ends={DatetimeUtils.format(lot.end_time.astimezone(), use_zone=False)}"
     if hasattr(lot, "priority"):
         result += f", priority={getattr(lot, 'priority')}"
     if lot.weight is not None:

@@ -22,6 +22,8 @@ from dynreact.lots_optimization import LotCreator
 
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.plugins import Plugins
+from dynreact.auction import auction
+from dynreact.shortterm.common import KeySearch
 
 
 class DynReActSrvState:
@@ -126,6 +128,12 @@ class DynReActSrvState:
             self._stp = self._plugins.get_stp_config_params()
         return (self._stp._stpConfigParams.KAFKA_IP,self._stp._stpConfigParams.TOPIC_GEN,
                 self._stp._stpConfigParams.VB)
+
+    def get_stp_context_params(self):
+        self.set_stp_config()
+        return (KeySearch.search_for_value("KAFKA_IP"),KeySearch.search_for_value("TOPIC_GEN"),
+                KeySearch.search_for_value("TOPIC_CALLBACK"), KeySearch.search_for_value("VB"))
+
     
     def get_stp_context_timing(self):
         if self._stp is None:
@@ -269,3 +277,8 @@ class DynReActSrvState:
     def set_auction_obj(self, auction) -> None:
         if self._auction_obj is None:
             self._auction_obj = auction
+
+    def set_stp_config(self) -> None:
+        if self._stp is None:
+            self._stp = self._plugins.get_stp_config_params()
+

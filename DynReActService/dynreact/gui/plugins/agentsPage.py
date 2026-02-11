@@ -16,7 +16,7 @@ from jsonpath_ng.ext import parse
 from dynreact.auction.auction import Auction, JobStatus
 from dynreact.app import state
 from dynreact.shortterm.common import KeySearch, purge_topics, delete_topics
-from ShortTermPlanning.dynreact.shortterm.short_term_planning import create_auction, start_auction, genauction, ask_results
+from dynreact.shortterm.short_term_planning import create_auction, start_auction, genauction, ask_results
 
 DISPLAY_FLEX = {"display": "flex"}
 DISPLAY_BLOCK = {"display": "block"}

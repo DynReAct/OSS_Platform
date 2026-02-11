@@ -211,7 +211,7 @@ class BatchMtpTest(unittest.TestCase):
         total_weight = (num_orders - len(pre_assigned_orders)) * order_weight
         total_weight_per_plant = total_weight / 3
         lot_creation_settings = LotCreationSettings(processes={process: ProcessLotCreationSettings(total_size=total_weight_per_plant)}, duration=timedelta(days=1))
-        state, snapshot = BatchMtpTest._init_for_tests(process, num_orders, order_weight=order_weight, batch_config=f"00:00,append,P5D;P1D;{process}:50:PT1M;test",
+        state, snapshot = BatchMtpTest._init_for_tests(process, num_orders, order_weight=order_weight, batch_config=f"00:00,mode:append,lh:P5D;P1D;{process}:50:PT1M;test",
                                                     num_plants=4, lot_creation=lot_creation_settings, lots=lots)
         results_persistence = state.get_results_persistence()
         horizons: dict[int, datetime] = {eq: max(lt.end_time for lt in eq_lots) if len(eq_lots) > 0 else now for eq, eq_lots in lots.items()}
@@ -261,7 +261,7 @@ class BatchMtpTest(unittest.TestCase):
             2: {now + timedelta(hours=8 * idx): (timedelta(hours=8), timedelta(hours=8)) for idx in range(max_num_shifts)},
             3: {now + timedelta(hours=8 * idx): (timedelta(hours=8), timedelta(hours=8)) for idx in range(max_num_shifts)},
         }
-        state, snapshot = BatchMtpTest._init_for_tests(process, num_orders, order_weight=order_weight, batch_config=f"00:00,append,P5D;P1D;{process}:50:PT1M;test",
+        state, snapshot = BatchMtpTest._init_for_tests(process, num_orders, order_weight=order_weight, batch_config=f"00:00,mode:append,lh:P5D;P1D;{process}:50:PT1M;test",
                                                     num_plants=4, lot_creation=lot_creation_settings, lots=lots, shifts=shifts)
         results_persistence = state.get_results_persistence()
         horizons: dict[int, datetime] = {eq: max(lt.end_time for lt in eq_lots) if len(eq_lots) > 0 else now for eq, eq_lots in lots.items()}

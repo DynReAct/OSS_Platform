@@ -33,11 +33,12 @@ class DynReActSrvConfig:
     Format: <time of day>(,append,<max_horizon>);<planning horizon>;<process id1>:<max_iterations>:<max duration>,<process id2>:<max duration>,...[;test] .
     If the `test` flag is set, then the batch job will run once on startup, based on the latest snapshot available. 
     Multiple configs to be separated by a single space. 
-    Examples: 
-        06:00;P1D;PROC1:1000:PT15M,PROC2:250:PT10M;
-        06:00;P1D;PROC1:1000:PT15M,PROC2:250:PT10M;test
-        06:00,append,P5D;P1D;PROC1:1000:PT15M,PROC2:250:PT10M;
-        
+        Examples:
+            06:00;P1D;PROC1:1000:PT15M,PROC2:250:PT10M
+            06:00;P1D;PROC1:1000:PT15M,PROC2:250:PT10M;test
+            06:00,mode:append,lh:P5D,sa:PT1H;P1D;PROC1:1000:PT15M,PROC2:250:PT10M;
+            
+        Where lh = lots horizon, sa = snapshot age
     """
     shifts_provider: str = "dummy:default"
     out_directory: str = "./out"

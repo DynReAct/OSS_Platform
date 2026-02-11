@@ -40,6 +40,8 @@ class BatchConfig(BaseModel, frozen=True, use_attribute_docstrings=True):
     """
     test: bool = False
     "If set to true, a batch job will be run on startup"
+    max_snapshot_age: timedelta = timedelta(hours=1)
+    "Maximum age of a snapshot to use for lot creation"
 
 
 class LotsBatchOptimizationJob:
@@ -77,7 +79,7 @@ class LotsBatchOptimizationJob:
             if self._stopped.is_set():
                 break
             try:
-                start = next_planned_invocation - timedelta(minutes=5) if not (self._config.test and self._runs == 0) else now - timedelta(days=10*365)
+                start = next_planned_invocation - self._config.max_snapshot_age if not (self._config.test and self._runs == 0) else now - timedelta(days=10*365)
                 snap = next(snaps_provider.snapshots(start, now, order="desc"))
             except StopIteration:
                 if wait_cnt > 30:   # TODO  configurable?
@@ -248,7 +250,9 @@ class LotsBatchOptimizationJob:
         Examples:
             06:00;P1D;PROC1:1000:PT15M,PROC2:250:PT10M
             06:00;P1D;PROC1:1000:PT15M,PROC2:250:PT10M;test
-            06:00,append,P5D;P1D;PROC1:1000:PT15M,PROC2:250:PT10M;
+            06:00,mode:append,lh:P5D,sa:PT1H;P1D;PROC1:1000:PT15M,PROC2:250:PT10M;
+
+        Where lh = lots horizon, sa = snapshot age
         """
         if any(c.isspace() for c in cfg):
             raise Exception("Multiple batch configs not supported yet")
@@ -258,19 +262,28 @@ class LotsBatchOptimizationJob:
         first_comp = cmps[0]
         append = False
         horizon = timedelta(days=7)
+        max_snapshot_age = timedelta(hours=1)
         if "," in first_comp:
             first_split = first_comp.split(",")
-            if first_split[1].lower().strip() == "append":
-                append = True
-                if len(first_split) > 2:
-                    horizon = pd.Timedelta(first_split[2]).to_pytimedelta()
             first_comp = first_split[0]
+            for other in first_split[1:]:
+                if ":" not in other:
+                    continue
+                other = other.strip()
+                if other == "mode:append":
+                    append = True
+                elif other.startswith("lh:"):
+                    horizon = pd.Timedelta(other[3:]).to_pytimedelta()
+                elif other.startswith("sa:"):
+                    max_snapshot_age = pd.Timedelta(other[3:]).to_pytimedelta()
+                elif len(other) > 0:
+                    raise Exception(f"Unsupported batch configuration (entry: {other}): {cfg}")
         dt: datetime = datetime.strptime(first_comp, "%H:%M")
         planning_duration = pd.Timedelta(cmps[1]).to_pytimedelta()
         processes: list[tuple[str, int, timedelta]] = [(prc[0], int(prc[1]), pd.Timedelta(prc[2]).to_pytimedelta()) for prc in (prc.split(":") for prc in cmps[2].split(","))]
         procs = [ProcessConfig(process=p[0], max_iterations=p[1], max_duration=p[2]) for p in processes]
         test = len(cmps) > 3 and cmps[3].strip().lower() == "test"
-        config = BatchConfig(time=dt, processes=procs, test=test, period=planning_duration, append_period=append, max_equipment_horizon=horizon)
+        config = BatchConfig(time=dt, processes=procs, test=test, period=planning_duration, append_period=append, max_equipment_horizon=horizon, max_snapshot_age=max_snapshot_age)
         return config
 
     def _next_invocation(self, now: datetime) -> datetime:

@@ -10,9 +10,10 @@ Version History:
 from datetime import datetime
 from dynreact.shortterm.common import sendmsgtopic, KeySearch
 from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
-from dynreact.shortterm.common.functions import calculate_bidding_price
 from dynreact.shortterm.agents.agent import Agent
 from dynreact.shortterm.common.handler import DockerManager
+from datetime import datetime, timedelta
+import random
 
 
 class Material(Agent):
@@ -121,7 +122,7 @@ class Material(Agent):
 
         if material_start_time <= auction_start_time:
             # Calculate the bidding price based on EQUIPMENT status and MATERIAL parameters
-            bidding_price = calculate_bidding_price(
+            bidding_price = self.calculate_bidding_price(
                 material_params=self.params, equipment_status=equipment_status, previous_price=previous_price
             )
             if bidding_price is not None:
@@ -228,3 +229,43 @@ class Material(Agent):
         Calculates the total length of the order by summing up all the individual coil lengths.
         """
         return sum(self.coil_lengths)
+
+    def calculate_bidding_price(self, material_params: dict, equipment_status: dict,
+                                previous_price: float | None) -> float | None:
+        """
+        Calculates the bidding price that the MATERIAL would pay to be processed in the EQUIPMENT with the given status.
+        Returns None if the EQUIPMENT's status is not compatible with the MATERIAL's parameters.
+        Otherwise, returns the bidding price as a float, which depends on the MATERIAL's parameters and the previous
+        bidding price (but not on the EQUIPMENT's status).
+
+        :param dict equipment_status: Status of the EQUIPMENT
+        :param dict material_params: Parameters of the MATERIAL
+        :param float previous_price: Bidding price in the EQUIPMENT's previous round
+
+        :return: Bidding price, or None if the MATERIAL cannot be processed by that equipment
+        :rtype: float
+        """
+        # Reject offer is equipment is not among the allowed equipments of the material
+        # JOM 2025
+        if equipment_status['targets']['equipment'] not in material_params['order']['allowed_equipment']:
+            return None
+
+        # For now, the bidding price is greater when the delivery date is sooner. If due_date is not present simulate a value
+        if material_params['order'].get("due_date"):
+            delivery_date = material_params['order']['due_date']
+            delivery_date = datetime.strptime(delivery_date, '%Y-%m-%dT%H:%M:%SZ')
+        else:
+            # Calculate today's date
+            today = datetime.now()
+            # Calculate the date 10 days ago
+            ten_days_ago = today - timedelta(days=10)
+            # Generate a random date between today and 10 days ago
+            delivery_date = ten_days_ago + timedelta(days=random.randint(0, 10))
+
+        bidding_price = 150 / (delivery_date - datetime(2020, 1, 1)).days
+
+        # For now, the bidding price is simply increased by the previous bidding price
+        if previous_price is not None:
+            bidding_price += previous_price
+
+        return bidding_price

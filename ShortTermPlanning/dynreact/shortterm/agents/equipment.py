@@ -35,7 +35,7 @@ class Equipment(Agent):
 
         super().__init__(topic=topic, agent=agent)
         """
-           Constructor function for the Equipment Class
+        Constructor function for the Equipment Class
 
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
@@ -90,7 +90,7 @@ class Equipment(Agent):
         self.last_bid_time = None
         self.bid_to_confirm = dict()
         self.current_order_length = None
-
+        # TODO: recalculate start time based in processing time
         full_msg = dict(
             source=self.agent, dest=self.agent, topic=self.topic, action='START',
             payload=dict(price=self.previous_price)
@@ -336,7 +336,7 @@ class Equipment(Agent):
             return 'END'
 
         # Ask the (next) best material for confirmation
-        self.bids.sort(key=lambda item: item['profit'])
+        self.sort_bids()
         best_bid = self.bids.pop()
         if self.verbose > 1:
             self.write_log(f"Removed the best bid, {best_bid}, from the list of bids: {self.bids}", "1ea89f70-2e6c-4840-9bdb-bb89dfc7bff5")
@@ -349,3 +349,10 @@ class Equipment(Agent):
             self.write_log(f"Equipment: Asked material {best_bid['material']} for confirmation.", "8d7d38bc-00cb-486c-8efa-0e46257bf1a2")
 
         return 'CONTINUE'
+
+    def sort_bids(self):
+        """
+        Sorts the bids based on their profit in ascending order.
+        """
+
+        self.bids.sort(key=lambda item: item['profit'])

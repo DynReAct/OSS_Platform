@@ -26,7 +26,11 @@ translations_key = "agp"
 
 # Setings (From stp_context.json in DynReactService/data)
 # params related to kafka config and timing delays
-state.set_stp_config()
+# We force the extaction of the configuration object before finding the values.
+stp_params = state._plugins.get_stp_config_params() # O el método que recupere el ShortTermTargets
+if stp_params:
+    KeySearch.set_global(stp_params._stpConfigParams)
+# state.set_stp_config()
 EXTERNAL_PERF_URL = KeySearch.search_for_value("PERF_URL")
 
 # Recovering the last snapshot selected as well as Site related plants

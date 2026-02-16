@@ -17,6 +17,9 @@ from dynreact.auction.auction import Auction, JobStatus
 from dynreact.app import state
 from dynreact.shortterm.common import KeySearch, purge_topics, delete_topics
 from dynreact.shortterm.short_term_planning import create_auction, start_auction, genauction, ask_results
+from dynreact.gui.localization import Localization
+from dynreact.gui.pages.session_state import language
+from dash import ALL
 
 DISPLAY_FLEX = {"display": "flex"}
 DISPLAY_BLOCK = {"display": "block"}
@@ -24,7 +27,7 @@ NO_DISPLAY = {"display": "none"}
 
 translations_key = "agp"
 
-# Setings (From stp_context.json in DynReactService/data)
+# Settings (From stp_context.json in DynReactService/data)
 # params related to kafka config and timing delays
 # We force the extaction of the configuration object before finding the values.
 stp_params = state._plugins.get_stp_config_params() # O el método que recupere el ShortTermTargets
@@ -277,6 +280,8 @@ def generate_resource_section(res_all, res_def):
             id="ag-sect2"
         ),
         html.Br(),
+        html.Div(id="ag-equipment-configs", style={"margin-top": "20px"}),
+        html.Br(),
     ])
 
 def generate_materials_section(lmats, s_mats):
@@ -458,6 +463,7 @@ def layout(*args, **kwargs):
             href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=refresh",
             rel="stylesheet"
         ),
+        language,
         dcc.Store(id='stored-data'),
         dcc.Store(id='has_initialized_session', data=False),
         dcc.Store(id='auction-store', storage_type="local"),
@@ -628,6 +634,8 @@ def setAssMaterials(matype, plants, ass_mats):
     State('ag-ass-materials', 'value'),
     State('auction-store', 'data'),
     State('has_initialized_session', 'data'),
+    State({'type': 'equip-date', 'index': ALL}, 'date'),
+    State({'type': 'equip-coil', 'index': ALL}, 'value'),
     prevent_initial_call=True
 )
 def handle_auction_actions(ag_create, ag_start, ag_refresh, ag_end, ag_restart,
@@ -680,7 +688,7 @@ def handle_auction_actions(ag_create, ag_start, ag_refresh, ag_end, ag_restart,
 
     return dash.no_update
 
-def handle_create_click(ag_create, reftxt, matype, plnts, lmats, ass_type, amats, auction):
+def handle_create_click(ag_create, reftxt, matype, plnts, lmats, ass_type, amats, auction, dates, coils):
     """
     Handles the logic when the 'Create Auction' button is clicked.
     Supports both Materials and Orders material types with proper conversion logic.
@@ -697,6 +705,14 @@ def handle_create_click(ag_create, reftxt, matype, plnts, lmats, ass_type, amats
              tabs, and serialized auction.
     :rtype: tuple
     """
+
+    equip_configs = {}
+    for i, plant_name in enumerate(plnts):
+        equip_configs[plant_name] = {
+            "start_date": dates[i],
+            "start_coil": coils[i]
+        }
+
     # Set up auction details
     auction.code = reftxt
     snpshot = current.strftime("%Y-%m-%dT%H:%M:%S%z")
@@ -727,7 +743,8 @@ def handle_create_click(ag_create, reftxt, matype, plnts, lmats, ass_type, amats
             snap_name=snpshot,
             resources=plnts,
             materials=os_mats,
-            verbose=0
+            verbose=0,
+            equip_configs=equip_configs
         )
 
         # Set auction lists based on material type
@@ -973,7 +990,7 @@ def handle_restart_click(ag_restart, reftxt, auction):
 
 
 def initialize_auction(topic: str, snap_name: str, resources: list,
-                       materials: list, verbose: int) -> tuple[str, int]:
+                       materials: list, verbose: int, equip_configs: dict) -> tuple[str, int]:
     """
     Starting the auction creation.
 
@@ -994,8 +1011,16 @@ def initialize_auction(topic: str, snap_name: str, resources: list,
     producer = Producer(producer_config)
 
     # Get equipment IDs from site structure
-    lres = [state.get_site().get_equipment_by_name(j).get_equipment_id()
-            for j in resources]
+    lres = []
+    configs_by_id = {}
+
+    for name in resources:
+        equip_obj = state.get_site().get_equipment_by_name(name)
+        equip_id = equip_obj.get_equipment_id()
+        lres.append(equip_id)
+
+        if name in equip_configs:
+            configs_by_id[equip_id] = equip_configs[name]
 
     return create_auction(
         equipments=lres,
@@ -1005,6 +1030,7 @@ def initialize_auction(topic: str, snap_name: str, resources: list,
         act=topic,
         verbose=verbose,
         materials=materials,
+        equip_configs=configs_by_id,
     )
 
 
@@ -1073,3 +1099,42 @@ def download_equipment_csv(n_clicks, selected_tab, auction_data):
             )
 
     return dash.no_update
+
+
+@callback(
+    Output("ag-equipment-configs", "children"),
+    Input("ag-resources", "value"),
+    prevent_initial_call=True
+)
+def update_equipment_inputs(selected_equipments):
+    if not selected_equipments:
+        return []
+
+    content = [html.H4("Equipment Specific Configuration:")]
+
+    for equip in selected_equipments:
+        row = html.Div([
+            html.Label(f"Machine: {equip}", style={"fontWeight": "bold", "width": "150px", "display": "inline-block"}),
+
+            dcc.DatePickerSingle(
+                id={'type': 'equip-date', 'index': equip},
+                date=datetime.date.today(),
+                display_format='YYYY-MM-DD',
+                style={"margin-right": "20px"}
+            ),
+
+            dcc.Input(
+                id={'type': 'equip-coil', 'index': equip},
+                type='text',
+                placeholder='Starting Coil/Order ID',
+                style={"width": "200px"}
+            ),
+            html.Hr()
+        ], style={"margin-bottom": "15px", "display": "flex", "alignItems": "center"})
+
+        content.append(row)
+
+    return content
+
+#TODO: add callback for Locale
+#TODO: add performance check

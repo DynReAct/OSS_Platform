@@ -156,8 +156,8 @@ def run_general_agents(producer: Producer, gagents: str, verbose: int):
 
 def create_auction(
         equipments: list[str], producer: Producer, verbose: int,
-        snapshot: str = None, act: str = None, nmaterials: int = None, materials: list[str] = None, admin_client: AdminClient = None
-) -> tuple[str, int]:
+        snapshot: str = None, act: str = None, nmaterials: int = None, materials: list[str] = None, admin_client: AdminClient = None,
+        equip_configs: dict = None) -> tuple[str, int]:
     """
     Creates an auction by instructing the master LOG, EQUIPMENTS and MATERIAL to clone themselves to follow a new topic
 
@@ -220,6 +220,18 @@ def create_auction(
     # Instruct the general EQUIPMENT to clone itself for the auction,
     # for as many times as specified by the user
     for equipment in equipments:
+
+        payload_data = dict(
+            id=equipment,
+            snapshot=data_setup.last_snapshot,
+            variables=KeySearch.dump_model()
+        )
+
+        if equip_configs and equipment in equip_configs:
+            config = equip_configs[equipment]
+            payload_data['user_start_date'] = config.get('start_date')
+            payload_data['user_start_coil'] = config.get('start_coil')
+
         sendmsgtopic(
             producer=producer,
             tsend=topic_gen,
@@ -227,7 +239,7 @@ def create_auction(
             source="UX",
             dest="EQUIPMENT:" + topic_gen,
             action="CREATE",
-            payload=dict(id=equipment, snapshot=data_setup.last_snapshot, variables=KeySearch.dump_model()),
+            payload=payload_data,
             vb=verbose
         )
         num_agents += 1

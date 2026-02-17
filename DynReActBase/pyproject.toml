@@ -1,33 +1,32 @@
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+# Minimum requirements for the build system to execute.
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
 
-[tool.poetry]
+[project]
 name = "dynreact_base"
 version = "0.0.1"
+#authors = [
+#  { name="Example Author", email="author@example.com" },
+#]
 description = "The DynReAct base package"
 readme = "README.md"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent"
+    "Operating System :: OS Independent",
 ]
-packages = [
-    { include = "dynreact/base"},
-    { include = "dynreact/base/impl" },
-]
+dynamic = ["dependencies"]
 
-[tool.poetry.urls]
+[project.urls]
 Homepage = "https://github.com/DynReAct/OSS_Platform"
 Issues = "https://github.com/DynReAct/OSS_Platform/issues"
 
-[tool.poetry.dependencies]
-python = ">=3.12"
-pandas = ">=2,<3"
-pydantic = ">=2.7,<3"
-python-dotenv = ">=1,<2"
-requests = ">=2.32.3,<3"
-urllib3 = ">1.26.0,<3"
+# See https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#setuptools-specific-configuration
+[tool.setuptools]
+packages = ["dynreact.base", "dynreact.base.impl"]
+package-dir = {"" = "."}
 
-# Dependent local modules
-dynreact-shortterm = { path = "../ShortTermPlanning", develop = true }
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}

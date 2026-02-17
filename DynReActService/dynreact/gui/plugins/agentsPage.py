@@ -508,7 +508,7 @@ def layout(*args, **kwargs):
             Output('ag-materials','value'),
             Input( 'ag-matypes','value'),
             Input( 'ag-resources','value'))
-def setMaterials(matype, plants):
+def set_materials(matype, plants):
     """
     Function to prepare the list of materials to use in the auction
 
@@ -546,9 +546,7 @@ def setMaterials(matype, plants):
         for ic in unique_materials:
             res.append({"label": str(ic), "value": str(ic)})
 
-        jres = [json.loads(k) for k in res]
-
-        return titx, jres, DISPLAY_BLOCK, []
+        return titx, res, DISPLAY_BLOCK, []
     else:
         if matype == 'Materials':
             titx = 'Targeted Materials (select resources first):'
@@ -565,7 +563,7 @@ def setMaterials(matype, plants):
            Input( 'ag-matypes','value'),
            Input( 'ag-resources','value'),
            Input( 'ag-ass-matypes','value'))
-def setAssMaterials(matype, plants, ass_mats):
+def set_ass_materials(matype, plants, ass_mats):
     """
     Function to prepare the list of materials to use in the aunction
 
@@ -605,9 +603,7 @@ def setAssMaterials(matype, plants, ass_mats):
         for ic in unique_assigned_materials:
             res.append({"label": str(ic), "value": str(ic)})
 
-        jres = [json.loads(k) for k in res]
-
-        return titx, jres, DISPLAY_BLOCK, []
+        return titx, res, DISPLAY_BLOCK, []
 
     return '', [], NO_DISPLAY, []
 
@@ -1136,5 +1132,56 @@ def update_equipment_inputs(selected_equipments):
 
     return content
 
-#TODO: add callback for Locale
+@callback(
+    Output("agp-title", "children"),
+    Output("ag-cont_item-matypes", "children"),
+    Output("ag-cont_item-resources", "children"),
+    Output("ag-cont_ass-materials", "children"),
+    Output("ag-submit", "children"),
+    Output("ag-start", "children"),
+    Output("ag-refresh", "children"),
+    Output("ag-end", "children"),
+    Output("ag-restart", "children"),
+    Input("lang", "data")
+)
+def update_page_localization(lang: str):
+    translation = Localization.get_translation(lang, translations_key)
+    return (
+        Localization.get_value(translation, "title", "Short term planning"),
+        Localization.get_value(translation, "schedule_based_on", "Schedule based on: "),
+        Localization.get_value(translation, "targeted_equipments", "Targeted Equipments: "),
+        Localization.get_value(translation, "include_assigned",
+                               "Include materials/orders assigned to non-targeted resources?: "),
+        Localization.get_value(translation, "btn_create", "Create Auction"),
+        Localization.get_value(translation, "btn_start", "Start Auction"),
+        [html.Span(className="material-symbols-outlined", children="refresh"),
+         " " + Localization.get_value(translation, "btn_refresh", "Refresh Results")],
+        Localization.get_value(translation, "btn_end", "End Auction"),
+        Localization.get_value(translation, "btn_restart", "Restart")
+    )
+
+@callback(
+    Output("ag-matypes", "options"),
+    Input("lang", "data")
+)
+def update_radio_options_localization(lang: str):
+    translation = Localization.get_translation(lang, translations_key)
+    return [
+        {'label': Localization.get_value(translation, "label_materials", "Materials"), 'value': 'Materials'},
+        {'label': Localization.get_value(translation, "label_orders", "Orders"), 'value': 'Orders'}
+    ]
+
+
+@callback(
+    Output("ag-ass-matypes", "options"),
+    Input("lang", "data")
+)
+def update_ass_radio_localization(lang: str):
+    translation = Localization.get_translation(lang, translations_key)
+    return [
+        {'label': Localization.get_value(translation, "label_yes", "Yes"), 'value': 'Yes'},
+        {'label': Localization.get_value(translation, "label_no", "No"), 'value': 'No'}
+    ]
+
 #TODO: add performance check
+#TODO: add documentation

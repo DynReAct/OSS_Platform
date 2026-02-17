@@ -634,7 +634,7 @@ def setAssMaterials(matype, plants, ass_mats):
     State('ag-ass-materials', 'value'),
     State('auction-store', 'data'),
     State('has_initialized_session', 'data'),
-    State({'type': 'equip-date', 'index': ALL}, 'date'),
+    State({'type': 'equip-date', 'index': ALL}, 'value'),
     State({'type': 'equip-coil', 'index': ALL}, 'value'),
     prevent_initial_call=True
 )
@@ -1116,10 +1116,10 @@ def update_equipment_inputs(selected_equipments):
         row = html.Div([
             html.Label(f"Machine: {equip}", style={"fontWeight": "bold", "width": "150px", "display": "inline-block"}),
 
-            dcc.DatePickerSingle(
+            dcc.Input(
                 id={'type': 'equip-date', 'index': equip},
-                date=datetime.date.today(),
-                display_format='YYYY-MM-DD',
+                type="datetime-local",
+                value=datetime.datetime.now().strftime("%Y-%m-%dT%H:%M"),
                 style={"margin-right": "20px"}
             ),
 

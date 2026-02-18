@@ -631,7 +631,6 @@ def set_ass_materials(matype, plants, ass_mats):
     State('auction-store', 'data'),
     State('has_initialized_session', 'data'),
     State({'type': 'equip-date', 'index': ALL}, 'value'),
-    State({'type': 'equip-coil', 'index': ALL}, 'value'),
     prevent_initial_call=True
 )
 def handle_auction_actions(ag_create, ag_start, ag_refresh, ag_end, ag_restart,
@@ -684,7 +683,7 @@ def handle_auction_actions(ag_create, ag_start, ag_refresh, ag_end, ag_restart,
 
     return dash.no_update
 
-def handle_create_click(ag_create, reftxt, matype, plnts, lmats, ass_type, amats, auction, dates, coils):
+def handle_create_click(ag_create, reftxt, matype, plnts, lmats, ass_type, amats, auction, dates):
     """
     Handles the logic when the 'Create Auction' button is clicked.
     Supports both Materials and Orders material types with proper conversion logic.
@@ -705,8 +704,7 @@ def handle_create_click(ag_create, reftxt, matype, plnts, lmats, ass_type, amats
     equip_configs = {}
     for i, plant_name in enumerate(plnts):
         equip_configs[plant_name] = {
-            "start_date": dates[i],
-            "start_coil": coils[i]
+            "start_date": dates[i]
         }
 
     # Set up auction details
@@ -1117,13 +1115,6 @@ def update_equipment_inputs(selected_equipments):
                 type="datetime-local",
                 value=datetime.datetime.now().strftime("%Y-%m-%dT%H:%M"),
                 style={"margin-right": "20px"}
-            ),
-
-            dcc.Input(
-                id={'type': 'equip-coil', 'index': equip},
-                type='text',
-                placeholder='Starting Coil/Order ID',
-                style={"width": "200px"}
             ),
             html.Hr()
         ], style={"margin-bottom": "15px", "display": "flex", "alignItems": "center"})

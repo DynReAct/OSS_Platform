@@ -120,7 +120,6 @@ class Equipment(Agent):
             KeySearch.assign_values(new_values=variables)
 
             user_start_date = payload['user_start_date']
-            user_start_coil = payload['user_start_coil']
 
             equipment = payload['id']
             snapshot = payload['snapshot']
@@ -136,7 +135,6 @@ class Equipment(Agent):
                 "status": status,
                 "operation_speed": float(operation_speed),
                 "start_time": start_time,
-                "current_order_length": user_start_coil,
                 "variables": KeySearch.dump_model(),
             }
 

@@ -54,14 +54,16 @@ node {
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user root \\
+          --user "$(id -u):$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_00"
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_00"
         """
     }
 
@@ -76,14 +78,16 @@ node {
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -v "/var/log/dynreact-logs:/var/log/dynreact-logs:rw,rshared" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user root \\
+          --user "$(id -u):$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_01"
+                   pytest -s  -p no:cacheprovider test_auction.py::test_scenario_01"
         """
     }
 
@@ -97,14 +101,16 @@ node {
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user root \\
+          --user "$(id -u):$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_02"
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_02"
         """
     }
 
@@ -118,14 +124,16 @@ node {
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user root \\
+          --user "$(id -u):$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_03"
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_03"
         """
     }
 
@@ -139,14 +147,16 @@ node {
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user root \\
+          --user "$(id -u):$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_04"
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_04"
         """
     }
 
@@ -157,7 +167,9 @@ node {
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/replace_base.py:/app/shortterm/__main__.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
-          --user root \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          --user "$(id -u):$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
            python -m shortterm -v 3 -g 111
         """
@@ -173,14 +185,16 @@ node {
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user root \\
+          --user "$(id -u):$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_05"
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_05"
         """
     }
 
@@ -194,14 +208,16 @@ node {
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user root \\
+          --user "$(id -u):$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_06"
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_06"
         """
     }
 
@@ -215,14 +231,16 @@ node {
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user root \\
+          --user "$(id -u):$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_07"
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_07"
         """
     }
 
@@ -236,14 +254,16 @@ node {
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user root \\
+          --user "$(id -u):$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
                    poetry install --no-root && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_08"
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_08"
         """
     }
 }

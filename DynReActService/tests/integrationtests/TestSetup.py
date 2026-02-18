@@ -44,9 +44,12 @@ class TestSetup:
 
 
     @staticmethod
-    def create_order(id: str, plants: Sequence[int], weight: float, due_date: datetime|None=None, current_processes: Sequence[int]|None=None, lots: dict[str, str]|None=None):
+    def create_order(id: str, plants: Sequence[int], weight: float, due_date: datetime|None=None,
+                     current_processes: Sequence[int]|None=None, current_equipment: list[int]|None=None, lots: dict[str, str]|None=None):
         return Order(id=id, allowed_equipment=plants, target_weight=weight, actual_weight=weight, due_date=due_date, material_properties=TestMaterial(material_id="test"),
-                     current_processes=[p for p in current_processes] if current_processes else [], active_processes={}, lots=lots)
+                     current_processes=[p for p in current_processes] if current_processes else [], active_processes={},
+                     current_equipment=current_equipment,
+                     lots=lots)
 
     @staticmethod
     def create_coils_for_orders(orders: Sequence[Order], process: int) -> list[Material]:  # one coil per order

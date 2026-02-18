@@ -326,8 +326,8 @@ class BatchMtpTest(unittest.TestCase):
             # Below is the follow up stage
             p20.id: [Lot(id=f"{p20.name_short}_01", equipment=p20.id, active=True, status=3, orders=["forbidden_order5", "forbidden_order4", "forbidden_order11", "forbidden_order12"],
                          weight=4 * order_weight, start_time=now + timedelta(days=2), end_time=now + timedelta(days=3))],
-            p21.id: [Lot(id=f"{p21.name_short}_01", equipment=p21.id, active=True, status=4, orders=["forbidden_order13", "forbidden_order14"],
-                         weight=2 * order_weight, start_time=now, end_time=now + timedelta(days=2))],
+            p21.id: [Lot(id=f"{p21.name_short}_01", equipment=p21.id, active=True, status=4, orders=["forbidden_order9a","forbidden_order13", "forbidden_order14"],
+                         weight=3 * order_weight, start_time=now, end_time=now + timedelta(days=2))],
             # And the one after
             p30.id: [Lot(id=f"{p30.name_short}_01", equipment=p30.id, active=True, status=4, orders=["forbidden_order15", "forbidden_order16"],
                          weight=2 * order_weight, start_time=now, end_time=now + timedelta(days=1)),
@@ -344,6 +344,9 @@ class BatchMtpTest(unittest.TestCase):
             TestSetup.create_order(f"forbidden_order7", plant_ids, order_weight, current_processes=[1], lots={processes[1].name_short: existing_lots[p11.id][0].id}, current_equipment=[p11.id]),
             TestSetup.create_order(f"forbidden_order8", plant_ids, order_weight, current_processes=[1, 2], lots={processes[1].name_short: existing_lots[p12.id][0].id}, current_equipment=[p12.id, p20.id]),
             TestSetup.create_order(f"forbidden_order9", plant_ids, order_weight, current_processes=[1, 2], lots={processes[1].name_short: existing_lots[p12.id][0].id}, current_equipment=[p12.id, p22.id]),
+            TestSetup.create_order(f"forbidden_order9a", plant_ids, order_weight, current_processes=[1, 2], lots={processes[2].name_short: existing_lots[p21.id][0].id}, current_equipment=[p12.id, p22.id]),
+            TestSetup.create_order(f"forbidden_order9b", plant_ids, order_weight, current_processes=[1, 2]),  # already located at the follow-up step
+            TestSetup.create_order(f"forbidden_order9c", plant_ids, order_weight, current_processes=[1], active_processes={processes[1].process_ids[0]: "STARTED"}),  # processing at stage 1 already started
             TestSetup.create_order(f"forbidden_order10", plant_ids, order_weight, current_processes=[1], lots={processes[1].name_short: existing_lots[p12.id][0].id}, current_equipment=[p12.id]),
             TestSetup.create_order(f"forbidden_order11", plant_ids, order_weight, current_processes=[2], lots={processes[2].name_short: existing_lots[p20.id][0].id}, current_equipment=[p20.id]),
             TestSetup.create_order(f"forbidden_order12", plant_ids, order_weight, current_processes=[2], lots={processes[2].name_short: existing_lots[p20.id][0].id}, current_equipment=[p01.id]),

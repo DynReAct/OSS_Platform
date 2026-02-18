@@ -321,7 +321,7 @@ class SnapshotProvider:
         previous_process_names = [p.name_short for p in previous_steps]
         proc = self._site.get_process(process, do_raise=True)
         current_process_ids = proc.process_ids
-        next_processes = [p for p in self._site.processes if p in proc.next_steps] if proc.next_steps is not None else []
+        next_processes = [p for p in self._site.processes if p.name_short in proc.next_steps] if proc.next_steps is not None else []
         next_process_ids = [pid for p in next_processes for pid in p.process_ids]
         applicable_orders: list[str] = []
         for order in snapshot.orders:
@@ -364,6 +364,8 @@ class SnapshotProvider:
                         continue
             # step 3: check if order is available already at the considered process stage and not already at the next
             if not any(p in current_process_ids for p in order.current_processes) or any(p in next_process_ids for p in order.current_processes):
+                continue
+            if any(p in order.active_processes and order.active_processes[p] != "PENDING" for p in current_process_ids):
                 continue
             applicable_orders.append(order.id)
         return applicable_orders

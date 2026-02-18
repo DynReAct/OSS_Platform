@@ -635,7 +635,7 @@ def set_ass_materials(matype, plants, ass_mats):
 )
 def handle_auction_actions(ag_create, ag_start, ag_refresh, ag_end, ag_restart,
                           reftxt, matype, resources, materials, ass_type, ass_materials,
-                          auction_data, has_initialized):
+                          auction_data, has_initialized, dates):
     """
     Handles all auction-related actions based on button clicks.
     Includes complete logic for both Orders and Materials material types.
@@ -653,6 +653,7 @@ def handle_auction_actions(ag_create, ag_start, ag_refresh, ag_end, ag_restart,
     :param ass_materials: Selected assigned materials.
     :param auction_data: Stored auction data.
     :param has_initialized: Whether session has been initialized.
+    :param dates: List of start dates for each equipment.
     :return: Tuple with updated UI states and data.
     :rtype: tuple
     """
@@ -671,7 +672,7 @@ def handle_auction_actions(ag_create, ag_start, ag_refresh, ag_end, ag_restart,
 
     if triggered_id == 'ag-submit':
         return handle_create_click(ag_create, reftxt, matype, resources, materials,
-                                  ass_type, ass_materials, auction)
+                                  ass_type, ass_materials, auction, dates)
     elif triggered_id == 'ag-start':
         return handle_start_click(ag_start, reftxt, auction)
     elif triggered_id == 'ag-refresh':
@@ -696,6 +697,7 @@ def handle_create_click(ag_create, reftxt, matype, plnts, lmats, ass_type, amats
     :param ass_type: Whether to include assigned materials ('Yes' or 'No').
     :param amats: List of assigned materials.
     :param auction: Current auction object.
+    :param dates: List of start dates for each equipment.
     :return: Tuple containing the auction status message, styling options,
              tabs, and serialized auction.
     :rtype: tuple

@@ -57,7 +57,7 @@ node {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "$(id -u):$(id -g)" \\
+          --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
@@ -81,7 +81,7 @@ node {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "$(id -u):$(id -g)" \\
+          --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
@@ -104,7 +104,7 @@ node {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "$(id -u):$(id -g)" \\
+          --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
@@ -127,7 +127,7 @@ node {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "$(id -u):$(id -g)" \\
+          --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
@@ -150,7 +150,7 @@ node {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "$(id -u):$(id -g)" \\
+          --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
@@ -169,7 +169,7 @@ node {
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
-          --user "$(id -u):$(id -g)" \\
+          --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
            python -m shortterm -v 3 -g 111
         """
@@ -188,7 +188,7 @@ node {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "$(id -u):$(id -g)" \\
+          --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
@@ -211,7 +211,7 @@ node {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "$(id -u):$(id -g)" \\
+          --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
@@ -234,7 +234,7 @@ node {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "$(id -u):$(id -g)" \\
+          --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\
@@ -257,7 +257,7 @@ node {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "$(id -u):$(id -g)" \\
+          --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    pip install poetry && \\

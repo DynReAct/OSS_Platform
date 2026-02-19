@@ -61,6 +61,7 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
+                   COMP='ShortTermPlanning' && \\
                    pip install -r /repo/\$COMP/requirements.txt && \\
                    [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
@@ -87,6 +88,7 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
+                   COMP='ShortTermPlanning' && \\
                    pip install -r /repo/\$COMP/requirements.txt && \\
                    [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
@@ -112,6 +114,7 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
+                   COMP='ShortTermPlanning' && \\
                    pip install -r /repo/\$COMP/requirements.txt && \\
                    [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
@@ -137,6 +140,7 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
+                   COMP='ShortTermPlanning' && \\
                    pip install -r /repo/\$COMP/requirements.txt && \\
                    [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
@@ -162,6 +166,7 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
+                   COMP='ShortTermPlanning' && \\
                    pip install -r /repo/\$COMP/requirements.txt && \\
                    [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
@@ -203,6 +208,7 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
+                   COMP='ShortTermPlanning' && \\
                    pip install -r /repo/\$COMP/requirements.txt && \\
                    [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
@@ -228,6 +234,7 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
+                   COMP='ShortTermPlanning' && \\
                    pip install -r /repo/\$COMP/requirements.txt && \\
                    [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
@@ -253,6 +260,7 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
+                   COMP='ShortTermPlanning' && \\
                    pip install -r /repo/\$COMP/requirements.txt && \\
                    [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
@@ -278,6 +286,7 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
+                   COMP='ShortTermPlanning' && \\
                    pip install -r /repo/\$COMP/requirements.txt && \\
                    [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\

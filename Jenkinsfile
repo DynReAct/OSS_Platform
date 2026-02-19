@@ -47,9 +47,9 @@ node {
 runStageWithCleanup('Run Scenario 0') {
     def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
     def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
-    def kafka = env.KAFKA_BOOTSTRAP_SERVERS ?: '138.100.82.173:9092'
+    def kafka = env.KAFKA_IP ?: '192.168.110.173:9092'
     sh """
-        echo "[INFO] KAFKA_BOOTSTRAP_SERVERS=${kafka}"
+        echo "[INFO] KAFKA_IP=${kafka}"
 
         docker run --rm \\
           --network host \\
@@ -60,14 +60,13 @@ runStageWithCleanup('Run Scenario 0') {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           -e PIP_CACHE_DIR=/tmp/pip-cache \\
-          -e KAFKA_BOOTSTRAP_SERVERS="${kafka}" \\
-          -e BOOTSTRAP_SERVERS="${kafka}" \\
+          -e KAFKA_IP="${kafka}" \\
           ${envArgs} \\
           --user \$(id -u):\$(id -g) \\
           192.168.110.176:5000/dynreact-shortterm:latest \\
           bash -lc 'set -euo pipefail
                 source .venv/bin/activate
-                COMP=ShortTermPlanning
+                COMP=DynReActService
 
                 python -m venv /tmp/venv
                 . /tmp/venv/bin/activate
@@ -77,6 +76,8 @@ runStageWithCleanup('Run Scenario 0') {
                 python -m pip install -r "/repo/\$COMP/requirements.txt"
                 [ -f "/repo/\$COMP/requirements_local.txt" ] && python -m pip install -r "/repo/\$COMP/requirements_local.txt" || true
                 [ -f "/repo/\$COMP/requirements-dev.txt" ] && python -m pip install -r "/repo/\$COMP/requirements-dev.txt" || true
+                python -m pip install -r "/repo/ShortTermPlanning/requirements.txt"
+
                 command -v pytest >/dev/null 2>&1 || python -m pip install pytest
 
                 cd /app/shortterm/dynreact/tests/integration_test

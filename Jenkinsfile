@@ -66,6 +66,7 @@ node {
                    python -m venv /tmp/venv
                    . /tmp/venv/bin/activate
                    python -m pip install -U pip setuptools wheel
+                   python -m pip install -r "/repo/DynReActBase/requirements.txt"
                    pip install -r "/repo/\$COMP/requirements.txt"
                    [ -f "/repo/\$COMP/requirements_local.txt" ] && python -m pip install -r "/repo/\$COMP/requirements_local.txt" || true
                    [ -f "/repo/\$COMP/requirements-dev.txt" ] && python -m pip install -r "/repo/\$COMP/requirements-dev.txt" || true 

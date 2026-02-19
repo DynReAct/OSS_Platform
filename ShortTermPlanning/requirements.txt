@@ -7,6 +7,7 @@ dash-core-components>=2.0.0, <3
 dash-html-components>=2.0.0, <3
 dash-table>=5.0.0, <6
 docutils>=0.20.1, <1
+docker>=7,<8
 Flask>=3.0.3, <4
 Jinja2>=3.1.2, <4
 jsonpatch>=1.32, <2

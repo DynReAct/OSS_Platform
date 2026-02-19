@@ -48,6 +48,10 @@ runStageWithCleanup('Run Scenario 0') {
     def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
     def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
     def kafka = env.KAFKA_IP ?: '192.168.110.173:9092'
+    def kafkaServer = "192.168.110.173:9092"
+
+    echo "[INFO] KAFKA_SERVER=${kafkaServer}"
+
     sh """
         echo "[INFO] KAFKA_IP=${kafka}"
 
@@ -61,6 +65,10 @@ runStageWithCleanup('Run Scenario 0') {
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           -e PIP_CACHE_DIR=/tmp/pip-cache \\
           -e KAFKA_IP="${kafka}" \\
+          -e KAFKA_BOOTSTRAP_SERVERS="${kafkaServer}" \\
+          -e BOOTSTRAP_SERVERS="${kafkaServer}" \\
+          -e KAFKA_BOOTSTRAP_SERVERS="${kafkaServer}" \
+          -e BOOTSTRAP_SERVERS="${kafkaServer}" \\
           ${envArgs} \\
           --user \$(id -u):\$(id -g) \\
           192.168.110.176:5000/dynreact-shortterm:latest \\

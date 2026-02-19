@@ -6,6 +6,7 @@ node {
     env.LOCAL_REGISTRY = LOCAL_REGISTRY
     env.TOPIC_CALLBACK = "DynReact-TEST-Callback"
     env.TOPIC_GEN = "DynReact-TEST-Gen"
+    env.CONTAINER_NAME_PREFIX = "JENKINS_TEST"
 
     env.SNAPSHOT_VERSION = "2025-01-18T08:00:00Z"
     env.SCENARIO_4_5_EQUIPMENT = "9" // One Equipment, One Material
@@ -13,6 +14,20 @@ node {
     env.SCENARIO_7_EQUIPMENTS = "9 10" // Two Equipments, One Material
     env.SCENARIO_8_EQUIPMENTS = "9 11" // Two Equipments, shared material
     env.SCENARIO_8_ORDER_ID = "1193611" 
+
+     // Wrap all secret text credentials at once
+    withCredentials([
+        string(credentialsId: 'LOCAL_REGISTRY', variable: 'REGISTRY'),
+        string(credentialsId: 'KAFKA_IP', variable: 'KAFKA_IP_SECRET'),
+        string(credentialsId: 'LOG_FILE_PATH', variable: 'LOG_FILE_PATH_SECRET'),
+        string(credentialsId: 'REST_URL', variable: 'REST_URL_SECRET')
+    ]) {
+
+        env.KAFKA_IP = KAFKA_IP_SECRET
+        env.LOG_FILE_PATH = LOG_FILE_PATH_SECRET
+        env.REST_URL = REST_URL_SECRET
+        env.LOCAL_REGISTRY = REGISTRY
+
 
     def runStageWithCleanup = { stageName, body ->
         stage(stageName) {
@@ -31,10 +46,14 @@ node {
     }
 
     stage('Build Docker Image') {
-        sh """
+    sh """
         cd ShortTermPlanning
-        docker build --build-arg DOCKER_REGISTRY=${LOCAL_REGISTRY} -t ${IMAGE_NAME}:${IMAGE_TAG} .
-        """
+        docker build \\
+            --build-arg DOCKER_REGISTRY="$REGISTRY" \\
+            --build-arg BUILD_DATE="\$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \\
+            --build-arg JENKINS_BUILD_ID="$BUILD_ID" \\
+            -t ${IMAGE_NAME}:${IMAGE_TAG} .
+    """
     }
 
     stage('Tag & Push Image') {
@@ -45,12 +64,9 @@ node {
     }
 
 runStageWithCleanup('Run Scenario 0') {
+    def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
     def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
     def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
-    def kafka = env.KAFKA_IP ?: '192.168.110.173:9092'
-    def kafkaServer = "192.168.110.173:9092"
-
-    echo "[INFO] KAFKA_SERVER=${kafkaServer}"
 
     sh """
         docker run --rm \\
@@ -62,11 +78,6 @@ runStageWithCleanup('Run Scenario 0') {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           -e PIP_CACHE_DIR=/tmp/pip-cache \\
-          -e KAFKA_IP="${kafka}" \\
-          -e KAFKA_BOOTSTRAP_SERVERS="${kafkaServer}" \\
-          -e BOOTSTRAP_SERVERS="${kafkaServer}" \\
-          -e KAFKA_BOOTSTRAP_SERVERS="${kafkaServer}" \
-          -e BOOTSTRAP_SERVERS="${kafkaServer}" \\
           --user "0:0" \\
           ${envArgs} \\
           192.168.110.176:5000/dynreact-shortterm:latest \\
@@ -324,4 +335,5 @@ runStageWithCleanup('Run Scenario 0') {
                    pytest -s -p no:cacheprovider test_auction.py::test_scenario_08"
         """
     }
+  }
 }

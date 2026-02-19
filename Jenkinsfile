@@ -65,7 +65,6 @@ node {
 
 runStageWithCleanup('Run Scenario 0') {
     def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
-    def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
     def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
 
     sh """

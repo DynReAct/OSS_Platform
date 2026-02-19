@@ -99,10 +99,10 @@ runStageWithCleanup('Run Scenario 0') {
                 cd /app/shortterm/dynreact/tests/integration_test
 
         	# Debug: variables de entorno
-        	python -c "import os; print(\\"KAFKA_BOOTSTRAP_SERVERS=\\", os.getenv(\\"KAFKA_BOOTSTRAP_SERVERS\\")); print(\\"BOOTSTRAP_SERVERS=\\", os.getenv(\\"BOOTSTRAP_SERVERS\\"))"
+        	python -c "import os; print(\\"KAFKA_IP=\\", os.getenv(\\"KAFKA_IP\\")); print(\\"BOOTSTRAP_SERVERS=\\", os.getenv(\\"BOOTSTRAP_SERVERS\\"))"
 
         	# Debug: conectividad TCP al broker (sin heredoc, para evitar IndentationError)
-        	python -c "import os, socket; bs=(os.getenv(\\"KAFKA_BOOTSTRAP_SERVERS\\") or os.getenv(\\"BOOTSTRAP_SERVERS\\",\\"\\")).strip(); print(\\"bootstrap:\\", bs); h,p=bs.split(\\":\\"); socket.create_connection((h,int(p)),timeout=3).close(); print(\\"TCP connectivity OK\\")"
+        	python -c "import os, socket; bs=(os.getenv(\\"KAFKA_IP\\") or os.getenv(\\"BOOTSTRAP_SERVERS\\",\\"\\")).strip(); print(\\"bootstrap:\\", bs); h,p=bs.split(\\":\\"); socket.create_connection((h,int(p)),timeout=3).close(); print(\\"TCP connectivity OK\\")"
 
                 pytest -s -p no:cacheprovider test_auction.py::test_scenario_00
       '

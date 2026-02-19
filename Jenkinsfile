@@ -53,8 +53,6 @@ runStageWithCleanup('Run Scenario 0') {
     echo "[INFO] KAFKA_SERVER=${kafkaServer}"
 
     sh """
-        echo "[INFO] KAFKA_IP=${kafka}"
-
         docker run --rm \\
           --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
@@ -69,9 +67,8 @@ runStageWithCleanup('Run Scenario 0') {
           -e BOOTSTRAP_SERVERS="${kafkaServer}" \\
           -e KAFKA_BOOTSTRAP_SERVERS="${kafkaServer}" \
           -e BOOTSTRAP_SERVERS="${kafkaServer}" \\
-          ${envArgs} \\
-          # --user \$(id -u):\$(id -g) \\
           --user "0:0" \\
+          ${envArgs} \\
           192.168.110.176:5000/dynreact-shortterm:latest \\
           bash -lc 'set -euo pipefail
                 source .venv/bin/activate

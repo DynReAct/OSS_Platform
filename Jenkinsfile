@@ -52,7 +52,6 @@ node {
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE:/repo:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
@@ -60,13 +59,15 @@ node {
           ${envArgs} \\
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   COMP='ShortTermPlanning' && \\
-                   pip install -r /repo/\$COMP/requirements.txt && \\
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_00"
+          bash -lc 'set -euo pipefail
+                   source .venv/bin/activate
+                   COMP=ShortTermPlanning
+                   pip install -r "/repo/\$COMP/requirements.txt"
+                   [ -f "/repo/\$COMP/requirements_local.txt" ] && python -m pip install -r "/repo/\$COMP/requirements_local.txt" || true
+                   [ -f "/repo/\$COMP/requirements-dev.txt" ] && python -m pip install -r "/repo/\$COMP/requirements-dev.txt" || true 
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   cd /app/shortterm/dynreact/tests/integration_test 
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_00'
         """
     }
 

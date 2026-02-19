@@ -4,7 +4,7 @@
 if [ -e /var/run/docker.sock ]; then
     DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
     groupmod -g "$DOCKER_GID" docker
-    newgrp docker
+    # newgrp docker
 fi
 
 mkdir -p /var/log/dynreact-logs/

@@ -56,6 +56,7 @@ node {
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e PIP_CACHE_DIR=/tmp/pip-cache \
           ${envArgs} \\
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\

@@ -51,6 +51,7 @@ node {
         # Run container to execute tests
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
@@ -60,8 +61,9 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
+                   pip install -r /repo/\$COMP/requirements.txt && \\
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s -p no:cacheprovider test_auction.py::test_scenario_00"
         """
@@ -74,6 +76,7 @@ node {
         # Run container to execute tests
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
@@ -84,8 +87,9 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
+                   pip install -r /repo/\$COMP/requirements.txt && \\
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s  -p no:cacheprovider test_auction.py::test_scenario_01"
         """
@@ -98,6 +102,7 @@ node {
         # Run container to execute tests
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
@@ -107,8 +112,9 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
+                   pip install -r /repo/\$COMP/requirements.txt && \\
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s -p no:cacheprovider test_auction.py::test_scenario_02"
         """
@@ -121,6 +127,7 @@ node {
         # Run container to execute tests
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
@@ -130,8 +137,9 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
+                   pip install -r /repo/\$COMP/requirements.txt && \\
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s -p no:cacheprovider test_auction.py::test_scenario_03"
         """
@@ -144,6 +152,7 @@ node {
         # Run container to execute tests
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
@@ -153,8 +162,9 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
+                   pip install -r /repo/\$COMP/requirements.txt && \\
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s -p no:cacheprovider test_auction.py::test_scenario_04"
         """
@@ -165,6 +175,7 @@ node {
         # Run container to execute tests
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/replace_base.py:/app/shortterm/__main__.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
@@ -182,6 +193,7 @@ node {
         # Run container to execute tests
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
@@ -191,8 +203,9 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
+                   pip install -r /repo/\$COMP/requirements.txt && \\
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s -p no:cacheprovider test_auction.py::test_scenario_05"
         """
@@ -205,6 +218,7 @@ node {
         # Run container to execute tests
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
@@ -214,8 +228,9 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
+                   pip install -r /repo/\$COMP/requirements.txt && \\
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s -p no:cacheprovider test_auction.py::test_scenario_06"
         """
@@ -228,6 +243,7 @@ node {
         # Run container to execute tests
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
@@ -237,8 +253,9 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
+                   pip install -r /repo/\$COMP/requirements.txt && \\
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s -p no:cacheprovider test_auction.py::test_scenario_07"
         """
@@ -251,6 +268,7 @@ node {
         # Run container to execute tests
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
@@ -260,8 +278,9 @@ node {
           --user "\$(id -u):\$(id -g)" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
+                   pip install -r /repo/\$COMP/requirements.txt && \\
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
                    cd /app/shortterm/dynreact/tests/integration_test && \\
                    pytest -s -p no:cacheprovider test_auction.py::test_scenario_08"
         """

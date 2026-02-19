@@ -70,7 +70,8 @@ runStageWithCleanup('Run Scenario 0') {
           -e KAFKA_BOOTSTRAP_SERVERS="${kafkaServer}" \
           -e BOOTSTRAP_SERVERS="${kafkaServer}" \\
           ${envArgs} \\
-          --user \$(id -u):\$(id -g) \\
+          # --user \$(id -u):\$(id -g) \\
+          --user "0:0" \\
           192.168.110.176:5000/dynreact-shortterm:latest \\
           bash -lc 'set -euo pipefail
                 source .venv/bin/activate

@@ -115,7 +115,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "\$(id -u):\$(id -g)" \\
+          --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    COMP='ShortTermPlanning' && \\
@@ -141,7 +141,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "\$(id -u):\$(id -g)" \\
+          --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    COMP='ShortTermPlanning' && \\
@@ -167,7 +167,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "\$(id -u):\$(id -g)" \\
+          --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    COMP='ShortTermPlanning' && \\
@@ -193,7 +193,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "\$(id -u):\$(id -g)" \\
+          --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    COMP='ShortTermPlanning' && \\
@@ -215,7 +215,7 @@ runStageWithCleanup('Run Scenario 0') {
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
-          --user "\$(id -u):\$(id -g)" \\
+          --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
            python -m shortterm -v 3 -g 111
         """
@@ -235,7 +235,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "\$(id -u):\$(id -g)" \\
+          --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    COMP='ShortTermPlanning' && \\
@@ -261,7 +261,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "\$(id -u):\$(id -g)" \\
+          --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    COMP='ShortTermPlanning' && \\
@@ -287,7 +287,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "\$(id -u):\$(id -g)" \\
+          --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    COMP='ShortTermPlanning' && \\
@@ -313,7 +313,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           ${envArgs} \\
-          --user "\$(id -u):\$(id -g)" \\
+          --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -c "source .venv/bin/activate && \\
                    COMP='ShortTermPlanning' && \\

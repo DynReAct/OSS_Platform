@@ -73,6 +73,16 @@ node {
                    [ -f "/repo/\$COMP/requirements-dev.txt" ] && python -m pip install -r "/repo/\$COMP/requirements-dev.txt" || true 
                    command -v pytest >/dev/null 2>&1 || python -m pip install pytest
                    cd /app/shortterm/dynreact/tests/integration_test 
+python -c "import os; print('KAFKA_BOOTSTRAP_SERVERS=', os.getenv('KAFKA_BOOTSTRAP_SERVERS')); print('BOOTSTRAP_SERVERS=', os.getenv('BOOTSTRAP_SERVERS'))"
+python - <<'PY'
+import os, socket
+bs=os.getenv("KAFKA_BOOTSTRAP_SERVERS","")
+print("bootstrap:", bs)
+host, port = bs.split(":")
+s=socket.socket(); s.settimeout(3)
+s.connect((host,int(port)))
+print("TCP connectivity OK")
+PY
                    pytest -s -p no:cacheprovider test_auction.py::test_scenario_00'
         """
     }

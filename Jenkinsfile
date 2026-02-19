@@ -44,48 +44,61 @@ node {
         """
     }
 
-    runStageWithCleanup('Run Scenario 0') {
-        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
-        def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
-        sh """
-        # Run container to execute tests
+runStageWithCleanup('Run Scenario 0') {
+    def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+    def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
+    def kafka = env.KAFKA_BOOTSTRAP_SERVERS ?: '138.100.82.173:9092'
+    sh """
+        echo "[INFO] KAFKA_BOOTSTRAP_SERVERS=${kafka}"
+
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
-          -v "$WORKSPACE:/repo:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
+          -v ${WORKSPACE}:/repo:ro \\
+          -v ${WORKSPACE}/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro \\
+          -v ${WORKSPACE}/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
           -e PIP_CACHE_DIR=/tmp/pip-cache \\
-          -e KAFKA_BOOTSTRAP_SERVERS=192.168.110.173:9092 \\
+          -e KAFKA_BOOTSTRAP_SERVERS="${kafka}" \\
+          -e BOOTSTRAP_SERVERS="${kafka}" \\
           ${envArgs} \\
-          --user "\$(id -u):\$(id -g)" \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          --user \$(id -u):\$(id -g) \\
+          192.168.110.176:5000/dynreact-shortterm:latest \\
           bash -lc 'set -euo pipefail
-                   source .venv/bin/activate
-                   COMP=ShortTermPlanning
-                   python -m venv /tmp/venv
-                   . /tmp/venv/bin/activate
-                   python -m pip install -U pip setuptools wheel
-                   python -m pip install -r "/repo/DynReActBase/requirements.txt"
-                   pip install -r "/repo/\$COMP/requirements.txt"
-                   [ -f "/repo/\$COMP/requirements_local.txt" ] && python -m pip install -r "/repo/\$COMP/requirements_local.txt" || true
-                   [ -f "/repo/\$COMP/requirements-dev.txt" ] && python -m pip install -r "/repo/\$COMP/requirements-dev.txt" || true 
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
-                   cd /app/shortterm/dynreact/tests/integration_test 
-python -c "import os; print('KAFKA_BOOTSTRAP_SERVERS=', os.getenv('KAFKA_BOOTSTRAP_SERVERS')); print('BOOTSTRAP_SERVERS=', os.getenv('BOOTSTRAP_SERVERS'))"
-python - <<'PY'
-import os, socket
-bs=os.getenv("KAFKA_BOOTSTRAP_SERVERS","")
-print("bootstrap:", bs)
-host, port = bs.split(":")
-s=socket.socket(); s.settimeout(3)
-s.connect((host,int(port)))
-print("TCP connectivity OK")
+                source .venv/bin/activate
+                COMP=ShortTermPlanning
+
+                python -m venv /tmp/venv
+                . /tmp/venv/bin/activate
+
+                python -m pip install -U pip setuptools wheel
+                python -m pip install -r "/repo/DynReActBase/requirements.txt"
+                python -m pip install -r "/repo/\$COMP/requirements.txt"
+                [ -f "/repo/\$COMP/requirements_local.txt" ] && python -m pip install -r "/repo/\$COMP/requirements_local.txt" || true
+                [ -f "/repo/\$COMP/requirements-dev.txt" ] && python -m pip install -r "/repo/\$COMP/requirements-dev.txt" || true
+                command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+
+                cd /app/shortterm/dynreact/tests/integration_test
+
+                # Debug: variables de entorno (OJO: comillas correctas)
+                python -c '"'"'import os; print("KAFKA_BOOTSTRAP_SERVERS=", os.getenv("KAFKA_BOOTSTRAP_SERVERS")); print("BOOTSTRAP_SERVERS=", os.getenv("BOOTSTRAP_SERVERS"))'"'"'
+
+                # Debug: conectividad TCP al broker
+                python - <<'"'"'PY'"'"'
+                    import os, socket
+                    bs = os.getenv("KAFKA_BOOTSTRAP_SERVERS") or os.getenv("BOOTSTRAP_SERVERS","")
+                    print("bootstrap:", bs)
+                    host, port = bs.split(":")
+                    socket.create_connection((host, int(port)), timeout=3).close()
+                    print("TCP connectivity OK")
 PY
-                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_00'
-        """
+
+                pytest -s -p no:cacheprovider test_auction.py::test_scenario_00
+      '
+    """
     }
+
 
     runStageWithCleanup('Run Scenario 1') {
         def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']

@@ -119,6 +119,7 @@ runStageWithCleanup('Run Scenario 0') {
           ${envArgs} \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
+                   python -m venv /tmp/venv
                    source .venv/bin/activate 
                    COMP='ShortTermPlanning' 
                    pip install -r /repo/\$COMP/requirements.txt
@@ -140,7 +141,6 @@ runStageWithCleanup('Run Scenario 0') {
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE:/repo:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
@@ -149,6 +149,7 @@ runStageWithCleanup('Run Scenario 0') {
           ${envArgs} \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
+                   python -m venv /tmp/venv
                    source .venv/bin/activate 
                    COMP='ShortTermPlanning' 
                    pip install -r /repo/\$COMP/requirements.txt 
@@ -179,6 +180,7 @@ runStageWithCleanup('Run Scenario 0') {
           --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
+                   python -m venv /tmp/venv
                    source .venv/bin/activate 
                    COMP='ShortTermPlanning' 
                    pip install -r /repo/\$COMP/requirements.txt 
@@ -209,6 +211,7 @@ runStageWithCleanup('Run Scenario 0') {
           --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
+                   python -m venv /tmp/venv
                    source .venv/bin/activate 
                    COMP='ShortTermPlanning' 
                    pip install -r /repo/\$COMP/requirements.txt 

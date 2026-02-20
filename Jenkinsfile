@@ -124,6 +124,8 @@ runStageWithCleanup('Run Scenario 0') {
                    pip install -r /repo/\$COMP/requirements.txt
                    [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
+
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
                    cd /app/shortterm/dynreact/tests/integration_test 
                    pytest -s  -p no:cacheprovider test_auction.py::test_scenario_01'
         """

@@ -102,7 +102,7 @@ class KeySearch:
         dump_model = cls._global_config.model_copy()
         update = {}
 
-        for field_name in dump_model.model_fields.keys():
+        for field_name in dump_model.__class__.model_fields.keys():
 
             current_val = cls._get_value(field_name)
 

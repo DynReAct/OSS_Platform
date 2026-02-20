@@ -1,8 +1,6 @@
 FROM python:3.12.3 AS builder
 LABEL authors="Hector Flores"
 
-# RUN pip install poetry==2.1.1
-
 # Install system dependencies
 RUN apt update && apt upgrade -y && \
     apt install -y  \
@@ -33,30 +31,22 @@ RUN git config --global http.postBuffer 104857600 && \
 
 WORKDIR /app
 
-ENV PIP_REQUIRE_HASES=
-
+# Opciones de pip limpias, sin rastro de poetry
 ENV PIP_INDEX_URL=https://pypi.org/simple \
     PIP_TRUSTED_HOST="pypi.org files.pythonhosted.org" \
     PIP_DEFAULT_TIMEOUT=120 \
     PIP_RETRIES=10 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=1 \
-    POETRY_VIRTUALENVS_CREATE=1 \
-    POETRY_CACHE_DIR=/tmp/poetry_cache
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-RUN pip install --upgrade pip wheel setuptools && \
-    pip install --no-cache-dir "poetry==2.1.1" && \
-    poetry --version
+# Copiamos el requirements.txt
+COPY requirements.txt ./
 
-RUN poetry config installer.parallel false
+# Creamos el entorno virtual, actualizamos pip/setuptools 
+# e instalamos requirements con --no-build-isolation para que flatdict instale bien
+RUN python -m venv /app/.venv && \
+    /app/.venv/bin/pip install --upgrade pip wheel setuptools && \
+    /app/.venv/bin/pip install --no-build-isolation -r requirements.txt
 
-COPY pyproject.toml ./
-
-RUN for i in 1 2 3; do \
-      poetry install --only main --no-root --no-interaction --no-ansi && break || \
-      (echo "Poetry failed (attempt $i) — cleaning cache & retrying..." && rm -rf "$POETRY_CACHE_DIR" && sleep 5); \
-    done
 
 FROM python:3.12.3
 
@@ -86,9 +76,10 @@ COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 COPY --from=builder /usr/lib/lib* /usr/lib/
 
 COPY dynreact/shortterm/common/ ./shortterm/dynreact/shortterm/common/
+
+# IMPORTANTE: Copiamos la carpeta entera para que __main__.py quede en su sitio correcto
 COPY dynreact/shortterm/agents/ ./shortterm/dynreact/shortterm/agents/
-# COPY dynreact/shortterm/agents/agent.py dynreact/shortterm/agents/equipment.py dynreact/shortterm/agents/log.py dynreact/shortterm/agents/material.py ./shortterm/dynreact/shortterm/agents/ # updated by JOM 20/02/2026
-# COPY dynreact/shortterm/agents/__main__.py ./shortterm/ # updated by JOM 20/02/2026
+
 COPY dynreact/shortterm/shorttermtargets.py ./shortterm/dynreact/shortterm/
 COPY dynreact/shortterm/timedelay.py ./shortterm/dynreact/shortterm/
 

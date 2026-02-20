@@ -95,15 +95,7 @@ runStageWithCleanup('Run Scenario 0') {
                 python -m pip install -r "/repo/ShortTermPlanning/requirements.txt"
 
                 command -v pytest >/dev/null 2>&1 || python -m pip install pytest
-
                 cd /app/shortterm/dynreact/tests/integration_test
-
-        	# Debug: variables de entorno
-        	python -c "import os; print(\\"KAFKA_IP=\\", os.getenv(\\"KAFKA_IP\\")); print(\\"BOOTSTRAP_SERVERS=\\", os.getenv(\\"BOOTSTRAP_SERVERS\\"))"
-
-        	# Debug: conectividad TCP al broker (sin heredoc, para evitar IndentationError)
-        	python -c "import os, socket; bs=(os.getenv(\\"KAFKA_IP\\") or os.getenv(\\"BOOTSTRAP_SERVERS\\",\\"\\")).strip(); print(\\"bootstrap:\\", bs); h,p=bs.split(\\":\\"); socket.create_connection((h,int(p)),timeout=3).close(); print(\\"TCP connectivity OK\\")"
-
                 pytest -s -p no:cacheprovider test_auction.py::test_scenario_00
       '
     """
@@ -111,29 +103,29 @@ runStageWithCleanup('Run Scenario 0') {
 
 
     runStageWithCleanup('Run Scenario 1') {
-        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE:/repo:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -v "/var/log/dynreact-logs:/var/log/dynreact-logs:rw,rshared" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
-          ${envArgs} \\
           --user "0:0" \\
+          ${envArgs} \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   COMP='ShortTermPlanning' && \\
-                   pip install -r /repo/\$COMP/requirements.txt && \\
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s  -p no:cacheprovider test_auction.py::test_scenario_01"
+          bash -lc 'set -euo pipefail
+                   source .venv/bin/activate 
+                   COMP='ShortTermPlanning' 
+                   pip install -r /repo/\$COMP/requirements.txt
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
+                   cd /app/shortterm/dynreact/tests/integration_test 
+                   pytest -s  -p no:cacheprovider test_auction.py::test_scenario_01'
         """
     }
 

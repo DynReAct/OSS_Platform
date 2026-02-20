@@ -127,12 +127,13 @@ runStageWithCleanup('Run Scenario 0') {
 
                    command -v pytest >/dev/null 2>&1 || python -m pip install pytest
                    cd /app/shortterm/dynreact/tests/integration_test 
-                   pytest -s  -p no:cacheprovider test_auction.py::test_scenario_01'
+                   pytest -s  -p no:cacheprovider test_auction.py::test_scenario_01
+         '
         """
     }
 
     runStageWithCleanup('Run Scenario 2') {
-        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -144,21 +145,25 @@ runStageWithCleanup('Run Scenario 0') {
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
-          ${envArgs} \\
           --user "0:0" \\
+          ${envArgs} \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   COMP='ShortTermPlanning' && \\
-                   pip install -r /repo/\$COMP/requirements.txt && \\
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_02"
+          bash -lc 'set -euo pipefail
+                   source .venv/bin/activate 
+                   COMP='ShortTermPlanning' 
+                   pip install -r /repo/\$COMP/requirements.txt 
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
+
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   cd /app/shortterm/dynreact/tests/integration_test 
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_02
+         '
         """
     }
 
     runStageWithCleanup('Run Scenario 3') {
-        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -173,18 +178,22 @@ runStageWithCleanup('Run Scenario 0') {
           ${envArgs} \\
           --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   COMP='ShortTermPlanning' && \\
-                   pip install -r /repo/\$COMP/requirements.txt && \\
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_03"
+          bash -lc 'set -euo pipefail
+                   source .venv/bin/activate 
+                   COMP='ShortTermPlanning' 
+                   pip install -r /repo/\$COMP/requirements.txt 
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
+
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   cd /app/shortterm/dynreact/tests/integration_test 
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_03
+         '
         """
     }
 
     runStageWithCleanup('Run Scenario 4') {
-        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'SCENARIO_4_5_EQUIPMENT']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -199,13 +208,17 @@ runStageWithCleanup('Run Scenario 0') {
           ${envArgs} \\
           --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   COMP='ShortTermPlanning' && \\
-                   pip install -r /repo/\$COMP/requirements.txt && \\
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_04"
+          bash -lc 'set -euo pipefail
+                   source .venv/bin/activate 
+                   COMP='ShortTermPlanning' 
+                   pip install -r /repo/\$COMP/requirements.txt 
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
+
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   cd /app/shortterm/dynreact/tests/integration_test 
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_04
+         '
         """
     }
 
@@ -226,7 +239,7 @@ runStageWithCleanup('Run Scenario 0') {
     }
 
     stage('Run Scenario 5') {
-        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_4_5_EQUIPMENT', 'LOCAL_REGISTRY']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -241,18 +254,22 @@ runStageWithCleanup('Run Scenario 0') {
           ${envArgs} \\
           --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   COMP='ShortTermPlanning' && \\
-                   pip install -r /repo/\$COMP/requirements.txt && \\
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_05"
+          bash -lc 'set -euo pipefail
+                   source .venv/bin/activate 
+                   COMP='ShortTermPlanning' 
+                   pip install -r /repo/\$COMP/requirements.txt 
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true
+
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   cd /app/shortterm/dynreact/tests/integration_test 
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_05
+         '
         """
     }
 
     stage('Run Scenario 6') {
-        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_6_EQUIPMENT', 'LOCAL_REGISTRY']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -267,18 +284,22 @@ runStageWithCleanup('Run Scenario 0') {
           ${envArgs} \\
           --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   COMP='ShortTermPlanning' && \\
-                   pip install -r /repo/\$COMP/requirements.txt && \\
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_06"
+          bash -lc 'set -euo pipefail
+                   source .venv/bin/activate 
+                   COMP='ShortTermPlanning' 
+                   pip install -r /repo/\$COMP/requirements.txt 
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
+
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   cd /app/shortterm/dynreact/tests/integration_test 
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_06
+         '
         """
     }
 
     stage('Run Scenario 7') {
-        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_7_EQUIPMENTS', 'LOCAL_REGISTRY']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -293,18 +314,22 @@ runStageWithCleanup('Run Scenario 0') {
           ${envArgs} \\
           --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   COMP='ShortTermPlanning' && \\
-                   pip install -r /repo/\$COMP/requirements.txt && \\
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_07"
+          bash -lc 'set -euo pipefail
+                   source .venv/bin/activate 
+                   COMP='ShortTermPlanning' 
+                   pip install -r /repo/\$COMP/requirements.txt 
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
+
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   cd /app/shortterm/dynreact/tests/integration_test 
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_07
+         '
         """
     }
 
     stage('Run Scenario 8') {
-        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_8_EQUIPMENTS', 'SCENARIO_8_ORDER_ID', 'LOCAL_REGISTRY']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -319,13 +344,17 @@ runStageWithCleanup('Run Scenario 0') {
           ${envArgs} \\
           --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   COMP='ShortTermPlanning' && \\
-                   pip install -r /repo/\$COMP/requirements.txt && \\
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true && \\
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_08"
+          bash -lc 'set -euo pipefail
+                   source .venv/bin/activate 
+                   COMP='ShortTermPlanning' 
+                   pip install -r /repo/\$COMP/requirements.txt 
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
+
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   cd /app/shortterm/dynreact/tests/integration_test 
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_08
+         '
         """
     }
   }

@@ -27,7 +27,7 @@ class Material(Agent):
         transport_times (dict): Dictionary with the transport times for each equipment expressed in seconds.
         coil_lengths (list): List with the coil lengths for each equipment expressed in meters.
     """
-    def __init__(self, topic: str, agent: str, params: dict, transport_times: dict[str, int], coil_lengths: list[float] = None, manager=True):
+    def __init__(self, topic: str, agent: str, params: dict, transport_times: dict[str, int] = None, coil_lengths: list[float] = None, manager=True):
 
         super().__init__(topic=topic, agent=agent)
         """
@@ -52,7 +52,7 @@ class Material(Agent):
 
         self.assigned_equipment = ""
         self.params = params
-        self.transport_times = transport_times
+        self.transport_times = transport_times if transport_times is not None else {}
         self.coil_lengths = coil_lengths if coil_lengths is not None else [0.0]
         if self.verbose > 1:
             self.write_log(msg=f"Finished creating the agent {self.agent} with parameters {self.params}.",
@@ -123,7 +123,7 @@ class Material(Agent):
         if material_start_time <= auction_start_time:
             # Calculate the bidding price based on EQUIPMENT status and MATERIAL parameters
             bidding_price = self.calculate_bidding_price(
-                material_params=self.params, equipment_status=equipment_status, previous_price=previous_price
+                material_params=self.params, equipment_status=equipment_status, previous_price=previous_price, auction_start_time=auction_start_time
             )
             if bidding_price is not None:
                 sendmsgtopic(
@@ -231,7 +231,7 @@ class Material(Agent):
         return sum(self.coil_lengths)
 
     def calculate_bidding_price(self, material_params: dict, equipment_status: dict,
-                                previous_price: float | None) -> float | None:
+                                previous_price: float | None, auction_start_time: timedelta) -> float | None:
         """
         Calculates the bidding price that the MATERIAL would pay to be processed in the EQUIPMENT with the given status.
         Returns None if the EQUIPMENT's status is not compatible with the MATERIAL's parameters.
@@ -262,7 +262,7 @@ class Material(Agent):
             # Generate a random date between today and 10 days ago
             delivery_date = ten_days_ago + timedelta(days=random.randint(0, 10))
 
-        bidding_price = 150 / (delivery_date - datetime(2020, 1, 1)).days
+        bidding_price = 150 / (delivery_date - datetime(2020, 1, 1)).days + 150 / (auction_start_time - datetime(2020, 1, 1)).seconds
 
         # For now, the bidding price is simply increased by the previous bidding price
         if previous_price is not None:

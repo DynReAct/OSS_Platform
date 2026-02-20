@@ -31,7 +31,7 @@ class Equipment(Agent):
         current_order_length (float): The total length of the current assigned order in meters.
 
     """
-    def __init__(self, topic: str, agent: str, status: dict, operation_speed: float, start_time: datetime = None, current_order_length: float = None, manager=True):
+    def __init__(self, topic: str, agent: str, status: dict, operation_speed: float = None, start_time: datetime = None, current_order_length: float = None, manager=True):
 
         super().__init__(topic=topic, agent=agent)
         """

@@ -39,7 +39,8 @@ class DockerManager:
             # Get updated list of containers before launching
             all_containers = self.list_tracked_containers()
 
-            command_str = f"python -m shortterm {agent} {mode} {dict_to_cli_params(params)}".strip()
+            # command_str = f"python -m shortterm {agent} {mode} {dict_to_cli_params(params)}".strip()  # Replaced by JOM 20/02/2026
+            command_str = f"python -m dynreact.shortterm.agents {agent} {mode} {dict_to_cli_params(params)}".strip()
 
             print(f"Launching with {command_str}")
 

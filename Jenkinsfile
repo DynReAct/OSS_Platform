@@ -16,23 +16,6 @@ node {
     env.SCENARIO_8_ORDER_ID = "1193611" 
 
      // Wrap all secret text credentials at once
-    stage('Debug Credentials') {
-        steps {
-            withCredentials([
-                string(credentialsId: 'KAFKA_IP', variable: 'KAFKA_IP_SECRET'),
-                string(credentialsId: 'REST_URL', variable: 'REST_URL_SECRET')
-            ]) {
-                sh '''
-                    echo "KAFKA_IP codificado en Base64:"
-                    echo $KAFKA_IP_SECRET | base64
-                    
-                    echo "REST_URL codificado en Base64:"
-                    echo $REST_URL_SECRET | base64
-                '''
-            }
-        }
-    }
-
     withCredentials([
         string(credentialsId: 'LOCAL_REGISTRY', variable: 'REGISTRY'),
         string(credentialsId: 'KAFKA_IP', variable: 'KAFKA_IP_SECRET'),

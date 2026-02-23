@@ -152,7 +152,7 @@ def test_scenario_03(run_agents_handler_spy):
         "counterbidWait": "0",
         "smallWait": "5",
         "exitWait": "0",
-        "equipments": ["9"],
+        "equipments": ["7"],
         "nmaterials": 1,
         "rungagents": 111,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
@@ -180,7 +180,7 @@ def test_scenario_04():
         "counterbidWait": "15",
         "smallWait": "5",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_4_5_EQUIPMENT", "9").split(" "),
+        "equipments": os.environ.get("SCENARIO_4_5_EQUIPMENT", "7").split(" "),
         "nmaterials": 1,
         "rungagents": 111,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
@@ -209,7 +209,7 @@ def test_scenario_05():
         "counterbidWait": "15",
         "smallWait": "5",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_4_5_EQUIPMENT", "9").split(" "),
+        "equipments": os.environ.get("SCENARIO_4_5_EQUIPMENT", "7").split(" "),
         "nmaterials": 1,
         "rungagents": 000,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
@@ -238,7 +238,7 @@ def test_scenario_06():
         "counterbidWait": "15",
         "smallWait": "5",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_6_EQUIPMENT", "9").split(" "),
+        "equipments": os.environ.get("SCENARIO_6_EQUIPMENT", "7").split(" "),
         "nmaterials": 2,
         "rungagents": 000,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
@@ -269,7 +269,7 @@ def test_scenario_07():
         "counterbidWait": "15",
         "smallWait": "5",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_7_EQUIPMENTS", "9 10").split(" "),
+        "equipments": os.environ.get("SCENARIO_7_EQUIPMENTS", "6 7").split(" "),
         "nmaterials": 1,
         "rungagents": 000,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
@@ -300,7 +300,7 @@ def test_scenario_08():
         "counterbidWait": "15",
         "smallWait": "5",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_8_EQUIPMENTS", "9 11").split(" "),
+        "equipments": os.environ.get("SCENARIO_8_EQUIPMENTS", "6 7").split(" "),
         "nmaterials": 2,
         "rungagents": 000,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")

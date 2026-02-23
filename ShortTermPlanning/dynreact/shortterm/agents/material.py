@@ -69,14 +69,14 @@ class Material(Agent):
 
         if self.handler:
         
-            topic = dctmsg['topic']
-            payload = dctmsg['payload']
-            material = payload['id']
+            topic = dctmsg['topic'] if 'topic' in dctmsg else ""
+            payload = dctmsg['payload'] if 'payload' in dctmsg else {}
+            material = payload['id'] if 'id' in payload else "0"
             agent = f"MATERIAL:{topic}:{material}"
-            params = payload['params']
-            transport_times = payload['transport_times']
-            coil_lengths = payload['coil_length']
-            variables = payload['variables']
+            params = payload['params'] if 'params' in payload else {}
+            transport_times = payload['transport_times'] if 'transport_times' in payload else {}
+            coil_lengths = payload['coil_length'] if 'coil_length' in payload else [0.0]
+            variables = payload['variables'] if 'variables' in payload else {}
 
             KeySearch.assign_values(new_values=variables)
     

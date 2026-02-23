@@ -10,6 +10,9 @@ Version History:
 
 import time
 from datetime import datetime
+
+from sphinx.ext.ifconfig import ifconfig
+
 from dynreact.shortterm.common import sendmsgtopic, KeySearch
 from dynreact.shortterm.common.data.data_functions import get_equipment_status
 from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
@@ -113,18 +116,25 @@ class Equipment(Agent):
 
             print("Inside the handler")
 
-            topic = dctmsg['topic']
-            payload = dctmsg['payload']
-            variables = payload['variables']
+            topic = dctmsg['topic'] if 'topic' in dctmsg else self.topic
+            payload = dctmsg['payload'] if 'payload' in dctmsg else dict()
+            variables = payload['variables'] if 'variables' in payload else dict()
 
             KeySearch.assign_values(new_values=variables)
 
-            user_start_date = payload['user_start_date']
+            user_start_date = payload['user_start_date'] if 'user_start_date' in payload else None
 
-            equipment = payload['id']
+            equipment = payload['id'] if 'id' in payload else 0
             snapshot = payload['snapshot']
-            operation_speed = payload['operation_speed']
-            start_time = user_start_date if user_start_date is not None else payload.get('start_time') # We either use the user start date or the snapshot start time/actual time
+            operation_speed = payload['operation_speed'] if 'operation_speed' in payload else 0.0
+
+            if user_start_date is not None:
+                start_time = user_start_date
+            elif 'start_time' in payload:
+                start_time = payload['start_time']
+            else:
+                start_time = None
+
             agent = f"EQUIPMENT:{topic}:{equipment}:0"
             status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)
             self.equipment = equipment

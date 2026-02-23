@@ -1103,6 +1103,13 @@ def download_equipment_csv(n_clicks, selected_tab, auction_data):
     prevent_initial_call=True
 )
 def update_equipment_inputs(selected_equipments):
+    """
+    Dynamically updates the inputs for the selected equipment.
+
+    :param selected_equipments: List of selected equipment names.
+    :return: List of input elements for the selected equipment.
+    :rtype: list
+    """
     if not selected_equipments:
         return []
 
@@ -1138,6 +1145,13 @@ def update_equipment_inputs(selected_equipments):
     Input("lang", "data")
 )
 def update_page_localization(lang: str):
+    """
+    Updates the static text elements on the page based on the selected language.
+
+    :param lang: Selected language code.
+    :return: List of updated text elements.
+    :rtype: list
+    """
     translation = Localization.get_translation(lang, translations_key)
     return (
         Localization.get_value(translation, "title", "Short term planning"),
@@ -1158,6 +1172,13 @@ def update_page_localization(lang: str):
     Input("lang", "data")
 )
 def update_radio_options_localization(lang: str):
+    """
+    Updates the radio options for the material type selection based on the selected language.
+
+    :param lang: Selected language code.
+    :return: List of updated radio options.
+    :rtype: list
+    """
     translation = Localization.get_translation(lang, translations_key)
     return [
         {'label': Localization.get_value(translation, "label_materials", "Materials"), 'value': 'Materials'},
@@ -1170,11 +1191,17 @@ def update_radio_options_localization(lang: str):
     Input("lang", "data")
 )
 def update_ass_radio_localization(lang: str):
+    """
+    Updates the radio options for the assignment type selection based on the selected language.
+
+    :param lang: Selected language code.
+    :return: List of updated radio options.
+    :rtype: list
+    """
     translation = Localization.get_translation(lang, translations_key)
     return [
         {'label': Localization.get_value(translation, "label_yes", "Yes"), 'value': 'Yes'},
         {'label': Localization.get_value(translation, "label_no", "No"), 'value': 'No'}
     ]
 
-#TODO: add performance check
-#TODO: add documentation
+#TODO: add performance check?

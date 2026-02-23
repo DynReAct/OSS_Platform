@@ -761,7 +761,7 @@ def evaluate_split_orders():
     site = plugins.get_config_provider().site_config()
     snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
     snapshot: Snapshot = plugins.get_snapshot_provider().load(time=snap)
-    processes = [_process_for_id(proc.strip(), args.process) for proc in args.process.split(",")]  if args.process is not None else site.processes
+    processes = [_process_for_id(site.processes, proc.strip()) for proc in args.process.split(",")]  if args.process is not None else site.processes
     all_lots: dict[int, list[Lot]] = snapshot.lots
     print("Multiple lots per process stage:")
     for proc in processes:
@@ -1266,7 +1266,7 @@ def mtp_benchmark():
     benchmark = MidTermBenchmark(scenario=scenario.id, iterations=iterations, child_processes=procs, cpu_time=end_time_cpu-start_time_cpu,
                                  wall_time=end_time_wall-start_time_wall, objective=result.best_objective_value,
                                  timestamp=start_datetime, optimizer_id="tabu_search", optimization_parameters=optimizer_params, lots=lots)
-    for_display: dict[str, typing.Any] = benchmark.model_dump()
+    for_display: dict[str, Any] = benchmark.model_dump()
     for_display["lots"] = {p: [json.dumps({l.id: l.orders}) for l in lots] for p, lots in benchmark.lots.items()}
     print(json.dumps(for_display, indent=4, default=str).replace("\"{\\\"", "{\"").replace("\\\"]}\"", "]}").replace("\\\"", "\""))
     return benchmark

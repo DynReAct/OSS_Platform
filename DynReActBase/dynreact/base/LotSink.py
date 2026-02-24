@@ -1,3 +1,5 @@
+from typing import Sequence
+
 from dynreact.base.PermissionManager import PermissionManager
 from dynreact.base.model import Lot, Site, Snapshot, ServiceMetrics
 
@@ -25,6 +27,7 @@ class LotSink:
     def transfer_new(self,
                  lot: Lot,
                  snapshot: Snapshot,
+                 material: dict[str, Sequence[str]]|None=None,
                  external_id: str|None = None,
                  comment: str|None = None,
                  user: str|None=None) -> str:
@@ -34,11 +37,13 @@ class LotSink:
                         lot: Lot,
                         start_order: str,
                         snapshot: Snapshot,
+                        material: dict[str, Sequence[str]] | None = None,
                         user: str|None=None) -> str:
         """
         :param lot:
         :param start_order: first order to be transferred
         :param snapshot:
+        :material: optional dictionary order id -> list of material ids
         :return: lot id
         """
         raise Exception("not implemented")

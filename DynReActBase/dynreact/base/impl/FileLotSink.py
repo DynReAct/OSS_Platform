@@ -1,4 +1,5 @@
 import os
+from typing import Sequence
 
 from dynreact.base.LotSink import LotSink
 from dynreact.base.NotApplicableException import NotApplicableException
@@ -40,6 +41,7 @@ class FileLotSink(LotSink):
 
     def transfer_new(self, lot: Lot,
                  snapshot: Snapshot,
+                 material: dict[str, Sequence[str]] | None = None,
                  external_id: str|None = None,
                  comment: str|None = None,
                  user: str|None = None):
@@ -63,6 +65,7 @@ class FileLotSink(LotSink):
     def transfer_append(self, lot: Lot,
                         start_order: str,
                         snapshot: Snapshot,
+                        material: dict[str, Sequence[str]] | None = None,
                         user: str|None = None):
         process = self._site.get_equipment(lot.equipment, do_raise=True).process
         FileLotSink._increase_stat(process, self._transfers)

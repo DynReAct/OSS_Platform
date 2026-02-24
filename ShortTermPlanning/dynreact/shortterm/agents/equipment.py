@@ -66,7 +66,12 @@ class Equipment(Agent):
         self.last_bid_time = None
         self.bid_to_confirm = dict()
         self.previous_price = None
-        self.start_time = start_time if start_time is not None else datetime.now()
+
+        if isinstance(start_time, str):
+            self.start_time = datetime.strptime(start_time, '%Y-%m-%dT%H:%M:%SZ')
+        else:
+            self.start_time = start_time if start_time is not None else datetime.now()
+
         self.current_order_length = current_order_length
 
         if self.verbose > 1:
@@ -130,7 +135,6 @@ class Equipment(Agent):
             snapshot = payload['snapshot']
             operation_speed = payload.get('operation_speed', 0)
             start_time = user_start_date if user_start_date is not None else payload.get('start_time')
-            start_time = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
 
             agent = f"EQUIPMENT:{topic}:{equipment}:0"
             status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)
@@ -176,7 +180,7 @@ class Equipment(Agent):
             source=self.agent,
             dest="MATERIAL:" + topic + ":.*",
             action="BID",
-            payload=dict(id=self.agent, status=self.status, start_time=self.start_time, previous_price=previous_price),
+            payload=dict(id=self.agent, status=self.status, start_time=self.start_time.strftime('%Y-%m-%dT%H:%M:%SZ'), previous_price=previous_price),
             vb=self.verbose
         )
         if self.verbose > 2:

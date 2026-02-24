@@ -69,14 +69,14 @@ class Material(Agent):
 
         if self.handler:
         
-            topic = dctmsg['topic'] if 'topic' in dctmsg else ""
-            payload = dctmsg['payload'] if 'payload' in dctmsg else {}
-            material = payload['id'] if 'id' in payload else "0"
+            topic = dctmsg.get('topic', "")
+            payload = dctmsg.get('payload', {})
+            material = payload.get('id', "0")
             agent = f"MATERIAL:{topic}:{material}"
-            params = payload['params'] if 'params' in payload else {}
-            transport_times = payload['transport_times'] if 'transport_times' in payload else {}
-            coil_lengths = payload['coil_length'] if 'coil_length' in payload else [0.0]
-            variables = payload['variables'] if 'variables' in payload else {}
+            params = payload.get('params', {})
+            transport_times = payload.get('transport_times', {})
+            coil_lengths = payload.get('coil_lengths', [0.0])
+            variables = payload.get('variables', {})
 
             KeySearch.assign_values(new_values=variables)
     
@@ -114,10 +114,11 @@ class Material(Agent):
         payload = dctmsg['payload']
         equipment_id = payload['id']
         equipment_status = payload['status']
-        previous_price = payload['previous_price']
-        auction_start_time = payload['start_time']
+        previous_price = payload.get('previous_price')
+        auction_start_time = payload.get('start_time')
+        auction_start_time = datetime.fromisoformat(str(auction_start_time).replace('Z', '+00:00'))
 
-        time_to_equipment = self.transport_times[equipment_id] # This is a timedelta
+        time_to_equipment = timedelta(seconds=int(self.transport_times.get(equipment_id, 0)))
         material_start_time = datetime.now() + time_to_equipment
 
         if material_start_time <= auction_start_time:
@@ -231,7 +232,7 @@ class Material(Agent):
         return sum(self.coil_lengths)
 
     def calculate_bidding_price(self, material_params: dict, equipment_status: dict,
-                                previous_price: float | None, auction_start_time: timedelta) -> float | None:
+                                previous_price: float | None, auction_start_time: datetime) -> float | None:
         """
         Calculates the bidding price that the MATERIAL would pay to be processed in the EQUIPMENT with the given status.
         Returns None if the EQUIPMENT's status is not compatible with the MATERIAL's parameters.

@@ -119,24 +119,18 @@ class Equipment(Agent):
 
             print("Inside the handler")
 
-            topic = dctmsg['topic'] if 'topic' in dctmsg else self.topic
-            payload = dctmsg['payload'] if 'payload' in dctmsg else dict()
-            variables = payload['variables'] if 'variables' in payload else dict()
+            topic = dctmsg.get('topic', self.topic)
+            payload = dctmsg.get('payload', dict())
+            variables = payload.get('variables', dict())
 
             KeySearch.assign_values(new_values=variables)
 
-            user_start_date = payload['user_start_date'] if 'user_start_date' in payload else None
-
-            equipment = payload['id'] if 'id' in payload else 0
+            user_start_date = payload.get('user_start_date', None)
+            equipment = payload.get('id', 0)
             snapshot = payload['snapshot']
-            operation_speed = payload['operation_speed'] if 'operation_speed' in payload else 0.0
-
-            if user_start_date is not None:
-                start_time = user_start_date
-            elif 'start_time' in payload:
-                start_time = payload['start_time']
-            else:
-                start_time = None
+            operation_speed = payload.get('operation_speed', 0)
+            start_time = user_start_date if user_start_date is not None else payload.get('start_time')
+            start_time = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
 
             agent = f"EQUIPMENT:{topic}:{equipment}:0"
             status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)
@@ -173,9 +167,7 @@ class Equipment(Agent):
         """
         topic = dctmsg['topic']
         payload = dctmsg['payload']
-        previous_price = None
-        if 'price' in payload:
-            previous_price = payload['price']
+        previous_price = payload.get('price')
 
         sendmsgtopic(
             producer=self.producer,

@@ -9,7 +9,7 @@ Version History:
 """
 
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sphinx.ext.ifconfig import ifconfig
 
@@ -92,8 +92,11 @@ class Equipment(Agent):
         self.bids = []
         self.last_bid_time = None
         self.bid_to_confirm = dict()
+
+        if self.start_time is not None and self.current_order_length is not None and self.operation_speed > 0:
+            self.start_time += timedelta(seconds=self.current_order_length / self.operation_speed)
+
         self.current_order_length = None
-        # TODO: recalculate start time based in processing time
         full_msg = dict(
             source=self.agent, dest=self.agent, topic=self.topic, action='START',
             payload=dict(price=self.previous_price)

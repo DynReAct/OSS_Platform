@@ -202,7 +202,7 @@ def dict_to_cli_params(params):
             if value:  # Include flag only if True
                 cli_params.append(f"--{key}")
         elif isinstance(value, list):  # Handle list values
-            cli_params.append(f"--{key} {" ".join(value)}")
+            cli_params.append(f"--{key} {' '.join(map(str, value))}")
         elif isinstance(value, dict):  # Handle dict values
             json_string = json.dumps(value)
             cli_params.append(f"--{key} {shlex.quote(json_string)}")

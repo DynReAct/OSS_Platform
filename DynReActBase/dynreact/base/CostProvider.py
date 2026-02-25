@@ -31,6 +31,21 @@ class CostProvider:
         """
         raise Exception("not implemented")
 
+    def assignment_costs(self, equipment: Equipment, order: Order) -> float:
+        """
+        Costs for assigning an order to a specific equipment. This cost component can be used to define
+        equipment preferences for specific orders at a given process stage. It must then be taken into consideration in
+        evaluate_equipment_assignments() and update_transition_costs().
+
+        Parameters:
+            equipment: equipment
+            order: order
+
+        Returns:
+            Costs (non-negative float)
+        """
+        return 0
+
     def logistic_costs(self, new_equipment: Equipment, order: Order, material: Material | None = None) -> float:
         """
         Calculates the transition costs for an order or individual material from an order to be transported to a new
@@ -42,9 +57,12 @@ class CostProvider:
                                    snapshot: Snapshot, total_priority: int|None = None, orders_custom_priority: dict[str, int]|None=None,
                                    previous_orders: dict[int, str]|None = None) -> ProductionPlanning:
         """
-        :param process:
-        :param assignments:
-        :return:
+
+        Parameters:
+            process:
+            assignments:
+
+        Returns:
         """
         #plants = [p for p in self._site.plants if p.process == process]
         plant_ids = list(targets.target_weight.keys())
@@ -75,27 +93,13 @@ class CostProvider:
         return ProductionPlanning(process=process, order_assignments=order_assignments, equipment_status=status,
                                   target_structure=target_structure, total_priority=total_priority, previous_orders=previous_orders)
 
-    def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
-                                       planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None,
-                                       current_material: list[Material] | None=None,
-                                       track_structure: bool=False, main_category: str|None=None,
-                                       orders_custom_priority: dict[str, int]|None=None,
-                                       previous_order: str|None = None) -> EquipmentStatus:
+    def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot,
+                                new_lot: bool, current_material: Material | None = None, next_material: Material | None = None,
+                                orders_custom_priority: dict[str, int]|None=None) -> tuple[EquipmentStatus, ObjectiveFunction]:
         """
-        Main function to be implemented in derived class taking into account global status.
-        Note that this must set the PlantStatus.planning.target_fct value.
-        :param equipment:
-        :param assignments: order assignments; keys: order ids
-        :param target_weight:
-        :param snapshot:
-        :param current_coils: should only be present if the last order is not assumed to be processed entirely
-        :param track_structure:
-        :param main_category: only relevant if track_structure is true; used for nested structure targets
-        :param orders_custom_priority:
-        :param previous_order:
-        :return:
+        Intended to be called by the lot creation, which first needs to check whether a new lot has to be created
         """
-        raise Exception("Not implemented")
+        raise Exception("not implemented")
 
     # TODO this is meant to be an incremental version of the evaluate_order_assignment method above
     #def transition_costs_stateful(self, plant: Plant, current: Order, next: Order, status: PlantStatus, current_coil: Coil|None = None, next_coil: Coil|None = None) -> tuple[PlantStatus, float]:
@@ -106,13 +110,32 @@ class CostProvider:
     #    """
     #    raise Exception("not implemented")
 
-    def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot,
-                                new_lot: bool, current_material: Material | None = None, next_material: Material | None = None,
-                                orders_custom_priority: dict[str, int]|None=None) -> tuple[EquipmentStatus, ObjectiveFunction]:
+    def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
+                                       planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None,
+                                       current_material: list[Material] | None=None,
+                                       track_structure: bool=False, main_category: str|None=None,
+                                       orders_custom_priority: dict[str, int]|None=None,
+                                       previous_order: str|None = None) -> EquipmentStatus:
         """
-        Intended to be called by the lot creation, which first needs to check whether a new lot has to be created
+        Main function to be implemented in derived class taking into account global status.
+        Note that this must set the PlantStatus.planning.target_fct value.
+
+        Parameters
+            equipment_targets:
+            process:
+            assignments: order assignments; keys: order ids
+            snapshot:
+            planning_period: the time interval
+            min_due_date:
+            track_structure:
+            main_category: only relevant if track_structure is true; used for nested structure targets
+            orders_custom_priority: user-defined custom priorities
+            previous_order:
+
+        Returns:
+            information about the equipment status, including the objective function value
         """
-        raise Exception("not implemented")
+        raise Exception("Not implemented")
 
     def objective_function(self, status: EquipmentStatus) -> ObjectiveFunction:
         "Evaluate the target/objective function for a specific plant status"
@@ -217,7 +240,7 @@ class CostProvider:
         :return:
         """
         costs_parameter = self.priority_costs_parameter()
-        if costs_parameter <= 0:
+        if not isinstance(costs_parameter, float|int) or costs_parameter <= 0:
             return 0
         cnt_assigned_orders_prio = sum(status.planning.assigned_priority for status in planning.equipment_status.values())
         cnt_backlog_orders_prio = planning.total_priority      #ass + unass
@@ -237,6 +260,12 @@ class CostProvider:
 
     def optimum_possible_costs(self, process: str, num_plants: int):
         return 0
+
+    def path_dependent_costs(self, process: str) -> bool:
+        """
+        Overwrite in subclass if the optimal sorting of orders depends on global/path-dependent costs.
+        """
+        return False
 
     def relevant_fields(self, equipment: Equipment) -> None|list[str]:
         """

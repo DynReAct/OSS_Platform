@@ -375,7 +375,7 @@ class SnapshotProvider:
                         process: str,
                         planning_horizon: tuple[datetime, datetime],
                         method: OrderInitMethod|Iterable[OrderInitMethod]=(
-                            OrderInitMethod.ACTIVE_PROCESS,
+                            OrderInitMethod.ACTIVE_PROCESS, 
                             OrderInitMethod.CURRENT_PLANNING,
                             OrderInitMethod.INACTIVE_LOTS,
                             OrderInitMethod.OMIT_CURRENT_LOT,
@@ -488,3 +488,5 @@ class SnapshotProvider:
     def metrics(self) -> ServiceMetrics:
         # Overwrite in derived class
         return ServiceMetrics(service_id="snapshotprovider", metrics=[])
+
+

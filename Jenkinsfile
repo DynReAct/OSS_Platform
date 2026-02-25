@@ -69,6 +69,7 @@ runStageWithCleanup('Run Scenario 0') {
 
     sh """
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v ${WORKSPACE}:/repo:ro \\
           -v ${WORKSPACE}/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro \\
@@ -107,6 +108,7 @@ runStageWithCleanup('Run Scenario 0') {
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
@@ -138,6 +140,7 @@ runStageWithCleanup('Run Scenario 0') {
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
@@ -168,6 +171,7 @@ runStageWithCleanup('Run Scenario 0') {
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
@@ -199,6 +203,7 @@ runStageWithCleanup('Run Scenario 0') {
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
@@ -228,6 +233,7 @@ runStageWithCleanup('Run Scenario 0') {
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/replace_base.py:/app/shortterm/__main__.py:ro" \\
@@ -246,6 +252,7 @@ runStageWithCleanup('Run Scenario 0') {
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
@@ -276,6 +283,7 @@ runStageWithCleanup('Run Scenario 0') {
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
@@ -306,6 +314,7 @@ runStageWithCleanup('Run Scenario 0') {
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
@@ -336,6 +345,7 @@ runStageWithCleanup('Run Scenario 0') {
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\

@@ -125,6 +125,8 @@ def main():
     parser_equipment_replica.add_argument("-a", "--agent-name", type=str, required=True, help="Agent name")
     parser_equipment_replica.add_argument("-s", "--status", type=str, required=True, help="Equipment Status")
     parser_equipment_replica.add_argument("-v", "--variables", type=str, required=True, help="Dynamic values from the KeySearch dump model")
+    parser_equipment_replica.add_argument("--os", "--operation_speed", type=float, dest="operation_speed", help="Operation speed")
+    parser_equipment_replica.add_argument("--st", "--start_time", type=str, dest="start_time", help="Start time")
 
 
     # ------------------------
@@ -148,6 +150,8 @@ def main():
     parser_material_replica.add_argument("-a", "--agent-name", type=str, required=True, help="Agent name")
     parser_material_replica.add_argument("-p", "--params", type=str, required=True, help="Materials parameters relevant to the configuration of the agent.")
     parser_material_replica.add_argument("-v", "--variables", type=str, required=True, help="Dynamic values from the KeySearch dump model")
+    parser_material_replica.add_argument("--tt", "--transport_times", type=str, dest="transport_times", help="Transport times for each equipment")
+    parser_material_replica.add_argument("--cl", "--coil_lengths", type=str, dest="coil_lengths", help="List of coil lengths")
 
     # ------------------------
 
@@ -185,6 +189,8 @@ def main():
                 topic=args.topic,
                 agent=args.agent_name,
                 status=json.loads(args.status),
+                operation_speed=args.operation_speed,
+                start_time=args.start_time,
                 manager=False
             )
 
@@ -201,6 +207,8 @@ def main():
                 topic=args.topic,
                 agent=args.agent_name,
                 params=json.loads(args.params),
+                transport_times=json.loads(args.transport_times) if args.transport_times else None,
+                coil_lengths=json.loads(args.coil_lengths) if args.coil_lengths else None,
                 manager=False
             )
     else:

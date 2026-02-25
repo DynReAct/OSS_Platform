@@ -198,6 +198,9 @@ class DockerManager:
 def dict_to_cli_params(params):
     cli_params = []
     for key, value in params.items():
+        if value is None:
+            continue #TODO: reevaluate need for this optional.
+
         if isinstance(value, bool):
             if value:  # Include flag only if True
                 cli_params.append(f"--{key}")

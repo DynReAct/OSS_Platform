@@ -67,10 +67,10 @@ class Equipment(Agent):
         self.bid_to_confirm = dict()
         self.previous_price = None
 
-        if isinstance(start_time, str):
+        if isinstance(start_time, str) and start_time not in 'None':
             self.start_time = datetime.strptime(start_time, '%Y-%m-%dT%H:%M:%SZ')
         else:
-            self.start_time = start_time if start_time is not None else datetime.now()
+            self.start_time = start_time if isinstance(start_time, datetime) else datetime.now()
 
         self.current_order_length = current_order_length
 

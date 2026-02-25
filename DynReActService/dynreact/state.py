@@ -23,8 +23,6 @@ from dynreact.lots_optimization import LotCreator
 
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.plugins import Plugins
-from dynreact.auction import auction
-from dynreact.shortterm.common import KeySearch
 
 
 class DynReActSrvState:
@@ -47,9 +45,6 @@ class DynReActSrvState:
         self._results_persistence: ResultsPersistence | None = None
         self._availability_persistence: PlantAvailabilityPersistence|None = None
         self._shifts_provider: ShiftsProvider|None = None
-        self._auction_obj : Any|None=None  # auction.Auction | None = None
-        self._stp: Any|None=None #ShortTermPlanning | None = None
-
         self._max_snapshot_caches: int = config.max_snapshot_caches
         self._max_snapshot_solutions_cache: int = config.max_snapshot_solutions_caches
         self._snapshots_cache: dict[datetime, Snapshot] = {}
@@ -123,27 +118,6 @@ class DynReActSrvState:
         if self._shifts_provider is None:
             self._shifts_provider = self._plugins.get_shifts_provider()
         return self._shifts_provider
-
-    def get_stp_context_params(self):
-        if self._stp is None:
-            self._stp = self._plugins.get_stp_config_params()
-        return (self._stp._stpConfigParams.KAFKA_IP,self._stp._stpConfigParams.TOPIC_GEN,
-                self._stp._stpConfigParams.VB)
-
-    def get_stp_context_params(self):
-        self.set_stp_config()
-        return (KeySearch.search_for_value("KAFKA_IP"),KeySearch.search_for_value("TOPIC_GEN"),
-                KeySearch.search_for_value("TOPIC_CALLBACK"), KeySearch.search_for_value("VB"))
-
-    
-    def get_stp_context_timing(self):
-        if self._stp is None:
-            self._stp = self._plugins.get_stp_config_params()
-        return (self._stp._stpConfigParams.TimeDelays.AUCTION_WAIT,
-                self._stp._stpConfigParams.TimeDelays.COUNTERBID_WAIT,
-                self._stp._stpConfigParams.TimeDelays.CLONING_WAIT,
-                self._stp._stpConfigParams.TimeDelays.EXIT_WAIT,
-                self._stp._stpConfigParams.TimeDelays.SMALL_WAIT)
 
     def get_results_persistence(self) -> ResultsPersistence:
         if self._results_persistence is None:
@@ -272,17 +246,4 @@ class DynReActSrvState:
         if self._stp_page is None:
             self._stp_page = self._plugins.load_stp_page()
         return self._stp_page
-
-    def get_auction_obj(self):
-        if self._auction_obj is not None:
-            return(self._auction_obj)
-        return None
-
-    def set_auction_obj(self, auction) -> None:
-        if self._auction_obj is None:
-            self._auction_obj = auction
-
-    def set_stp_config(self) -> None:
-        if self._stp is None:
-            self._stp = self._plugins.get_stp_config_params()
 

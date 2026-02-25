@@ -1,4 +1,3 @@
-from pydantic import BaseModel, Field, ConfigDict
 from dynreact.shortterm.shorttermtargets import ShortTermTargets
 from dynreact.shortterm.timedelay import TimeDelay
 
@@ -23,5 +22,5 @@ class ShortTermPlanning:
         raise Exception("not implemented")
 
 if __name__ == "__main__":
-    provider = ShortTermPlanning("default+file:./data/stp_cotnext.json")
+    provider = ShortTermPlanning("default+file:./data/stp_context.json")
     print(provider.stp_config_params())

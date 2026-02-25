@@ -44,7 +44,6 @@ class Plugins:
         self._cost_provider: CostProvider|None = None
         self._lots_optimizer: LotsOptimizationAlgo|None = None
         self._long_term_planning: LongTermPlanning|None = None
-        self._short_term_planning: Any| None = None
         self._shifts_provider: ShiftsProvider|None = None
         self._results_persistence: ResultsPersistence|None = None
         self._availability_persistence: PlantAvailabilityPersistence|None = None
@@ -117,16 +116,6 @@ class Plugins:
             if self._long_term_planning is None:
                 raise Exception("Long term planning not found: " + str(self._config.long_term_provider))
         return self._long_term_planning
-
-    def get_stp_config_params(self): # -> ShortTermPlanning:
-        if self._short_term_planning is None:
-            from dynreact.base.ShortTermPlanning import ShortTermPlanning
-            if self._config.short_term_planning.startswith("default+file:"):
-                self._short_term_planning = ShortTermPlanning(self._config.short_term_planning)
-            else:
-                self._short_term_planning = Plugins._load_module("dynreact.shorttermplanning", ShortTermPlanning,
-                                                                self._config.short_term_planning)
-        return self._short_term_planning
 
     def get_results_persistence(self) -> ResultsPersistence:
         if self._results_persistence is None:
@@ -215,8 +204,8 @@ class Plugins:
             return None
         if stp == "default":
             try:
-                import dynreact.gui.plugins.agentsPage
-                return dynreact.gui.plugins.agentsPage.layout
+                import dynreact.gui_stp.agentsPage
+                return dynreact.gui_stp.agentsPage.layout
             except:
                 print("Failed to load standard Agents page")
                 traceback.print_exc()

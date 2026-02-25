@@ -16,7 +16,8 @@ classifiers = [
 ]
 packages = [
     { include = "dynreact/shortterm" },
-    { include = "dynreact/auction" }
+    { include = "dynreact/auction" },
+    { include = "dynreact/gui_stp" }
 ]
 
 [tool.poetry.urls]

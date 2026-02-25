@@ -14,6 +14,8 @@ from confluent_kafka.admin import AdminClient
 from dash import html, dcc, ctx, callback, Input, Output, State
 from jsonpath_ng.ext import parse
 from dynreact.auction.auction import Auction, JobStatus
+
+from dynreact.gui_stp.agents_state import AgentsState
 from dynreact.app import state
 from dynreact.shortterm.common import KeySearch, purge_topics, delete_topics
 from dynreact.shortterm.short_term_planning import create_auction, start_auction, genauction, ask_results
@@ -30,7 +32,8 @@ translations_key = "agp"
 # Settings (From stp_context.json in DynReactService/data)
 # params related to kafka config and timing delays
 # We force the extaction of the configuration object before finding the values.
-stp_params = state._plugins.get_stp_config_params() # O el método que recupere el ShortTermTargets
+agents_state: AgentsState = AgentsState()
+stp_params = agents_state.get_stp_config_params() # O el método que recupere el ShortTermTargets
 if stp_params:
     KeySearch.set_global(stp_params._stpConfigParams)
 # state.set_stp_config()

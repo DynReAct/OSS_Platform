@@ -51,12 +51,22 @@ def auth_test():
     parser = argparse.ArgumentParser(description="Test authentication")
     parser.add_argument("user", help="Username", type=str)
     parser.add_argument("pw", help="Password", type=str)
+    parser.add_argument("-p", "--permission", help="Check if user has a specific permission", type=str)
     parser.add_argument("-v", "--verbose", help="Activate verbose mode", action="store_true")
     args = parser.parse_args()
     if args.verbose:
         # TODO
         verbose = True
-    authenticate(DynReActSrvConfig(), args.user, args.pw)
+    auth: bool = authenticate(DynReActSrvConfig(), args.user, args.pw)
+    print(f"Authenticated: {auth}")
+    if auth and args.permission:
+        perm = args.permission
+        config = DynReActSrvConfig()
+        plugins = Plugins(config)
+        perm_manager = plugins.get_permission_manager()
+        success = perm_manager.check_permission(perm, user=args.user)
+        success_text = "granted" if success else "denied"
+        print(f"Permission {perm} {success_text}")
 
 
 # TODO option to aggregate by storage content
@@ -751,7 +761,7 @@ def evaluate_split_orders():
     site = plugins.get_config_provider().site_config()
     snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
     snapshot: Snapshot = plugins.get_snapshot_provider().load(time=snap)
-    processes = [_process_for_id(proc.strip(), args.process) for proc in args.process.split(",")]  if args.process is not None else site.processes
+    processes = [_process_for_id(site.processes, proc.strip()) for proc in args.process.split(",")]  if args.process is not None else site.processes
     all_lots: dict[int, list[Lot]] = snapshot.lots
     print("Multiple lots per process stage:")
     for proc in processes:
@@ -1154,6 +1164,7 @@ def transfer_lot():
     parser.add_argument("-sn", "--sink", help="Select a lot sink", type=str, default=None)
     parser.add_argument("-ln", "--lot-name", help="Select a new lot name; only relevant if the \"lot\" parameter is not set", type=str, default=None)
     parser.add_argument("-e", "--equipment", help="Equipment name or id", type=str, default=None)
+    parser.add_argument("-m", "--material", help="Optional material ids to include. Use the format \"ORDER1:MAT1,MAT2,MAT3;ORDER2:MAT4,MAT5,MAT6,...\"", type=str, default=None)
     parser.add_argument("-c", "--comment", help="Optional comment for lot", type=str, default=None)
     parser.add_argument("-u", "--user", help="Specify a user name", type=str, default=None)
     parser = _trafo_args(parser=parser, include_snapshot=True)
@@ -1182,10 +1193,21 @@ def transfer_lot():
     lot_sink = sinks[selected_sink]
     name = args.lot if args.lot is not None else args.lot_name if args.lot_name is not None else "test"
     lot = Lot(id=name, equipment=plant.id, active=False, status=1, orders=orders, comment=args.comment)
+    mat = args.material
+    mat_ids: dict[str, list[str]]|None = None
+    if mat is not None:
+        order_entries = mat.split(";")
+        split_entries = [oe.split(":") for oe in order_entries]
+        if any(len(entry) != 2 for entry in split_entries):
+            raise Exception(f"Invalid material specifier {mat}")
+        mat_ids = {entry[0].strip(): [m for m in (m.strip() for m in entry[1].split(",")) if m != "m"] for entry in split_entries}
+        missing = [o for o in mat_ids.keys() if o not in orders]
+        if len(missing) > 0:
+            raise Exception(f"Orders {missing} specified in material but not in orders")
     if args.lot is not None:
-        return lot_sink.transfer_append(lot, orders[0], snapshot, user=user)
+        return lot_sink.transfer_append(lot, orders[0], snapshot, user=user, material=mat_ids)
     else:
-        return lot_sink.transfer_new(lot, snapshot, external_id=name, comment=comment, user=user)
+        return lot_sink.transfer_new(lot, snapshot, external_id=name, comment=comment, user=user, material=mat_ids)
 
 def mtp_scenario():
     parser = argparse.ArgumentParser(description="Run a mid-term planning optimization benchmark scenario from a file.")
@@ -1256,7 +1278,7 @@ def mtp_benchmark():
     benchmark = MidTermBenchmark(scenario=scenario.id, iterations=iterations, child_processes=procs, cpu_time=end_time_cpu-start_time_cpu,
                                  wall_time=end_time_wall-start_time_wall, objective=result.best_objective_value,
                                  timestamp=start_datetime, optimizer_id="tabu_search", optimization_parameters=optimizer_params, lots=lots)
-    for_display: dict[str, typing.Any] = benchmark.model_dump()
+    for_display: dict[str, Any] = benchmark.model_dump()
     for_display["lots"] = {p: [json.dumps({l.id: l.orders}) for l in lots] for p, lots in benchmark.lots.items()}
     print(json.dumps(for_display, indent=4, default=str).replace("\"{\\\"", "{\"").replace("\\\"]}\"", "]}").replace("\\\"", "\""))
     return benchmark

@@ -54,5 +54,13 @@
       "5": {"3":  2, "4":  2},
       "6": {"7":  1},
       "7": {"6":  1}
+  },
+  "lot_creation": {
+    "default_iterations": 100,
+    "processes": {
+       "PKL": {"total_size": 75},
+       "CRL": {"total_size": 50},
+       "FIN": {"total_size": 75}
+    }
   }
 }

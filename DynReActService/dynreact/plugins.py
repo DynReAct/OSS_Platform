@@ -3,6 +3,7 @@ import sys
 import traceback
 from typing import Any, Iterator
 
+from dynreact.auth.authentication import get_permission_manager
 from dynreact.base.ConfigurationProvider import ConfigurationProvider
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.DowntimeProvider import DowntimeProvider
@@ -10,6 +11,7 @@ from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo
+from dynreact.base.PermissionManager import PermissionManager
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.ResultsPersistence import ResultsPersistence
@@ -49,6 +51,7 @@ class Plugins:
         self._plant_performance_models: list[PlantPerformanceModel]|None = None
         self._lot_sinks: dict[str, LotSink]|None = None
         self._aggregation_persistence: AggregationPersistence|None = None
+        self._permissions: PermissionManager|None = None
 
     def get_snapshot_provider(self) -> SnapshotProvider:
         if self._snapshot_provider is None:
@@ -168,11 +171,12 @@ class Plugins:
         if self._lot_sinks is None and not if_exists:
             site = self.get_config_provider().site_config()
             sinks = {}
+            permissions = self.get_permission_manager()
             for sink_config in self._config.lot_sinks:
                 if sink_config.startswith("default+file:"):
-                    sink = FileLotSink(sink_config, site)
+                    sink = FileLotSink(sink_config, site, permissions)
                 else:
-                    sink = Plugins._load_module("dynreact.lots.LotSinkImpl", LotSink, sink_config, site)
+                    sink = Plugins._load_module("dynreact.lots.LotSinkImpl", LotSink, sink_config, site, permissions)
                 if sink is not None:
                     sinks[sink.id()] = sink
             self._lot_sinks = sinks
@@ -192,6 +196,11 @@ class Plugins:
                     if self._shifts_provider is None:
                         raise Exception("Shifts provider not found " + self._config.shifts_provider)
         return self._shifts_provider
+
+    def get_permission_manager(self) -> PermissionManager:
+        if self._permissions is None:
+            self._permissions = get_permission_manager(self._config)
+        return self._permissions
 
     def get_plant_performance_models(self) -> list[PlantPerformanceModel]:
         if self._plant_performance_models is None:

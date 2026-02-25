@@ -30,19 +30,23 @@ class DynReActSrvConfig:
     lots_batch_config: str = ""   # TODO option to specify initialization method
     """
     Configuration for periodic batch lot creation processes.
-    Format: <time of day>;<process id1>:<max_iterations>:<max duration>,<process id2>:<max duration>,...[;test] .
+    Format: <time of day>(,append,<max_horizon>);<planning horizon>;<process id1>:<max_iterations>:<max duration>,<process id2>:<max duration>,...[;test] .
     If the `test` flag is set, then the batch job will run once on startup, based on the latest snapshot available. 
     Multiple configs to be separated by a single space. 
-    Examples: 
-        06:00;PROC1:1000:15m,PROC2:250:10m;
-        06:00;PROC1:1000:15m,PROC2:250:10m;test
-        
+        Examples:
+            06:00;P1D;PROC1:1000:PT15M,PROC2:250:PT10M
+            06:00;P1D;PROC1:1000:PT15M,PROC2:250:PT10M;test
+            06:00,mode:append,lh:P5D,sa:PT1H;P1D;PROC1:1000:PT15M,PROC2:250:PT10M;
+            
+        Where lh = lots horizon, sa = snapshot age
     """
     shifts_provider: str = "dummy:default"
     out_directory: str = "./out"
     cors: bool = False
     auth_method: Literal["dummy", "ldap", "ldap_simple"]|None = None
     auth_max_user_length: int = 20
+    auth_view_permission: str|tuple[str]|None=None
+    "Permission required for accessing the frontend"
     ldap_address: str|list[str] = "ldap://localhost:1389"
     # for ldap_simple mode
     ldap_user_extension: str | None = None
@@ -52,6 +56,8 @@ class DynReActSrvConfig:
     ldap_search_base: str|None = None
     ldap_query: str = "(sAMAccountName={user})"
     ldap_use_ssl: bool = False
+    ldap_permissions: dict[str, str]|None=None
+    "Mapping permission name => group distinguished name"
     # expected format: ["dynreact.custom.SomePlantPerformanceModel:uri"],
     # where the first component identifies a class name (sub class of PlantPerformanceModel) and uri may contain
     # model-specific initialization data
@@ -80,6 +86,7 @@ class DynReActSrvConfig:
                  cors: bool|None = None,
                  auth_method: Literal["dummy", "ldap", "ldap_simple"]|None = None,
                  auth_max_user_length: int|None = None,
+                 auth_view_permission: str|tuple[str]|None = None,
                  ldap_user_extension: str | None = None,
                  ldap_address: str|list[str] | None = None,
                  ldap_query_user: str | None = None,
@@ -87,6 +94,7 @@ class DynReActSrvConfig:
                  ldap_search_base: str | None = None,
                  ldap_query: str | None = None,
                  ldap_use_ssl: bool|None = None,
+                 ldap_permissions: dict[str, str]|None=None,
                  plant_performance_models: list[str]|None = None,
                  stp_frontend: str|None = None,
                  time_zone: str | None = None
@@ -159,6 +167,10 @@ class DynReActSrvConfig:
             auth_method = os.getenv("AUTH_METHOD", DynReActSrvConfig.auth_method)
         if auth_max_user_length is None:
             auth_max_user_length = int(os.getenv("AUTH_MAX_USER_LENGTH", DynReActSrvConfig.auth_max_user_length))
+        if auth_method is not None and auth_view_permission is None:
+            auth_view_permission = os.getenv("AUTH_VIEW_PERMISSION")
+            if auth_view_permission is not None and "," in auth_view_permission:
+                auth_view_permission = tuple([perm for perm in (perm.strip() for perm in auth_view_permission.split(",")) if perm != ""])
         if auth_method is not None:
             auth_method = auth_method.lower()
             if auth_method.startswith("ldap"):
@@ -176,9 +188,17 @@ class DynReActSrvConfig:
                         ldap_query = os.getenv("LDAP_QUERY", DynReActSrvConfig.ldap_query)
                 if ldap_use_ssl is None:
                     ldap_use_ssl = os.getenv("LDAP_SSL") is not None and os.getenv("LDAP_SSL").lower() != "false"
+                if ldap_permissions is None:
+                    ldap_permissions0 = os.getenv("LDAP_PERMISSIONS")
+                    if ldap_permissions0 is not None and ldap_permissions0.strip() != "":
+                        permissions: list[tuple[str, str]] = [perms for perms in ((perm[0:perm.index("=")], perm[perm.index("=")+1:])for perm in ldap_permissions0.split(";") if len(perm) > 0)]
+                        if any(len(perms) != 2 for perms in permissions):
+                            raise Exception("Invalid LDAP permissions configuration, need pairs of the form \"PERM_1=DIST_NAME1,PERM_2=DIST_NAME2\", etc")
+                        ldap_permissions = {arr[0]: arr[1] for arr in permissions}
         elif auth_method == "none":
             auth_method = None
         self.auth_method = auth_method
+        self.auth_view_permission = auth_view_permission
         self.auth_max_user_length = auth_max_user_length
         self.ldap_user_extension = ldap_user_extension
         if ldap_address is not None and "," in ldap_address:
@@ -189,6 +209,8 @@ class DynReActSrvConfig:
         self.ldap_query = ldap_query
         self.ldap_search_base = ldap_search_base
         self.ldap_use_ssl = ldap_use_ssl
+        self.ldap_permissions = ldap_permissions
+
         idx = 0
         if plant_performance_models is None:
             plant_performance_models = []

@@ -9,7 +9,7 @@ node {
     env.CONTAINER_NAME_PREFIX = "JENKINS_TEST"
 
     env.SNAPSHOT_VERSION = "2025-01-18T08:00:00Z"
-    env.SCENARIO_4_5_EQUIPMENT = "7" // One Equipment, One Material
+    env.SCENARIO_4_5_EQUIPMENT = "6" // One Equipment, One Material
     env.SCENARIO_6_EQUIPMENT = "7" // One Equipment, Two Material
     env.SCENARIO_7_EQUIPMENTS = "6 7" // Two Equipments, One Material
     env.SCENARIO_8_EQUIPMENTS = "6 7" // Two Equipments, shared material

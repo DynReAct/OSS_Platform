@@ -54,7 +54,8 @@ def test_scenario_00(run_agents_handler_spy):
         "equipments": [],
         "nmaterials": 0,
         "rungagents": 100,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     with patch("dynreact.shortterm.short_term_planning.create_auction", return_value=("DYN_TEST", 0)):
@@ -89,7 +90,8 @@ def test_scenario_01(run_agents_handler_spy):
         "equipments": [],
         "nmaterials": 0,
         "rungagents": 111,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     with patch("dynreact.shortterm.short_term_planning.create_auction", return_value=("DYN_TEST", 0)):
@@ -132,7 +134,8 @@ def test_scenario_02(run_agents_handler_spy):
         "equipments": [],
         "nmaterials": 0,
         "rungagents": 100,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     # Can't really mock a Docker container isolated execution. Luckly tagging ensure a single reference
@@ -156,7 +159,8 @@ def test_scenario_03(run_agents_handler_spy):
         "equipments": ["7"],
         "nmaterials": 1,
         "rungagents": 111,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     # Can't really mock a Docker container isolated execution. Luckly tagging ensure a single reference
@@ -211,10 +215,11 @@ def test_scenario_05():
         "counterbidWait": "15",
         "smallWait": "5",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_4_5_EQUIPMENT", "7").split(" "),
+        "equipments": os.environ.get("SCENARIO_4_5_EQUIPMENT", "6").split(" "),
         "nmaterials": 1,
         "rungagents": 000,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     result = execute_short_term_planning(args)
@@ -243,7 +248,8 @@ def test_scenario_06():
         "equipments": os.environ.get("SCENARIO_6_EQUIPMENT", "7").split(" "),
         "nmaterials": 2,
         "rungagents": 000,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     result = execute_short_term_planning(args)
@@ -274,7 +280,8 @@ def test_scenario_07():
         "equipments": os.environ.get("SCENARIO_7_EQUIPMENTS", "6 7").split(" "),
         "nmaterials": 1,
         "rungagents": 000,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     result = execute_short_term_planning(args)
@@ -305,7 +312,8 @@ def test_scenario_08():
         "equipments": os.environ.get("SCENARIO_8_EQUIPMENTS", "6 7").split(" "),
         "nmaterials": 2,
         "rungagents": 000,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     result = execute_short_term_planning(args)

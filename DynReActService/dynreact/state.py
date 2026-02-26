@@ -244,7 +244,7 @@ class DynReActSrvState:
         for arr in coils_by_order.values():
             arr.sort(key=lambda coil: (coil.current_process if coil.current_process is not None else 10_000, coil.order_position if coil.order_position is not None else 10_000))
         if len(self._coils_by_orders_cache) > self._max_snapshot_caches:
-            first_ts = sorted(list(self._coils_by_orders_cache()))[0]
+            first_ts = sorted(list(self._coils_by_orders_cache))[0]
             self._coils_by_orders_cache.pop(first_ts)
         self._coils_by_orders_cache[snapshot] = coils_by_order
         return dict(coils_by_order)

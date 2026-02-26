@@ -560,11 +560,14 @@ def main():
         "-g", "--rungagents", default='000', type=str,
         help="0 => General agents are not launched; 100 => Material ; 010 => Equipment; 001 => Log; "
     )
-
     ap.add_argument(
         "-sn", "--snapshot", type=str,
         help="Optional snapshot time in ISO8601 format, otherwise use the latest available"
     )
+    ap.add_argument(
+        "-st", "--start_time", dest="start_time", type=str,
+        help="Start time"
+    ) #TODO: add missing args (see __main__.py)
     args = vars(ap.parse_args())
 
     return execute_short_term_planning(args)
@@ -591,6 +594,7 @@ def execute_short_term_planning(args: dict):
     equipments = args["equipments"]
     snapshot = args["snapshot"]
     nmaterials = args["nmaterials"]
+    start_time = args["start_time"]
 
     time_delay = TimeDelay(AUCTION_WAIT=auction_wait, COUNTERBID_WAIT=counterbid_wait,
                            EXIT_WAIT=exit_wait, CLONING_WAIT=cloning_wait, RUNNING_WAIT=running_wait, SMALL_WAIT=small_wait)
@@ -665,10 +669,12 @@ def execute_short_term_planning(args: dict):
 
     results = {}
 
+    equip_configs = {equipment: {'start_date': start_time} for equipment in equipments} if start_time else None
+
     try:
         act, n_agents = create_auction(
             equipments=equipments, producer=producer, verbose=verbose,
-            nmaterials=nmaterials, snapshot=snapshot
+            nmaterials=nmaterials, snapshot=snapshot, equip_configs=equip_configs
         )
 
         print(f"Creating auction for topic {act}")

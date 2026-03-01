@@ -808,7 +808,7 @@ def update_plants(snapshot: str,
             # sort by completeness and lot end time
             lot_entries: list[tuple[Lot, bool, datetime|None]] = sorted([(lot, sp.is_lot_complete(lot), lot.end_time) for lot in current_lots],
                                                                         key=lambda tp: (-1 if tp[1] else 0, now - tp[2] if tp[2] is not None else datetime(year=3000,month=1,day=1, tzinfo=timezone.utc)))
-            value = lot_entries[0][0].id if lot_entries[0][1] else None  # preselect the last lot
+            value = lot_entries[0][0].id if lot_entries[0][1] else None  # preselect the last complete lot
             # This should also work, but it does not => leads to an infinite loop => WHY? => this would allow us to style options differently depending on whether the lot is complete or not
             # "label": html.Span([lot[0].id], title=_lot_info(lot[0]), className="lots2-option-grey" if not lot[1] else "")
             prev_lot = html.Div(

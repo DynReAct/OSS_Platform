@@ -1,7 +1,7 @@
 import logging
 import threading
 import traceback
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Iterable, Any, Literal
 import uuid
 
@@ -389,7 +389,12 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
             return True, None, None, True, None, None, None, None, True
         best_result = result.best_solution
     site = state.get_site()
+    sp = state.get_snapshot_provider()
     plants = {p.id: p for p in site.equipment}
+    process_plants = [p.id for p in site.get_process_equipment(process)]
+    previous_processes: list[str] = [proc.name_short for proc in site.processes if proc.next_steps is not None and process in proc.next_steps]
+    prev_proc_plants = [p.id for p in site.equipment if p.process in previous_processes]
+
     lots: list[Lot] = sorted([lot for plant_lots in best_result.get_lots().values() for lot in plant_lots],
                              key=lambda lot: (plants.get(lot.equipment).name_short if lot.equipment in plants else "ZZ", lot.id))
     unassigned_order_ids: list[str] = [ass.order for ass in best_result.order_assignments.values() if ass.lot == ""]
@@ -473,6 +478,9 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
     value_formatter_object = {"function": "formatCell(params.value, 2, 4)"}
     fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True, "filter": "agTextColumnFilter"},
                 {"field": "equipment", "headerTooltip": "Current equipment location of the order"},
+                {"field": "previous_lot", "headerTooltip": "The lot at the previous process stage, if any."},
+                {"field": "availability", "headerTooltip": "Order availability, determined by the lot at the previous process stage."},
+                {"field": "existing_lot", "headerTooltip": "The existing lot at the planned process stage, if any."},
                 {"field": "costs", "headerTooltip": "Transition costs from previous order.", "valueFormatter": value_formatter_object},
                 {"field": "weight", "headerTooltip": "Order weight in tons.", "valueFormatter": value_formatter_object },
                 {"field": "due_date", "headerTooltip": "Order due date." },
@@ -496,6 +504,25 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         as_dict["priority"] = o.priority
         if o.current_equipment is not None:
             as_dict["equipment"] = ", ".join([plants[p].name_short or str(plants[p]) for p in o.current_equipment])
+        if o.lots is not None:
+            all_lots = snap_obj.lots
+            if process in o.lots:
+                lt = o.lots[process]
+                existing_lt_obj = next((lt_obj for plant in process_plants if plant in all_lots for lt_obj in all_lots[plant] if lt_obj.id == lt), None)
+                as_dict["existing_lot"] = _lot_info(existing_lt_obj) if existing_lt_obj is not None else lt
+            all_prev_lots: list[str] = [o.lots[proc] for proc in previous_processes if proc in o.lots]
+            all_prev_lot_objs: list[Lot] = [lt_obj for plant in prev_proc_plants if plant in all_lots for lt_obj in all_lots[plant] if lt_obj.id in all_prev_lots]
+            now = DatetimeUtils.now()
+            lot_entries: list[tuple[Lot, bool, datetime|None]] = sorted([(lot, sp.is_lot_complete(lot), lot.end_time) for lot in all_prev_lot_objs],
+                                                                        key=lambda tp: (-1 if tp[1] else 0, now - tp[2] if tp[2] is not None else datetime(year=3000,month=1,day=1, tzinfo=timezone.utc)))
+            last_lot = lot_entries[0][0] if len(lot_entries) > 0 and lot_entries[0][1] else None  # preselect the last complete lot
+            if last_lot is not None:
+                prev_proc = site.get_equipment(last_lot.equipment, do_raise=True).process
+                as_dict["previous_lot"] = _lot_info(last_lot)
+                timings = sp.get_order_lot_times(snap_obj.timestamp, o.id)
+                if timings is not None and len(timings) > 0 and prev_proc in timings.get(o.id, {}):
+                    as_dict["availability"] = DatetimeUtils.format(timings.get(o.id).get(prev_proc).end.astimezone(), use_zone=False)
+
         if lot is None:
             as_dict["unassigned"] = True
             return as_dict
@@ -875,6 +902,20 @@ clientside_callback(
     Input("lotplanning-transfer-type", "data"),
     State("lotplanning-transfer-grid", "id"),
 )
+
+
+def _lot_info(lot: Lot) -> str:
+    result = f"{lot.id} [status={lot.status}, active={lot.active}"
+    if lot.status > 1 and lot.end_time is not None:
+        result += f", ends={DatetimeUtils.format(lot.end_time.astimezone(), use_zone=False)}"
+    if hasattr(lot, "priority"):
+        result += f", priority={getattr(lot, 'priority')}"
+    if lot.weight is not None:
+        result += f", weight={lot.weight:.2f} t"
+    if lot.comment is not None:
+        result += f", comment={lot.comment}"
+    result += "]"
+    return result
 
 
 class LotTransferThread(threading.Thread):

@@ -7,6 +7,7 @@ from dynreact.shortterm.common import purge_topics, KeySearch
 from dynreact.shortterm.common.handler import DockerManager
 from dynreact.shortterm.short_term_planning import execute_short_term_planning
 from dynreact.shortterm.shorttermtargets import ShortTermTargets
+from dynreact.shortterm.common.data.data_setup import DataSetup
 
 KeySearch.set_global(config_provider=ShortTermTargets())
 topic_gen = KeySearch.search_for_value("TOPIC_GEN")
@@ -173,7 +174,7 @@ def test_scenario_04():
     """Test the return value of short_term_planning() locally."""
 
     args = {
-        "verbose": 3,
+        "verbose": 4,
         "runningWait": "10",
         "cloningWait": "30",
         "auctionWait": "50",
@@ -185,6 +186,13 @@ def test_scenario_04():
         "rungagents": 111,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
     }
+
+    if args.get("verbose") == 4:
+        test_data_setup = DataSetup(verbose=args['verbose'], snapshot_time=args['snapshot'])
+        print(f"------ DEBUG VERBOSE 4 ------")
+        print(f"Snapshot version: {args['snapshot']}")
+        print(f"Contenido completo del Snapshot: {test_data_setup.last_snapshot_data}")
+
 
     result = execute_short_term_planning(args)
 

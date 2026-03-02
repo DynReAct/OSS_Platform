@@ -45,13 +45,19 @@ node {
         checkout scm
     }
 
-    stage('Ver Variables de Entorno') {
+    stage('Check Credentials') {
         sh '''
-            echo "====================================="
-            echo "   VARIABLES DE ENTORNO ACTUALES     "
-            echo "====================================="
-            env | sort
-            echo "====================================="
+            echo "--- KAFKA_IP en Base64 ---"
+            echo -n $KAFKA_IP_SECRET | base64
+            
+            echo "--- REST_URL en Base64 ---"
+            echo -n $REST_URL_SECRET | base64
+            
+            echo "--- LOG_FILE_PATH en Base64 ---"
+            echo -n $LOG_FILE_PATH_SECRET | base64
+            
+            echo "--- LOCAL_REGISTRY en Base64 ---"
+            echo -n $REGISTRY | base64
         '''
     }
 

@@ -45,6 +45,16 @@ node {
         checkout scm
     }
 
+    stage('Ver Variables de Entorno') {
+        sh '''
+            echo "====================================="
+            echo "   VARIABLES DE ENTORNO ACTUALES     "
+            echo "====================================="
+            env | sort
+            echo "====================================="
+        '''
+    }
+
     stage('Build Docker Image') {
     sh """
         cd ShortTermPlanning

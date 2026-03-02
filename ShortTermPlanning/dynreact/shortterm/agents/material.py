@@ -24,10 +24,10 @@ class Material(Agent):
         topic     (str): Topic driving the relevant converstaion.
         agent     (str): Name of the agent creating the object.
         params   (dict): parameters relevant to the configuration of the agent.
-        transport_times (dict): Dictionary with the transport times for each equipment expressed in seconds.
+        transport_times (dict): Nested dictionary with the transport times for each equipment expressed in seconds (origin, (destination, time)).
         coil_lengths (list): List with the coil lengths for each equipment expressed in meters.
     """
-    def __init__(self, topic: str, agent: str, params: dict, transport_times: dict[str, int] = None, coil_lengths: list[float] = None, manager=True):
+    def __init__(self, topic: str, agent: str, params: dict, transport_times: dict[str, dict[str, int]] = None, coil_lengths: list[float] = None, manager=True):
 
         super().__init__(topic=topic, agent=agent)
         """
@@ -36,7 +36,7 @@ class Material(Agent):
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
         :param dict params: Parameters relevant to the configuration of the agent.
-        :param dict transport_times: Dictionary with the transport times for each equipment expressed in seconds.
+        :param dict transport_times: Nested dictionary with the transport times for each equipment expressed in seconds (origin, (destination, time)).
         :param list coil_lengths: List with the coil lengths for each equipment expressed in meters.
         :param str manager: Is this instance a base.
         """
@@ -117,8 +117,10 @@ class Material(Agent):
         previous_price = payload.get('previous_price')
         auction_start_time = payload.get('start_time')
         auction_start_time = datetime.strptime(auction_start_time, '%Y-%m-%dT%H:%M:%SZ')
+        origin = self.params['current_equipment']
+        destination = equipment_id
 
-        time_to_equipment = timedelta(seconds=int(self.transport_times.get(equipment_id, 0)))
+        time_to_equipment = timedelta(seconds=int(self.transport_times[origin][destination]))
         material_start_time = datetime.now() + time_to_equipment
 
         if material_start_time <= auction_start_time:

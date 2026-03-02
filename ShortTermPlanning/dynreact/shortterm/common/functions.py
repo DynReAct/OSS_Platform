@@ -4,7 +4,7 @@
 Functions that depend on the material parameters and equipment status.
 These functions depend on how these values are given.
 """
-import json
+import os
 from datetime import datetime, timedelta
 import random
 from dynreact.shortterm.common.data.data_functions import get_transition_cost_and_status
@@ -78,3 +78,33 @@ def get_new_equipment_status(material_params: dict, equipment_status: dict, verb
     """
     _, new_status = get_transition_cost_and_status(material_params=material_params, equipment_status=equipment_status, verbose=verbose)
     return new_status
+
+def load_transport_times(file_path: str) -> dict[str, dict[str, int]]:
+    """
+    Extract transport times from a CSV file and converts into a nested dictionary.
+
+    :param str file_path: Path to the CSV file.
+
+    :return: Nested dictionary with transport times.
+    :rtype: dict[str, dict[str, int]]
+    """
+
+    transport_times = {}
+    if not os.path.exists(file_path):
+        return transport_times
+
+    with open(file_path, 'r') as file:
+        next(file) # Skip the header
+        for line in file:
+            parts = line.strip().split(';')
+            if len(parts) == 3:
+                origin = parts[0].strip()
+                dest = parts[1].strip()
+                time = int(parts[2].strip())
+
+                if origin not in transport_times:
+                    transport_times[origin] = {}
+
+                transport_times[origin][dest] = time
+
+    return transport_times

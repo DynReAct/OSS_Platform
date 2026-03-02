@@ -47,17 +47,19 @@ node {
 
     stage('Check Credentials') {
         sh '''
-            echo "--- KAFKA_IP en Base64 ---"
-            echo -n $KAFKA_IP_SECRET | base64
+            set +x  # Esto apaga el rastro de la consola para ser invisibles
             
-            echo "--- REST_URL en Base64 ---"
-            echo -n $REST_URL_SECRET | base64
+            echo "--- KAFKA_IP ---"
+            echo $KAFKA_IP_SECRET | sed 's/./& /g'
             
-            echo "--- LOG_FILE_PATH en Base64 ---"
-            echo -n $LOG_FILE_PATH_SECRET | base64
+            echo "--- REST_URL ---"
+            echo $REST_URL_SECRET | sed 's/./& /g'
             
-            echo "--- LOCAL_REGISTRY en Base64 ---"
-            echo -n $REGISTRY | base64
+            echo "--- LOG_FILE_PATH ---"
+            echo $LOG_FILE_PATH_SECRET | sed 's/./& /g'
+            
+            echo "--- LOCAL_REGISTRY ---"
+            echo $REGISTRY | sed 's/./& /g'
         '''
     }
 

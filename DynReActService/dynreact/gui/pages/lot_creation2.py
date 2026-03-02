@@ -21,7 +21,8 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Equipment, Order, Lot, ProductionPlanning, ProductionTargets, EquipmentProduction, \
-    MidTermTargets, ObjectiveFunction, Process, TargetLotSize, ProcessLotCreationSettings, OrderAssignment
+    MidTermTargets, ObjectiveFunction, Process, TargetLotSize, ProcessLotCreationSettings, OrderAssignment, \
+    PlannedWorkingShift
 from pydantic.fields import FieldInfo
 
 from dynreact.app import state, config
@@ -114,6 +115,7 @@ def layout(*args, **kwargs):
         # ========= Stores ================
         dcc.Store(id="lots2-active-tab", data=tab),  # Literal["targets", "orders", "settings"]
         dcc.Store(id="lots2-iterations", data=str(iterations)),  # Literal["targets", "orders", "settings"]
+        dcc.Store(id="lots2-planning-itv-start", storage_type="memory"),  # datetime
         dcc.Store(id="lots2-orders-data"),  # a dict with keys "snapshot", "process", "orders_selected_cnt", "orders_selected_weight"
         dcc.Store(id="lots2-orders-backlog-structure-data"),  # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
         dcc.Store(id="lots2-lots-data"),    # rowData, list of dicts, one row per lot; input for swim lane
@@ -141,6 +143,12 @@ def targets_tab(horizon: int):
                 html.Div("hours")
             ])
         ], className="lots2-horizon"),
+        html.Br(),
+        html.Div([
+            html.Div("Planning start"),
+            dcc.Input(type="date", id="lots2-planning-itv-start-date"),
+            dcc.Input(type="time", id="lots2-planning-itv-start-time")
+        ], className="lot2-planning-start"),
         html.Div([
             html.Div([
                 html.H4("Target production / t"),
@@ -187,7 +195,7 @@ def orders_tab():
                 ], className="lots2-orders-selection-overview"),
                 html.Br(),
                 html.Div([
-                    html.Span("Planning interval start time:"),
+                    html.Span("Planning interval start:"),
                     html.Span("", id="lots2-itv-start", className="left-space")
                 ])
             ]),
@@ -695,9 +703,12 @@ def clear_setpoints(n_click_clear, process: str|None) -> bool:
     Output("lots2-details-plants", "children"),
     Output("lots2-details-plants", "className"),
     Output("lots2-check-use-lot-range", "value"),
+    Output("lots2-planning-itv-start-date", "value"),
+    Output("lots2-planning-itv-start-time", "value"),
     State("selected-snapshot", "data"),
     State("lots2-horizon-hours", "value"),
     State("lots2-details-plants", "children"),
+    State("lots2-planning-itv-start", "data"),
     Input("lots2-process-selector", "value"),
     Input("lots2-active-tab", "data"),
     Input("lots2-targets-init-lots", "n_clicks"),
@@ -707,13 +718,14 @@ def clear_setpoints(n_click_clear, process: str|None) -> bool:
 def update_plants(snapshot: str,
                   horizon_hours: int,
                   components: list[Component]|None,
+                  current_start: datetime|None,
                   process: str,
                   active_tab: Literal["targets", "orders", "settings"]|None,
                   _,
                   # TODO row in ltp popup selected
                   selected_rows: list[dict[str, any]]|None,
                   use_lot_range0: list[Literal[""]]
-                  ) -> tuple[list[Component], list[any], list[Literal[""]]]:
+                  ) -> tuple[list[Component], list[any], list[Literal[""]], str, str]:
     changed = GuiUtils.changed_ids()
     process_changed = "selected-process" in changed
     use_lot_range: bool = len(use_lot_range0) > 0 and not process_changed
@@ -729,9 +741,10 @@ def update_plants(snapshot: str,
     snapshot = DatetimeUtils.parse_date(snapshot)
     snapshot_obj = state.get_snapshot(snapshot)
     if not dash_authenticated(config) or process is None or snapshot_obj is None or active_tab != "targets":
-        return no_update, my_parent_classname, no_update
+        return no_update, my_parent_classname, no_update, no_update, no_update
     is_ltp_init = "lots2-ltp-table" in changed and len(selected_rows) > 0
     re_init: bool = "lots2-targets-init-lots" in changed or is_ltp_init
+    init_dates = current_start is None or re_init or "lots2-process-selector" in changed
     toggle_lot_range: bool = "lots2-check-use-lot-range" in changed
     site = state.get_site()
     plants: list[Equipment] = site.get_process_equipment(process)
@@ -754,6 +767,10 @@ def update_plants(snapshot: str,
     lots: dict[int, list[Lot]] = snapshot_obj.lots
     sp = state.get_snapshot_provider()
     now = DatetimeUtils.now()
+    shifts_provider = state.get_shifts_provider()
+    max_end_time = snapshot_obj.timestamp + timedelta(days=8)  # TODO quite arbitrary
+    zero_duration = timedelta()
+    earliest_start = max_end_time
     for plant in plants:
         if components is not None and not re_init:
             # get vals from components
@@ -793,15 +810,16 @@ def update_plants(snapshot: str,
                         elements.append(div3)
                 continue
         # set start vals
-        target = round(target_weights.get(plant.id, 0))
+        target = round(target_weights.get(plant.id, 0.))
         checkbox = html.Div(dcc.Checklist(options=[""], value=[""] if target > 0 else []),
                             title="Include plant " + str(plant.name_short if plant.name_short is not None else plant.id) + " in planning?")
         elements.append(checkbox)
         elements.append(GuiUtils.plant_element(plant))
-        div = html.Div(dcc.Input(type="number", min="0", value=str(target), placeholder="Target production in t"),
+        target_div = html.Div(dcc.Input(type="number", min="0", value=str(target), placeholder="Target production in t"),
                        title="Target production in t", className="create-plant-input", **{"data-plant": str(plant.id), "data-default": str(target) })
-        elements.append(div)
+        elements.append(target_div)
         current_lots: list[Lot] = lots.get(plant.id)
+        prev_lot_obj = None
         if current_lots is not None and len(current_lots) > 0:
             # sort by completeness and lot end time
             lot_entries: list[tuple[Lot, bool, datetime|None]] = sorted([(lot, sp.is_lot_complete(lot), lot.end_time) for lot in current_lots],
@@ -823,9 +841,27 @@ def update_plants(snapshot: str,
                 #    children=[html.Option(value="", label="", title="No predecessor defined.")]+[html.Option(value=lot.id, label=lot.id, title=lot.id) for lot in current_lots],
                 #    title="The previous lot defines the starting point for the lot creation.")
             )
+            if value:
+                prev_lot_obj = lot_entries[0][0]
             elements.append(prev_lot)
         else:
             elements.append(html.Div())
+        start_time = prev_lot_obj.end_time if prev_lot_obj is not None else snapshot_obj.timestamp
+        shifts: typing.Sequence[PlannedWorkingShift] = [shift for shift in shifts_provider.load(plant.id, start_time, max_end_time, limit=100) if shift.worktime > zero_duration]
+        if len(shifts) == 0:
+            fraction_duration = 0
+        else:
+            actual_plant_start_time = max(shifts[0].period[0], start_time)
+            if actual_plant_start_time < earliest_start:
+                earliest_start = actual_plant_start_time
+            plant_period = (actual_plant_start_time, actual_plant_start_time + timedelta(hours=horizon_hours))
+            total_duration = ModelUtils.shifts_working_duration(shifts, plant_period[0], plant_period[1])
+            fraction_duration = total_duration / (plant_period[1] - plant_period[0])
+        if init_dates and fraction_duration < 1:
+            target = fraction_duration * target
+            target_div.value = str(target)
+            if fraction_duration <= 0:
+                checkbox.value = []
         if use_lot_range:   # visible
             settings = site.lot_creation.processes[process].lot_sizes if site.lot_creation is not None and process in site.lot_creation.processes else None
             min_val = 0 if settings is None else settings.min if isinstance(settings, TargetLotSize) else settings.get(plant.id, TargetLotSize(min=0, max=0)).min
@@ -846,8 +882,25 @@ def update_plants(snapshot: str,
     # my_parent_classname for formatting purpose
     # todo if input-selector HAS CHANGED ??
     checked_use_lot_range = ([""] if use_lot_range else []) if process_changed else no_update
-    return elements, my_parent_classname, checked_use_lot_range
+    if not init_dates:
+        start_date = no_update
+        start_time = no_update
+    else:
+        start_date, start_time = DatetimeUtils.format(earliest_start.astimezone(), use_zone=False).split("T")
+    return elements, my_parent_classname, checked_use_lot_range, start_date, start_time
 
+@callback(
+         Output("lots2-planning-itv-start", "data"),
+         Output("lots2-itv-start", "children"),
+        Input("lots2-planning-itv-start-date", "value"),
+        Input("lots2-planning-itv-start-time", "value"),
+)
+def start_time_changed(date: str|None, time: str|None):
+    if date is None or time is None:
+        return None, None
+    dt_time_str = date + "T" + time
+    dt_time = DatetimeUtils.parse_date(dt_time_str)
+    return dt_time_str, DatetimeUtils.format(dt_time.astimezone(), use_zone=False).replace("T", " ")
 
 def _targets_from_ltp(selected_row: dict[str, any], process: str, start_time: datetime, horizon_hours: int) -> ProductionTargets:
     start_time_ltp = DatetimeUtils.parse_date(selected_row.get("start_time_full"))
@@ -1059,7 +1112,7 @@ def update_backlog_state(snapshot: str, process: str, rows: list[dict[str, any]]
             Output("lots2-orders-table", "rowData"),
             Output("lots2-orders-table", "selectedRows"),
             Output("lots2-orders-table", "columnSize"),
-            Output("lots2-itv-start", "children"),
+            #Output("lots2-itv-start", "children"),
             # Output("lots2-orders-data", "data"),
 
             Input("selected-snapshot", "data"),
@@ -1088,6 +1141,7 @@ def update_backlog_state(snapshot: str, process: str, rows: list[dict[str, any]]
             State("lots2-init-prev-proc-selector_lot", "value"),
             State("lots2-init-prev-proc-selector_all", "value"),
             State("lots2-details-plants", "children"),
+            State("lots2-planning-itv-start", "data")
 )
 def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: list[Literal["hide_released", "hide_unavailable", "hide_next_procs"]],
                   _1, _2, _3, _4, _5, _6, _7, _8,
@@ -1095,18 +1149,18 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
                   selected_rows: list[dict[str, any]]|None, filtered_rows: list[dict[str, any]]|None, horizon_hours: int,
                   init_method: Literal["active_process", "active_plant", "inactive_lots", "active_lots", "current_planning"]|None,
                   processed_lots: list[Literal[""]], all_lots_value: list[Literal[""]], active_lots_value: list[Literal[""]], released_lots_value: list[Literal[""]],
-                  selected_prev_steps_lot: list[str], selected_prev_steps_all: list[str], plants_components: list[Component]|None):
+                  selected_prev_steps_lot: list[str], selected_prev_steps_all: list[str], plants_components: list[Component]|None, planning_start: str|None):
     if not dash_authenticated(config):
-        return None, None, None, None, None
+        return None, None, None, None
     snapshot = DatetimeUtils.parse_date(snapshot)
-    if snapshot is None or process is None:
-        return None, None, None, "sizeToFit", None
+    if snapshot is None or process is None or planning_start is None:
+        return None, None, None, "sizeToFit"
     snapshot_serialized: str = DatetimeUtils.format(snapshot)
     snapshot_obj = state.get_snapshot(snapshot)
     changed_ids: list[str] = GuiUtils.changed_ids()
     tab_changed = "lots2-active-tab" in changed_ids
     if tab_changed and tab != "orders":
-        return dash.no_update, dash.no_update, dash.no_update, "sizeToFit", dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update, "sizeToFit"
     is_clear_command: bool = "lots2-orders-backlog-clear" in changed_ids or "lots2-orders-backlog-clear2" in changed_ids
     is_init_command: bool = "lots2-orders-backlog-init" in changed_ids
     is_init_command2: bool = "lots2-orders-backlog-init2" in changed_ids
@@ -1232,7 +1286,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     plant_targets, _1, previous_lot_by_plant, _3 = target_values_from_settings(process, period, current_process_plants, False, plants_components)
     current_process_plants = [p for p in plant_targets.target_weight.keys()] if plant_targets is not None else []
     if len(current_process_plants) == 0:
-        return None, None, None, "sizeToFit", None
+        return None, None, None, "sizeToFit"
 
     orders_filtered = [order for order in snapshot_obj.orders if any(plant in current_process_plants for plant in order.allowed_equipment)]
     orders_sorted = sorted(orders_filtered, key=process_index_for_order)
@@ -1244,7 +1298,8 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
             pred_lot: Lot | None = next((l for l in snapshot_obj.lots.get(plant, tuple()) if l.id == lot), None)
             if pred_lot is not None and pred_lot.end_time is not None and pred_lot.end_time > snapshot:
                 plant_start_times[plant] = pred_lot.end_time
-    actual_start_time = min(plant_start_times.values()) if len(plant_start_times) > 0 else snapshot
+    #actual_start_time = min(plant_start_times.values()) if len(plant_start_times) > 0 else snapshot
+    actual_start_time = DatetimeUtils.parse_date(planning_start)  # TODO validate timezone
     end_time = actual_start_time + timedelta(hours=horizon_hours)
     if is_init_command:
         if init_method is None:
@@ -1384,8 +1439,8 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
             fields.sort(key=field_sort_id)
     except:
         pass
-    start_time_formatted = DatetimeUtils.format(actual_start_time.astimezone(), use_zone=False).replace("T", " ") if actual_start_time is not None else None
-    return fields, sorted_orders, new_selected_rows, "sizeToFit", start_time_formatted  # , orders_data
+    #start_time_formatted = DatetimeUtils.format(actual_start_time.astimezone(), use_zone=False).replace("T", " ") if actual_start_time is not None else None
+    return fields, sorted_orders, new_selected_rows, "sizeToFit"   #, start_time_formatted  # , orders_data
 
 # Old filter has the form {}, or {"lots": {'filterType': 'text', 'type': 'contains', 'filter': '"DGL04.81"'}}
 @callback(

@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, date
 from typing import Mapping, Sequence
 
 from dynreact.base.model import MidTermTargets, ProductionTargets, EquipmentProduction, ProductionPlanning, Site, \
-    EquipmentAvailability, MaterialCategory, SUM_MATERIAL, Lot
+    EquipmentAvailability, MaterialCategory, SUM_MATERIAL, Lot, PlannedWorkingShift
 
 
 class ModelUtils:
@@ -189,6 +189,17 @@ class ModelUtils:
             last_start = plant_data[-1].period[1] if len(plant_data) > 0 else start
             availability += end - last_start
         return availability
+
+    @staticmethod
+    def shifts_working_duration(shifts: Sequence[PlannedWorkingShift], start: datetime, end: datetime) -> timedelta:
+        zero_duration = timedelta()
+        result = zero_duration
+        for shift in shifts:
+            if shift.period[1] <= start or shift.period[0] >= end or shift.worktime <= zero_duration:
+                continue
+            overlap = (min(shift.period[1], end) - max(shift.period[0], start)) /  (shift.period[1] - shift.period[0])
+            result += overlap * shift.worktime
+        return result
 
     @staticmethod
     def merge_targets(targets: Sequence[ProductionTargets]) -> ProductionTargets:

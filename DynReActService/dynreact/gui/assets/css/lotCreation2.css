@@ -201,6 +201,12 @@
     max-width: 5em;
 }
 
+.lot2-planning-start {
+    display: flex;
+    column-gap: 0.5em;
+
+}
+
 /* In structure portfolio popup */
 
 .lots2-weight-total2 {

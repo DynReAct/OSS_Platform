@@ -510,7 +510,7 @@ def init_calendar(selected_plant: int|None, _, start_time: datetime|str, horizon
     changed = GuiUtils.changed_ids()
     if "ltp-calendar-clear" in changed:
         availabilities.delete(selected_plant, start, end)
-        return None, None
+        #return None, None
     av: list[EquipmentAvailability] = availabilities.load(selected_plant, start, end)
     av_json = TypeAdapter(list[EquipmentAvailability]).dump_json(av).decode("utf-8")
     start_dt, end_dt = _date_range_to_datetime(start, end)
@@ -610,12 +610,13 @@ def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
 
 
 @callback(Output("ltp-init-availabilities-result", "children"),
-            Input("ltp-availability-buffer", "data"),  # FIXME are we sure the persistence method is triggered first?
-            State("ltp-start-time", "value"),
-            State("ltp-horizon-weeks", "value")
+            Input("ltp-plants-graph", "stylesheet"),  # this is triggered by a change in ltp-availability-buffer.data
+            Input("ltp-plant-availability", "data"),  # triggered by calendar-clear => update upon clearing the calendar
+            Input("ltp-start-time", "value"),
+            Input("ltp-horizon-weeks", "value")
 )
 # TODO currently returns a flat structure, i.e. one div per plant. Better: make it a grid, with 2 divs per plant, also divide between 3 or so columns
-def set_initial_availabilities(_: Any, start_time: datetime|str, horizon: str|int):
+def set_initial_availabilities(_: Any, __: Any, start_time: datetime|str, horizon: str|int):
     persistence = state.get_availability_persistence()
     start, end = _get_start_end_time(start_time, horizon)
     if start is None or end is None:
@@ -730,6 +731,7 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
                      total_production: float|str|None):
     if not dash_authenticated(config):
         return None
+    horizon_weeks = int(horizon_weeks)
     is_running, new_solution_id = check_running_optimization()
     total_amount = _get_total_selected_amount(setpoints)
     changed_ids = GuiUtils.changed_ids()

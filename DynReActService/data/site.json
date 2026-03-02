@@ -15,18 +15,18 @@
     "name": "Finishing"
   }],
   "equipment": [
-    {"id": 1, "name_short": "PKL01", "process":  "PKL", "storage_in": "A", "storage_out": "B"},
-    {"id": 2, "name_short": "PKL02", "process":  "PKL", "storage_in": "A", "storage_out": "B"},
-    {"id": 3, "name_short": "CRL01", "process":  "CRL", "storage_in": "B", "storage_out": "C"},
-    {"id": 4, "name_short": "CRL02", "process":  "CRL", "storage_in": "B", "storage_out": "C"},
-    {"id": 5, "name_short": "CRL03", "process":  "CRL", "storage_in": "B", "storage_out": "C"},
-    {"id": 6, "name_short": "FIN01", "process":  "FIN", "storage_in": "C", "storage_out": "DONE"},
-    {"id": 7, "name_short": "FIN02", "process":  "FIN", "storage_in": "C", "storage_out": "DONE"}
+    {"id": 1, "name_short": "PKL01", "process":  "PKL", "storage_in": "A", "storage_out": "B", "throughput_capacity": 90},
+    {"id": 2, "name_short": "PKL02", "process":  "PKL", "storage_in": "A", "storage_out": "B", "throughput_capacity": 80},
+    {"id": 3, "name_short": "CRL01", "process":  "CRL", "storage_in": "B", "storage_out": "C", "throughput_capacity": 60},
+    {"id": 4, "name_short": "CRL02", "process":  "CRL", "storage_in": "B", "storage_out": "C", "throughput_capacity": 50},
+    {"id": 5, "name_short": "CRL03", "process":  "CRL", "storage_in": "B", "storage_out": "C", "throughput_capacity": 60},
+    {"id": 6, "name_short": "FIN01", "process":  "FIN", "storage_in": "C", "storage_out": "DONE", "throughput_capacity": 80},
+    {"id": 7, "name_short": "FIN02", "process":  "FIN", "storage_in": "C", "storage_out": "DONE", "throughput_capacity": 80}
   ],
   "storages": [
-    {"name_short": "A", "equipment":  [1, 2]},
-    {"name_short": "B", "equipment":  [3, 4, 5]},
-    {"name_short": "C", "equipment":  [6, 7]},
+    {"name_short": "A", "equipment":  [1, 2], "capacity_weight": 4000},
+    {"name_short": "B", "equipment":  [3, 4, 5], "capacity_weight": 4000},
+    {"name_short": "C", "equipment":  [6, 7], "capacity_weight": 4000},
     {"name_short": "DONE", "equipment":  []}
   ],
   "material_categories": [

@@ -49,6 +49,7 @@ class FileAvailabilityPersistence(PlantAvailabilityPersistence):
         json_str = availability.model_dump_json(exclude_unset=True, exclude_none=True)
         with open(new_file, "w", encoding="utf-8") as file:
             file.write(json_str)
+        FileAvailabilityPersistence._parse_file.cache_clear()
 
     def delete(self, plant: int, start: date, end: date) -> bool:
         folder = self._get_folder_plant(plant)
@@ -64,6 +65,8 @@ class FileAvailabilityPersistence(PlantAvailabilityPersistence):
                 found = True
             elif dt > end:
                 break
+        if found:
+            FileAvailabilityPersistence._parse_file.cache_clear()
         return found
 
     def load(self, plant: int, start: date, end: date) -> list[EquipmentAvailability]:

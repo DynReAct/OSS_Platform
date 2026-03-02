@@ -183,14 +183,18 @@ def orders_tab():
                 html.H4("Order backlog", title="Select orders for scheduling from the order backlog."),
 
                 html.Div([
-                    html.Div("Selected orders:"),
-                    html.Div(id="lots2-orders-backlog-count", className="left-space"),
-                    html.Div(", total weight:"),
-                    html.Div(id="lots2-orders-backlog-weight-acc", className="left-space"),
-                    html.Div("t (target:"),
-                    html.Div(id="lots2-orders-backlog-target-weight", className="left-space"),
-                    html.Div("t)")
+                    html.Span("Selected orders:"),
+                    html.Span(id="lots2-orders-backlog-count", className="left-space"),
+                    html.Span(", total weight:"),
+                    html.Span(id="lots2-orders-backlog-weight-acc", className="left-space"),
+                    html.Span("t (target:"),
+                    html.Span(id="lots2-orders-backlog-target-weight", className="left-space"),
+                    html.Span("t)")
                 ], className="lots2-orders-selection-overview"),
+                html.Div([
+                    html.Span("Planning interval start time:"),
+                    html.Span("", id="lots2-itv-start")  # TODO
+                ])
             ]),
             html.Div([
                 html.Div([
@@ -1159,6 +1163,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     # FIXME tooltipField not working?
     fields.append({"field": "lot_info", "headerName": "Lot", "tooltipField": "lot_info", "headerTooltip": "Lot of the selected processing stage", "filter":  "agTextColumnFilter"})
     fields.append({"field": "prev_lot_info", "headerName": "Lot: previous", "tooltipField": "prev_lot_info", "headerTooltip": "Lot of the previous processing stage", "filter": "agTextColumnFilter"})
+    fields.append({"field": "availability", "headerTooltip": "Order availability", "filter": "agDateColumnFilter"})
 
     def order_to_json(o: Order):
         as_dict = o.model_dump(exclude_none=True, exclude_unset=True)
@@ -1180,6 +1185,12 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
             prev_lot = snapshot_obj.get_order_lot(site, o.id, proc)
             if prev_lot is not None:
                 as_dict["prev_lot_info"] = _lot_info(prev_lot)
+                lt_times = snapshot_provider.get_order_lot_times(snapshot_obj.timestamp, o.id)
+                if lt_times is not None and o.id in lt_times:
+                    prev_proc = site.get_equipment(prev_lot.equipment, do_raise=True).process
+                    if prev_proc in lt_times[o.id]:
+                        av = DatetimeUtils.format(lt_times[o.id][prev_proc].end.astimezone(), use_zone=False).replace("T", " ")
+                        as_dict["availability"] = av
                 break
         return as_dict
 
@@ -1340,10 +1351,12 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
                 if field_id in relevant_fields and next((o for o in first_orders if o.get(_id) is not None), None) is not None:
                     return relevant_fields.index(field_id)
                 if field_id == "current_equipment":
-                    return -3
+                    return -4
                 if field_id == "lot_info":
-                    return -2
+                    return -3
                 if field_id == "prev_lot_info":
+                    return -2
+                if field_id == "availability":
                     return -1
                 return 1000
             fields.sort(key=field_sort_id)

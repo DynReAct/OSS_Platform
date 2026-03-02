@@ -342,7 +342,7 @@ class SnapshotProvider:
                 prev_lot: str|None = order.lots.get(prev_proc, None)
                 if prev_lot is not None:
                     lt = lots_by_ids.get(prev_lot)
-                    if lt is None or lt.status < 3:  # not definitely scheduled yet
+                    if lt is None or not self.is_lot_complete(lt):  # not definitely scheduled yet
                         continue
                     first_start_time = lt.end_time   # first we check the overall lot time
                     if first_start_time is not None:
@@ -353,8 +353,8 @@ class SnapshotProvider:
                         elif lt.start_time is not None and lt.start_time + trsp < planning_horizon[0]:  # case 2: look at order-specific execution time, if the lot starts in time to be considered, at least
                             try:
                                 times_dct = self.get_order_lot_times(snapshot=snapshot.timestamp, order=order.id)
-                                if times_dct is not None:
-                                    times: LotTimes = times_dct.get(order.id).get(process)
+                                if times_dct is not None and len(times_dct) > 0:
+                                    times: LotTimes = times_dct.get(order.id).get(prev_proc)
                                     first_start_time = times.end + trsp
                                     if first_start_time <= planning_horizon[0]:
                                         applicable_orders.append(order.id)

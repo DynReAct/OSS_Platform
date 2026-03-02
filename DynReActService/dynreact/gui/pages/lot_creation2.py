@@ -899,8 +899,9 @@ def start_time_changed(date: str|None, time: str|None):
     if date is None or time is None:
         return None, None
     dt_time_str = date + "T" + time
-    dt_time = DatetimeUtils.parse_date(dt_time_str)
-    return dt_time_str, DatetimeUtils.format(dt_time.astimezone(), use_zone=False).replace("T", " ")
+    #dt_time = DatetimeUtils.parse_date(dt_time_str).replace(tzinfo=datetime.now().astimezone().tzinfo)
+    #return dt_time_str, DatetimeUtils.format(dt_time.astimezone(), use_zone=False).replace("T", " ")
+    return dt_time_str, dt_time_str.replace("T", " ")
 
 def _targets_from_ltp(selected_row: dict[str, any], process: str, start_time: datetime, horizon_hours: int) -> ProductionTargets:
     start_time_ltp = DatetimeUtils.parse_date(selected_row.get("start_time_full"))
@@ -1281,8 +1282,10 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
         return plant_idx
 
     current_process_plants: list[int] = process_plants[current_process_index]
-
-    period: tuple[datetime, datetime] = (snapshot_obj.timestamp, snapshot_obj.timestamp + timedelta(hours=horizon_hours))
+    #actual_start_time = min(plant_start_times.values()) if len(plant_start_times) > 0 else snapshot
+    actual_start_time = DatetimeUtils.parse_date(planning_start).replace(tzinfo=datetime.now().astimezone().tzinfo).astimezone(tz=timezone.utc)
+    end_time = actual_start_time + timedelta(hours=horizon_hours)
+    period: tuple[datetime, datetime] = (actual_start_time, end_time)
     plant_targets, _1, previous_lot_by_plant, _3 = target_values_from_settings(process, period, current_process_plants, False, plants_components)
     current_process_plants = [p for p in plant_targets.target_weight.keys()] if plant_targets is not None else []
     if len(current_process_plants) == 0:
@@ -1292,15 +1295,12 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     orders_sorted = sorted(orders_filtered, key=process_index_for_order)
     order_ids = [o.id for o in orders_sorted]
     new_selected_rows = {"ids": []}
-    plant_start_times: dict[int, datetime] = {plant: snapshot for plant in current_process_plants}
-    if previous_lot_by_plant is not None and len(previous_lot_by_plant) > 0:
-        for plant, lot in previous_lot_by_plant.items():
-            pred_lot: Lot | None = next((l for l in snapshot_obj.lots.get(plant, tuple()) if l.id == lot), None)
-            if pred_lot is not None and pred_lot.end_time is not None and pred_lot.end_time > snapshot:
-                plant_start_times[plant] = pred_lot.end_time
-    #actual_start_time = min(plant_start_times.values()) if len(plant_start_times) > 0 else snapshot
-    actual_start_time = DatetimeUtils.parse_date(planning_start)  # TODO validate timezone
-    end_time = actual_start_time + timedelta(hours=horizon_hours)
+    #plant_start_times: dict[int, datetime] = {plant: snapshot for plant in current_process_plants}
+    #if previous_lot_by_plant is not None and len(previous_lot_by_plant) > 0:
+    #    for plant, lot in previous_lot_by_plant.items():
+    #        pred_lot: Lot | None = next((l for l in snapshot_obj.lots.get(plant, tuple()) if l.id == lot), None)
+    #        if pred_lot is not None and pred_lot.end_time is not None and pred_lot.end_time > snapshot:
+    #            plant_start_times[plant] = pred_lot.end_time
     if is_init_command:
         if init_method is None:
             return no_update, no_update, no_update, no_update, no_update, no_update
@@ -1394,7 +1394,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
             if hide_unavailable:
                 if not all(p in current_process_ids or p in follow_up_process_ids for p in o.current_processes):
                     has_lot_in_time = False
-                    prev_proc = next((p for p in prev_processes if p in o.lots), None) if o.lots is not None and process not in o.lots else None
+                    prev_proc = next((p for p in prev_processes if p in o.lots), None) if o.lots is not None else None
                     if prev_proc is not None:
                         lt_times = snapshot_provider.get_order_lot_times(snapshot_obj.timestamp, o.id)
                         if lt_times is not None and len(lt_times) > 0 and prev_proc in lt_times[o.id]:

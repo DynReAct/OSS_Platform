@@ -350,7 +350,7 @@ class SnapshotProvider:
                         first_start_time = first_start_time + trsp
                         if first_start_time <= planning_horizon[0]:   # case 1: the complete lot is expected to be done
                             applicable_orders.append(order.id)
-                        elif lt.start_time is not None and lt.start_time + trsp < planning_horizon[1]:  # case 2: look at order-specific execution time, if the lot starts in time to be considered, at least
+                        elif lt.start_time is not None and lt.start_time + trsp < planning_horizon[0]:  # case 2: look at order-specific execution time, if the lot starts in time to be considered, at least
                             try:
                                 times_dct = self.get_order_lot_times(snapshot=snapshot.timestamp, order=order.id)
                                 if times_dct is not None:

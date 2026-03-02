@@ -34,12 +34,6 @@ from dynreact.lots_optimization import FrontendOptimizationListener
 dash.register_page(__name__, path="/lots/create2")
 translations_key = "lots2"
 
-"""  # moved to OptimizationState (state.get_optimization_state())  # TODO use
-lot_creation_thread_name = "lot-creation"
-lot_creation_thread: threading.Thread|None = None
-lot_creation_listener: FrontendOptimizationListener|None = None
-"""
-
 
 # TODO option to record optimizaiton history including lots information and possibility to replay/step to specific optimization steps
 # TODO option to initialize optimization from existing result
@@ -191,9 +185,10 @@ def orders_tab():
                     html.Span(id="lots2-orders-backlog-target-weight", className="left-space"),
                     html.Span("t)")
                 ], className="lots2-orders-selection-overview"),
+                html.Br(),
                 html.Div([
                     html.Span("Planning interval start time:"),
-                    html.Span("", id="lots2-itv-start")  # TODO
+                    html.Span("", id="lots2-itv-start", className="left-space")
                 ])
             ]),
             html.Div([
@@ -299,11 +294,10 @@ def orders_tab():
                 ], className="lots2-orders-backlog-settings-buttons"),
                 html.Br(),
                 html.Div([
-                    html.Div(dcc.Checklist(id="lots2-check-hide-released-lots",
-                                           options=[{"value": "hide_released", "label": "Hide released lots"},
-                                                    {"value": "hide_next_procs",
-                                                     "label": "Hide orders at later process steps"}],
-                                           value=["hide_released", "hide_next_procs"],
+                    html.Div(dcc.Checklist(id="lots2-check-hide-released-lots", options=[{"value": "hide_released", "label": "Hide released lots"},
+                                                    {"value": "hide_unavailable","label": "Hide unavailable orders"},
+                                                    {"value": "hide_next_procs", "label": "Hide orders at later process steps"}],
+                                           value=["hide_released", "hide_unavailable", "hide_next_procs"],
                                            className="lots2-checkbox"))
                 ], className="lots2-use-range-checkbox"),
             ])  # , id="lots2-orders-backlog-settings")
@@ -1065,6 +1059,7 @@ def update_backlog_state(snapshot: str, process: str, rows: list[dict[str, any]]
             Output("lots2-orders-table", "rowData"),
             Output("lots2-orders-table", "selectedRows"),
             Output("lots2-orders-table", "columnSize"),
+            Output("lots2-itv-start", "children"),
             # Output("lots2-orders-data", "data"),
 
             Input("selected-snapshot", "data"),
@@ -1094,7 +1089,7 @@ def update_backlog_state(snapshot: str, process: str, rows: list[dict[str, any]]
             State("lots2-init-prev-proc-selector_all", "value"),
             State("lots2-details-plants", "children"),
 )
-def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: list[Literal["hide_released", "hide_next_procs"]],
+def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: list[Literal["hide_released", "hide_unavailable", "hide_next_procs"]],
                   _1, _2, _3, _4, _5, _6, _7, _8,
                   orders_data: dict[str, str]|None, selected_lots: list[str],
                   selected_rows: list[dict[str, any]]|None, filtered_rows: list[dict[str, any]]|None, horizon_hours: int,
@@ -1102,16 +1097,16 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
                   processed_lots: list[Literal[""]], all_lots_value: list[Literal[""]], active_lots_value: list[Literal[""]], released_lots_value: list[Literal[""]],
                   selected_prev_steps_lot: list[str], selected_prev_steps_all: list[str], plants_components: list[Component]|None):
     if not dash_authenticated(config):
-        return None, None, None, None
+        return None, None, None, None, None
     snapshot = DatetimeUtils.parse_date(snapshot)
     if snapshot is None or process is None:
-        return None, None, None, "sizeToFit"
+        return None, None, None, "sizeToFit", None
     snapshot_serialized: str = DatetimeUtils.format(snapshot)
     snapshot_obj = state.get_snapshot(snapshot)
     changed_ids: list[str] = GuiUtils.changed_ids()
     tab_changed = "lots2-active-tab" in changed_ids
     if tab_changed and tab != "orders":
-        return dash.no_update, dash.no_update, dash.no_update, "sizeToFit"
+        return dash.no_update, dash.no_update, dash.no_update, "sizeToFit", dash.no_update
     is_clear_command: bool = "lots2-orders-backlog-clear" in changed_ids or "lots2-orders-backlog-clear2" in changed_ids
     is_init_command: bool = "lots2-orders-backlog-init" in changed_ids
     is_init_command2: bool = "lots2-orders-backlog-init2" in changed_ids
@@ -1121,11 +1116,18 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
         orders_data = {"process": process, "snapshot": snapshot_serialized}
     hide_released_lots: bool = "hide_released" in check_hide_list
     hide_next_procs: bool = "hide_next_procs" in check_hide_list
+    hide_unavailable: bool = "hide_unavailable" in check_hide_list
     site = state.get_site()
-    all_processes = [p.name_short for p in site.processes]
+    processes_by_ids = {p.name_short: p for p in site.processes}
+    all_processes = list(processes_by_ids.keys())
     proc_idx = all_processes.index(process)
+    # xxx
     previous_processes = all_processes[:proc_idx]
     previous_processes.reverse()
+    prev_procs, next_procs = _previous_and_next_process_ids(site.processes, process)
+    prev_process_ids: list[int] = [pid for p in prev_procs for pid in p.process_ids]
+    follow_up_process_ids: list[int] = [pid for p in next_procs for pid in p.process_ids]
+    all_lots: dict[str, Lot] = {lot.id: lot for lots in snapshot_obj.lots.values() for lot in lots}
     _none_type = type(None)
 
     def _is_numeric(tp: type|None):
@@ -1178,20 +1180,22 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
             as_dict.update(o.material_properties.model_dump(exclude_none=True, exclude_unset=True))
         elif isinstance(o.material_properties, dict):
             as_dict.update(o.material_properties)
-        lot = snapshot_obj.get_order_lot(site, o.id, process)
-        if lot is not None:
-            as_dict["lot_info"] = _lot_info(lot)
-        for proc in previous_processes:
-            prev_lot = snapshot_obj.get_order_lot(site, o.id, proc)
+        if o.lots is not None:
+            lot = snapshot_obj.get_order_lot(site, o.id, process)
+            if lot is not None:
+                as_dict["lot_info"] = _lot_info(lot)
+            prev_lot_proc = next((p for p in previous_processes if p in o.lots), None)
+            prev_lot_id = o.lots.get(prev_lot_proc)
+            prev_lot = all_lots.get(prev_lot_id)
             if prev_lot is not None:
                 as_dict["prev_lot_info"] = _lot_info(prev_lot)
-                lt_times = snapshot_provider.get_order_lot_times(snapshot_obj.timestamp, o.id)
-                if lt_times is not None and o.id in lt_times:
-                    prev_proc = site.get_equipment(prev_lot.equipment, do_raise=True).process
-                    if prev_proc in lt_times[o.id]:
-                        av = DatetimeUtils.format(lt_times[o.id][prev_proc].end.astimezone(), use_zone=False).replace("T", " ")
-                        as_dict["availability"] = av
-                break
+                prev_proc_obj = processes_by_ids[prev_lot_proc]
+                if prev_proc_obj.next_steps is not None and process in prev_proc_obj.next_steps and snapshot_provider.is_lot_complete(prev_lot):
+                    lt_times = snapshot_provider.get_order_lot_times(snapshot_obj.timestamp, o.id)
+                    if lt_times is not None and o.id in lt_times:
+                        if prev_lot_proc in lt_times[o.id]:
+                            av = DatetimeUtils.format(lt_times[o.id][prev_lot_proc].end.astimezone(), use_zone=False).replace("T", " ")
+                            as_dict["availability"] = av
         return as_dict
 
     current_process_index = next((idx for idx, proc in enumerate(site.processes) if proc.name_short == process), None)
@@ -1228,12 +1232,20 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     plant_targets, _1, previous_lot_by_plant, _3 = target_values_from_settings(process, period, current_process_plants, False, plants_components)
     current_process_plants = [p for p in plant_targets.target_weight.keys()] if plant_targets is not None else []
     if len(current_process_plants) == 0:
-        return None, None, None, "sizeToFit"
+        return None, None, None, "sizeToFit", None
 
     orders_filtered = [order for order in snapshot_obj.orders if any(plant in current_process_plants for plant in order.allowed_equipment)]
     orders_sorted = sorted(orders_filtered, key=process_index_for_order)
     order_ids = [o.id for o in orders_sorted]
     new_selected_rows = {"ids": []}
+    plant_start_times: dict[int, datetime] = {plant: snapshot for plant in current_process_plants}
+    if previous_lot_by_plant is not None and len(previous_lot_by_plant) > 0:
+        for plant, lot in previous_lot_by_plant.items():
+            pred_lot: Lot | None = next((l for l in snapshot_obj.lots.get(plant, tuple()) if l.id == lot), None)
+            if pred_lot is not None and pred_lot.end_time is not None and pred_lot.end_time > snapshot:
+                plant_start_times[plant] = pred_lot.end_time
+    actual_start_time = min(plant_start_times.values()) if len(plant_start_times) > 0 else snapshot
+    end_time = actual_start_time + timedelta(hours=horizon_hours)
     if is_init_command:
         if init_method is None:
             return no_update, no_update, no_update, no_update, no_update, no_update
@@ -1267,16 +1279,6 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
         new_selected_rows = {"ids": eligible_orders}
     elif is_init_command2:
         # adapt planning start time according to frozen lots
-        plant_start_times: dict[int, datetime] = {plant: snapshot for plant in current_process_plants}
-        if previous_lot_by_plant is not None and len(previous_lot_by_plant) > 0:
-            for plant, lot in previous_lot_by_plant.items():
-                pred_lot: Lot|None = next((l for l in snapshot_obj.lots.get(plant, tuple()) if l.id == lot), None)
-                if pred_lot is not None and pred_lot.end_time is not None and pred_lot.end_time > snapshot:
-                    plant_start_times[plant] = pred_lot.end_time
-        actual_start_time = min(plant_start_times.values()) if len(plant_start_times) > 0 else snapshot
-        end_time = snapshot + timedelta(hours=horizon_hours)
-        if actual_start_time >= end_time:
-            return dash.no_update, dash.no_update, dash.no_update, "sizeToFit"
         # TODO transport times
         eligible_orders = state.get_snapshot_provider().eligible_orders2(snapshot_obj, process, (actual_start_time, end_time),
                                             equipment=current_process_plants, transport_times=None)
@@ -1308,26 +1310,46 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     #    # TODO1
     selected_ids: list[str] = new_selected_rows["ids"]
     #orders_data["orders"] = selected_ids
-    if hide_next_procs or hide_released_lots:
+    if hide_next_procs or hide_released_lots or hide_unavailable:
         all_procs = site.processes
         procs_by_id: dict[int, Process] = {}
         for proc in all_procs:
             for p_id in proc.process_ids:
                 procs_by_id[p_id] = proc
-        current_process_idx: int = all_procs.index(site.get_process(process, do_raise=True))
-
+        proc_obj = site.get_process(process, do_raise=True)
+        #current_process_idx: int = all_procs.index(proc_obj)
+        prev_processes = [p.name_short for p in site.processes if p.next_steps is not None and process in p.next_steps]
+        prev_process_ids = [pid for p in prev_procs for pid in p.process_ids]
+        follow_up_process_ids = [pid for p in next_procs for pid in p.process_ids]
         snapshot_provider = state.get_snapshot_provider()
+        current_process_ids = proc_obj.process_ids
+
         def _filter_order(o: Order) -> bool:
             if hide_next_procs:
-                process_ids = o.current_processes
-                order_processes = [procs_by_id.get(p_id) for p_id in process_ids if p_id in procs_by_id]
-                is_at_follow_up_proc: bool = any(all_procs.index(p) > current_process_idx for p in order_processes)
+                #process_ids = o.current_processes
+                #order_processes = [procs_by_id.get(p_id) for p_id in process_ids if p_id in procs_by_id]
+                #is_at_follow_up_proc: bool = any(all_procs.index(p) > current_process_idx for p in order_processes)
+                is_at_follow_up_proc: bool = any(p in follow_up_process_ids for p in o.current_processes)
                 if is_at_follow_up_proc:
                     return False
             if hide_released_lots:
                 lot = snapshot_obj.get_order_lot(site, o.id, process)
                 if lot is not None and not snapshot_provider.is_lot_reschedulable(lot):
                     return False
+            if hide_unavailable:
+                if not all(p in current_process_ids or p in follow_up_process_ids for p in o.current_processes):
+                    has_lot_in_time = False
+                    prev_proc = next((p for p in prev_processes if p in o.lots), None) if o.lots is not None and process not in o.lots else None
+                    if prev_proc is not None:
+                        lt_times = snapshot_provider.get_order_lot_times(snapshot_obj.timestamp, o.id)
+                        if lt_times is not None and len(lt_times) > 0 and prev_proc in lt_times[o.id]:
+                            end_time = lt_times[o.id][prev_proc].end
+                            if end_time < actual_start_time:
+                                p_lot = all_lots.get(o.lots[prev_proc])
+                                if p_lot is not None and snapshot_provider.is_lot_complete(p_lot):
+                                    has_lot_in_time = True
+                    if not has_lot_in_time:
+                        return False
             return True
         orders_sorted = [o for o in orders_sorted if _filter_order(o)]
     sorted_orders = [order_to_json(order) for order in orders_sorted]
@@ -1362,7 +1384,8 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
             fields.sort(key=field_sort_id)
     except:
         pass
-    return fields, sorted_orders, new_selected_rows, "sizeToFit"  # , orders_data
+    start_time_formatted = DatetimeUtils.format(actual_start_time.astimezone(), use_zone=False).replace("T", " ") if actual_start_time is not None else None
+    return fields, sorted_orders, new_selected_rows, "sizeToFit", start_time_formatted  # , orders_data
 
 # Old filter has the form {}, or {"lots": {'filterType': 'text', 'type': 'contains', 'filter': '"DGL04.81"'}}
 @callback(
@@ -2282,4 +2305,19 @@ def _lot_info(lot: Lot) -> str:
         result += f", comment={lot.comment}"
     result += "]"
     return result
+
+
+def _previous_and_next_process_ids(processes: typing.Sequence[Process], proc: str, prev_incl: bool=True, next_incl: bool=True) -> tuple[list[Process]|None, list[Process]|None]:
+    previous_procs = None
+    next_procs = None
+    if prev_incl:
+        previous_procs = [p for p in processes if p.next_steps is not None and proc in p.next_steps]
+        if len(previous_procs) > 0:
+            previous_procs = [p for dp in previous_procs for p in _previous_and_next_process_ids(processes, dp.name_short, next_incl=False)[0]] + previous_procs
+    if next_incl:
+        p0 = next(p for p in processes if p.name_short == proc)
+        next_procs = [p for p in processes if p.name_short in p0.next_steps] if p0.next_steps is not None else []
+        if len(next_procs) > 0:
+            next_procs = next_procs + [p for dp in next_procs for p in _previous_and_next_process_ids(processes, dp.name_short, prev_incl=False)[1]]
+    return previous_procs, next_procs
 

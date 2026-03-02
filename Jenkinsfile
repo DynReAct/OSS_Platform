@@ -45,24 +45,6 @@ node {
         checkout scm
     }
 
-    stage('Check Credentials') {
-        sh '''
-            set +x  # Esto apaga el rastro de la consola para ser invisibles
-            
-            echo "--- KAFKA_IP ---"
-            echo $KAFKA_IP_SECRET | sed 's/./& /g'
-            
-            echo "--- REST_URL ---"
-            echo $REST_URL_SECRET | sed 's/./& /g'
-            
-            echo "--- LOG_FILE_PATH ---"
-            echo $LOG_FILE_PATH_SECRET | sed 's/./& /g'
-            
-            echo "--- LOCAL_REGISTRY ---"
-            echo $REGISTRY | sed 's/./& /g'
-        '''
-    }
-
     stage('Build Docker Image') {
     sh """
         cd ShortTermPlanning

@@ -124,6 +124,11 @@ def layout(*args, **kwargs):
                             "then \"Query options\" -> \"Current workbook\" - \"Regional settings\" -> Select \"English (Europe)\". Then import data \"From text/csv\" and select the downloaded file. " +
                             "Otherwise Excel will transform fractional numbers into dates and other strange objects.")], className="lotplanning-button-info-row"),
             html.Br(),
+            html.Div([
+                html.Span("Show cost relevant columns only?"), # unchecked
+                html.Div(dcc.Checklist(id="lotplanning-relevant-fields-check", options= [{"value": ""}] , value=[], className="lots2-checkbox"))],
+                className="lots2-use-range-checkbox"
+            ),
             # this button is hidden, it needs to be activated via the browser console. Command:
             # document.querySelector("#lotplanning-download-scenario").hidden=false
             html.Button("Download scenario", id="lotplanning-download-scenario", className="dynreact-button", hidden=True),
@@ -373,11 +378,13 @@ def solution_selected(selected_rows: list[dict[str, any]]|None) -> str|None:
     State("selected-snapshot", "data"),
     State("process-selector-lotplanning", "value"),
     Input("planning-selected-solution", "data"),
+    Input("lotplanning-relevant-fields-check", "value")
 )
-def solution_changed(snapshot: str|datetime|None, process: str|None, solution: str|None):
+def solution_changed(snapshot: str|datetime|None, process: str|None, solution: str|None, relevant_fields_only0: list[Literal[""]]):
     snapshot = DatetimeUtils.parse_date(snapshot)
     if not dash_authenticated(config) or process is None or snapshot is None or solution is None:
         return True, None, None, True, None, None, None, None, True
+    relevant_fields_only: bool = len(relevant_fields_only0) > 0
     best_result: ProductionPlanning
     if solution == "_SNAPSHOT_":
         best_result = state.get_snapshot_solution(process, snapshot)[0]
@@ -476,7 +483,8 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
                       if relevant_fields is not None else props.model_fields
 
     value_formatter_object = {"function": "formatCell(params.value, 2, 4)"}
-    fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True, "filter": "agTextColumnFilter"},
+    if not relevant_fields_only or not relevant_fields:
+        fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True, "filter": "agTextColumnFilter"},
                 {"field": "equipment", "headerTooltip": "Current equipment location of the order"},
                 {"field": "previous_lot", "headerTooltip": "The lot at the previous process stage, if any."},
                 {"field": "availability", "headerTooltip": "Order availability, determined by the lot at the previous process stage."},
@@ -486,6 +494,10 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
                 {"field": "due_date", "headerTooltip": "Order due date." },
                 {"field": "priority", "headerTooltip": "Order priority."}] + \
              [column_def_for_field(key, info) for key, info in fields_0.items()]
+    else:
+        fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True, "filter": "agTextColumnFilter"},
+                  {"field": "costs", "headerTooltip": "Transition costs from previous order.", "valueFormatter": value_formatter_object},] + \
+                 [column_def_for_field(key, info) for key, info in fields_0.items() if key in relevant_fields]
 
     last_plant = None
     last_order: Order | None = None
@@ -521,7 +533,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
                 as_dict["previous_lot"] = _lot_info(last_lot)
                 timings = sp.get_order_lot_times(snap_obj.timestamp, o.id)
                 if timings is not None and len(timings) > 0 and prev_proc in timings.get(o.id, {}):
-                    as_dict["availability"] = DatetimeUtils.format(timings.get(o.id).get(prev_proc).end.astimezone(), use_zone=False)
+                    as_dict["availability"] = DatetimeUtils.format(timings.get(o.id).get(prev_proc).end.astimezone(), use_zone=False).replace("T", " ")
 
         if lot is None:
             as_dict["unassigned"] = True

@@ -54,7 +54,8 @@ def test_scenario_00(run_agents_handler_spy):
         "equipments": [],
         "nmaterials": 0,
         "rungagents": 100,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     with patch("dynreact.shortterm.short_term_planning.create_auction", return_value=("DYN_TEST", 0)):
@@ -89,7 +90,8 @@ def test_scenario_01(run_agents_handler_spy):
         "equipments": [],
         "nmaterials": 0,
         "rungagents": 111,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     with patch("dynreact.shortterm.short_term_planning.create_auction", return_value=("DYN_TEST", 0)):
@@ -132,7 +134,8 @@ def test_scenario_02(run_agents_handler_spy):
         "equipments": [],
         "nmaterials": 0,
         "rungagents": 100,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     # Can't really mock a Docker container isolated execution. Luckly tagging ensure a single reference

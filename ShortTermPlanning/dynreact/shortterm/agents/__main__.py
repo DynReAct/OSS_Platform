@@ -185,6 +185,8 @@ def main():
                 topic=args.topic,
                 agent=args.agent_name,
                 status=json.loads(args.status),
+                operation_speed=args.operation_speed,
+                start_time=args.start_time,
                 manager=False
             )
 
@@ -201,6 +203,8 @@ def main():
                 topic=args.topic,
                 agent=args.agent_name,
                 params=json.loads(args.params),
+                transport_times=json.loads(args.transport_times) if args.transport_times else None,
+                coil_lengths=json.loads(args.coil_lengths) if args.coil_lengths else None,
                 manager=False
             )
     else:

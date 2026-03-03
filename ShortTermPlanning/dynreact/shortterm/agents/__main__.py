@@ -125,7 +125,8 @@ def main():
     parser_equipment_replica.add_argument("-a", "--agent-name", type=str, required=True, help="Agent name")
     parser_equipment_replica.add_argument("-s", "--status", type=str, required=True, help="Equipment Status")
     parser_equipment_replica.add_argument("-v", "--variables", type=str, required=True, help="Dynamic values from the KeySearch dump model")
-
+    parser_equipment_replica.add_argument("--os", "--operation_speed", type=float, dest="operation_speed", help="Operation speed")
+    parser_equipment_replica.add_argument("--st", "--start_time", type=str, dest="start_time", help="Start time")
 
     # ------------------------
     # Instance Material Subparser
@@ -148,6 +149,8 @@ def main():
     parser_material_replica.add_argument("-a", "--agent-name", type=str, required=True, help="Agent name")
     parser_material_replica.add_argument("-p", "--params", type=str, required=True, help="Materials parameters relevant to the configuration of the agent.")
     parser_material_replica.add_argument("-v", "--variables", type=str, required=True, help="Dynamic values from the KeySearch dump model")
+    parser_material_replica.add_argument("--tt", "--transport_times", type=str, dest="transport_times", help="Transport times for each equipment")
+    parser_material_replica.add_argument("--cl", "--coil_lengths", type=str, dest="coil_lengths", help="List of coil lengths")
 
     # ------------------------
 

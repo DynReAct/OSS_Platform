@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
+from datetime import datetime, timedelta
 from dynreact.shortterm.common import purge_topics, KeySearch
 from dynreact.shortterm.common.handler import DockerManager
 from dynreact.shortterm.short_term_planning import execute_short_term_planning
@@ -155,7 +156,8 @@ def test_scenario_03(run_agents_handler_spy):
         "equipments": ["7"],
         "nmaterials": 1,
         "rungagents": 111,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     # Can't really mock a Docker container isolated execution. Luckly tagging ensure a single reference
@@ -183,7 +185,8 @@ def test_scenario_04():
         "equipments": os.environ.get("SCENARIO_4_5_EQUIPMENT", "7").split(" "),
         "nmaterials": 1,
         "rungagents": 111,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     result = execute_short_term_planning(args)
@@ -212,7 +215,8 @@ def test_scenario_05():
         "equipments": os.environ.get("SCENARIO_4_5_EQUIPMENT", "7").split(" "),
         "nmaterials": 1,
         "rungagents": 000,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     result = execute_short_term_planning(args)
@@ -241,7 +245,8 @@ def test_scenario_06():
         "equipments": os.environ.get("SCENARIO_6_EQUIPMENT", "7").split(" "),
         "nmaterials": 2,
         "rungagents": 000,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     result = execute_short_term_planning(args)
@@ -272,7 +277,8 @@ def test_scenario_07():
         "equipments": os.environ.get("SCENARIO_7_EQUIPMENTS", "6 7").split(" "),
         "nmaterials": 1,
         "rungagents": 000,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     result = execute_short_term_planning(args)
@@ -303,7 +309,8 @@ def test_scenario_08():
         "equipments": os.environ.get("SCENARIO_8_EQUIPMENTS", "6 7").split(" "),
         "nmaterials": 2,
         "rungagents": 000,
-        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z")
+        "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),
+        "start_time": (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
     }
 
     result = execute_short_term_planning(args)

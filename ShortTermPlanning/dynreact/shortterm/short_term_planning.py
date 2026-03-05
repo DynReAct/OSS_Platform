@@ -231,7 +231,7 @@ def create_auction(
 
         if equip_configs and equipment in equip_configs:
             config = equip_configs[equipment]
-            payload_data['user_start_date'] = config['start_date']
+            payload_data['user_start_time'] = config['start_time']
 
         sendmsgtopic(
             producer=producer,
@@ -679,7 +679,7 @@ def execute_short_term_planning(args: dict):
 
     results = {}
 
-    equip_configs = {equipment: {'start_date': start_time} for equipment in equipments} if start_time else None
+    equip_configs = {equipment: {'start_time': start_time} for equipment in equipments} if start_time else None
 
     try:
         act, n_agents = create_auction(

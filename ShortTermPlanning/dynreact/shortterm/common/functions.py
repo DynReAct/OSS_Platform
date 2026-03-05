@@ -111,6 +111,11 @@ def load_transport_times(file_path: str) -> dict[str, dict[str, int]]:
 
 def get_transport_times(perf_url: str) -> dict:
 #TODO: add docs
+
+    if not isinstance(perf_url, str):
+        print(f"Transport times URL is not a string: {perf_url}")
+        return {}
+
     if perf_url.startswith("default+file:"):
         file_path = perf_url.split("default+file:")[1]
         return load_transport_times(file_path)

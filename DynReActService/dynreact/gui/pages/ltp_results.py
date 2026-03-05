@@ -7,16 +7,12 @@ import dash_ag_grid as dash_ag
 from pydantic import TypeAdapter
 from typing_extensions import Any
 
-from dynreact.base.LongTermPlanning import LongTermPlanning
-from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import LongTermTargets, EquipmentAvailability, StorageLevel, MidTermTargets
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
-# from dynreact.gui.gui_utils import GuiUtils
-# from dynreact.gui.pages.plants_graph import plants_graph, default_stylesheet
 
 dash.register_page(__name__, path="/ltp/planned")
 translations_key = "ltp_res"
@@ -156,10 +152,8 @@ def get_date_range(start_date: date|None=None) -> tuple[date, date, list[date], 
                         end=DatetimeUtils.date_to_datetime(start_date + timedelta(days=65)))
     else:
         start_times = persistence.start_times_ltp(sort="desc", limit=50)
-        if len(start_times) > 0:
-            start_date = start_times[0].date()
     start_dates: list[date] = _start_times_to_dates(start_times)
-    start_date = start_date if start_date is not None and start_date in start_dates else None  # ?
+    start_date = start_date if start_date is not None and start_date in start_dates else start_dates[0] if len(start_dates) > 0 else None
     if start_date is None:
         return None, None, [], None
     options = [{"label": snap_id, "value": snap_id, "selected": selected} for snap_id, selected in ((d.strftime("%Y-%m-%d"), d == start_date) for d in start_dates)]
@@ -170,7 +164,7 @@ def get_date_range(start_date: date|None=None) -> tuple[date, date, list[date], 
 
 
 def _start_times_to_dates(lst: list[datetime]) -> list[date]:
-    result = list(set(l.date() for l in lst))
+    result = list(set(state.as_timezone(l).date() for l in lst))
     result.sort(reverse=True)
     return result
 
@@ -182,6 +176,7 @@ def find_solutions(starttime: str|None):
     parsed = DatetimeUtils.parse_date(starttime)
     if parsed is None:
         return [], []
+    parsed = state.replace_timezone(parsed)
     #parsed_date = parsed.date()
     persistence: ResultsPersistence = state.get_results_persistence()
     solutions: list[str] = persistence.solutions_ltp(parsed)  # TODO is this exact? Or could we specify a range?
@@ -280,7 +275,8 @@ def update_storages_table(solution: dict[str, Any], rel_abs: Literal["relative",
     if solution is None or rel_abs is None or not dash_authenticated(config):
         return [{"field": "day", "pinned": True}], None
     levels = solution.get("storage_levels")  # serialized list[dict[str, StorageLevel]]
-    sub_periods: list[tuple[datetime, datetime]] = [(DatetimeUtils.parse_date(period[0]), DatetimeUtils.parse_date(period[1])) for period in solution.get("targets").get("sub_periods")]
+    sub_periods: list[tuple[datetime, datetime]] = [(state.replace_timezone(DatetimeUtils.parse_date(period[0])),
+                                                     state.replace_timezone(DatetimeUtils.parse_date(period[1]))) for period in solution.get("targets").get("sub_periods")]
     site = state.get_site()
     value_formatter_object = {"function": "formatCell(params.value, 4)"}
     column_defs = [{"field": storage.name_short, "headerName": str(storage.name or storage.name_short), "valueFormatter": value_formatter_object}
@@ -290,7 +286,8 @@ def update_storages_table(solution: dict[str, Any], rel_abs: Literal["relative",
     is_absolute = rel_abs == "absolute"
     storage_capacities = {s.name_short: s.capacity_weight for s in site.storages}
     for idx, period in enumerate(sub_periods):
-        if period[0].time().hour != 8:  # 6:  # FIXME hardcoded
+        # display a single value per day, not all shifts XXX
+        if period[0].time().hour not in (6,7,8,9,10):
             continue
         current_levels = levels[idx]
         current_data = {"day": period[0].date().strftime("%Y-%m-%d")}

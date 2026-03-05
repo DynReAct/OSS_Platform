@@ -33,6 +33,7 @@ from confluent_kafka import Producer, Consumer, Message
 from confluent_kafka.admin import AdminClient
 import configparser
 
+from dynreact.shortterm.common.functions import get_transport_times
 from dynreact.shortterm.common import VAction, sendmsgtopic, KeySearch
 from dynreact.shortterm.common.data.data_functions import end_auction
 from dynreact.shortterm.common.data.data_setup import DataSetup
@@ -175,6 +176,7 @@ def create_auction(
     """
 
     topic_gen = KeySearch.search_for_value("TOPIC_GEN")
+    perf_url = KeySearch.search_for_value("PERF_URL")
 
     if nmaterials is not None and materials is not None:
         dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
@@ -286,6 +288,8 @@ def create_auction(
     all_materials = list(set(all_materials))
     print("Final material list size is {}".format(len(all_materials)))
 
+    transport_times = get_transport_times(perf_url)
+
     # Clone the master MATERIAL for each material ID
     for material in all_materials:
         sendmsgtopic(
@@ -295,7 +299,12 @@ def create_auction(
             source="UX",
             dest="MATERIAL:" + topic_gen,
             action="CREATE",
-            payload=dict(id=str(material), params=data_setup.get_material_params(material), variables=KeySearch.dump_model()),
+            payload=dict(
+                id=str(material),
+                params=data_setup.get_material_params(material),
+                transport_times=transport_times,
+                variables=KeySearch.dump_model()
+            ),
             vb=verbose
         )
         num_agents += 1

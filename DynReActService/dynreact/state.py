@@ -28,11 +28,13 @@ from dynreact.plugins import Plugins
 class DynReActSrvState:
 
     def __init__(self, config: DynReActSrvConfig, plugins: Plugins):
-        if config.time_zone:
+        if config.time_zone == "local":
+            self._time_zone = None
+        elif config.time_zone:
             from zoneinfo import ZoneInfo
             self._time_zone = ZoneInfo(config.time_zone)
         else:
-            self._time_zone = datetime.now(timezone.utc).astimezone().tzinfo
+            self._time_zone = datetime.now(tz=timezone.utc).astimezone().tzinfo
         self._config = config
         self._plugins = plugins
         self._config_provider: ConfigurationProvider|None = None
@@ -65,8 +67,23 @@ class DynReActSrvState:
             from dynreact.batch import LotsBatchOptimizationJob
             self._lots_batch_job = LotsBatchOptimizationJob(self._config, self)
 
-    def get_time_zone(self) -> tzinfo:
-        return self._time_zone
+    def as_timezone(self, dtm: datetime) -> datetime:
+        """
+        Convert the datetime object (which must have the time zone set) to the configured system time zone
+        :param dtm:
+        :return:
+        """
+        # if self._time_zone is not set this will return it in the local timezone
+        return dtm.astimezone(tz=self._time_zone)
+
+    def replace_timezone(self, dtm: datetime) -> datetime:
+        """
+        Replace the timezone of the passed datetime object (which need not have a timezone set) with the configured system time zone
+        :param dtm:
+        :return:
+        """
+        tz = dtm.astimezone(tz=self._time_zone).tzinfo
+        return dtm.replace(tzinfo=tz)
 
     def get_lot_creator(self) -> LotCreator:
         return self._optimization_state

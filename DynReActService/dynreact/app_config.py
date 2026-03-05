@@ -6,8 +6,8 @@ from dotenv import load_dotenv
 
 class DynReActSrvConfig:
 
-    time_zone: str|None = None
-    "By default, the local timezone is used. Example: \"Europe/Berlin\", \"America/Los_Angeles\"."
+    time_zone: str|None = "local"
+    "By default, the local timezone of the server is used. Example: \"local\", \"Europe/Berlin\", \"America/Los_Angeles\"."
     config_provider: str = "default+file:./data/site.json"
     "Config provider id. Alternatively, it is also admissible to set this field to the config provider itself (for testing)"
     snapshot_provider: str = "default+file:./data/snapshots"
@@ -101,7 +101,7 @@ class DynReActSrvConfig:
                  ):
         load_dotenv()
         if time_zone is None:
-            time_zone = os.getenv("TIME_ZONE")
+            time_zone = os.getenv("TIME_ZONE", DynReActSrvConfig.time_zone)
         self.time_zone = time_zone
         if config_provider is None:
             config_provider = os.getenv("CONFIG_PROVIDER", DynReActSrvConfig.config_provider)

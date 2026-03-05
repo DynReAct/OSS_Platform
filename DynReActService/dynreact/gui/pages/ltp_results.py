@@ -23,8 +23,8 @@ translations_key = "ltp_res"
 
 
 def layout(*args, **kwargs):
-    selected_start_date: date|None = DatetimeUtils.parse_date(kwargs.get("start"))
-    selected_start_date = selected_start_date.date() if selected_start_date is not None else None
+    selected_start_date0: datetime|None = DatetimeUtils.parse_date(kwargs.get("start"))
+    selected_start_date = selected_start_date0.date() if selected_start_date0 is not None else None
     start, end, start_time_options, selected = get_date_range(selected_start_date)
     site = state.get_site()
     num_processes = len(site.processes)
@@ -151,11 +151,13 @@ def get_date_range(start_date: date|None=None) -> tuple[date, date, list[date], 
     if not dash_authenticated(config):
         return None, None, [], None
     persistence: ResultsPersistence = state.get_results_persistence()
-    if start_date is None:
-        start_date = datetime.now()  # beginning of next month
-        start_date = (start_date.replace(day=1, minute=0, second=0, microsecond=0) + timedelta(days=32)).replace(day=1).date()
-    start_times: list[datetime] = persistence.start_times_ltp(DatetimeUtils.date_to_datetime(start_date - timedelta(days=150)),
-                                                                DatetimeUtils.date_to_datetime(start_date + timedelta(days=1)))
+    if start_date is not None:
+        start_times: list[datetime] = persistence.start_times_ltp(start=DatetimeUtils.date_to_datetime(start_date - timedelta(days=65)),
+                        end=DatetimeUtils.date_to_datetime(start_date + timedelta(days=65)))
+    else:
+        start_times = persistence.start_times_ltp(sort="desc", limit=50)
+        if len(start_times) > 0:
+            start_date = start_times[0].date()
     start_dates: list[date] = _start_times_to_dates(start_times)
     start_date = start_date if start_date is not None and start_date in start_dates else None  # ?
     if start_date is None:
@@ -169,7 +171,7 @@ def get_date_range(start_date: date|None=None) -> tuple[date, date, list[date], 
 
 def _start_times_to_dates(lst: list[datetime]) -> list[date]:
     result = list(set(l.date() for l in lst))
-    result.sort()
+    result.sort(reverse=True)
     return result
 
 

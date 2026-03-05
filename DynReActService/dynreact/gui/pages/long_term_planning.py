@@ -38,7 +38,11 @@ def layout(*args, **kwargs):
     total_production: float = kwargs.get("total", 100_000)
     start_date0: datetime = DatetimeUtils.parse_date(kwargs.get("starttime"))
     if start_date0 is None:
-        start_date0 = datetime.now()  # beginning of next month
+        try:
+            start_date0 = next(state.get_snapshot_provider().snapshots(datetime(year=1900,month=1,day=1, tzinfo=timezone.utc),
+                                                                       datetime(year=3000,month=1,day=1, tzinfo=timezone.utc), order="desc"))
+        except StopIteration:
+            start_date0 = datetime.now()
         start_date0 = (start_date0.replace(day=1, minute=0, second=0, microsecond=0) + timedelta(days=32)).replace(day=1)
     start_date = f"{start_date0.year:4d}-{start_date0.month:2d}-{start_date0.day:2d}".replace(" ", "0")
     num_processes = len(state.get_site().processes)
@@ -488,8 +492,7 @@ def _get_start_end_time(start_time: datetime|str, horizon: str|int) -> tuple[dat
 
 
 def _date_range_to_datetime(start: date, end: date) -> tuple[datetime, datetime]:
-    return datetime.combine(start, datetime.min.time()).replace(tzinfo=state.get_time_zone()), datetime.combine(end, datetime.min.time()).replace(tzinfo=state.get_time_zone())
-
+    return state.replace_timezone(datetime.combine(start, datetime.min.time())), state.replace_timezone(datetime.combine(end, datetime.min.time()))
 
 
 @callback(Output("ltp-plant-availability", "data"),
@@ -771,7 +774,7 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
                     new_shifts = [new_first] + list(eq_shifts)[1:-1] + [new_last]
                     shifts[eq] = new_shifts
             availabilities_aggregated = PlantAvailabilityPersistence.aggregate([p.id for p in state.get_site().equipment], start, end, availabilities, shifts=shifts)
-            run(DatetimeUtils.parse_date(start_time), horizon_weeks, shift_duration_hours, setpoints, total_production, levels, availabilities_aggregated)
+            run(start_dt, end_dt, shift_duration_hours, setpoints, total_production, levels, availabilities_aggregated)
     if "ltp-stop" in changed_ids and ltp_thread is not None:
         stop()
     is_running = ltp_thread is not None
@@ -823,15 +826,14 @@ def check_running_optimization() -> tuple[bool, str|None]:
     return ltp_thread is not None, solution_id
 
 
-def run(start_time: datetime, horizon_weeks: int, shift_duration_hours: int, setpoints: dict[str, float],
+def run(start_time: datetime, end_time: datetime, shift_duration_hours: int, setpoints: dict[str, float],
           total_production: float, storage_levels: dict[str, StorageLevel], availabilities: dict[int, EquipmentAvailability]):
     global ltp_thread
     shift_duration = timedelta(hours=shift_duration_hours)
-    end_time = start_time + timedelta(weeks=horizon_weeks)
-    # FIXME need 30 days
-    diff_days: int = round((end_time - start_time).total_seconds()/3600/24)
-    if diff_days != 30 and abs(30-diff_days) < 4:
-        end_time += timedelta(days=30-diff_days)
+    # originally needed exactly 30 days
+    #diff_days: int = round((end_time - start_time).total_seconds()/3600/24)
+    #if diff_days != 30 and abs(30-diff_days) < 4:
+    #    end_time += timedelta(days=30-diff_days)
     shifts: list[tuple[datetime, datetime]] = []
     start_shift = start_time
     end_shift = start_shift + shift_duration

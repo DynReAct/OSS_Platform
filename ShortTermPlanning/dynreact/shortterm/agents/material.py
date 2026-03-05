@@ -265,7 +265,10 @@ class Material(Agent):
             # Generate a random date between today and 10 days ago
             delivery_date = ten_days_ago + timedelta(days=random.randint(0, 10))
 
-        bidding_price = 150 / (delivery_date - datetime(2020, 1, 1)).days + 150 / (auction_start_time - datetime(2020, 1, 1)).seconds
+        #a = 150 / (delivery_date - datetime(2020, 1, 1)).days
+        #b = 90000 / (auction_start_time - datetime(2020, 1, 1)).seconds
+
+        bidding_price = 150 / (delivery_date - datetime(2020, 1, 1)).days + 90000 / (auction_start_time - datetime(2020, 1, 1)).seconds
 
         # For now, the bidding price is simply increased by the previous bidding price
         if previous_price is not None:

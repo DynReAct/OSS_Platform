@@ -176,7 +176,7 @@ def create_auction(
     """
 
     topic_gen = KeySearch.search_for_value("TOPIC_GEN")
-    perf_url = KeySearch.search_for_value("PERF_URL")
+    perf_url = "default+file:DynReActService/data/transport_times.csv" #TODO: change back to KeySearch.search_for_value("PERF_URL")
 
     if nmaterials is not None and materials is not None:
         dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")

@@ -130,11 +130,11 @@ class Equipment(Agent):
 
             KeySearch.assign_values(new_values=variables)
 
-            user_start_date = payload.get('user_start_date', None)
+            user_start_time = payload.get('user_start_time', None)
             equipment = payload.get('id', 0)
             snapshot = payload['snapshot']
             operation_speed = payload.get('operation_speed', 0)
-            start_time = user_start_date if user_start_date is not None else payload.get('start_time')
+            start_time = user_start_time if user_start_time is not None else payload.get('start_time')
 
             agent = f"EQUIPMENT:{topic}:{equipment}:0"
             status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)

@@ -108,3 +108,21 @@ def load_transport_times(file_path: str) -> dict[str, dict[str, int]]:
                 transport_times[origin][dest] = time
 
     return transport_times
+
+def get_transport_times(perf_url: str) -> dict:
+#TODO: add docs
+
+    if not isinstance(perf_url, str):
+        print(f"Transport times URL is not a string: {perf_url}")
+        return {}
+
+    if perf_url.startswith("default+file:"):
+        file_path = perf_url.split("default+file:")[1]
+        return load_transport_times(file_path)
+
+    elif perf_url.startswith("http://") or perf_url.startswith("https://"):
+        pass #TODO: Implement service for transport times
+
+    print(f"Unknown transport times URL: {perf_url}")
+
+    return {}

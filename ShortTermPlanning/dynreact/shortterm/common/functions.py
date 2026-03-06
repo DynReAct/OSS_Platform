@@ -51,6 +51,7 @@ def load_transport_times(file_path: str) -> dict[str, dict[str, int]]:
 
     transport_times = {}
     if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
         return transport_times
 
     with open(file_path, 'r') as file:

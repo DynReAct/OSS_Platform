@@ -85,6 +85,10 @@ def get_transport_times(perf_url: str) -> dict:
     if perf_url.startswith("default+file:"):
         file_path = perf_url.split("default+file:")[1]
         print(f"Loading transport times from file: {file_path}")
+        print(f"Ruta actual: {os.getcwd()}")
+        print(f"Abriendo: {os.path.abspath(file_path)}")
+        print(f"Archivos visibles aquí: {os.listdir(os.getcwd())[:15]}")
+
         return load_transport_times(file_path)
 
     elif perf_url.startswith("http://") or perf_url.startswith("https://"):

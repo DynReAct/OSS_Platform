@@ -55,8 +55,10 @@ def load_transport_times(file_path: str) -> dict[str, dict[str, int]]:
         return transport_times
 
     with open(file_path, 'r') as file:
+        print(f"Opening file: {file_path}")
         next(file) # Skip the header
         for line in file:
+            print(f"Processing line: {line}")
             parts = line.strip().split(';')
             if len(parts) == 3:
                 origin = parts[0].strip()

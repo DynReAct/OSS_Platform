@@ -83,6 +83,7 @@ def get_transport_times(perf_url: str) -> dict:
         return load_transport_times(file_path)
 
     elif perf_url.startswith("http://") or perf_url.startswith("https://"):
+        print(f"Loading transport times from URL: {perf_url}")
         pass #TODO: Implement service for transport times
 
     print(f"Unknown transport times URL: {perf_url}")

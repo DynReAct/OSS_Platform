@@ -289,6 +289,7 @@ def create_auction(
     print("Final material list size is {}".format(len(all_materials)))
 
     transport_times = get_transport_times(perf_url)
+    print(f"Transport times: {transport_times}")
 
     # Clone the master MATERIAL for each material ID
     for material in all_materials:

@@ -58,7 +58,6 @@ def load_transport_times(file_path: str) -> dict[str, dict[str, int]]:
         print(f"Opening file: {file_path}")
         next(file) # Skip the header
         for line in file:
-            print(f"Processing line: {line}")
             parts = line.strip().split(';')
             if len(parts) == 3:
                 origin = parts[0].strip()
@@ -85,9 +84,6 @@ def get_transport_times(perf_url: str) -> dict:
     if perf_url.startswith("default+file:"):
         file_path = perf_url.split("default+file:")[1]
         print(f"Loading transport times from file: {file_path}")
-        print(f"Ruta actual: {os.getcwd()}")
-        print(f"Abriendo: {os.path.abspath(file_path)}")
-        print(f"Archivos visibles aquí: {os.listdir(os.getcwd())[:15]}")
 
         return load_transport_times(file_path)
 

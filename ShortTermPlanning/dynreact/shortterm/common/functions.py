@@ -63,7 +63,6 @@ def load_transport_times(file_path: str) -> dict[str, dict[str, int]]:
                 origin = parts[0].strip()
                 dest = parts[1].strip()
                 time = int(parts[2].strip())
-                print(f"Origin: {type(origin)}, Destination: {type(dest)}, Time: {type(time)}")
 
                 if origin not in transport_times:
                     transport_times[origin] = {}

@@ -117,8 +117,8 @@ class Material(Agent):
         previous_price = payload.get('previous_price')
         auction_start_time = payload.get('start_time')
         auction_start_time = datetime.strptime(auction_start_time, '%Y-%m-%dT%H:%M:%SZ')
-        origin = self.params['current_equipment']
-        destination = equipment_id.split(":")[2]
+        origin = str(self.params['current_equipment'])
+        destination = str(equipment_id.split(":")[2])
         print(f"Origin: {origin} Destination: {destination}")
 
         time_to_equipment = timedelta(seconds=int(self.transport_times[origin][destination]))

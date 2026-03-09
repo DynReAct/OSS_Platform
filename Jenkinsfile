@@ -9,7 +9,7 @@ node {
     env.CONTAINER_NAME_PREFIX = "JENKINS_TEST"
 
     env.SNAPSHOT_VERSION = "2025-01-18T08:00:00Z"
-    env.SCENARIO_4_5_EQUIPMENT = "7" // One Equipment, One Material
+    env.SCENARIO_4_5_EQUIPMENT = "1" // One Equipment, One Material
     env.SCENARIO_6_EQUIPMENT = "7" // One Equipment, Two Material
     env.SCENARIO_7_EQUIPMENTS = "6 7" // Two Equipments, One Material
     env.SCENARIO_8_EQUIPMENTS = "6 7" // Two Equipments, shared material
@@ -198,7 +198,7 @@ runStageWithCleanup('Run Scenario 0') {
     }
 
     runStageWithCleanup('Run Scenario 4') {
-        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX', 'SCENARIO_4_5_EQUIPMENT']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests

@@ -51,9 +51,11 @@ def load_transport_times(file_path: str) -> dict[str, dict[str, int]]:
 
     transport_times = {}
     if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
         return transport_times
 
     with open(file_path, 'r') as file:
+        print(f"Opening file: {file_path}")
         next(file) # Skip the header
         for line in file:
             parts = line.strip().split(';')
@@ -72,15 +74,20 @@ def load_transport_times(file_path: str) -> dict[str, dict[str, int]]:
 def get_transport_times(perf_url: str) -> dict:
 #TODO: add docs
 
+    print(f"PERF_URL: {perf_url}, type: {type(perf_url)}")
+
     if not isinstance(perf_url, str):
         print(f"Transport times URL is not a string: {perf_url}")
         return {}
 
     if perf_url.startswith("default+file:"):
         file_path = perf_url.split("default+file:")[1]
+        print(f"Loading transport times from file: {file_path}")
+
         return load_transport_times(file_path)
 
     elif perf_url.startswith("http://") or perf_url.startswith("https://"):
+        print(f"Loading transport times from URL: {perf_url}")
         pass #TODO: Implement service for transport times
 
     print(f"Unknown transport times URL: {perf_url}")

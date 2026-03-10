@@ -176,7 +176,7 @@ def create_auction(
     """
 
     topic_gen = KeySearch.search_for_value("TOPIC_GEN")
-    perf_url = "default+file:DynReActService/data/transport_times.csv" #TODO: change back to KeySearch.search_for_value("PERF_URL")
+    perf_url = "default+file:dynreact/data/transport_times.csv" #TODO: change back to KeySearch.search_for_value("PERF_URL")
 
     if nmaterials is not None and materials is not None:
         dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
@@ -289,6 +289,7 @@ def create_auction(
     print("Final material list size is {}".format(len(all_materials)))
 
     transport_times = get_transport_times(perf_url)
+    print(f"Transport times: {transport_times}")
 
     # Clone the master MATERIAL for each material ID
     for material in all_materials:

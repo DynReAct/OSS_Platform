@@ -118,12 +118,14 @@ class Material(Agent):
         auction_start_time = payload.get('start_time')
         auction_start_time = datetime.strptime(auction_start_time, '%Y-%m-%dT%H:%M:%SZ')
         origin = str(self.params['current_equipment'])
-        destination = str(equipment_id)
+        destination = str(equipment_id.split(":")[2])
+        print(f"Origin: {origin} Destination: {destination}")
 
         time_to_equipment = timedelta(seconds=int(self.transport_times[origin][destination]))
         material_start_time = datetime.now() + time_to_equipment
 
         if material_start_time <= auction_start_time:
+
             # Calculate the bidding price based on EQUIPMENT status and MATERIAL parameters
             bidding_price = self.calculate_bidding_price(
                 material_params=self.params, equipment_status=equipment_status, previous_price=previous_price, auction_start_time=auction_start_time

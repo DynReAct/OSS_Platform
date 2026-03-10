@@ -421,17 +421,12 @@ class LotsOptimizationAlgo:
         instance = self._create_instance_internal(process, snapshot, targets, costs, None)
         plant_lots: dict[int, list[Lot]] = instance.assign_lots(assignments)
         order_assignments: dict[str, OrderAssignment] = {}
-        for order, plant in assignments.items():
-            if plant not in plant_lots:
-                continue
-            lots = plant_lots[plant]
-            lot: Lot | None = next((lot for lot in lots if order in lot.orders), None)
-            if lot is None:
-                continue
-            order_assignments[order] = OrderAssignment(order=order, equipment=plant, lot=lot.id,
-                                                       lot_idx=lot.orders.index(order) + 1)
+        for plant, lots in plant_lots.items():
+            for lot in lots:
+                for idx, order in enumerate(lot.orders):
+                    order_assignments[order] = OrderAssignment(order=order, equipment=plant, lot=lot.id, lot_idx=idx + 1)
         if orders is not None:
-            unassigned: Sequence[str] = (order for order in orders if order not in assignments)
+            unassigned: Sequence[str] = (order for order in orders if order not in order_assignments)
             order_assignments.update(
                 {order: OrderAssignment(order=order, equipment=-1, lot="", lot_idx=-1) for order in unassigned})
         planning = costs.evaluate_order_assignments(process, order_assignments, targets=targets, snapshot=snapshot,

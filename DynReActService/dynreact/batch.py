@@ -10,10 +10,11 @@ import pandas as pd
 from pydantic import BaseModel
 
 from dynreact.app_config import DynReActSrvConfig
+from dynreact.base.LotsOptimizer import OptimizationListener
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Snapshot, ProcessLotCreationSettings, ProductionTargets, EquipmentProduction, Lot, \
-    MidTermTargets, PlannedWorkingShift
+    MidTermTargets, PlannedWorkingShift, ProductionPlanning
 from dynreact.lots_optimization import FrontendOptimizationListener
 from dynreact.state import DynReActSrvState
 
@@ -46,20 +47,23 @@ class BatchConfig(BaseModel, frozen=True, use_attribute_docstrings=True):
 
 class LotsBatchOptimizationJob:
     """
-    TODO timezone handling
     TODO metrics reporting
     TODO use logging over print
     """
 
-    def __init__(self, config: DynReActSrvConfig, state: DynReActSrvState):
+    def __init__(self, config: DynReActSrvConfig, state: DynReActSrvState,
+                 store_results: bool=True, batch_config: BatchConfig|None=None, listener: OptimizationListener|None=None, initial_solutions: dict[str, ProductionPlanning]|None=None):
         self._thread = None
         self._config = None
         self._runs: int = 0
         self._state = state
+        self._listener = listener
+        self._store_results = store_results
+        self._initial_solutions = initial_solutions
         self._snapshot_provider = state.get_snapshot_provider()
         self._stopped = threading.Event()
-        if config.lots_batch_config:
-            self._config = LotsBatchOptimizationJob._parse_config(config.lots_batch_config.strip())
+        if config.lots_batch_config or batch_config:
+            self._config = batch_config if batch_config else LotsBatchOptimizationJob._parse_config(config.lots_batch_config.strip())
             self._thread = threading.Thread(name="batch-lot-creation", target=self.run)
             self._thread.daemon = True
             self._thread.start()
@@ -106,8 +110,14 @@ class LotsBatchOptimizationJob:
     def is_active(self) -> bool:
         return self._thread is not None and not self._stopped.is_set()
 
+    def wait(self, timeout: timedelta|None=None):
+        self._thread.join(timeout=timeout.total_seconds() if timeout is not None else None)
+
     def _process(self, snapshot: datetime):
         state = self._state
+        store_results = self._store_results
+        custom_listener = self._listener
+        initial_solutions = self._initial_solutions
         snap: Snapshot = state.get_snapshot(snapshot)
         algo = state.get_lots_optimization()
         costs = state.get_cost_provider()
@@ -211,19 +221,25 @@ class LotsBatchOptimizationJob:
                 # eligible_orders: list[str] = self._snapshot_provider.eligible_orders(snap, proc.process, process_period, method=method)
                 fixed_transport_duration = timedelta(hours=4)
                 transport_times = lambda eq1, eq2: fixed_transport_duration    # TODO configurable transport times
-                eligible_orders: list[str] = self._snapshot_provider.eligible_orders2(snap, proc.process, process_period, equipment=equipment_ids, transport_times=transport_times)
-                eligible_orders = [o for o in eligible_orders if o in all_orders and any(e in equipment_ids for e in all_orders[o].allowed_equipment)]
-                available_material = sum(all_orders[o].actual_weight for o in eligible_orders)
+                if initial_solutions is not None and proc.process in initial_solutions:
+                    initial_solution = initial_solutions[proc.process]
+                    eligible_orders: list[str] = list(initial_solution.order_assignments.keys())
+                else:
+                    eligible_orders = self._snapshot_provider.eligible_orders2(snap, proc.process, process_period, equipment=equipment_ids, transport_times=transport_times)
+                    eligible_orders = [o for o in eligible_orders if o in all_orders and any(e in equipment_ids for e in all_orders[o].allowed_equipment)]
+                    initial_solution, _ = algo.heuristic_solution(proc.process, snap, process_period[1]-process_period[0], costs, self._snapshot_provider, final_targets, eligible_orders, previous_orders=last_orders)
                 if len(eligible_orders) <= 2:   # TODO configurable, maybe also minimum amount of material
                     print(f"Batch lot creation job for process {proc.process} has only {len(eligible_orders)} eligible orders, skipping it.")
                     continue
+                available_material = sum(all_orders[o].actual_weight for o in eligible_orders)
                 if final_total_production > available_material:
                     print(f"Batch lot creation for {proc.process}: available order backlog of {available_material}t does not cover the target of {final_total_production}t.")
-                initial_solution, _ = algo.heuristic_solution(proc.process, snap, process_period[1]-process_period[0], costs, self._snapshot_provider, final_targets, eligible_orders, previous_orders=last_orders)
                 opti = algo.create_instance(proc.process, snap, costs, targets=final_targets, initial_solution=initial_solution, orders=eligible_orders)
                 # TODO parameters
                 time_id: str = DatetimeUtils.format(DatetimeUtils.now(), use_zone=False).replace("-", "").replace(":","").replace("T", "")
-                listener = FrontendOptimizationListener(proc.process + "_" + time_id + "_batch", persistence, True, opti, timeout=proc.max_duration)
+                listener = FrontendOptimizationListener(proc.process + "_" + time_id + "_batch", persistence, store_results, opti, timeout=proc.max_duration)
+                if custom_listener is not None:
+                    opti.add_listener(custom_listener)
                 t0 = time.time()
                 opti_state.start(proc.process, snapshot, listener, opti, proc.max_iterations)
                 opti_state.wait_for_completion(timeout=proc.max_duration + timedelta(minutes=5))

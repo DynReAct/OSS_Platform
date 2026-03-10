@@ -41,7 +41,6 @@ class TabuSwap:
         return "Order " + str(self.Order) + ": " + str(self.PlantFrom) + " -> " + str(self.PlantTo)
 
 
-# TODO populate lot weight field
 class TabuSearch(LotsOptimizer):
 
     def __init__(self, site: Site, process: str, costs: CostProvider, snapshot: Snapshot, targets: ProductionTargets,
@@ -52,12 +51,13 @@ class TabuSearch(LotsOptimizer):
                  performance_models: list[PlantPerformanceModel] | None = None,
                  orders_custom_priority: dict[str, int] | None = None,
                  forced_orders:  list[str]|None = None,
-                 base_lots: list[Lot]|None = None
+                 base_lots: list[Lot]|None = None,
+                 params: TabuParams|None=None,
                  ):
         super().__init__(site, process, costs, snapshot, targets, initial_solution, min_due_date=min_due_date,
                          best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
                          orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots)
-        self._params: TabuParams = TabuParams()
+        self._params: TabuParams = params if params is not None else TabuParams()
         self._performance_restrictions: list[PerformanceEstimation]|None = None
         self._forbidden_assignments: dict[str, list[int]] = {}
         self._orders_custom_priority = orders_custom_priority
@@ -74,7 +74,36 @@ class TabuSearch(LotsOptimizer):
         self._assignment_costs_by_oder: dict[str, dict[int, float]]|None = None
         self._logistic_costs_by_oder: dict[str, dict[int, float]] | None = None
         self._rnd = random.Random(x=self._params.rand_seed)
+        self._strict = self._params.strict
 
+    def check_solution(self, p: ProductionPlanning):
+        last_eq = None
+        last_order = None
+        last_lot = None
+        lot_idx = 2
+        equipment = self._plants
+        orders = self._orders
+        costs = self._costs
+        for ass in p.order_assignments.values():
+            if ass.equipment < 0 or ass.equipment != last_eq:
+                last_eq = ass.equipment
+                last_order = orders[ass.order]
+                lot_idx = 2
+                last_lot = ass.lot
+                continue
+            next_order = orders[ass.order] if orders is not None else self._snapshot.get_order(ass.order, do_raise=True)
+            next_lot = ass.lot
+            if next_lot == last_lot and lot_idx != ass.lot_idx:
+                raise Exception(f" --!! INVALID solution !!-- for equ {equipment[ass.equipment].name_short} order {last_order.id} - {ass.order}: idx not as expected, wanted {lot_idx}, got {ass.lot_idx}")
+            costs0 = costs.transition_costs(equipment[ass.equipment], last_order, next_order)
+            if self._allocator.create_new_lot_costs_based(costs0) and next_lot == last_lot:
+                raise Exception(f" --!! INVALID solution !!-- for equ {equipment[ass.equipment].name_short} order {last_order.id} - {next_order.id}: costs {costs0} exceed threshold within lot {last_lot};{next_lot}")
+            if next_lot == last_lot:
+                lot_idx += 1
+            else:
+                lot_idx = 2
+            last_order = next_order
+            last_lot = next_lot
 
     def _init_performance_models(self, initial_plant_assignments: dict[str, int]) -> dict[str, int]:
         if self._performance_models is None or len(self._performance_models) == 0 or self._orders is None:
@@ -136,8 +165,9 @@ class TabuSearch(LotsOptimizer):
             #target_vbest: float = self._state.current_object_value
             if self._base_lots is not None:  # append to existing lots
                 initial_plant_assignments = {orders: plant for orders, plant in initial_plant_assignments.items() if orders not in self._base_assignments}
-            vbest = self._allocator.optimize_lots(initial_plant_assignments)
-            target_vbest0 = self._costs.process_objective_function(vbest)
+            init_on_start = self._params.init_order_on_start
+            vbest = self._allocator.optimize_lots(initial_plant_assignments) if init_on_start else self._state.best_solution
+            target_vbest0 = self._costs.process_objective_function(vbest) if init_on_start else self._state.best_objective_value
             target_vbest = target_vbest0.total_value
             self._state.current_solution = vbest
             self._state.current_object_value = target_vbest0
@@ -167,6 +197,8 @@ class TabuSearch(LotsOptimizer):
         iterations_without_shuffle: int = 0
         max_iterations_without_shuffle: int = min(100, int(ntotal/2)) if ntotal >= 30 else ntotal
         while niter < ntotal and not interrupted:
+            if self._strict:
+                self.check_solution(vbest)
             # planning: ProductionPlanning = self._costs.evaluate_order_assignments(self._process, s_best, self._targets, self._snapshot)
             # target_vbest = FTarget(vbest, self.PDict, self.params)
             # target_vbest = self._costs.process_objective_function(vbest)
@@ -535,8 +567,8 @@ class LotsAllocator:
             if plant_id < 0:
                 continue
             order_ids: list[str] = [o for o, plant in order_plant_assignments.items() if plant == plant_id]
-            orders: list[Order] = [self._orders[o] if self._orders is not None else self._snapshot.get_order(o, do_raise=True) for o in order_ids]
-            lots, timeout_hit = self.assign_lots_internal(plant_id, orders, global_costs, self._snapshot, bound_factor=self._params.tsp_solver_global_bound_factor,
+            orders: dict[str, Order] = {o: self._orders[o] if self._orders is not None else self._snapshot.get_order(o, do_raise=True) for o in order_ids}
+            lots, timeout_hit = self.assign_lots_internal(plant_id, list(orders.values()), global_costs, self._snapshot, bound_factor=self._params.tsp_solver_global_bound_factor,
                                       timeout=timeout if timeout is not None else self._params.tsp_solver_global_timeout,
                                       pre_timeout=pre_timeout, solver_id=self._params.tsp_solver_global_costs)
             if timeout_hit:
@@ -628,12 +660,12 @@ class LotsAllocator:
         last_order: Order | None = None
         for idx in route:
             costs = 0 if last_order is None else transition_costs[last_idx, idx]
+
             order: Order = orders[idx]
             # costs = 0 if last_order is None else self._costs.transition_costs(plant, last_order, order)
             if self.create_new_lot_costs_based(costs):
                 lot: Lot = Lot(id="LC_" + plant.name_short + "." + f"{lot_count:02d}", equipment=plant_id, active=False,
-                               status=1, orders=[o.id for o in lot_orders],
-                               weight=sum(o.actual_weight for o in lot_orders))
+                               status=1, orders=[o.id for o in lot_orders], weight=sum(o.actual_weight for o in lot_orders))
                 lots.append(lot)
                 lot_count += 1
                 lot_orders = []
@@ -812,11 +844,12 @@ class LotsAllocator:
         return new_planning
 
     @staticmethod
-    def _adapt_lot_sizes(lots: list[Lot], orders: list[Order], min_lot: float, max_lot: float, plant_id: int, lot_prefix: str):
+    def _adapt_lot_sizes(lots: list[Lot], orders: dict[str, Order], min_lot: float, max_lot: float, plant_id: int, lot_prefix: str):
         """Changes lots list in place"""
         lot_replacements: dict[int, list[Lot]] = {}
+        total_added_lots = 0
         for idx, lot in enumerate(lots):
-            lot_orders = [o for o in orders if o.id in lot.orders]
+            lot_orders = [orders[o] for o in lot.orders]  # important to retain the order here
             total_weight = sum(o.actual_weight for o in lot_orders)
             if total_weight > max_lot and abs(total_weight - max_lot) / max_lot > 0.02 and total_weight / 2 >= min_lot:
                 new_sub_lots = []
@@ -827,7 +860,7 @@ class LotsAllocator:
                 for order_idx, order in enumerate(lot_orders):
                     current_weight = order.actual_weight
                     if sub_lot_weight + current_weight > max_lot and sub_lot_weight >= min_lot and sub_lot_weight > 0:
-                        new_sub_lots.append(Lot(id=lot_prefix + "." + f"{idx + sub_lot_idx:02d}", orders=[o.id for o in current_lot],
+                        new_sub_lots.append(Lot(id=lot_prefix + "." + f"{idx + total_added_lots + sub_lot_idx:02d}", orders=[o.id for o in current_lot],
                                 equipment=plant_id, active=False, status=1, weight=sub_lot_weight))
                         sub_lot_idx += 1
                         current_lot = [order]
@@ -836,13 +869,14 @@ class LotsAllocator:
                         sub_lot_weight += current_weight
                         current_lot.append(order)
                 if len(current_lot) > 0:
-                    new_sub_lots.append(Lot(id=lot_prefix + "." + f"{idx + sub_lot_idx:02d}", orders=[o.id for o in current_lot],
+                    new_sub_lots.append(Lot(id=lot_prefix + "." + f"{idx + total_added_lots + sub_lot_idx:02d}", orders=[o.id for o in current_lot],
                             equipment=plant_id, active=False, status=1, weight=sub_lot_weight))
                 if len(new_sub_lots) > 1:
                     for l_idx in range(idx + 1, len(lots)):  # rename remaining lots
                         other_lot = lots[l_idx]
-                        other_lot.id = lot_prefix + "." + f"{l_idx + len(new_sub_lots) - 1:02d}"
+                        other_lot.id = lot_prefix + "." + f"{l_idx + total_added_lots + len(new_sub_lots) - 1:02d}"
                     lot_replacements[idx] = new_sub_lots
+                    total_added_lots += len(new_sub_lots) - 1
         if len(lot_replacements) > 0:
             for idx in reversed(list(lot_replacements.keys())):
                 new_lots = lot_replacements[idx]
@@ -855,6 +889,7 @@ class TabuAlgorithm(LotsOptimizationAlgo):
 
     def __init__(self, site: Site):
         super().__init__(site)
+        self._params = TabuParams()
 
     def _create_instance_internal(self, process: str, snapshot: Snapshot, targets: ProductionTargets,
                                   costs: CostProvider, initial_solution: ProductionPlanning, min_due_date: datetime|None = None,
@@ -868,7 +903,10 @@ class TabuAlgorithm(LotsOptimizationAlgo):
                                   ) -> TabuSearch:
         return TabuSearch(self._site, process, costs, snapshot, targets, initial_solution=initial_solution, min_due_date=min_due_date,
                           best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
-                          orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots)
+                          orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots, params=self._params)
+
+    def set_params(self, params: TabuParams):
+        self._params = params
 
 
 class CTabuWorker:
@@ -1082,7 +1120,7 @@ class CTabuWorker:
                     last_lot = oa.lot
                     new_assignments[order] = OrderAssignment(order=order, equipment=target_plant, lot="LC_" + plant.name_short + "." + f"{lot_count:02d}", lot_idx=lot_idx)
                     lot_idx += 1
-                if best_cost_idx >= len(other_orders) :
+                if best_cost_idx >= len(other_orders):
                     new_lot = self.tabu_search.create_new_lot_costs_based(transition_costs_left[-1])
                     if new_lot:
                         lot_count += 1

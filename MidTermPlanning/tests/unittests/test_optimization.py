@@ -12,15 +12,15 @@ from dynreact.base.model import Site, Process, Equipment, ProductionTargets, Pro
 
 from dynreact.lotcreation.LotsOptimizerImpl import TabuAlgorithm
 from dynreact.base.impl.SimpleCostProvider import SimpleCostProvider
+from dynreact.lotcreation.TabuParams import TabuParams
 
 
-def _set_test_params(algo: LotsOptimizer):
-    params = algo._params  #: TabuParams
-    params.tsp_solver_final_tsp = False
+def _init_algo(site: Site) -> LotsOptimizationAlgo:
+    algo: TabuAlgorithm = TabuAlgorithm(site)
     # disable limited number of tsps per worker to guarantee deterministic test behaviour
-    params.max_tsps_per_worker = -1
     # params.tsp_solver_global_timeout = 2  # higher timeout in tests to avoid spurious failures?
-    params.rand_seed = 42
+    algo.set_params(TabuParams(tsp_solver_final_tsp=False, max_tsps_per_worker=-1, rand_seed=42, strict=True))
+    return algo
 
 
 class OptimizationTest(unittest.TestCase):
@@ -46,9 +46,8 @@ class OptimizationTest(unittest.TestCase):
         start_assignments: dict[str, OrderAssignment] = {o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for o in orders}  # nothing assigned yet
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
-        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
-        _set_test_params(optimization)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
             objective_value = objective.total_value
@@ -94,9 +93,8 @@ class OptimizationTest(unittest.TestCase):
         }
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
-        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
-        _set_test_params(optimization)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
             objective_value = objective.total_value
@@ -145,9 +143,8 @@ class OptimizationTest(unittest.TestCase):
         initial_status: dict[int, EquipmentStatus] = \
             {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
-        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, performance_models=[ppm])
-        _set_test_params(optimization)
         # optimization.add_listener(TestListener())  # for debugging
         optimization_state: LotsOptimizationState = optimization.run(max_iterations=10)
         assignments: dict[str, int] = {order: ass.equipment for order, ass in optimization_state.best_solution.order_assignments.items()}
@@ -181,9 +178,8 @@ class OptimizationTest(unittest.TestCase):
         start_assignments: dict[str, OrderAssignment] = {o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for o in orders}  # nothing assigned yet
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
-        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
-        _set_test_params(optimization)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
             all_lots = solution.get_lots()
@@ -224,9 +220,8 @@ class OptimizationTest(unittest.TestCase):
         start_assignments: dict[str, OrderAssignment] = {o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for o in orders}  # nothing assigned yet
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
-        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, orders_custom_priority=custom_priorities)
-        _set_test_params(optimization)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
             all_lots = solution.get_lots()
@@ -269,9 +264,8 @@ class OptimizationTest(unittest.TestCase):
                                                        snapshot, planning_period, previous_order=orders[0].id) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,
                                                                   equipment_status=initial_status, previous_orders={p_id: orders[0].id})
-        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
-        _set_test_params(optimization)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
             all_lots = solution.get_lots()
@@ -307,9 +301,8 @@ class OptimizationTest(unittest.TestCase):
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments,
                                                        snapshot, planning_period, previous_order=orders[0].id) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,equipment_status=initial_status)
-        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
-        _set_test_params(optimization)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
             all_lots = solution.get_lots()
@@ -354,9 +347,8 @@ class OptimizationTest(unittest.TestCase):
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments,
                                                        snapshot, planning_period, previous_order=orders[0].id) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,equipment_status=initial_status)
-        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, min_due_date=min_due_date)
-        _set_test_params(optimization)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
             all_lots = solution.get_lots()
@@ -393,9 +385,8 @@ class OptimizationTest(unittest.TestCase):
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments,
                                                        snapshot, planning_period, previous_order=orders[0].id) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,equipment_status=initial_status)
-        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, forced_orders=[special_order])
-        _set_test_params(optimization)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
             all_lots = solution.get_lots()
@@ -440,9 +431,8 @@ class OptimizationTest(unittest.TestCase):
         start_assignments.update({o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for idx, o in enumerate(orders) if o.id not in orders_in_lots})
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,equipment_status=initial_status, previous_orders={p: lot.orders[-1] for p, lot in initial_lots.items()})
-        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, base_lots=initial_lots)
-        _set_test_params(optimization)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
             all_lots = solution.get_lots()
@@ -496,13 +486,9 @@ class OptimizationTest(unittest.TestCase):
         start_assignments: dict[str, OrderAssignment] = {o: OrderAssignment(order=o, lot=lot.id, equipment=lot.equipment, lot_idx=idx+1) for lot in initial_lots.values() for idx, o in enumerate(lot.orders)}
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
-        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        algo: TabuAlgorithm = TabuAlgorithm(test_site)
+        algo.set_params(TabuParams(max_tsps_per_worker=0, rand_seed=42, strict=True))
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
-        params = optimization._params  #: TabuParams
-        # disable the tsp solvers and work with heuristics instead
-        params.max_tsps_per_worker = 0
-
-        # params.tsp_solver_global_timeout = 2  # higher timeout in tests to avoid spurious failures?
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
             all_lots = solution.get_lots()
@@ -517,6 +503,131 @@ class OptimizationTest(unittest.TestCase):
         optimization.add_listener(listener)
         optimization_state: LotsOptimizationState = optimization.run(max_iterations=5)   # will stop earlier when the target has been reached
         listener.check()
+
+    def test_dummy_swaps_respect_lots1(self):
+        """
+        Here we run the optimization with specific parameters (max_tsps_per_worker = 0) to disable the TSP solver completely.
+        Instead, a heuristic algorithm is used to find the best order permutation, which in this simple scenario should succeed, as well.
+        """
+        process = "testProcess"
+        process_id = 0
+        num_plants = 1
+        num_orders = 5
+        plants = [Equipment(id=p, name_short="Plant" + str(p), process=process) for p in range(num_plants)]
+        test_site = Site(processes=[Process(name_short=process, process_ids=[process_id])], equipment=plants, storages=[], material_categories=[])
+        orders = [OptimizationTest._create_order("o_" + str(o), list(range(num_plants)), 10) for o in range(num_orders)]
+        snapshot = Snapshot(timestamp=datetime(year=2025, month=10, day=25), orders=orders, material=OptimizationTest._create_coils_for_orders(orders, process_id),inline_material={}, lots={})
+        planning_period = (snapshot.timestamp, snapshot.timestamp + timedelta(days=1))
+        # transition costs are chosen such that the configuration
+        #   0->1->2->3->4
+        # has costs 11 and the target configuration
+        #   0->1->4->2->3
+        # has costs 8; BUT we still need 2 lots, because the transition 1->4 has costs 5
+        transition_matrix = {o1: {o2: 0 if o1 == o2 else \
+                                  6 if o1 == 1 and o2 == 2 else \
+                                  5 if o1 == 1 and o2 == 4 else \
+                                  1 if (o1 == 4 and o2 == 2) or (o1 == 2 and o2 == 4) else \
+                                  3 if o1 == 3 and o2 == 4 else \
+                                  1 if o2 == o1 + 1 else \
+                                  10 \
+                                  for o2 in range(num_orders)} for o1 in range(num_orders)}
+        transition_costs = {o1.id: {o2.id: transition_matrix[int(o1.id[2:])][int(o2.id[2:])] for o2 in orders} for o1 in orders}
+        costs = SimpleCostProvider("simple:costs", test_site, transition_costs, minimum_possible_costs=1, missing_weight_costs=100, surplus_weight_costs=100)
+        p1 = plants[0]
+        target_weight: float = sum(o.actual_weight for o in orders)
+        targets: ProductionTargets = ProductionTargets(process=process, target_weight={p.id: EquipmentProduction(equipment=p.id, total_weight=target_weight) for p in plants},period=planning_period)
+        start_assignments: dict[str, OrderAssignment] = {f"o_{o}": OrderAssignment(order=f"o_{o}", lot="L0" if o < 2 else "L1" if o < 4 else "", equipment=p1.id if o < 4 else -1,
+                                                                                   lot_idx=o+1 if o < 2 else -1 if o == 4 else o-1) for o in range(num_orders)}
+        initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
+        initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
+        algo: TabuAlgorithm = TabuAlgorithm(test_site)
+        algo.set_params(TabuParams(max_tsps_per_worker=0, NParallel=1, rand_seed=42, strict=True))
+        optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
+
+
+        def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
+            all_lots = solution.get_lots()
+            lots_flat = [lot for lots in all_lots.values() for lot in lots]
+            assert len(lots_flat) == 2, f"Expected two updated lots, got {len(lots_flat)}"
+            assigned_orders = [o for lot in lots_flat for o in lot.orders]
+            assert len(assigned_orders) == len(orders), f"Expected all {len(orders)} orders to be assigned, got {assigned_orders}"
+            lot1 = lots_flat[0]
+            lot1_orders = [int(o[2:]) for o in lot1.orders]
+            assert len(lot1_orders) == 2, f"Expected 2 orders in lot 1, got {lot1.orders}"
+            assert 0 in lot1_orders and 1 in lot1_orders, f"Expected orders 0 and 1 in lot1, got {lot1.orders}"
+            lot2 = lots_flat[1]
+            lot2_orders = [int(o[2:]) for o in lot2.orders]
+            assert lot2_orders[0] == 4, f"Expected lot 2 to start with order 4, got {lot2.orders}"
+            assert lot2_orders[1] == 2, f"Expected lot 2 to continue with order 2, got {lot2.orders}"
+
+        listener = InterruptionTestListener(check_expected_lots)
+        optimization.add_listener(listener)
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=1)  #  single plant with reasonable start config, need only one iteration
+        listener.check()
+
+    def test_dummy_swaps_respect_lots2(self):
+        """
+        Here we run the optimization with specific parameters (max_tsps_per_worker = 0) to disable the TSP solver completely.
+        Instead, a heuristic algorithm is used to find the best order permutation, which in this simple scenario should succeed, as well.
+        """
+        process = "testProcess"
+        process_id = 0
+        num_plants = 1
+        num_orders = 5
+        plants = [Equipment(id=p, name_short="Plant" + str(p), process=process) for p in range(num_plants)]
+        test_site = Site(processes=[Process(name_short=process, process_ids=[process_id])], equipment=plants, storages=[], material_categories=[])
+        orders = [OptimizationTest._create_order("o_" + str(o), list(range(num_plants)), 10) for o in range(num_orders)]
+        snapshot = Snapshot(timestamp=datetime(year=2025, month=10, day=25), orders=orders, material=OptimizationTest._create_coils_for_orders(orders, process_id),inline_material={}, lots={})
+        planning_period = (snapshot.timestamp, snapshot.timestamp + timedelta(days=1))
+        # transition costs are chosen such that the configuration
+        #   0->1->2->3->4
+        # has transition costs 15 and the target configuration
+        #   0->1->3->4
+        # has transition costs 12; we want to incentivize to remove order 2
+        transition_matrix = {o1: {o2: 0 if o1 == o2 else \
+                                  3 if o1 == 2 and o2 == 3 else \
+                                  1 if o2 == o1 + 1 and o1 != 1 else \
+                                  15 if o2 < o1 else \
+                                  10 \
+                                  for o2 in range(num_orders)} for o1 in range(num_orders)}
+        transition_costs = {o1.id: {o2.id: transition_matrix[int(o1.id[2:])][int(o2.id[2:])] for o2 in orders} for o1 in orders}
+        costs = SimpleCostProvider("simple:costs", test_site, transition_costs, minimum_possible_costs=1, missing_weight_costs=100, surplus_weight_costs=100)
+        p1 = plants[0]
+        target_weight: float = sum(o.actual_weight for o in orders if o.id != "o_2")
+        targets: ProductionTargets = ProductionTargets(process=process, target_weight={p.id: EquipmentProduction(equipment=p.id, total_weight=target_weight) for p in plants},period=planning_period)
+        start_assignments: dict[str, OrderAssignment] = {f"o_{o}": OrderAssignment(order=f"o_{o}", lot="L0" if o < 2 else "L1", equipment=p1.id,
+                                                                                   lot_idx=o+1 if o < 2 else o-1) for o in range(num_orders)}
+        initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
+        initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
+        algo: TabuAlgorithm= TabuAlgorithm(test_site)
+        # params.tsp_solver_global_timeout = 2  # higher timeout in tests to avoid spurious failures?
+        algo.set_params(TabuParams(max_tsps_per_worker = 0, NParallel=1, rand_seed=42, strict=True))
+        optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
+
+        def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
+            all_lots = solution.get_lots()
+            lots_flat = [lot for lots in all_lots.values() for lot in lots]
+            assert len(lots_flat) == 2, f"Expected two updated lots, got {len(lots_flat)}"
+            assigned_orders = [o for lot in lots_flat for o in lot.orders]
+            assert len(assigned_orders) == len(orders)-1, f"Expected {len(orders)-1} orders to be assigned, got {assigned_orders}"
+            lot1 = lots_flat[0]
+            lot1_orders = [int(o[2:]) for o in lot1.orders]
+            assert len(lot1_orders) == 2, f"Expected 2 orders in lot 1, got {lot1.orders}"
+            assert 0 in lot1_orders and 1 in lot1_orders, f"Expected orders 0 and 1 in lot1, got {lot1.orders}"
+            lot2 = lots_flat[1]
+            lot2_orders = [int(o[2:]) for o in lot2.orders]
+            assert len(lot2_orders) == 2, f"Expected 2 orders in lot 2, got {lot2.orders}"
+            assert 3 in lot2_orders and 4 in lot2_orders, f"Expected orders 3 and 4 in lot2, got {lot2.orders}"
+
+
+            assert lot2_orders[0] == 3, f"Expected lot 2 to start with order 3, got {lot2.orders}"
+            assert lot2_orders[1] == 4, f"Expected lot 2 to continue with order 4, got {lot2.orders}"
+
+        listener = InterruptionTestListener(check_expected_lots)
+        optimization.add_listener(listener)
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=1)  #  single plant with reasonable start config, need only one iteration
+        listener.check()
+
 
     def test_assignment_costs(self):
         process = "testProcess"
@@ -547,7 +658,7 @@ class OptimizationTest(unittest.TestCase):
         start_assignments: dict[str, OrderAssignment] = { o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for o in orders}
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period, previous_order=previous_orders[p.id]) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status, previous_orders=previous_orders)
-        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
@@ -596,7 +707,7 @@ class OptimizationTest(unittest.TestCase):
 
         target_weight: float = sum(o.actual_weight for o in orders)/2
         targets: ProductionTargets = ProductionTargets(process=process, target_weight={p.id: EquipmentProduction(equipment=p.id, total_weight=target_weight) for p in plants},period=planning_period)
-        algo: LotsOptimizationAlgo = TabuAlgorithm(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site)
         start_solution = algo.heuristic_solution(process, snapshot, timedelta(days=1), costs, None, targets, [o.id for o in all_orders], previous_orders=previous_orders)[0]
         start_assignments: dict[str, OrderAssignment] = start_solution.order_assignments
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period, previous_order=previous_orders[p.id]) for p in plants}

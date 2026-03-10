@@ -24,6 +24,8 @@ class TabuParams:
     "Maximum transition cost within lot; cf. new lot costs in cost provider (default: 3, for SimpleCostProvider)"
     CostNaN: float = 50.0
     "default if cost can not be calculated"
+    init_order_on_start: bool = True
+    "Test setting"
     tsp_solver_global_costs: Literal["ortools", "globalbb", "default"] = "default"
     """
     The algorithm to be used for sorting of orders assigned to one equipment. This is a traveling salesman problem,
@@ -71,6 +73,10 @@ class TabuParams:
     """
     Pseudo-random seed for tests.  
     """
+    strict: bool = False
+    """
+    In strict mode solutions are checked for consistency in every iteration
+    """
 
     def __init__(self,
                  ntotal: int|None = None,
@@ -80,6 +86,7 @@ class TabuParams:
                  NParallel: int|None = None,
                  TAllowed: float|None = None,
                  CostNaN: float|None = None,
+                 init_order_on_start: bool|None=None,
                  tsp_solver_global_costs: Literal["ortools", "globalbb", "default"]|None = None,
                  tsp_solver_global_bound_factor: float | None = None,
                  tsp_solver_global_timeout: float|None = None,
@@ -87,7 +94,8 @@ class TabuParams:
                  tsp_solver_final_timeout: float|None = None,
                  tsp_solver_ortools_timeout: int|None = None,
                  max_tsps_per_worker: int|None = None,
-                 rand_seed: int|None = None
+                 rand_seed: int|None = None,
+                 strict: bool|None = None
     ):
         dotenv.load_dotenv()
         if ntotal is None:
@@ -117,6 +125,18 @@ class TabuParams:
             CostNaN = float(os.getenv("TABU_COST_NAN", TabuParams.CostNaN))
         self.CostNaN = CostNaN
         "default if cost cannot be calculated"
+        if init_order_on_start is None:
+            init_order_on_start0 = os.getenv("INIT_ORDER_ON_START")
+            if init_order_on_start0 is not None:
+                init_order_on_start0 = init_order_on_start0.lower()
+                init_order_on_start = init_order_on_start0 != "0" and init_order_on_start0 != "false"
+            else:
+                init_order_on_start = TabuParams.init_order_on_start
+        self.init_order_on_start = init_order_on_start
+        if strict is None:
+            strict0 = os.getenv("TABU_STRICT_MODE")
+            strict = strict0 is not None and len(strict0.strip()) > 0
+        self.strict = strict
         if tsp_solver_global_costs is None:
             tsp_solver_global_costs = os.getenv("TABU_GLOBAL_COSTS_SOLVER", TabuParams.tsp_solver_global_costs).lower().strip()
             if tsp_solver_global_costs not in ("ortools", "globalbb", "default"):

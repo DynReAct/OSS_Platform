@@ -15,7 +15,7 @@ from dynreact.base.AggregationProvider import AggregationLevel
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.LotSink import LotSink
-from dynreact.base.LotsOptimizer import LotsOptimizationState
+from dynreact.base.LotsOptimizer import LotsOptimizationState, OptimizationListener
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
 from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.SnapshotProvider import SnapshotProvider
@@ -26,7 +26,7 @@ from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.impl.Scenarios import MidTermScenario, MidTermBenchmark
 from dynreact.base.model import Snapshot, Material, OrderAssignment, Order, EquipmentProduction, ProductionTargets, \
     ProductionPlanning, ObjectiveFunction, Site, LabeledItem, Lot, Process, Equipment, PlannedWorkingShift, \
-    LongTermTargets, MaterialCategory, StorageLevel, LotTimes
+    LongTermTargets, MaterialCategory, StorageLevel, LotTimes, ProcessLotCreationSettings, TargetLotSize
 from dynreact.plugins import Plugins
 from dynreact.auth.authentication import authenticate
 
@@ -873,6 +873,82 @@ def run_ltp():
     mtp, levels = ltp.run(f"ltp_cli_{DatetimeUtils.format(DatetimeUtils.now(), use_zone=False)}", targets, initial_storage_levels=initial_storages,
                           shifts=shifts0, plant_availabilities=availabilities_aggregated)
     print("Results", mtp)
+
+
+def run_mtp():
+    parser = argparse.ArgumentParser(description="Run the mid term planning")
+    parser.add_argument("process", help="Process stage", type=str, default=None)
+    parser.add_argument("-s", "--snapshot", help="Snapshot timestamp", type=str, default=None)
+    parser.add_argument("-o", "--order", help="Select orders to be included. Separate multiple fields by \",\". If not specified, all available orders will be included.", type=str, default=None)
+    parser.add_argument("-lt", "--lot", help="Select lots to be included in order backlog. Separate multiple fields by \",\". If not specified, all available orders will be included.", type=str, default=None)
+    parser.add_argument("-e", "--equipment", help="Filter equipment to be included. Separate multiple by commas.", type=str, default=None)
+    parser.add_argument("-sl", "--solution", help="Start from an existing solution", type=str, default=None)
+    parser.add_argument("-sr", "--store-result", help="Set parameter to store result", action="store_true")
+    parser.add_argument("-i", "--iterations", help="Maximum number of iterations to run", type=int, default=100)
+    parser.add_argument("-t", "--timeout", help="Timeout, such as PT2M for two minutes", type=str, default="PT5M")
+    parser.add_argument("-str", "--strict", help="Run in strict mode, validating the created solution in every iteration", action="store_true")
+    args = parser.parse_args()
+    cfg = DynReActSrvConfig()
+    plugins = Plugins(cfg)
+    site = plugins.get_config_provider().site_config()
+    process: str = _process_for_id(site.processes, args.process).name_short
+    snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
+    snapshot: Snapshot = plugins.get_snapshot_provider().load(time=snap)
+    equipment: list[Equipment] = _plants_for_ids(args.equipment, site) or site.get_process_equipment(process)
+    equipment_ids = [p.id for p in equipment]
+    start_solution = None
+    opti = plugins.get_lots_optimization()
+    strict = args.strict
+    from dynreact.lotcreation.TabuParams import TabuParams
+    params = TabuParams(rand_seed=42, strict=strict)  # make the result reproducible
+    opti.set_params(params)
+    if args.solution is not None:
+        opti_state: LotsOptimizationState = plugins.get_results_persistence().load(snapshot.timestamp, process, args.solution)
+        if opti_state is None:
+            raise Exception(f"Solution not found: {args.solution}")
+        start_solution: ProductionPlanning = opti_state.best_solution
+    elif args.lot is not None or args.order is not None:
+        if args.lot is not None:
+            lots = [lt for lt in (lt.strip() for lt in args.lot.split(",")) if lt != ""]
+            lots_by_ids = {lot.id: lot for lots_arr in snapshot.lots.values() for lot in lots_arr}
+            lot_obj = [lots_by_ids[lt] for lt in lots]
+            order_ids= [o for lot in lot_obj for o in lot.orders]
+        else:
+            order_ids = [o for o in (o.strip() for o in args.order.split(",")) if o != ""]
+        lot_creation_settings: ProcessLotCreationSettings = site.lot_creation.processes[process]
+        equipment_targets: dict[int, float] = {e: lot_creation_settings.get_equipment_targets(e) for e in equipment_ids}
+        equipment_lot_ranges: dict[int, tuple[float, float]] = {e: (s.min, s.max) for e, s in {e: lot_creation_settings.get_equipment_lot_sizes(e) for e in equipment_ids}.items() if s is not None}
+        eq_targets: dict[int, EquipmentProduction] = {e: EquipmentProduction(equipment=e, total_weight=target, lot_weight_range=equipment_lot_ranges.get(e)) for e, target in equipment_targets.items()}
+        horizon = site.lot_creation.duration
+        start = snapshot.timestamp
+        period = (start, start + horizon)
+        targets = ProductionTargets(process=process, target_weight=eq_targets, period=period)
+        start_solution = opti.heuristic_solution(process, snapshot, period, plugins.get_cost_provider(), plugins.get_snapshot_provider(), targets, order_ids)[0]
+    iterations = args.iterations
+    timeout = pd.Timedelta(args.timeout).to_pytimedelta()
+
+    from dynreact.batch import ProcessConfig, BatchConfig, LotsBatchOptimizationJob
+    from dynreact.state import DynReActSrvState
+    pc = ProcessConfig(process=process, max_duration=timeout, max_iterations=iterations)
+    batch_config = BatchConfig(time=DatetimeUtils.now(), test=True, processes=[pc], append_period=True)
+    listener = CliMtpListener()
+
+    job = LotsBatchOptimizationJob(cfg, DynReActSrvState(cfg, plugins), store_results=args.store_result, batch_config=batch_config, listener=listener,
+                                   initial_solutions=None if start_solution is None else {process: start_solution})
+    time.sleep(1)
+    job.stop()
+    one_minute = timedelta(minutes=1)
+    if timeout <= one_minute:
+        wait_timeout = timeout + timedelta(seconds=30)
+    else:
+        wait_timeout = timeout + one_minute
+    job.wait(timeout=wait_timeout)
+
+
+class CliMtpListener(OptimizationListener):
+
+    def update_solution(self, planning: ProductionPlanning, objective_value: ObjectiveFunction):
+        print("  - Batch MTP next step, objective", objective_value)
 
 
 def _field_for_order(o: Order|Material, field: str) -> Sequence[str]:

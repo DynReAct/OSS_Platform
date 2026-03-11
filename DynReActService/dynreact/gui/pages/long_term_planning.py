@@ -98,9 +98,9 @@ def layout(*args, **kwargs):
                 html.Div([  # this extra layer is only there to avoid applying the control panel styles for subelements to the div below
                     html.Div([
                         html.H3("Equipment availabilities"),
-                        html.Div("To be defined", id="ltp-init-availabilities-result",
+                        html.Div("To be defined", id="ltp-init-availabilities-result", className="ltp-init-processes",
                                 title="Click equipment icons below to adapt the availabilities.")
-                    ], id="ltp-init-availabilities"),
+                    ], className="ltp-settings-card"),
                     html.Div([
                         html.H3("Process capacities"),
                         html.Div("To be defined", id="ltp-init-process-capacities", className="ltp-init-processes"),
@@ -108,21 +108,21 @@ def layout(*args, **kwargs):
                             html.Div("Min: ", title="The minimum capacity process determines the target production. Some processes may be ignored in this consideration."),
                             html.Div(id="ltp-process-min-capacity", title="The minimum capacity process determines the target production. Some processes may be ignored in this consideration.")
                         ], className="ltp-process-min-capacity")
-                    ]),
+                    ], className="ltp-settings-card"),
                     html.Div([
                         html.H3("Material structure"),
                         html.Div([
                             html.Div("To be defined", id="ltp-init-structure-total"),
                             html.Div(id="ltp-init-structure-result")
                         ], className="ltp-init-structure-body")
-                    ], id="ltp-init-structure"),
+                    ], id="ltp-init-structure", className="ltp-settings-card"),
                     html.Div([
                         html.H3("Initial storage content"),
                         html.Div([
                             html.Div("To be defined", id="ltp-init-storages-total"),
                             html.Div(id="ltp-init-storages-result", className="ltp-init-storages-result")
                         ], className="ltp-init-structure-body")
-                    ], id="ltp-init-storages")
+                    ], id="ltp-init-storages", className="ltp-settings-card")
                 ], className="ltp-init-panel2")
             ])
         ], className="control-panel", id="ltp-initialization"),
@@ -698,7 +698,7 @@ def set_initial_availabilities(_: Any, __: Any, start_time: datetime|str, horizo
         decimals = 0 if average_capacity >= 100_000 else 1 if average_capacity >= 10_000 else 2
         min_capacity_in_unit = min_capacity_in_unit / 1e3
     min_cap_string = f"{min_capacity_in_unit:.{decimals}f} {capacity_unit} ({min_capacity_proc})"
-    return [html.Div(f"{plants[pid].name_short}: {round(period.total_seconds()/3_600)}h") for pid, period in hours_per_plant.items()], \
+    return [div for divs in ((html.Div(f"{plants[pid].name_short}:"), html.Div(f"{round(period.total_seconds()/3_600)}h", className="ltp-processes-cap"), html.Div()) for pid, period in hours_per_plant.items()) for div in divs], \
         [div for divs in ((html.Div(f"{proc}:"), html.Div(f"{capacity:.{decimals}f} {capacity_unit}", className="ltp-processes-cap"), html.Div()) for proc, capacity in capacity_by_process.items()) for div in divs], \
         min_cap_string, min_capacity
 

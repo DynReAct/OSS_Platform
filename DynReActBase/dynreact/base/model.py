@@ -542,6 +542,16 @@ class LotCreationSettings(Model):
     "The reference duration these settings apply to. E.g., one shift of eight hours, or one day."
 
 
+class ProcessLtpSettings(Model):
+    ignore_capacity: bool = False
+    "If set to true, the process step is ignored in the capacity consideration"
+
+
+class LongTermPlanningSettings(Model):
+    processes: dict[str, ProcessLtpSettings]
+    "Settings per process step"
+
+
 class Site(LabeledItem):
     processes: list[Process]
     equipment: list[Equipment]
@@ -554,6 +564,7 @@ class Site(LabeledItem):
     """
     #structure_planning: dict[str, StructurePlanningSettings]|None = None
     lot_creation: LotCreationSettings|None=None
+    long_term_planning: LongTermPlanningSettings|None=None
 
 
     def get_process(self, process: str, do_raise: bool=False) -> Process|None:

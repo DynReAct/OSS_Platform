@@ -105,3 +105,24 @@
     /*color: rgba(235, 112, 25, 1); *//* rgba(2, 69, 17, 1); */
 }
 
+.ltp-init-processes {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    column-gap: 0.5em;
+    row-gap: 0.3em;
+}
+
+.ltp-processes-cap {
+    justify-self: end;
+}
+
+.ltp-process-min-capacity {
+    display: flex;
+    column-gap: 0.5em;
+    margin-top: 1em;
+}
+
+.ltp-process-min-capacity>:first-child {
+    font-weight: bold;
+    color: rgba(2, 69, 17, 1);;
+}

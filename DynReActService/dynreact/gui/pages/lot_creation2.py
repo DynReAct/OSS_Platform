@@ -727,7 +727,7 @@ def update_plants(snapshot: str,
                   use_lot_range0: list[Literal[""]]
                   ) -> tuple[list[Component], list[any], list[Literal[""]], str, str]:
     changed = GuiUtils.changed_ids()
-    process_changed = "selected-process" in changed
+    process_changed = "lots2-process-selector" in changed
     use_lot_range: bool = len(use_lot_range0) > 0 and not process_changed
     init_lot_size_from_settings: bool = False
     site = state.get_site()
@@ -862,7 +862,7 @@ def update_plants(snapshot: str,
             target_div.value = str(target)
             if fraction_duration <= 0:
                 checkbox.value = []
-        if use_lot_range:   # visible
+        if use_lot_range:
             settings = site.lot_creation.processes[process].lot_sizes if site.lot_creation is not None and process in site.lot_creation.processes else None
             min_val = 0 if settings is None else settings.min if isinstance(settings, TargetLotSize) else settings.get(plant.id, TargetLotSize(min=0, max=0)).min
             max_val = 0 if settings is None else settings.max if isinstance(settings, TargetLotSize) else settings.get(plant.id, TargetLotSize(min=0, max=0)).max

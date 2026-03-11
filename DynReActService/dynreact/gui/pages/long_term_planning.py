@@ -1,3 +1,5 @@
+import numpy as np
+
 import threading
 import traceback
 from calendar import monthrange  # , Day  # Python 3.12
@@ -97,8 +99,16 @@ def layout(*args, **kwargs):
                     html.Div([
                         html.H3("Equipment availabilities"),
                         html.Div("To be defined", id="ltp-init-availabilities-result",
-                                title="Click equipment icons below to adapt the availabilities.")  # TODO content
+                                title="Click equipment icons below to adapt the availabilities.")
                     ], id="ltp-init-availabilities"),
+                    html.Div([
+                        html.H3("Process capacities"),
+                        html.Div("To be defined", id="ltp-init-process-capacities", className="ltp-init-processes"),
+                        html.Div([
+                            html.Div("Min: ", title="The minimum capacity process determines the target production. Some processes may be ignored in this consideration."),
+                            html.Div(id="ltp-process-min-capacity", title="The minimum capacity process determines the target production. Some processes may be ignored in this consideration.")
+                        ], className="ltp-process-min-capacity")
+                    ]),
                     html.Div([
                         html.H3("Material structure"),
                         html.Div([
@@ -143,6 +153,7 @@ def layout(*args, **kwargs):
         # as output from the calendar popup
         dcc.Store(id="ltp-availability-buffer", storage_type="memory"),
         dcc.Store(id="ltp-storage-levels"),  # None or {storage id: StorageLevel}
+        dcc.Store(id="ltp-min-capacity", storage_type="memory", data=100_000),
         dcc.Interval(id="ltp-interval", n_intervals=3_600_000),  # for polling when optimization is running
     ], id="ltp")
 
@@ -292,9 +303,12 @@ def snapshot_changed(snapshot: datetime | None) -> str:
 @callback(
     Output("ltp-production-total", "value"),
           Input("ltp-materials-cancel", "n_clicks"),
+          Input("ltp-min-capacity", "data"),
           State("ltp-material-setpoints", "data"),
           config_prevent_initial_callbacks=True)
-def material_menu_canceled(_, setpoints: dict[str, float]) -> float:
+def material_menu_canceled(_, min_capacity: float, setpoints: dict[str, float]) -> float:
+    if "ltp-min-capacity" in GuiUtils.changed_ids():
+        return round(min_capacity) if min_capacity is not None and np.isfinite(min_capacity) else dash.no_update
     total_amount = _get_total_selected_amount(setpoints)
     if total_amount is None:
         return dash.no_update
@@ -570,8 +584,8 @@ def availabilities_changed(availabilities_json: dict[str, any]|None):   # user c
           Input("ltp-storageinit-half-trigger", "n_clicks"),
           Input("ltp-storageinit-clear", "n_clicks"),
           Input("ltp-start-time", "value"),
-          State("ltp-storage-levels", "data"),
-          config_prevent_initial_callbacks=True)
+          State("ltp-storage-levels", "data"),)
+          #config_prevent_initial_callbacks=True)
 def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
     if not dash_authenticated(config):
         return None
@@ -583,7 +597,8 @@ def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
         return None
     site = state.get_site()
     storages: dict[str, StorageLevel] = {}
-    if "ltp-storageinit-half-trigger" in changed_ids:
+    init_half = "ltp-storageinit-half-trigger" in changed_ids or len(changed_ids) == 0
+    if init_half:
         for storage in site.storages:
             material_levels = {cl.id: 0.5 * (cl.default_share if cl.default_share is not None else 1 if cl.is_default else 0)  \
                                                                     for cat in site.material_categories for cl in cat.classes}
@@ -613,6 +628,9 @@ def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
 
 
 @callback(Output("ltp-init-availabilities-result", "children"),
+            Output("ltp-init-process-capacities", "children"),
+            Output("ltp-process-min-capacity", "children"),
+            Output("ltp-min-capacity", "data"),
             Input("ltp-plants-graph", "stylesheet"),  # this is triggered by a change in ltp-availability-buffer.data
             Input("ltp-plant-availability", "data"),  # triggered by calendar-clear => update upon clearing the calendar
             Input("ltp-start-time", "value"),
@@ -623,7 +641,7 @@ def set_initial_availabilities(_: Any, __: Any, start_time: datetime|str, horizo
     persistence = state.get_availability_persistence()
     start, end = _get_start_end_time(start_time, horizon)
     if start is None or end is None:
-        return "Not available"
+        return "Not available", [], [], 100_000
     plants: dict[int, Equipment] = {p.id: p for p in state.get_site().equipment}
     plant_data: dict[int, list[EquipmentAvailability]] = persistence.load_all(start, end)
     start_dt, end_dt = _date_range_to_datetime(start, end)
@@ -648,7 +666,41 @@ def set_initial_availabilities(_: Any, __: Any, start_time: datetime|str, horizo
     hours_per_plant.update({pid: ModelUtils.aggregate_availabilities(avail, start, end) for pid, avail in plant_data.items()})
     # sort according to plants array
     hours_per_plant = dict(sorted(hours_per_plant.items(), key=lambda key_val: next(idx for idx, pid in enumerate(plants.keys()) if pid == key_val[0])))
-    return [html.Div(f"{plants[pid].name_short}: {round(period.total_seconds()/3_600)}h") for pid, period in hours_per_plant.items()]
+    processes = state.get_site().processes
+    capacity_by_process = {proc.name_short: 0. for proc in processes}  # in t
+    for p, hours in hours_per_plant.items():
+        if p not in plants:
+            continue
+        plant_obj = plants[p]
+        if plant_obj.throughput_capacity is None:   # maybe we should rather hide the element then?
+            continue
+        capacity_by_process[plant_obj.process] += plant_obj.throughput_capacity * hours.total_seconds() / 3600
+    min_cap_by_proc = capacity_by_process
+    ltp_settings = state.get_site().long_term_planning
+    if ltp_settings is not None:
+        procs_to_ignore = [p for p, settings in ltp_settings.processes.items() if settings.ignore_capacity]
+        if len(procs_to_ignore) > 0:
+            min_cap_by_proc = {p: c for p,c in min_cap_by_proc.items() if p not in procs_to_ignore}
+    min_capacity_proc = min(min_cap_by_proc, key=min_cap_by_proc.get)
+    min_capacity = capacity_by_process.get(min_capacity_proc)
+    min_capacity_in_unit = min_capacity
+    average_capacity = np.mean(list(capacity_by_process.values()))
+    capacity_unit = "t"
+    decimals = 0
+    if average_capacity > 1_000_000:
+        capacity_unit = "Mt"
+        capacity_by_process = {p: c/1e6 for p,c in capacity_by_process.items()}
+        decimals = 0 if average_capacity >= 100_000_000 else 1 if average_capacity >= 10_000_000 else 2
+        min_capacity_in_unit = min_capacity_in_unit / 1e6
+    if average_capacity > 1_000:
+        capacity_unit = "kt"
+        capacity_by_process = {p: c / 1e3 for p, c in capacity_by_process.items()}
+        decimals = 0 if average_capacity >= 100_000 else 1 if average_capacity >= 10_000 else 2
+        min_capacity_in_unit = min_capacity_in_unit / 1e3
+    min_cap_string = f"{min_capacity_in_unit:.{decimals}f} {capacity_unit} ({min_capacity_proc})"
+    return [html.Div(f"{plants[pid].name_short}: {round(period.total_seconds()/3_600)}h") for pid, period in hours_per_plant.items()], \
+        [div for divs in ((html.Div(f"{proc}:"), html.Div(f"{capacity:.{decimals}f} {capacity_unit}", className="ltp-processes-cap"), html.Div()) for proc, capacity in capacity_by_process.items()) for div in divs], \
+        min_cap_string, min_capacity
 
 
 @callback(

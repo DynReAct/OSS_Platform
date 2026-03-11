@@ -247,10 +247,10 @@ def update_plants_table(solution: dict[str, Any]):
                     "headerTooltip": f"{plant.name_short or plant.name} ({plant.id})" } for proc in procs for plant in site.get_process_equipment(proc.name_short)]
     column_defs = [{"field": "day", "pinned": True}] + column_defs
     row_data = []
-    current_day: date = sub_periods[0][0].date()
+    current_day: date = sub_periods[0][0].astimezone().date()
     current_data: dict[int|str, Any] = {"day": current_day.strftime("%Y-%m-%d")}
     for idx, period in enumerate(sub_periods):
-        day = period[0].date()
+        day = period[0].astimezone().date()
         if day != current_day:
             row_data.append(current_data)
             current_data = {"day": day.strftime("%Y-%m-%d")}
@@ -262,6 +262,7 @@ def update_plants_table(solution: dict[str, Any]):
                     current_data[plant] = 0
                 current_data[plant] += plant_targets.get("total_weight")
     row_data.append(current_data)
+    row_data = [{k: v if not isinstance(v, float|int) or v > 0.01 else 0 for k, v in row.items()} for row in row_data]
     return column_defs, row_data  # FIXME row_data looks ok, but the first day is missing in GUI
 
 

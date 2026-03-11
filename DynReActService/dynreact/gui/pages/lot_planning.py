@@ -501,12 +501,14 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
 
     last_plant = None
     last_order: Order | None = None
+    last_lot_obj: Lot|None = None
     plant_obj: Equipment|None = None
 
     def order_to_json(o: Order, lot: str|None):
         nonlocal last_plant
         nonlocal last_order
         nonlocal plant_obj
+        nonlocal last_lot_obj
         as_dict = o.material_properties.model_dump(exclude_none=True, exclude_unset=True) if isinstance(o.material_properties, BaseModel) \
             else o.material_properties
         as_dict["order"] = o.id
@@ -544,6 +546,8 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
             if plant == last_plant:
                 tr_costs = costs.transition_costs(plant_obj, last_order, o)
                 as_dict["costs"] = tr_costs
+                if lot_obj != last_lot_obj:
+                    as_dict["lotStart"] = True
             else:
                 as_dict["lotStart"] = True
                 plant_obj = plants[plant]
@@ -554,6 +558,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
                         tr_costs = costs.transition_costs(plant_obj, start_order, o)
                         as_dict["costs"] = tr_costs
             last_plant = plant
+            last_lot_obj = lot_obj
         else:
             as_dict["predecessorLot"] = True
         last_order = o

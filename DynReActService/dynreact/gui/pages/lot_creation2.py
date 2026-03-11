@@ -417,7 +417,7 @@ def settings_tab(init_method: Literal["heuristic", "duedate", "snapshot", "resul
             html.Div("Store:", title="Store results?"),
             html.Div(dcc.Checklist(options=[""], value=[""], id="lots2-store-results"), title="Store results?"),
         ], className="lots2-settings-tab-grid"),
-        html.Div(id="lots2-warning-message", className="lots2-message-field"),
+        html.Div(id="lots2-warning-message", className="lots2-message-severe"),
         html.Div([
             html.Button("Start", id="lots2-start", className="dynreact-button", disabled=True),
             html.Button("Continue", id="lots2-continue", className="dynreact-button", hidden=True),
@@ -1679,6 +1679,7 @@ def update_figure(history: list[float]|None):
           Output("lots2-interval", "interval"),
           Output("lots2-running-indicator", "hidden"),
           Output("lots2-warning-message", "children"),
+          Output("lots2-warning-message", "className"),
 
           State("selected-snapshot", "data"),
           State("lots2-check-use-lot-range", "value"),
@@ -1735,6 +1736,7 @@ def process_changed(snapshot: datetime|None,
                     _, __, ___, _v,
                     ):
     warning_message = ""
+    warning_class = "lots2-message-severe"
 
     #process_out = dash.no_update  #default, process_out = process only if changed inside
 
@@ -1779,7 +1781,7 @@ def process_changed(snapshot: datetime|None,
     if not dash_authenticated(config):
         return (True, True, True, #  process_out,
                 True, iterations, iterations, iterations, True, selected_init_method, [],
-                existing_solution, True, "Not authenticated", interval, True, warning_message)
+                existing_solution, True, "Not authenticated", interval, True, warning_message or "Not authenticated", warning_class)
     store_results: bool = len(store_results0) > 0
     changed_ids: list[str] = GuiUtils.changed_ids()
     # if running, then use configured iterations from run
@@ -1824,7 +1826,7 @@ def process_changed(snapshot: datetime|None,
         warning_message = warning_message if warning_message else title
         return (True, stop_disabled, True, #process_out,
                 False, iterations, iterations, iterations, True, selected_init_method, [], None,
-                selection_disabled, title, interval, True, warning_message)
+                selection_disabled, title, interval, True, warning_message, warning_class)
     if selected_init_method is None:
         if len(existing_solutions) > 0:
             selected_init_method = "result"
@@ -1841,7 +1843,7 @@ def process_changed(snapshot: datetime|None,
         warning_message = warning_message if warning_message else title
         return (True, stop_disabled, continue_hidden, #process_out,
                 False, iterations, iterations, iterations, True, selected_init_method, [], None,
-                selection_disabled, title, interval, True, warning_message)
+                selection_disabled, title, interval, True, warning_message, warning_class)
     result_selector_hidden = selected_init_method != "result"
     # here start optimization
     start_disabled, error_msg, info_msg = check_start_optimization(changed_ids, process, snapshot, iterations, horizon_hours, selected_init_method,
@@ -1863,7 +1865,7 @@ def process_changed(snapshot: datetime|None,
             warning_message = warning_message if warning_message else title
             return (True, stop_disabled, True, #process_out,
                     False, iterations, iterations, iterations, False, selected_init_method, results, existing_solution,
-                    selection_disabled, title, interval, True, warning_message)
+                    selection_disabled, title, interval, True, warning_message, warning_class)
         existing_solution = existing_solutions[-1]  # ?
     existing_solution = existing_solution if selected_init_method == "result" else dash.no_update
     stop_disabled = not start_disabled
@@ -1885,10 +1887,11 @@ def process_changed(snapshot: datetime|None,
     backlog_weight = order_data.get("orders_selected_weight", 0) if order_data is not None else 0
     if (warning_message is None or warning_message == "") and _tab == "settings" and target_weight is not None and target_weight > backlog_weight:
         warning_message = f"Order backlog of {backlog_weight:.1f}t does not cover the targeted {target_weight:.1f}t."
+        warning_class = "lots2-message-warn"
     return (start_disabled, stop_disabled, continue_hidden, #process_out,
             process_selection_disabled, iterations, iterations, iterations, result_selector_hidden,
             selected_init_method, results, existing_solution, selection_disabled, "Start/stop planning optimization", interval, running_indicator_hidden,
-            warning_message)
+            warning_message, warning_class)
 
 def continue_possible() -> tuple[bool, str|None]:
     return state.get_lot_creator().continue_possible()

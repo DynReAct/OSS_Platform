@@ -369,11 +369,14 @@
     display: flex;
     column-gap: 0.2em;
 }
-.lots2-message-field {
-    display: flex;
+.lots2-message-severe {
     margin-top: 1.5em;
-    column-gap: 0.2em;
     color: red
+}
+
+.lots2-message-warn {
+    margin-top: 1.5em;
+    color: orange;
 }
 
 /* Control row (tabs + graph) */

@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, date, time
-from typing import Literal
+from typing import Literal, Mapping
 
 import dash
 from dash import html, dcc, callback, Output, Input, clientside_callback, ClientsideFunction, State
@@ -28,6 +28,7 @@ def layout(*args, **kwargs):
     selected_material = kwargs.get("material") or kwargs.get("mat")
     selected_material = selected_material if selected_material is not None and next((m for m in materials if m.id == selected_material), None) is not None \
         else materials[0].id
+    initial_solution_id = None if selected is None else kwargs.get("solution")
     materials = [{"value": mat.id, "label": mat.name if mat.name is not None else mat.id, "selected": mat.id == selected_material} for mat in materials]
     return html.Div([
         html.H1("Long term planning results", id="ltp_res-title"),
@@ -35,7 +36,7 @@ def layout(*args, **kwargs):
             html.Div([html.Div("Start date: "), dcc.Dropdown(id="ltp_res-starttime-selector",  className="ltp_res-startselect",
                                                              options=start_time_options, value=selected.strftime("%Y-%m-%d") if selected is not None else None)]),
             html.Div([html.Div("Selection range: ", id="ltp_res-selection-range"),
-                   dcc.DatePickerRange(id="snapshots-date-range", display_format="YYYY-MM-DD", start_date=start, end_date=end)])
+                   dcc.DatePickerRange(id="ltp-res-date-range", display_format="YYYY-MM-DD", start_date=start, end_date=end)])
         ], className="ltp_res-selector-row"),
         html.H2("Solutions"),
         html.Div(
@@ -55,7 +56,7 @@ def layout(*args, **kwargs):
                 columnSizeOptions={"defaultMinWidth": 125},
                 columnSize="responsiveSizeToFit",
                 dashGridOptions={"rowSelection": "single", "domLayout": "autoHeight"},
-                style={"height": None}  # required with autoHeight
+                style={"height": None},  # required with autoHeight
                 ## tooltipField is not used, but it must match an existing field for the tooltip to be shown
                 # defaultColDef={"tooltipComponent": "CoilsTooltip", "tooltipField": "id"},
                 # dashGridOptions={"rowSelection": "multiple", "suppressRowClickSelection": True, "animateRows": False,
@@ -136,6 +137,7 @@ def layout(*args, **kwargs):
         dcc.Store(id="ltp_res-solutions"),              # array of json docs
         dcc.Store(id="ltp_res-selected-solution-id"),   # string
         dcc.Store(id="ltp_res-selected-solution"),      # json doc
+        dcc.Store(id="initial_solution_id", data=initial_solution_id)
    ])
 
 
@@ -146,10 +148,10 @@ def get_date_range(start_date: date|None=None) -> tuple[date, date, list[date], 
     """
     if not dash_authenticated(config):
         return None, None, [], None
-    persistence: ResultsPersistence = state.get_results_persistence()
+    persistence: ResultsPersistence = state.get_results_persistence_aggregate()
     if start_date is not None:
-        start_times: list[datetime] = persistence.start_times_ltp(start=DatetimeUtils.date_to_datetime(start_date - timedelta(days=65)),
-                        end=DatetimeUtils.date_to_datetime(start_date + timedelta(days=65)))
+        start_times: list[datetime] = persistence.start_times_ltp(start=DatetimeUtils.date_to_datetime(start_date - timedelta(days=65), utc=False),
+                        end=DatetimeUtils.date_to_datetime(start_date + timedelta(days=65), utc=False))
     else:
         start_times = persistence.start_times_ltp(sort="desc", limit=50)
     start_dates: list[date] = _start_times_to_dates(start_times)
@@ -171,14 +173,17 @@ def _start_times_to_dates(lst: list[datetime]) -> list[date]:
 
 @callback(Output("ltp_res-solutions", "data"),
           Output("ltp_res-solutions-table", "rowData"),
-          Input("ltp_res-starttime-selector", "value"))
-def find_solutions(starttime: str|None):
+          Output("ltp_res-solutions-table", "selectedRows"),
+          Input("ltp_res-starttime-selector", "value"),
+          State("ltp_res-solutions-table", "selectedRows"),
+          State("initial_solution_id", "data"))
+def find_solutions(starttime: str|None, selected_rows: list[dict[str, any]|str]|None, initial_solution_id: str|None):
     parsed = DatetimeUtils.parse_date(starttime)
     if parsed is None:
         return [], []
     parsed = state.replace_timezone(parsed)
     #parsed_date = parsed.date()
-    persistence: ResultsPersistence = state.get_results_persistence()
+    persistence: ResultsPersistence = state.get_results_persistence_aggregate()
     solutions: list[str] = persistence.solutions_ltp(parsed)  # TODO is this exact? Or could we specify a range?
     solutions2: list[tuple[MidTermTargets, list[dict[str, StorageLevel]]|None]] = [persistence.load_ltp(parsed, s) for s in solutions]
     rows = [{
@@ -190,7 +195,9 @@ def find_solutions(starttime: str|None):
             "storage_levels": TypeAdapter(list[dict[str, StorageLevel]]).dump_python(t[1])
         } for idx, t in enumerate(solutions2)]
     table_rows = [{k: v if k != "time_horizon" else round(v/7) for k, v in r.items()} for r in rows]
-    return rows, table_rows
+    if len(rows) > 0 and initial_solution_id is not None and (selected_rows is None or (isinstance(selected_rows, dict) and len(selected_rows["ids"]) == 0) or len(selected_rows) == 0):
+        selected_rows = {"ids": [initial_solution_id]}
+    return rows, table_rows, selected_rows
 
 
 # on table row selection change the selected solution
@@ -198,14 +205,19 @@ def find_solutions(starttime: str|None):
         Output("ltp_res-selected-solution", "data"),
         Input("ltp_res-solutions-table", "selectedRows"),
         State("ltp_res-solutions", "data"))
-def solution_selected(selected_rows: list[dict[str, any]]|None, solutions: list[dict[str, any]]|None):
+def solution_selected(selected_rows: list[dict[str, any]|str]|None, solutions: list[dict[str, any]]|None):
+    if isinstance(selected_rows, dict):
+        selected_rows = selected_rows["ids"]
     if selected_rows is None or len(selected_rows) == 0:
         return None, None
-    sol_id = selected_rows[0].get("id", None)
+    sol_id = selected_rows[0].get("id", None) if isinstance(selected_rows[0], Mapping) else selected_rows[0]
     if sol_id is None:
         return None, None
-    sol = next(s for s in solutions if s.get("id", None) == sol_id) if solutions is not None else None
-    return sol_id, sol
+    try:
+        sol = next(s for s in solutions if s.get("id", None) == sol_id) if solutions is not None else None
+        return sol_id, sol
+    except StopIteration:
+        return None, None
 
 
 #@callback(

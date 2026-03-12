@@ -113,14 +113,20 @@ class DatetimeUtils:
         return int(dt.timestamp() * 1000)
 
     @staticmethod
-    def to_datetime(millis: Union[float, int, datetime]) -> datetime:
+    def to_datetime(millis: Union[float, int, datetime], utc: bool=True) -> datetime:
+        """Always returns datetime objects with timezone information"""
         if isinstance(millis, datetime):
+            if millis.tzinfo is None:
+                millis = millis.replace(tzinfo=timezone.utc) if utc else millis.astimezone()
             return millis
-        return datetime.fromtimestamp(millis / 1000, timezone.utc).replace(tzinfo=timezone.utc)
+        dtm = datetime.fromtimestamp(millis / 1000, timezone.utc)
+        return dtm if utc else dtm.astimezone()
 
     @staticmethod
-    def date_to_datetime(dt: date) -> datetime:
-        return datetime(year=dt.year, month=dt.month, day=dt.day)
+    def date_to_datetime(dt: date, utc: bool=True) -> datetime:
+        """Always returns datetime objects with timezone information"""
+        dtm = datetime(year=dt.year, month=dt.month, day=dt.day)
+        return dtm.astimezone() if not utc else dtm.replace(tzinfo=timezone.utc)
 
     @staticmethod
     def parse_date(input0: Union[float, str, datetime]) -> Optional[datetime]:
@@ -152,5 +158,7 @@ class DatetimeUtils:
         return None
 
     @staticmethod
-    def format(dt: datetime, use_zone: bool=True) -> str:
+    def format(dt: datetime|date, use_zone: bool=True) -> str:
+        if isinstance(dt, date):
+            return dt.strftime(_FORMATS_NO_ZONE[-2])
         return dt.strftime(_FORMATS_WITH_ZONE[2] if use_zone else _FORMATS_NO_ZONE[2])

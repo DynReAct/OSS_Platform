@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone, tzinfo
 from threading import Lock
-from typing import Any
+from typing import Any, Sequence
 
 from dynreact.SnapshotUpdate import SnapshotUpdate
 from dynreact.base.AggregationProvider import AggregationProvider
@@ -18,8 +18,10 @@ from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.AggregationPersistence import AggregationPersistence
 from dynreact.base.impl.AggregationProviderImpl import AggregationProviderImpl
+from dynreact.base.impl.MemoryResultsPersistence import MemoryResultsPersistence
 from dynreact.base.model import Snapshot, Site, ProductionPlanning, ProductionTargets, Material, Lot
 from dynreact.lots_optimization import LotCreator
+from dynreact.AggregateResultsPersistence import AggregateResultsPersistence
 
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.plugins import Plugins
@@ -45,6 +47,7 @@ class DynReActSrvState:
         self._lots_optimizer: LotsOptimizationAlgo | None = None
         self._ltp: LongTermPlanning | None = None
         self._results_persistence: ResultsPersistence | None = None
+        self._results_persistence_memory: MemoryResultsPersistence | None = None
         self._availability_persistence: PlantAvailabilityPersistence|None = None
         self._shifts_provider: ShiftsProvider|None = None
         self._max_snapshot_caches: int = config.max_snapshot_caches
@@ -140,6 +143,36 @@ class DynReActSrvState:
         if self._results_persistence is None:
             self._results_persistence = self._plugins.get_results_persistence()
         return self._results_persistence
+
+    def get_results_persistence_memory(self, if_exists: bool=False) -> MemoryResultsPersistence:
+        if if_exists and self._results_persistence_memory is None:
+            existing = self._results_persistence
+            if isinstance(existing, MemoryResultsPersistence):
+                self._results_persistence_memory = existing
+        elif self._results_persistence_memory is None:
+            main_persistence = self.get_results_persistence()
+            if isinstance(main_persistence, MemoryResultsPersistence):
+                self._results_persistence_memory = main_persistence
+            else:
+                self._results_persistence_memory = MemoryResultsPersistence("memory:state", self.get_site())
+        return self._results_persistence_memory
+
+    def get_results_persistence_aggregate(self) -> ResultsPersistence:
+        """
+        Allows to read results from multiple persistence providers, including one that keeps results in memory only.
+        Does not support writes.
+        :return:
+        """
+        ps = []
+        p0 = self.get_results_persistence()
+        p1 = self._results_persistence_memory
+        if p0 is not None:
+            ps.append(p0)
+        if p1 is not None and p0 != p1:
+            ps.append(p1)
+        if len(ps) == 1:
+            return ps[0]
+        return AggregateResultsPersistence(self.get_site(), ps)
 
     def get_availability_persistence(self) -> PlantAvailabilityPersistence:
         if self._availability_persistence is None:

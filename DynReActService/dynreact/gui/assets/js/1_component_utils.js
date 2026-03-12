@@ -27,7 +27,7 @@
         },
 
         alert: {
-            showAlert: function(msg, type, siblingId, dummyReturnValue) {
+            showAlert: function(msg, type, siblingId, dummyReturnValue, options) {
                 const sibling = document.querySelector("#" + siblingId);
                 if (!sibling) {
                     console.log("Alert sibling not found", siblingId);
@@ -38,8 +38,13 @@
                     alert = document.createElement("basic-alert");
                     sibling.parentNode.insertBefore(alert, sibling.nextSibling);
                 }
-                alert.showMessage(msg, type);
+                alert.showMessage(msg, type, options);
                 return dummyReturnValue || "";
+            },
+            showAlertObj: function(obj, siblingId, dummyReturnValue) {
+                if (!obj?.msg)
+                    return globalThis.dash_clientside.alert.closeAlert(undefined, siblingId, dummyReturnValue);
+                return globalThis.dash_clientside.alert.showAlert(obj.msg, obj.type, siblingId, dummyReturnValue, obj.options);
             },
             closeAlert: function(clicks, siblingId, dummyReturnValue) {
                 const sibling = document.querySelector("#" + siblingId);

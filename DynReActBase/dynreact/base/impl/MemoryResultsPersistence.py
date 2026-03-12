@@ -123,7 +123,7 @@ class MemoryResultsPersistence(ResultsPersistence):
         if start or end:
             start_times = [s for s in start_times if (start is None or s >= start) and (end is None or s < end)]
         if sort == "desc":
-            start_times = reversed(start_times)
+            start_times = list(reversed(start_times))
         if limit < len(start_times):
             start_times = start_times[:limit]
         return start_times

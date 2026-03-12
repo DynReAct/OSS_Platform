@@ -290,7 +290,7 @@ def solutions_table(snapshot: str|datetime|None, process: str|None, preselected_
     ]
     if snapshot is None or process is None:
         return col_defs, [], []
-    persistence = state.get_results_persistence()
+    persistence = state.get_results_persistence_aggregate()
     solutions: list[str] = sorted(persistence.solutions(snapshot, process), reverse=True)
     sol_objects: dict[str, LotsOptimizationState] = {sol: persistence.load(snapshot, process, sol) for sol in solutions}
     snap_planning, snap_targets = state.get_snapshot_solution(process, snapshot)
@@ -391,7 +391,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
     elif solution == "_DUE_DATE_":
         best_result = state.get_due_date_solution(process, snapshot)[0]
     else:
-        result: LotsOptimizationState = state.get_results_persistence().load(snapshot, process, solution)
+        result: LotsOptimizationState = state.get_results_persistence_aggregate().load(snapshot, process, solution)
         if result is None or result.best_solution is None:
             return True, None, None, True, None, None, None, None, True
         best_result = result.best_solution
@@ -721,7 +721,7 @@ def extract_scenario_json(_, snapshot: str|datetime|None, process: str|None, sol
     snapshot = DatetimeUtils.parse_date(snapshot)
     if not dash_authenticated(config) or process is None or snapshot is None or solution is None or solution in ("_SNAPSHOT_", "_DUE_DATE_"):
         return None
-    result: LotsOptimizationState = state.get_results_persistence().load(snapshot, process, solution)
+    result: LotsOptimizationState = state.get_results_persistence_aggregate().load(snapshot, process, solution)
     if result is None or result.best_solution is None:
         return None
     site = state.get_site()
@@ -862,7 +862,7 @@ def check_start_transfer(_, __, lot: str, new_lotname: str, orders: list[str] | 
 
 def start_transfer0(lot_id: str, new_lotname: str, orders: list[str], snapshot: datetime, process: str, solution: str, transfer_target: str, update_snap: bool, user: str|None) -> str|None:
     best_result: ProductionPlanning
-    result: LotsOptimizationState = state.get_results_persistence().load(snapshot, process, solution)
+    result: LotsOptimizationState = state.get_results_persistence_aggregate().load(snapshot, process, solution)
     if result is None or result.best_solution is None:  # TODO error msg
         return None
     best_result: ProductionPlanning = result.best_solution

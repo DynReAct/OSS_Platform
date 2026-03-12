@@ -4,7 +4,7 @@ import threading
 import traceback
 from calendar import monthrange  # , Day  # Python 3.12
 from datetime import datetime, timedelta, date, tzinfo, timezone
-from typing import Any, Sequence
+from typing import Any, Sequence, Literal
 
 import dash
 from dash import html, dcc, callback, Output, Input, clientside_callback, ClientsideFunction, State
@@ -77,6 +77,7 @@ def layout(*args, **kwargs):
                 ], className="control-panel-entry"),
                 html.Div(html.Button("Structure Portfolio", className="dynreact-button", id="ltp-structure-btn")),
                 html.Div(html.Button("Storages initialization", className="dynreact-button", id="ltp-storages-btn")),
+                html.Div(dcc.Checklist(options=[{"value": "", "label": "Store results"}], value=[""]), title="Store result?", id="ltp-results-store"),
                 html.Div([
                     html.Button("Start", className="dynreact-button", id="ltp-start", disabled=True),
                     html.Button("Stop", className="dynreact-button", id="ltp-stop", disabled=True)
@@ -85,11 +86,12 @@ def layout(*args, **kwargs):
                     html.Progress(),
                     html.Div("Optimization running")
                 ], id="ltp-running-indicator", hidden=True),
-                html.Div([
-                    html.Div("New result"),
-                    html.Div(id="ltp-result-id"),
-                ], id="ltp-result-container", className="ltp-result-container", hidden=True),
-            ])
+                #html.Div([
+                #    html.Div("New result"),
+                #    html.Div(id="ltp-result-id"),
+                #], id="ltp-result-container", className="ltp-result-container", hidden=True),
+                html.Div(id="ltp-result-alert")
+            ]),
         ], className="control-panel"),
         # ======== Initial values panel ============
         html.Div([
@@ -154,6 +156,7 @@ def layout(*args, **kwargs):
         dcc.Store(id="ltp-availability-buffer", storage_type="memory"),
         dcc.Store(id="ltp-storage-levels"),  # None or {storage id: StorageLevel}
         dcc.Store(id="ltp-min-capacity", storage_type="memory", data=100_000),
+        dcc.Store(id="ltp-result-message", storage_type="memory"),
         dcc.Interval(id="ltp-interval", n_intervals=3_600_000),  # for polling when optimization is running
     ], id="ltp")
 
@@ -770,8 +773,9 @@ def set_storage_targets_overview(levels: str|None):  # {storage id: StorageLevel
           #Output("ltp-amount-selected", "children"),
           Output("ltp-interval", "interval"),
           Output("ltp-running-indicator", "hidden"),
-          Output("ltp-result-container", "hidden"),
-          Output("ltp-result-id", "children"),
+          #Output("ltp-result-container", "hidden"),
+          #Output("ltp-result-id", "children"),
+          Output("ltp-result-message", "data"),
           Input("ltp-start", "n_clicks"),
           Input("ltp-stop", "n_clicks"),
           Input("ltp-interval", "n_intervals"),
@@ -781,16 +785,24 @@ def set_storage_targets_overview(levels: str|None):  # {storage id: StorageLevel
           State("ltp-horizon-weeks", "value"),
           State("ltp-shift-hours", "value"),
           State("ltp-production-total", "value"),
+          State("ltp-results-store", "value"),
           config_prevent_initial_callbacks=True)
 def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: str|None, start_time: datetime|str, horizon_weeks: str|int, shift_duration_hours: str|int,
-                     total_production: float|str|None):
+                     total_production: float|str|None, do_store0: Sequence[Literal[""]]):
     if not dash_authenticated(config):
-        return None
+        return None, None, None, None, None, None, None, None
     horizon_weeks = int(horizon_weeks)
-    is_running, new_solution_id = check_running_optimization()
+    do_store: bool = do_store0 is not None and len(do_store0) > 0
+    is_running, new_solution_id, new_sol_start_date, new_error = check_running_optimization()
     total_amount = _get_total_selected_amount(setpoints)
     changed_ids = GuiUtils.changed_ids()
-    if not is_running and "ltp-start" in changed_ids:
+    new_sol_start = DatetimeUtils.format(new_sol_start_date) if new_sol_start_date is not None else None
+    message = dash.no_update if new_solution_id is None \
+        else {"msg": f"An error occurred: {new_error}", "type": "error"} if new_error is not None \
+        else {"msg": f"New solution: {new_solution_id}", "type": "success",
+              "options": {"href": f"/dash/ltp/planned?start={new_sol_start}&solution={new_solution_id}", "title": "Open solutions page in new tab"}}
+    starting = not is_running and "ltp-start" in changed_ids
+    if starting:
         try:
             start, end = _get_start_end_time(start_time, horizon_weeks)
             if start is None or end is None:
@@ -804,8 +816,17 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
                 raise ValueError("Total production must be positive, got " + str(total_production))
             if storage_levels is None:
                 raise Exception("Storage levels not defined yet")
-        except:  # TODO display error
-            raise
+        except Exception as e:
+            return (True,  # start disabled
+                    dash.no_update,
+                    True,  # end disabled
+                    "Not running.",  # end title
+                    dash.no_update,
+                    True,   # running indicator hidden
+                    #dash.no_update,
+                    #dash.no_update,
+                    {"msg": f"An error occurred: {e}", "type": "error"}
+                    )
         if ltp_thread is None and total_amount is not None:
             levels = TypeAdapter(dict[str, StorageLevel]).validate_json(storage_levels)
             availabilities: dict[int, list[EquipmentAvailability]] = state.get_availability_persistence().load_all(start, end)
@@ -826,15 +847,17 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
                     new_shifts = [new_first] + list(eq_shifts)[1:-1] + [new_last]
                     shifts[eq] = new_shifts
             availabilities_aggregated = PlantAvailabilityPersistence.aggregate([p.id for p in state.get_site().equipment], start, end, availabilities, shifts=shifts)
-            run(start_dt, end_dt, shift_duration_hours, setpoints, total_production, levels, availabilities_aggregated)
+            run(start_dt, end_dt, shift_duration_hours, setpoints, total_production, levels, availabilities_aggregated, do_store)
+            message = {"msg": "Long term planning started", "type": "info", "options": {"timeout": 4_000}}
     if "ltp-stop" in changed_ids and ltp_thread is not None:
         stop()
+        message = {"msg": "Long term planning stopped", "type": "info", "options": {"timeout": 4_000}}
     is_running = ltp_thread is not None
     itv = 3_000 if is_running else 3_600_000
     if not is_running:
-        result_container_hidden = new_solution_id is None
-        new_solution_id = new_solution_id if new_solution_id is not None else ""
-        amount_msg = "Total production target: " + str(total_amount) + " t" if total_amount is not None else ""
+        #result_container_hidden = new_solution_id is None
+        #new_solution_id = new_solution_id if new_solution_id is not None else ""
+        #amount_msg = "Total production target: " + str(total_amount) + " t" if total_amount is not None else ""
         if total_amount is None or storage_levels is None:
             return (True,  # start disabled
                     "Material structure or storage levels not defined, yet. Please open the structure portfolio menu and select the material to produce.", # start title
@@ -843,8 +866,9 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
                     #amount_msg,  # selected amount
                     itv,  # polling interval,
                     True,   # running indicator hidden
-                    result_container_hidden,   # result container hidden
-                    new_solution_id      # result id
+                    #result_container_hidden,   # result container hidden
+                    #new_solution_id,      # result id
+                    message
                     )
         return (False,  # start disabled
                 "Run long-term planning.", # start title
@@ -853,8 +877,9 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
                 #amount_msg,  # selected amount
                 itv,  # polling interval
                 True,  # running indicator hidden
-                result_container_hidden,  # result container hidden
-                new_solution_id # result id
+                #result_container_hidden,  # result container hidden
+                #ew_solution_id, # result id
+                message
                 )
     return (True,  # start disabled
             "Already running.", # start title
@@ -863,23 +888,28 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
             #"Total production target: " + str(total_amount) + " t",   # selected amount  # TODO retrieve from running optimization
             itv,  # polling interval
             False,  # running indicator hidden
-            True,  # result container hidden
-            ""  # result id
+            #True,  # result container hidden
+            #"",  # result id,
+            message
             )
 
 
-def check_running_optimization() -> tuple[bool, str|None]:
+def check_running_optimization() -> tuple[bool, str|None, date|None, Exception|None]:
     global ltp_thread
     solution_id = None
+    error = None
+    start_date = None
     if ltp_thread is not None:
         if not ltp_thread.is_alive():
             solution_id = ltp_thread.id()
+            start_date = ltp_thread.start_date()
+            error = ltp_thread.error()
             ltp_thread = None
-    return ltp_thread is not None, solution_id
+    return ltp_thread is not None, solution_id, start_date, error
 
 
 def run(start_time: datetime, end_time: datetime, shift_duration_hours: int, setpoints: dict[str, float],
-          total_production: float, storage_levels: dict[str, StorageLevel], availabilities: dict[int, EquipmentAvailability]):
+          total_production: float, storage_levels: dict[str, StorageLevel], availabilities: dict[int, EquipmentAvailability], do_store: bool):
     global ltp_thread
     shift_duration = timedelta(hours=shift_duration_hours)
     # originally needed exactly 30 days
@@ -902,8 +932,9 @@ def run(start_time: datetime, end_time: datetime, shift_duration_hours: int, set
     )
     ltp: LongTermPlanning = state.get_long_term_planning()
     # TODO option not to store results?
-    persistence = state.get_results_persistence()
-    new_id = "ltp_" + DatetimeUtils.format(DatetimeUtils.now(), use_zone=False)
+    persistence = state.get_results_persistence() if do_store else state.get_results_persistence_memory()
+    prefix = "ltp_" if do_store else "ltp_memory_"
+    new_id = prefix + DatetimeUtils.format(DatetimeUtils.now(), use_zone=False)
     actual_id = new_id
     cnt: int = 0
     while persistence.has_solution_ltp(start_time, actual_id):
@@ -919,6 +950,17 @@ def stop() -> bool:
         ltp_thread.kill()
         ltp_thread = None
     return ltp_thread is None
+
+# clientside arguments: msg, type, siblingId, dummyReturnValue
+clientside_callback(
+    ClientsideFunction(
+        namespace="alert",
+        function_name="showAlertObj"
+    ),
+    Output("ltp-result-alert", "title"),
+    Input("ltp-result-message", "data"),
+    State("ltp-result-alert", "id"),
+)
 
 
 
@@ -944,6 +986,8 @@ class LTPKillableOptimizationThread(threading.Thread):
         self._initial_storage_levels = initial_storage_levels
         self._shifts = shifts
         self._persistence = persistence
+        self._start_date: date|None = None
+        self._error = None
 
     def id(self):
         return self._id
@@ -951,11 +995,22 @@ class LTPKillableOptimizationThread(threading.Thread):
     def kill(self):
         self._kill.set()
 
+    def error(self):
+        return self._error
+
+    def start_date(self) -> date|None:
+        return self._start_date
+
     def run(self):
         solution_id = self._id
-        results, storage_levels = self._optimization.run(solution_id, self._structure, initial_storage_levels=self._initial_storage_levels,
-                                      shifts=self._shifts, plant_availabilities=self._availabilities)
-        if self._persistence:
-            self._persistence.store_ltp(solution_id, results, storage_levels=storage_levels)
-        return results
+        try:
+            results, storage_levels = self._optimization.run(solution_id, self._structure, initial_storage_levels=self._initial_storage_levels,
+                                          shifts=self._shifts, plant_availabilities=self._availabilities)
+            self._start_date = results.period[0].date()
+            if self._persistence:
+                self._persistence.store_ltp(solution_id, results, storage_levels=storage_levels)
+            return results
+        except Exception as e:
+            self._error = e
+            raise
 

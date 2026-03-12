@@ -184,7 +184,7 @@ def find_solutions(starttime: str|None, selected_rows: list[dict[str, any]|str]|
     parsed = state.replace_timezone(parsed)
     #parsed_date = parsed.date()
     persistence: ResultsPersistence = state.get_results_persistence_aggregate()
-    solutions: list[str] = persistence.solutions_ltp(parsed)  # TODO is this exact? Or could we specify a range?
+    solutions: list[str] = sorted(persistence.solutions_ltp(parsed), reverse=True)
     solutions2: list[tuple[MidTermTargets, list[dict[str, StorageLevel]]|None]] = [persistence.load_ltp(parsed, s) for s in solutions]
     rows = [{
             "id": solutions[idx],

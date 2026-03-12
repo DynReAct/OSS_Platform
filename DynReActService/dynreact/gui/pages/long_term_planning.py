@@ -77,7 +77,7 @@ def layout(*args, **kwargs):
                 ], className="control-panel-entry"),
                 html.Div(html.Button("Structure Portfolio", className="dynreact-button", id="ltp-structure-btn")),
                 html.Div(html.Button("Storages initialization", className="dynreact-button", id="ltp-storages-btn")),
-                html.Div(dcc.Checklist(options=[{"value": "", "label": "Store results"}], value=[""]), title="Store result?", id="ltp-results-store"),
+                html.Div(dcc.Checklist(options=[{"value": "", "label": "Store results"}], value=[""], id="ltp-results-store"), title="Store result?"),
                 html.Div([
                     html.Button("Start", className="dynreact-button", id="ltp-start", disabled=True),
                     html.Button("Stop", className="dynreact-button", id="ltp-stop", disabled=True)
@@ -934,7 +934,7 @@ def run(start_time: datetime, end_time: datetime, shift_duration_hours: int, set
     # TODO option not to store results?
     persistence = state.get_results_persistence() if do_store else state.get_results_persistence_memory()
     prefix = "ltp_" if do_store else "ltp_memory_"
-    new_id = prefix + DatetimeUtils.format(DatetimeUtils.now(), use_zone=False)
+    new_id = prefix + DatetimeUtils.format(DatetimeUtils.now().astimezone(), use_zone=False).replace("-", "_").replace(":", "_")
     actual_id = new_id
     cnt: int = 0
     while persistence.has_solution_ltp(start_time, actual_id):

@@ -159,6 +159,6 @@ class DatetimeUtils:
 
     @staticmethod
     def format(dt: datetime|date, use_zone: bool=True) -> str:
-        if isinstance(dt, date):
-            return dt.strftime(_FORMATS_NO_ZONE[-2])
-        return dt.strftime(_FORMATS_WITH_ZONE[2] if use_zone else _FORMATS_NO_ZONE[2])
+        if isinstance(dt, datetime):
+            return dt.strftime(_FORMATS_WITH_ZONE[2] if use_zone else _FORMATS_NO_ZONE[2])
+        return dt.strftime(_FORMATS_NO_ZONE[-2])

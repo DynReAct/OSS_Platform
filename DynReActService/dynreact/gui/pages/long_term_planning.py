@@ -10,6 +10,7 @@ import dash
 from dash import html, dcc, callback, Output, Input, clientside_callback, ClientsideFunction, State
 
 from dynreact.auth.authentication import dash_authenticated
+from dynreact.base.InterruptedException import InterruptedException
 from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
 from dynreact.base.ResultsPersistence import ResultsPersistence
@@ -797,7 +798,7 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
     total_amount = _get_total_selected_amount(setpoints)
     changed_ids = GuiUtils.changed_ids()
     new_sol_start = DatetimeUtils.format(new_sol_start_date) if new_sol_start_date is not None else None
-    message = dash.no_update if new_solution_id is None \
+    message = dash.no_update if new_solution_id is None or isinstance(new_error, InterruptedException) \
         else {"msg": f"An error occurred: {new_error}", "type": "error"} if new_error is not None \
         else {"msg": f"New solution: {new_solution_id}", "type": "success",
               "options": {"href": f"/dash/ltp/planned?start={new_sol_start}&solution={new_solution_id}", "title": "Open solutions page in new tab"}}
@@ -823,8 +824,6 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
                     "Not running.",  # end title
                     dash.no_update,
                     True,   # running indicator hidden
-                    #dash.no_update,
-                    #dash.no_update,
                     {"msg": f"An error occurred: {e}", "type": "error"}
                     )
         if ltp_thread is None and total_amount is not None:
@@ -855,41 +854,29 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
     is_running = ltp_thread is not None
     itv = 3_000 if is_running else 3_600_000
     if not is_running:
-        #result_container_hidden = new_solution_id is None
-        #new_solution_id = new_solution_id if new_solution_id is not None else ""
-        #amount_msg = "Total production target: " + str(total_amount) + " t" if total_amount is not None else ""
         if total_amount is None or storage_levels is None:
             return (True,  # start disabled
                     "Material structure or storage levels not defined, yet. Please open the structure portfolio menu and select the material to produce.", # start title
                     True,  # end disabled
                     "Not running.",  # end title
-                    #amount_msg,  # selected amount
                     itv,  # polling interval,
                     True,   # running indicator hidden
-                    #result_container_hidden,   # result container hidden
-                    #new_solution_id,      # result id
                     message
                     )
         return (False,  # start disabled
                 "Run long-term planning.", # start title
                 True,  # end disabled
                 "Not running.",  # end title
-                #amount_msg,  # selected amount
                 itv,  # polling interval
                 True,  # running indicator hidden
-                #result_container_hidden,  # result container hidden
-                #ew_solution_id, # result id
                 message
                 )
     return (True,  # start disabled
             "Already running.", # start title
             False,  # end disabled
             "Stop optimization.",  # end title
-            #"Total production target: " + str(total_amount) + " t",   # selected amount  # TODO retrieve from running optimization
             itv,  # polling interval
             False,  # running indicator hidden
-            #True,  # result container hidden
-            #"",  # result id,
             message
             )
 
@@ -912,10 +899,6 @@ def run(start_time: datetime, end_time: datetime, shift_duration_hours: int, set
           total_production: float, storage_levels: dict[str, StorageLevel], availabilities: dict[int, EquipmentAvailability], do_store: bool):
     global ltp_thread
     shift_duration = timedelta(hours=shift_duration_hours)
-    # originally needed exactly 30 days
-    #diff_days: int = round((end_time - start_time).total_seconds()/3600/24)
-    #if diff_days != 30 and abs(30-diff_days) < 4:
-    #    end_time += timedelta(days=30-diff_days)
     shifts: list[tuple[datetime, datetime]] = []
     start_shift = start_time
     end_shift = start_shift + shift_duration
@@ -931,7 +914,6 @@ def run(start_time: datetime, end_time: datetime, shift_duration_hours: int, set
         production_targets=setpoints
     )
     ltp: LongTermPlanning = state.get_long_term_planning()
-    # TODO option not to store results?
     persistence = state.get_results_persistence() if do_store else state.get_results_persistence_memory()
     prefix = "ltp_" if do_store else "ltp_memory_"
     new_id = prefix + DatetimeUtils.format(DatetimeUtils.now().astimezone(), use_zone=False).replace("-", "_").replace(":", "_")
@@ -994,6 +976,7 @@ class LTPKillableOptimizationThread(threading.Thread):
 
     def kill(self):
         self._kill.set()
+        self._optimization.interrupt(self._id)
 
     def error(self):
         return self._error
@@ -1006,6 +989,8 @@ class LTPKillableOptimizationThread(threading.Thread):
         try:
             results, storage_levels = self._optimization.run(solution_id, self._structure, initial_storage_levels=self._initial_storage_levels,
                                           shifts=self._shifts, plant_availabilities=self._availabilities)
+            if self._kill.is_set():
+                raise InterruptedException()
             self._start_date = results.period[0].date()
             if self._persistence:
                 self._persistence.store_ltp(solution_id, results, storage_levels=storage_levels)

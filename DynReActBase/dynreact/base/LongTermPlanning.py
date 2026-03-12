@@ -42,3 +42,7 @@ class LongTermPlanning:
                                The list is for sub periods, the dict keys are storage ids.
         """
         raise Exception("not implemented")
+
+    def interrupt(self, id0: str) -> bool:
+        """Shall cause the corresponding run() method to throw InterruptedException, if not finished yet"""
+        pass

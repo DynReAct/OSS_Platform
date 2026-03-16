@@ -902,7 +902,8 @@ def run(start_time: datetime, end_time: datetime, shift_duration_hours: int, set
     shifts: list[tuple[datetime, datetime]] = []
     start_shift = start_time
     end_shift = start_shift + shift_duration
-    while end_shift <= end_time:
+    end_boundary = end_time if start_time.tzinfo == end_time.tzinfo else end_time.replace(tzinfo=start_time.tzinfo)
+    while end_shift <= end_boundary:
         shifts.append((start_shift, end_shift))
         start_shift = end_shift
         end_shift = end_shift + shift_duration

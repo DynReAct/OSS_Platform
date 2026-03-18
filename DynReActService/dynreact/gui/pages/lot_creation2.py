@@ -1820,7 +1820,7 @@ def process_changed(snapshot: datetime|None,
         #settings_trigger_hidden = selected_init_method == "result"
         return (True, stop_disabled, True, #process_out,
                 True, iterations, iterations, iterations, result_selector_hidden, selected_init_method, results,
-                existing_solution, selection_disabled, "Optimization running", interval, False, warning_message)
+                existing_solution, selection_disabled, "Optimization running", interval, False, warning_message, warning_class)
     if horizon_hours is None or iterations is None or process is None or snapshot is None:
         title = "Select a process first" if process is None else "Select a snapshot first" if snapshot is None else "Enter valid planning horizon"
         warning_message = warning_message if warning_message else title

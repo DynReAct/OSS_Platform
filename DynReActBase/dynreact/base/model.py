@@ -552,6 +552,19 @@ class LongTermPlanningSettings(Model):
     "Settings per process step"
 
 
+class TransportTimes(Model):
+    equipment_matrix: dict[int, dict[int, float]]|None = None
+    default: float|None=None
+    unit: timedelta = timedelta(hours=1)
+
+    def transport_times(self, equipment1: int, equipment2: int) -> timedelta|None:
+        if self.equipment_matrix is not None and equipment1 in self.equipment_matrix:
+            dur = self.equipment_matrix[equipment1].get(equipment2, self.default)
+        else:
+            dur = self.default
+        return dur * self.unit if dur is not None else None
+
+
 class Site(LabeledItem):
     processes: list[Process]
     equipment: list[Equipment]
@@ -562,6 +575,7 @@ class Site(LabeledItem):
     Logistic costs for transfer of a complete order(?) from one plant to another (only within a single process stage, not considering
     transfer costs between processes)
     """
+    transport_times: TransportTimes|None = None
     #structure_planning: dict[str, StructurePlanningSettings]|None = None
     lot_creation: LotCreationSettings|None=None
     long_term_planning: LongTermPlanningSettings|None=None

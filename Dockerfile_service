@@ -25,5 +25,13 @@ RUN /bin/echo -e '\
 -e ../SampleUseCase \
 ' > ./requirements_local.txt
 RUN pip install --no-cache-dir --disable-pip-version-check -r ./requirements_local.txt
+
+ARG ENV_FILE=".env"
+ENV KAFKA_TOPIC_PREFIX="Dynreact_OSS"
+
+COPY ${ENV_FILE} ./.env
+
 ENV PYTHONUNBUFFERED=1
+ENV KAFKA_TOPIC_PREFIX=${KAFKA_TOPIC_PREFIX}
+
 CMD uvicorn run:fastapi_app --host 0.0.0.0 --port ${PORT:-8050} --log-level debug

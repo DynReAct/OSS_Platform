@@ -43,7 +43,8 @@ def get_transition_cost_and_status(
     """
     equipment_id = equipment_status["targets"]["equipment"]
     next_material = material_params["id"]
-    prev_material = equipment_status["current_material"][-1]
+    prev_material = (equipment_status.get("current_material") or [None])[-1]
+    current_order = equipment_status["current_order"]
 
     if verbose > 0:
         print(f"Transition of equipment {equipment_id} from {prev_material} to {next_material}...")
@@ -53,6 +54,11 @@ def get_transition_cost_and_status(
         if verbose > 0:
             print(msg_incompatible, f"The equipment {equipment_id} is not among the allowed equipments of {next_material}")
         return None, None
+
+    if current_order is None:
+        if verbose > 0:
+            print(f"First order for equipment {equipment_id}, assigning cost 0.")
+        return 0, equipment_status
 
     payload = {
         "equipment": equipment_id,

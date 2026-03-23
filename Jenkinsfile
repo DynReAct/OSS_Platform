@@ -208,6 +208,7 @@ runStageWithCleanup('Run Scenario 0') {
           -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/ShortTermPlanning/dynreact/data/:/app/shortterm/dynreact/data/:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
@@ -257,6 +258,7 @@ runStageWithCleanup('Run Scenario 0') {
           -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/ShortTermPlanning/dynreact/data/:/app/shortterm/dynreact/data/:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
@@ -288,6 +290,7 @@ runStageWithCleanup('Run Scenario 0') {
           -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/ShortTermPlanning/dynreact/data/:/app/shortterm/dynreact/data/:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
@@ -319,6 +322,7 @@ runStageWithCleanup('Run Scenario 0') {
           -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/ShortTermPlanning/dynreact/data/:/app/shortterm/dynreact/data/:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
@@ -350,6 +354,7 @@ runStageWithCleanup('Run Scenario 0') {
           -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/ShortTermPlanning/dynreact/data/:/app/shortterm/dynreact/data/:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\

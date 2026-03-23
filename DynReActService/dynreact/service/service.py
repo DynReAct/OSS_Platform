@@ -494,24 +494,27 @@ def target_function_update(transition: EquipmentTransitionStateful, username = u
     next_coil: Material | None = None
     current_order: Order | None = snapshot.get_order(transition.current_order)
     next_order: Order | None = snapshot.get_order(transition.next_order)
-    if next_order is None or current_order is None:   # FIXME current_order should be allowed None
-        raise HTTPException(status_code=404, detail=f"Current or next order {transition.current_order}/{transition.next_order} not found")
+
+    if next_order is None:
+        raise HTTPException(status_code=404, detail=f"Next order {transition.next_order} not found")
+
+    status = transition.equipment_status
+    if current_order is None: # first order, cost is 0
+        return TransitionInfo(status=status, costs=0)
+
     if transition.next_material is not None:
         current_coil = snapshot.get_material(transition.current_material)
         next_coil = snapshot.get_material(transition.next_material)
         if current_coil is None or next_coil is None:
             raise HTTPException(status_code=404, detail=f"Current/Next coil {transition.current_material}/{transition.next_material} not found")
-    # this is actually allowed at the beginning
-    #if current_order is None and current_coil is None:
-    #    raise HTTPException(status_code=404, detail="Current coil or order " + str(transition.current) + " not found")
-    status = transition.equipment_status
+
     initial_solution = ProductionPlanning(process=plant.process, equipment_status={plant.id: status}, order_assignments={})
     targets = ProductionTargets(process=plant.process, target_weight={plant.id: status.targets},
                                 period=status.planning_period)
     optimizer: LotsOptimizer = state.get_lots_optimization().create_instance(plant.process, snapshot, state.get_cost_provider(),
-                                                                    initial_solution=initial_solution, targets=targets)
+                                                                             initial_solution=initial_solution, targets=targets)
     new_status, new_objective = optimizer.update_transition_costs(plant, current_order, next_order, status,
-                                                                    snapshot, current_material=current_coil, next_material=next_coil)
+                                                                  snapshot, current_material=current_coil, next_material=next_coil)
     return TransitionInfo(status=new_status, costs=new_objective)
 
 

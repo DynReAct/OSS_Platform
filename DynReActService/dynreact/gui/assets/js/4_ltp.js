@@ -115,6 +115,7 @@
 
         const state = await initDynreactState({serverUrl: "__dash__"});
         materialSelector.setState(state);
+        storageLevels.setState(state);
         materialSelector.addEventListener("change", event => {
           const selection = event.detail;
           storageLevels.setColorCodes(selection?.colors);
@@ -122,8 +123,14 @@
         const timelineParent = document.createElement("div");
         const ltpAnimation = new LongTermPlanningAnimation(storageLevels, controls, timelineParent, state, await state.site());
 
-        const ltp = await state.longTermPlanningSolution(Date.now(), solutionId);
-        ltpAnimation.setResults(ltp.storage_levels, ltp.targets.sub_periods);
+        try {
+            const ltp = await state.longTermPlanningSolution(Date.now(), solutionId);
+            ltpAnimation.setResults(ltp.storage_levels, ltp.targets.sub_periods);
+        } catch(e) {
+            storageLevels.remove();
+            materialSelector.remove();
+            controls.remove();
+        }
      }
 
 })();

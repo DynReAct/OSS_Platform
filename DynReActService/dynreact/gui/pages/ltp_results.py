@@ -31,6 +31,10 @@ def layout(*args, **kwargs):
         else materials[0].id
     initial_solution_id = None if selected is None else kwargs.get("solution")
     materials = [{"value": mat.id, "label": mat.name if mat.name is not None else mat.id, "selected": mat.id == selected_material} for mat in materials]
+    anim_tab_active: bool = kwargs.get("tab") is not None and kwargs.get("tab").lower() in ("anim", "animation")
+    tabular_tab_active = not anim_tab_active
+    tabular_tab_class = _tab_button_class(tabular_tab_active)
+    anim_tab_class = _tab_button_class(anim_tab_active)
     return html.Div([
         html.H1("Long term planning results", id="ltp_res-title"),
         html.Div([
@@ -67,32 +71,18 @@ def layout(*args, **kwargs):
             )
         ),
         html.Div([
-            html.Button("Tabular view", id="ltp_res-tabular-btn", className="ltp_res-tab-button",
-                        title="Tabular view of the long-term planning results"),
-            html.Button("Graphical view", id="ltp_res-anim-btn", className="ltp_res-tab-button",
-                        title="Animation of the long-term planning results"),
-            html.Div()
-        ], className="ltp_res-tabs"),
+            html.Div([
+                html.Button("Table", id="ltp_res-tabular-btn", className=tabular_tab_class, title="Tabular view of the long-term planning results"),
+                html.Button("Animation", id="ltp_res-anim-btn", className=anim_tab_class, title="Animation of the long-term planning results"),
+                html.Div()
+            ], className="ltp_res-tabs", hidden=True),
 
-        #html.Div([
-        #    html.Div("Process Panel"),
-        #    html.Div([
-        #        html.Div([
-        #            html.Div([
-        #                html.Div("Product type:"),
-        #                dcc.Dropdown(options=materials, className="ltp_res-prodtype")
-        #            ], className="ltp_res-prodtype-selection"),
-        #            plants_graph("ltp_res-plants-graph", style={"width": str(num_processes * 10) + "em", "height": "500px"}, *args,  **kwargs)
-        #        ]),
-        #        # TODO indicate start, end and selected date below!
-        #        dcc.Slider(id="ltp_res-date-ctrl", className="ltp_res-date-ctrl", min=0, max=1, step=1),  # max=4, step=1, value=horizon_days),  # date selector as a slider
-        #        #dcc.Input(type="range", id="ltp_res-date-ctrl", className="ltp_res-date-ctrl", min=0, max=1, step=1, list="ltp_res_dateslist"),  # max=4, step=1, value=horizon_days),  # date selector as a slider
-        #        #html.Datalist(id="ltp_res_dateslist")  # TODO ticks for the range input: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/datalist
-        #    ], className="ltp_res-panel-flex")
-        #], className="control-panel ltp_res-panel", id="ltp_res-process-panel"),
-        _tabular_tab(),
-        _anim_tab(),
-        dcc.Store(id="ltp_res-active-tab", data="tabular", storage_type="memory"),  # either tabular or anim
+            html.Div([
+                _tabular_tab(not tabular_tab_active),
+                _anim_tab(not anim_tab_active),
+            ], className="ltp_res-tabs-container"),
+        ], id="ltp_res-tabs-hider", hidden=True),
+        dcc.Store(id="ltp_res-active-tab", data="tabular" if tabular_tab_active else "anim", storage_type="memory"),  # either tabular or anim
         dcc.Store(id="ltp_res-solutions"),              # array of json docs
         dcc.Store(id="ltp_res-selected-solution-id"),   # string
         dcc.Store(id="ltp_res-selected-solution"),      # json doc
@@ -100,7 +90,7 @@ def layout(*args, **kwargs):
         dcc.Store(id="ltp_res-client-init", storage_type="memory"),  # to ensure the selected ltp solution is transferred to the client before running any script there
    ])
 
-def _tabular_tab():
+def _tabular_tab(hidden: bool):
     return html.Div([
         html.H2("Equipment production"),
         html.Div(
@@ -150,12 +140,12 @@ def _tabular_tab():
                 ## "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
             )
         )
-    ], id="ltp_res-tabular-tab")
+    ], id="ltp_res-tabular-tab", hidden=hidden)
 
-def _anim_tab():
+def _anim_tab(hidden: bool):
     return html.Div([
         "Test!"
-    ], id="ltp_res-anim-tab")
+    ], id="ltp_res-anim-tab", hidden=hidden)
 
 
 @callback(Output("ltp_res-active-tab", "data"),
@@ -166,6 +156,21 @@ def set_active_tab(_, __) -> str|None:
         return None
     changed_ids = GuiUtils.changed_ids()
     return "tabular" if "ltp_res-tabular-btn" in changed_ids else "anim" if "ltp_res-anim-btn" in changed_ids else dash.no_update
+
+
+@callback(Output("ltp_res-tabular-btn", "className"),
+        Output("ltp_res-anim-btn", "className"),
+        Input("ltp_res-active-tab", "data"))
+def highlight_active_tab(active_tab: Literal["tabular", "anim"]|None):
+    tab_selected: bool = active_tab == "tabular"
+    anim_selected: bool = active_tab == "anim"
+    return _tab_button_class(tab_selected), _tab_button_class(anim_selected)
+
+def _tab_button_class(selected: bool) -> str:
+    name = "ltp_res-tab-button"
+    if selected:
+        name += " ltp_res-tab-button-active"
+    return name
 
 @callback(
     Output("ltp_res-tabular-tab", "hidden"),
@@ -239,42 +244,22 @@ def find_solutions(starttime: str|None, selected_rows: list[dict[str, any]|str]|
 # on table row selection change the selected solution
 @callback(Output("ltp_res-selected-solution-id", "data"),
         Output("ltp_res-selected-solution", "data"),
+        Output("ltp_res-tabs-hider", "hidden"),
         Input("ltp_res-solutions-table", "selectedRows"),
-        State("ltp_res-solutions", "data"))
+        Input("ltp_res-solutions", "data"))
 def solution_selected(selected_rows: list[dict[str, any]|str]|None, solutions: list[dict[str, any]]|None):
     if isinstance(selected_rows, dict):
         selected_rows = selected_rows["ids"]
-    if selected_rows is None or len(selected_rows) == 0:
-        return None, None
+    if solutions is None or len(solutions) == 0 or selected_rows is None or len(selected_rows) == 0:
+        return None, None, True
     sol_id = selected_rows[0].get("id", None) if isinstance(selected_rows[0], Mapping) else selected_rows[0]
     if sol_id is None:
-        return None, None
+        return None, None, True
     try:
         sol = next(s for s in solutions if s.get("id", None) == sol_id) if solutions is not None else None
-        return sol_id, sol
+        return sol_id, sol, False
     except StopIteration:
-        return None, None
-
-
-#@callback(
-#    Output("ltp_res-date-ctrl", "max"),
-#    Output("ltp_res-date-ctrl", "marks"),
-#    Input("ltp_res-selected-solution", "data"),
-#    State("ltp_res-starttime-selector", "value")
-#)
-#def solution_changed(solution: dict[str, any]|None, starttime: str|None):
-#    parsed: datetime = DatetimeUtils.parse_date(starttime)
-#    if solution is None or parsed is None:
-#        return 1, None
-#    days = solution.get("time_horizon", 0)
-#    marker_indices = range(days)
-#    if days > 8:
-#        num_marks = 8
-#        marker_indices = [round(0 + idx * (days-1)/(num_marks-1)) for idx in range(num_marks)]
-#        if (days-1) not in marker_indices:
-#            marker_indices.append(days-1)
-#    marks = {day: (parsed + timedelta(days=day)).strftime("%y-%m-%d") for day in marker_indices}
-#    return days, marks
+        return None, None, True
 
 
 @callback(

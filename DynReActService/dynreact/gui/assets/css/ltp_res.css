@@ -16,30 +16,6 @@
     min-width: 10em;
 }
 
-.ltp_res-panel {
-    margin-bottom: 10em;
-}
-
-.ltp_res-panel-flex {
-    display: flex;
-    flex-direction: column;
-}
-
-.ltp_res-date-ctrl {
-    width: calc(100% - 10em);
-}
-
-.ltp_res-prodtype-selection {
-    display: flex;
-    align-items: center;
-    column-gap: 1em;
-    padding-top: 1em;
-}
-
-.ltp_res-prodtype {
-    min-width: 12em;
-}
-
 .ltp-res-absrel-flex {
     display: flex;
     column-gap: 1em;
@@ -50,13 +26,13 @@
     display: flex;
     border: var(--lots2-tabs-border);
     border-bottom: none;
+    margin-top: 1em;
 }
 
 .ltp_res-tabs>div {
     flex-grow: 1;  /* placeholder element */
     background-color: var(--lots2-tabs-button-background);
 }
-
 
 .ltp_res-tab-button {
     background-color: var(--lots2-tabs-button-background);
@@ -74,11 +50,17 @@
     font-weight: bold;
 }
 
-
 .ltp_res-tab-button:hover {
     background-color: var(--lots2-tabs-button-hover-background);
     color: var(--lots2-tabs-button-hover-color);
     cursor: pointer;
     border-bottom: none;  /* FIXME this is really foreseen for the active tab button */
+}
+
+.ltp_res-tabs-container {
+    padding: 0.5em 1em;
+    border: var(--lots2-tabs-border);
+    border-top: none;
+    margin-bottom: 15em;
 }
 

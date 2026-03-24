@@ -49,6 +49,7 @@ export class StorageLevels extends HTMLElement {
     #tooltipTarget: HoverData|undefined;
     */
     #tooltip;
+    #initTimer;
     constructor() {
         super();
         const style = document.createElement("style");
@@ -258,8 +259,17 @@ export class StorageLevels extends HTMLElement {
         if (this.#storageLevels) {
             this.#initStorageLevels();
         }
-        const canvasRect = canvas.getClientRects()[0];
-        this.#tooltip.update(canvasRect.x, canvasRect.y, plantsDrawn, storagesDrawn);
+        let failCnt = 0;
+        const initTooltip = () => {
+            const canvasRect = canvas.getClientRects()[0];
+            if (!canvasRect) {
+                if (failCnt++ < 100)
+                    this.#initTimer = setTimeout(initTooltip, 100);
+            } else {
+                this.#tooltip.update(canvasRect.x, canvasRect.y, plantsDrawn, storagesDrawn);
+            }
+        }
+        initTooltip();
     }
     static #validateLevel(level) {
         if (level < 0)
@@ -322,6 +332,10 @@ export class StorageLevels extends HTMLElement {
         ctx.fillText(element.name_short, rect.x + rect.width / 2, rect.y + rect.height / 2);
     }
     #clear() {
+        if (this.#initTimer !== undefined) {
+            globalThis.clearTimeout(this.#initTimer);
+            this.#initTimer = undefined;
+        }
         const canvas = this.#canvas;
         const ctx = canvas.getContext("2d");
         ctx.clearRect(0, 0, canvas.width, canvas.height);

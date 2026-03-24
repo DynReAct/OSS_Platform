@@ -13,6 +13,7 @@ from dynreact.base.model import LongTermTargets, EquipmentAvailability, StorageL
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
+from dynreact.gui.gui_utils import GuiUtils
 
 dash.register_page(__name__, path="/ltp/planned")
 translations_key = "ltp_res"
@@ -65,7 +66,13 @@ def layout(*args, **kwargs):
                 ## "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
             )
         ),
-
+        html.Div([
+            html.Button("Tabular view", id="ltp_res-tabular-btn", className="ltp_res-tab-button",
+                        title="Tabular view of the long-term planning results"),
+            html.Button("Graphical view", id="ltp_res-anim-btn", className="ltp_res-tab-button",
+                        title="Animation of the long-term planning results"),
+            html.Div()
+        ], className="ltp_res-tabs"),
 
         #html.Div([
         #    html.Div("Process Panel"),
@@ -83,7 +90,18 @@ def layout(*args, **kwargs):
         #        #html.Datalist(id="ltp_res_dateslist")  # TODO ticks for the range input: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/datalist
         #    ], className="ltp_res-panel-flex")
         #], className="control-panel ltp_res-panel", id="ltp_res-process-panel"),
+        _tabular_tab(),
+        _anim_tab(),
+        dcc.Store(id="ltp_res-active-tab", data="tabular", storage_type="memory"),  # either tabular or anim
+        dcc.Store(id="ltp_res-solutions"),              # array of json docs
+        dcc.Store(id="ltp_res-selected-solution-id"),   # string
+        dcc.Store(id="ltp_res-selected-solution"),      # json doc
+        dcc.Store(id="initial_solution_id", data=initial_solution_id),
+        dcc.Store(id="ltp_res-client-init", storage_type="memory"),  # to ensure the selected ltp solution is transferred to the client before running any script there
+   ])
 
+def _tabular_tab():
+    return html.Div([
         html.H2("Equipment production"),
         html.Div(
             dash_ag.AgGrid(
@@ -93,7 +111,7 @@ def layout(*args, **kwargs):
                 rowData=[],
                 getRowId="params.data.day",
                 className="ag-theme-alpine",  # ag-theme-alpine-dark
-                #columnSizeOptions={"defaultMinWidth": 125},
+                # columnSizeOptions={"defaultMinWidth": 125},
                 columnSize="responsiveSizeToFit",
                 dashGridOptions={"rowSelection": "single", "domLayout": "autoHeight"},
                 style={"height": None}  # required with autoHeight
@@ -131,14 +149,32 @@ def layout(*args, **kwargs):
                 #                 "popupParent": {"function": "setCoilPopupParent()"}},
                 ## "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
             )
-        ),
+        )
+    ], id="ltp_res-tabular-tab")
+
+def _anim_tab():
+    return html.Div([
+        "Test!"
+    ], id="ltp_res-anim-tab")
 
 
-        dcc.Store(id="ltp_res-solutions"),              # array of json docs
-        dcc.Store(id="ltp_res-selected-solution-id"),   # string
-        dcc.Store(id="ltp_res-selected-solution"),      # json doc
-        dcc.Store(id="initial_solution_id", data=initial_solution_id)
-   ])
+@callback(Output("ltp_res-active-tab", "data"),
+          Input("ltp_res-tabular-btn", "n_clicks"),
+          Input("ltp_res-anim-btn", "n_clicks"))
+def set_active_tab(_, __) -> str|None:
+    if not dash_authenticated(config):
+        return None
+    changed_ids = GuiUtils.changed_ids()
+    return "tabular" if "ltp_res-tabular-btn" in changed_ids else "anim" if "ltp_res-anim-btn" in changed_ids else dash.no_update
+
+@callback(
+    Output("ltp_res-tabular-tab", "hidden"),
+    Output("ltp_res-anim-tab", "hidden"),
+    Input("ltp_res-active-tab", "data"))
+def apply_active_tab(active_tab: Literal["tabular", "anim"]|None):
+    if not active_tab:
+        return True, True
+    return active_tab != "tabular", active_tab != "anim"
 
 
 def get_date_range(start_date: date|None=None) -> tuple[date, date, list[date], date]:
@@ -179,8 +215,8 @@ def _start_times_to_dates(lst: list[datetime]) -> list[date]:
           State("initial_solution_id", "data"))
 def find_solutions(starttime: str|None, selected_rows: list[dict[str, any]|str]|None, initial_solution_id: str|None):
     parsed = DatetimeUtils.parse_date(starttime)
-    if parsed is None:
-        return [], []
+    if parsed is None or not dash_authenticated(config):
+        return [], [], []
     parsed = state.replace_timezone(parsed)
     #parsed_date = parsed.date()
     persistence: ResultsPersistence = state.get_results_persistence_aggregate()
@@ -311,3 +347,21 @@ def update_storages_table(solution: dict[str, Any], rel_abs: Literal["relative",
     # TODO final level
     return column_defs, row_data
 
+clientside_callback(
+    ClientsideFunction(
+        namespace="dynreact",
+        function_name="setLtp"
+    ),
+    Output("ltp_res-client-init", "data"),
+    Input("ltp_res-selected-solution", "data")
+)
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="ltp",
+        function_name="create_ltp_animation",
+    ),
+    Output("ltp_res-anim-tab", "title"),
+    Input("ltp_res-client-init", "data"),
+    State("ltp_res-anim-tab", "id")
+)

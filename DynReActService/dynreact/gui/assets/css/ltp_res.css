@@ -46,3 +46,39 @@
     align-items: center;
 }
 
+.ltp_res-tabs {
+    display: flex;
+    border: var(--lots2-tabs-border);
+    border-bottom: none;
+}
+
+.ltp_res-tabs>div {
+    flex-grow: 1;  /* placeholder element */
+    background-color: var(--lots2-tabs-button-background);
+}
+
+
+.ltp_res-tab-button {
+    background-color: var(--lots2-tabs-button-background);
+    color: var(--lots2-tabs-button-color);
+    border: none;
+    /*border-bottom: var(--lots2-tabs-border);*/
+    border-radius: 0;
+    font-size: 1em;
+    padding: 0.7em;
+}
+
+.ltp_res-tab-button-active {
+    background-color: var(--lots2-tabs-button-active-background);
+    color: var(--lots2-tabs-button-active-color);
+    font-weight: bold;
+}
+
+
+.ltp_res-tab-button:hover {
+    background-color: var(--lots2-tabs-button-hover-background);
+    color: var(--lots2-tabs-button-hover-color);
+    cursor: pointer;
+    border-bottom: none;  /* FIXME this is really foreseen for the active tab button */
+}
+

@@ -17,6 +17,10 @@ server = Flask(__name__)
 # requests_pathname_prefix required for operation with FastAPI
 app = dash.Dash(__name__, server=server, routes_pathname_prefix="/", requests_pathname_prefix="/dash/",
                 assets_folder="assets", suppress_callback_exceptions=False, title="DynReAct",
+                ## assets_ignore does not work as one would expect: https://github.com/plotly/dash/issues/2584
+                ## so we need to live with the module import errors in js
+                # assets_ignore=".*\/dynreactviz\/.*",
+                # external_scripts=[{"src": "/dash/assets/dynreactviz/ltp-viz.js", "type": "module"}],
                 use_pages=True, pages_folder="pages")
 # app = dash.Dash(__name__, server=server,  url_base_pathname="/dash/",
 #                 assets_folder="assets", suppress_callback_exceptions=False, title="DynReAct",

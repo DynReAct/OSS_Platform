@@ -76,4 +76,54 @@
         return dummyTitle;
     }
 
+     globalThis.dash_clientside.ltp.create_ltp_animation = async function(solutionId, elId) {
+        const el = document.querySelector("#" + elId);
+        while (el?.firstChild)
+                el.firstChild.remove();
+        if (!el || !solutionId)
+            return;
+        const initDynreactState = await import("../dynreactviz/client/state.js").then(module => module.initDynreactState);
+        //const LongTermPlanningSelector = await import("../dynreactviz/components/ltp-selector.js").then(module => module.LongTermPlanningSelector);
+        const StorageLevels = await import("../dynreactviz/components/storage-levels.js").then(module => module.StorageLevels);
+        const MaterialSelector = await import("../dynreactviz/components/material-selector.js").then(module => module.MaterialSelector);
+        const LongTermPlanningAnimation = await import("../dynreactviz/components/ltp-animation.js").then(module => module.LongTermPlanningAnimation);
+        const PlaybackControls = await import("../dynreactviz/dependencies/playback-controls/index.js").then(module => module.PlaybackControls);
+
+        //LongTermPlanningSelector.register();
+        StorageLevels.register();
+        MaterialSelector.register();
+        PlaybackControls.register();
+
+        /* Create a fragment of the kind:
+            <br>
+            <material-selector></material-selector>
+            <storage-levels></storage-levels>
+            <playback-controls></playback-controls>
+            <br><br>
+        */
+        const fragment = document.createDocumentFragment();
+        fragment.appendChild(document.createElement("br"));
+        const materialSelector = document.createElement("material-selector");
+        fragment.appendChild(materialSelector);
+        const storageLevels = document.createElement("storage-levels");
+        fragment.appendChild(storageLevels);
+        const controls = document.createElement("playback-controls");
+        fragment.appendChild(controls);
+        fragment.appendChild(document.createElement("br"));
+        fragment.appendChild(document.createElement("br"));
+        el.appendChild(fragment);
+
+        const state = await initDynreactState({serverUrl: "__dash__"});
+        materialSelector.setState(state);
+        materialSelector.addEventListener("change", event => {
+          const selection = event.detail;
+          storageLevels.setColorCodes(selection?.colors);
+        });
+        const timelineParent = document.createElement("div");
+        const ltpAnimation = new LongTermPlanningAnimation(storageLevels, controls, timelineParent, state, await state.site());
+
+        const ltp = await state.longTermPlanningSolution(Date.now(), solutionId);
+        ltpAnimation.setResults(ltp.storage_levels, ltp.targets.sub_periods);
+     }
+
 })();

@@ -224,13 +224,16 @@ runStageWithCleanup('Run Scenario 0') {
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
 
                    command -v pytest >/dev/null 2>&1 || python -m pip install pytest
-                   cd /app/shortterm
-                   pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_04
+                   cd /app/shortterm/dynreact/tests/integration_test
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_04
          '
         """
     }
 
     stage('Replace BASE agents') {
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+        def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
+
         sh """
         # Run container to execute tests
         docker run --rm \\
@@ -273,8 +276,8 @@ runStageWithCleanup('Run Scenario 0') {
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true
 
                    command -v pytest >/dev/null 2>&1 || python -m pip install pytest
-                   cd /app/shortterm
-                   pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_05
+                   cd /app/shortterm/dynreact/tests/integration_test
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_05
          '
         """
     }
@@ -305,8 +308,8 @@ runStageWithCleanup('Run Scenario 0') {
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
 
                    command -v pytest >/dev/null 2>&1 || python -m pip install pytest
-                   cd /app/shortterm
-                   pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_06
+                   cd /app/shortterm/dynreact/tests/integration_test
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_06
          '
         """
     }
@@ -337,8 +340,8 @@ runStageWithCleanup('Run Scenario 0') {
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
 
                    command -v pytest >/dev/null 2>&1 || python -m pip install pytest
-                   cd /app/shortterm
-                   pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_07
+                   cd /app/shortterm/dynreact/tests/integration_test
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_07
          '
         """
     }
@@ -369,8 +372,8 @@ runStageWithCleanup('Run Scenario 0') {
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
 
                    command -v pytest >/dev/null 2>&1 || python -m pip install pytest
-                   cd /app/shortterm
-                   pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_08
+                   cd /app/shortterm/dynreact/tests/integration_test
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_08
          '
         """
     }

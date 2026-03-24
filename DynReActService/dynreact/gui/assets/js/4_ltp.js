@@ -1,7 +1,9 @@
 (function() {
 
     globalThis.dash_clientside = Object.assign({}, globalThis.dash_clientside, {
-        ltp: {}
+        ltp: {
+            _solutions_timer: undefined
+        }
     });
 
     const materialsTag = "dynreact-material-grid";
@@ -76,7 +78,30 @@
         return dummyTitle;
     }
 
-     globalThis.dash_clientside.ltp.create_ltp_animation = async function(solutionId, elId) {
+    globalThis.dash_clientside.ltp.clickSolutionTable = function(solutionId, tableId) {
+        if (globalThis.dash_clientside.ltp._solutions_timer !== undefined) {
+            window.clearTimeout(globalThis.dash_clientside.ltp._solutions_timer);
+                globalThis.dash_clientside.ltp._solutions_timer = undefined;
+        }
+        if (!solutionId || !tableId)
+            return;
+        let failCount = 0;
+        const select = () => {
+            const table = document.querySelector("#" + tableId);
+            const cell = table?.querySelector("[row-id=" + solutionId + "]");
+            if (cell) {
+                // clicking immediately does not work, for whatever reason
+                globalThis.dash_clientside.ltp._solutions_timer = setTimeout(() => cell.click(), 500);
+            } else {
+                if (failCount++ < 200) {
+                    globalThis.dash_clientside.ltp._solutions_timer = window.setTimeout(select, 100);
+                }
+            }
+        };
+        select();
+    }
+
+    globalThis.dash_clientside.ltp.create_ltp_animation = async function(solutionId, elId) {
         const el = document.querySelector("#" + elId);
         while (el?.firstChild)
                 el.firstChild.remove();

@@ -86,7 +86,7 @@ def layout(*args, **kwargs):
         dcc.Store(id="ltp_res-solutions"),              # array of json docs
         dcc.Store(id="ltp_res-selected-solution-id"),   # string
         dcc.Store(id="ltp_res-selected-solution"),      # json doc
-        dcc.Store(id="initial_solution_id", data=initial_solution_id),
+        dcc.Store(id="ltp_res-initial_solution_id", data=initial_solution_id, storage_type="memory"),
         dcc.Store(id="ltp_res-client-init", storage_type="memory"),  # to ensure the selected ltp solution is transferred to the client before running any script there
    ])
 
@@ -214,16 +214,17 @@ def _start_times_to_dates(lst: list[datetime]) -> list[date]:
 
 @callback(Output("ltp_res-solutions", "data"),
           Output("ltp_res-solutions-table", "rowData"),
-          Output("ltp_res-solutions-table", "selectedRows"),
-          Input("ltp_res-starttime-selector", "value"),
-          State("ltp_res-solutions-table", "selectedRows"),
-          State("initial_solution_id", "data"))
-def find_solutions(starttime: str|None, selected_rows: list[dict[str, any]|str]|None, initial_solution_id: str|None):
+          # we cannot set the selectedRows programmatically here, it causes sporadic failures in later triggers => looks like a bug in the dash-aggrid component
+          # Neither can we set the selection in the init/layer method => it will always lead to missing callbacks
+#          Output("ltp_res-solutions-table", "selectedRows"),
+          Input("ltp_res-starttime-selector", "value"))
+#          State("ltp_res-solutions-table", "selectedRows"),
+#          State("ltp_res-initial_solution_id", "data"))
+def find_solutions(starttime: str|None): #,selected_rows: list[dict[str, any]|str]|None, initial_solution_id: str|None):
     parsed = DatetimeUtils.parse_date(starttime)
     if parsed is None or not dash_authenticated(config):
-        return [], [], []
-    parsed = state.replace_timezone(parsed)
-    #parsed_date = parsed.date()
+        return [], [], #[]
+    parsed =  state.replace_timezone(parsed)
     persistence: ResultsPersistence = state.get_results_persistence_aggregate()
     solutions: list[str] = sorted(persistence.solutions_ltp(parsed), reverse=True)
     solutions2: list[tuple[MidTermTargets, list[dict[str, StorageLevel]]|None]] = [persistence.load_ltp(parsed, s) for s in solutions]
@@ -236,9 +237,9 @@ def find_solutions(starttime: str|None, selected_rows: list[dict[str, any]|str]|
             "storage_levels": TypeAdapter(list[dict[str, StorageLevel]]).dump_python(t[1])
         } for idx, t in enumerate(solutions2)]
     table_rows = [{k: v if k != "time_horizon" else round(v/7) for k, v in r.items()} for r in rows]
-    if len(rows) > 0 and initial_solution_id is not None and (selected_rows is None or (isinstance(selected_rows, dict) and len(selected_rows["ids"]) == 0) or len(selected_rows) == 0):
-        selected_rows = {"ids": [initial_solution_id]}
-    return rows, table_rows, selected_rows
+    #if len(rows) > 0 and initial_solution_id is not None and (selected_rows is None or (isinstance(selected_rows, dict) and len(selected_rows["ids"]) == 0) or len(selected_rows) == 0):
+    #    selected_rows = {"ids": [initial_solution_id]}
+    return rows, table_rows, #selected_rows
 
 
 # on table row selection change the selected solution
@@ -246,7 +247,7 @@ def find_solutions(starttime: str|None, selected_rows: list[dict[str, any]|str]|
         Output("ltp_res-selected-solution", "data"),
         Output("ltp_res-tabs-hider", "hidden"),
         Input("ltp_res-solutions-table", "selectedRows"),
-        Input("ltp_res-solutions", "data"))
+        State("ltp_res-solutions", "data"))
 def solution_selected(selected_rows: list[dict[str, any]|str]|None, solutions: list[dict[str, any]]|None):
     if isinstance(selected_rows, dict):
         selected_rows = selected_rows["ids"]
@@ -349,4 +350,16 @@ clientside_callback(
     Output("ltp_res-anim-tab", "title"),
     Input("ltp_res-client-init", "data"),
     State("ltp_res-anim-tab", "id")
+)
+
+# This is a hacky workaround for a strange behaviour of dash-aggrid, which sporadically fails to deliver selectedRows events
+# when selectedRows are also set programmatically
+clientside_callback(
+    ClientsideFunction(
+        namespace="ltp",
+        function_name="clickSolutionTable",
+    ),
+    Output("ltp_res-title", "title"),
+    Input("ltp_res-initial_solution_id", "data"),
+    State("ltp_res-solutions-table", "id")
 )

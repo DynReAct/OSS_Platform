@@ -224,8 +224,8 @@ runStageWithCleanup('Run Scenario 0') {
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
 
                    command -v pytest >/dev/null 2>&1 || python -m pip install pytest
-                   cd /app/shortterm/dynreact/tests/integration_test 
-                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_04
+                   cd /app/shortterm
+                   pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_04
          '
         """
     }
@@ -273,8 +273,8 @@ runStageWithCleanup('Run Scenario 0') {
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true
 
                    command -v pytest >/dev/null 2>&1 || python -m pip install pytest
-                   cd /app/shortterm/dynreact/tests/integration_test 
-                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_05
+                   cd /app/shortterm
+                   pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_05
          '
         """
     }
@@ -305,8 +305,8 @@ runStageWithCleanup('Run Scenario 0') {
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
 
                    command -v pytest >/dev/null 2>&1 || python -m pip install pytest
-                   cd /app/shortterm/dynreact/tests/integration_test 
-                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_06
+                   cd /app/shortterm
+                   pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_06
          '
         """
     }
@@ -337,8 +337,8 @@ runStageWithCleanup('Run Scenario 0') {
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
 
                    command -v pytest >/dev/null 2>&1 || python -m pip install pytest
-                   cd /app/shortterm/dynreact/tests/integration_test 
-                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_07
+                   cd /app/shortterm
+                   pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_07
          '
         """
     }
@@ -369,8 +369,8 @@ runStageWithCleanup('Run Scenario 0') {
                    [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
 
                    command -v pytest >/dev/null 2>&1 || python -m pip install pytest
-                   cd /app/shortterm/dynreact/tests/integration_test 
-                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_08
+                   cd /app/shortterm
+                   pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_08
          '
         """
     }

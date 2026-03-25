@@ -5,8 +5,8 @@ node {
 
     env.LOCAL_REGISTRY = LOCAL_REGISTRY
     env.TOPIC_CALLBACK = "DynReact-TEST-Callback"
-    env.TOPIC_GEN = "DynReact-TEST-Gen"
-    env.CONTAINER_NAME_PREFIX = "JENKINS_TEST"
+    env.TOPIC_GEN = "DynReact-OSS-TEST-Gen"
+    env.CONTAINER_NAME_PREFIX = "JENKINS_OSS_TEST"
 
     env.SNAPSHOT_VERSION = "2025-01-18T08:00:00Z"
     env.SCENARIO_4_5_EQUIPMENT = "7" // One Equipment, One Material

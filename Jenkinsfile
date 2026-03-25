@@ -241,6 +241,7 @@ runStageWithCleanup('Run Scenario 0') {
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/replace_base.py:/app/shortterm/__main__.py:ro" \\
+          -v "$WORKSPACE/DynReActService/data/:/app/shortterm/dynreact/data/:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\

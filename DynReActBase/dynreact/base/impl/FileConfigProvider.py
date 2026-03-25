@@ -10,10 +10,15 @@ class FileConfigProvider(ConfigurationProvider):
     """
     def __init__(self, uri: str):
         super().__init__(uri)
-        uri = uri.lower()
-        if not uri.startswith("default+file:"):
+        # Only lowercase the scheme part, NOT the file path (which is case-sensitive)
+        scheme_part = "default+file:"
+        if uri.lower().startswith(scheme_part):
+            # Extract path preserving its original case
+            file_path = uri[len(scheme_part):]
+        else:
             raise NotApplicableException("Unexpected URI for file config provider: " + str(uri))
-        self._file = uri[len("default+file:"):]
+        
+        self._file = file_path
         js = None
         with open(self._file, "r", encoding="utf-8") as file:
             js = file.read()

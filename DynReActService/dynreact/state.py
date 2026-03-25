@@ -59,6 +59,7 @@ class DynReActSrvState:
         self._duedates_solutions_cache: list[tuple[datetime, str, ProductionPlanning, ProductionTargets]] = []
         self._coils_by_orders_cache: dict[datetime, dict[str, list[Material]]] = {}
         self._stp_page = None
+        self._stp = None
         self._aggregation: AggregationProvider|None = None
         self._aggregation_persistence: AggregationPersistence|None = None
         self._optimization_state = LotCreator()
@@ -297,3 +298,40 @@ class DynReActSrvState:
             self._stp_page = self._plugins.load_stp_page()
         return self._stp_page
 
+    def set_stp_config(self) -> None:
+        if self._stp is None:
+            self.get_stp_config_params()
+
+    def get_stp_context_params(self):
+        from dynreact.shortterm.common import KeySearch
+        self.set_stp_config()
+        return (
+            KeySearch.search_for_value("KAFKA_IP"),
+            KeySearch.search_for_value("TOPIC_GEN"),
+            KeySearch.search_for_value("TOPIC_CALLBACK"),
+            KeySearch.search_for_value("VB"),
+        )
+
+    def get_stp_context_timing(self):
+        self.set_stp_config()
+        return (
+            self._stp._stpConfigParams.TimeDelays.AUCTION_WAIT,
+            self._stp._stpConfigParams.TimeDelays.COUNTERBID_WAIT,
+            self._stp._stpConfigParams.TimeDelays.CLONING_WAIT,
+            self._stp._stpConfigParams.TimeDelays.EXIT_WAIT,
+            self._stp._stpConfigParams.TimeDelays.SMALL_WAIT,
+        )
+
+    def get_stp_config_params(self):
+        if self._stp is None:
+            uri = self._config.short_term_planning
+            if uri.startswith("default+file:"):
+                from dynreact.shortterm.ShortTermPlanning import ShortTermPlanning
+                self._stp = ShortTermPlanning(uri)
+            elif uri.startswith("ras+file:"):
+                from dynreact.shortterm.ras_short_term_planning_impl import RasFileShortTermPlanning
+                self._stp = RasFileShortTermPlanning(uri)
+            else:
+                from dynreact.shortterm.ShortTermPlanning import ShortTermPlanning
+                self._stp = Plugins._load_module("dynreact.shorttermplanning", ShortTermPlanning, uri)
+        return self._stp

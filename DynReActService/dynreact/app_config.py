@@ -1,7 +1,11 @@
 import os
+from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
+
+
+_DOTENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 
 
 class DynReActSrvConfig:
@@ -63,6 +67,8 @@ class DynReActSrvConfig:
     # model-specific initialization data
     plant_performance_models: list[str]|None = None
     stp_frontend: str = "default"  # default is the frontend provided in this module
+    profile: str = "oss"
+    "Profile name for component loading: 'oss' (default), 'ras', or custom. Determines which implementations to load."
 
     def __init__(self,
                  config_provider: str | None = None,
@@ -97,12 +103,16 @@ class DynReActSrvConfig:
                  ldap_permissions: dict[str, str]|None=None,
                  plant_performance_models: list[str]|None = None,
                  stp_frontend: str|None = None,
-                 time_zone: str | None = None
+                 time_zone: str | None = None,
+                 profile: str|None = None
                  ):
-        load_dotenv()
+        load_dotenv(dotenv_path=_DOTENV_PATH, override=True)
         if time_zone is None:
             time_zone = os.getenv("TIME_ZONE", DynReActSrvConfig.time_zone)
         self.time_zone = time_zone
+        if profile is None:
+            profile = os.getenv("PROFILE", DynReActSrvConfig.profile)
+        self.profile = profile
         if config_provider is None:
             config_provider = os.getenv("CONFIG_PROVIDER", DynReActSrvConfig.config_provider)
         if snapshot_provider is None:
@@ -234,5 +244,4 @@ class ConfigProvider:
     """
 
     config = DynReActSrvConfig()
-
 

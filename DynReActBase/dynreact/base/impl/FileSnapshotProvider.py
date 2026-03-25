@@ -24,10 +24,15 @@ class FileSnapshotProvider(SnapshotProvider):
     def __init__(self, uri: str, site: Site,
                  file_type: Literal["csv", "json", "pickle"] = "csv"):  # TODO how to pass parameters?
         super().__init__(uri, site)
-        uri = uri.lower()
-        if not uri.startswith("default+file:"):
+        # Only lowercase the scheme part, NOT the file path (which is case-sensitive)
+        scheme_part = "default+file:"
+        if uri.lower().startswith(scheme_part):
+            # Extract path preserving its original case
+            folder = uri[len(scheme_part):]
+        else:
             raise NotApplicableException("Unexpected URI for file snapshot provider: " + str(uri))
-        self._folder = uri[len("default+file:"):]
+        
+        self._folder = folder
         self._file_type: Literal["csv", "json", "pickle"] = file_type
         Path(self._folder).mkdir(parents=True, exist_ok=True)
         self._snapshot_ids: dict[str, datetime] = {}
@@ -35,23 +40,55 @@ class FileSnapshotProvider(SnapshotProvider):
 
     @staticmethod
     def _extract_timestamp(fl: str) -> datetime | None:
-        last_sep = fl.rindex("/")
+        last_sep = fl.rfind("/")
         file0 = (fl if last_sep < 0 else fl[last_sep + 1:]).lower()
-        dot = file0.rindex(".")
+        dot = file0.rfind(".")
         if dot < 0 or not file0.startswith("snapshot_"):
             return None
-        file0 = file0[len("snapshot_"):dot]
+        
+        # Extract the part between "snapshot_" and the file extension
+        file_middle = file0[len("snapshot_"):dot]
+        
+        # Try format: snapshot_YYYY-MM-DDTHH_MM (old format with dashes/underscores)
         try:
-            return datetime.strptime(file0, FileSnapshotProvider._DATETIME_FORMAT).astimezone(tz=timezone.utc)
+            return datetime.strptime(file_middle, FileSnapshotProvider._DATETIME_FORMAT).astimezone(tz=timezone.utc)
         except (ValueError, TypeError):
-            return None
+            pass
+        
+        # Try format: snapshot_N6179_8_20250201000000 (new format with equipment ID + YYYYMMDDHHMMSS)
+        # Extract the last 14 characters which should be YYYYMMDDHHMMSS
+        if len(file_middle) >= 14:
+            timestamp_str = file_middle[-14:]  # Last 14 chars: YYYYMMDDHHMMSS
+            try:
+                return datetime.strptime(timestamp_str, "%Y%m%d%H%M%S").astimezone(tz=timezone.utc)
+            except (ValueError, TypeError):
+                pass
+
+        # Try format: snapshot_YYYYMMDDHHMM (compact format without seconds)
+        if len(file_middle) >= 12:
+            timestamp_str = file_middle[-12:]  # Last 12 chars: YYYYMMDDHHMM
+            try:
+                return datetime.strptime(timestamp_str, "%Y%m%d%H%M").astimezone(tz=timezone.utc)
+            except (ValueError, TypeError):
+                pass
+
+        return None
 
     def snapshots(self, start_time: datetime, end_time: datetime, order: Literal["asc", "desc"] = "asc") -> Iterator[datetime]:
+        print(f"[DEBUG FileSnapshotProvider.snapshots] self._folder: {self._folder}")
+        print(f"[DEBUG FileSnapshotProvider.snapshots] folder exists: {os.path.exists(self._folder)}")
         if len(self._snapshot_ids) > 0:
+            print(f"[DEBUG FileSnapshotProvider.snapshots] returning cached {len(self._snapshot_ids)} snapshots")
             return iter(self._snapshot_ids.values())
         file_types = ",".join(FileSnapshotProvider._FILE_TYPES)
-        matches = [f for f in (f.replace("\\", "/") for f in sorted(glob.glob(os.path.join(self._folder, f"*.[{file_types}]*"), recursive=False),
-                                      reverse=order == "desc")) if "snapshot" in f and ("/" not in f or f.rindex("/") < f.rindex("snapshot"))]
+        glob_pattern = os.path.join(self._folder, f"*.[{file_types}]*")
+        print(f"[DEBUG FileSnapshotProvider.snapshots] glob_pattern: {glob_pattern}")
+        glob_matches = sorted(glob.glob(glob_pattern, recursive=False), reverse=order == "desc")
+        print(f"[DEBUG FileSnapshotProvider.snapshots] glob_matches count: {len(glob_matches)}")
+        for m in glob_matches[:3]:
+            print(f"[DEBUG FileSnapshotProvider.snapshots]   - {m}")
+        matches = [f for f in (f.replace("\\", "/") for f in glob_matches) if "snapshot" in f and ("/" not in f or f.rindex("/") < f.rindex("snapshot"))]
+        print(f"[DEBUG FileSnapshotProvider.snapshots] matches after filter: {len(matches)}")
         num_matches: int = len(matches)
         if num_matches == 1:
             ts: datetime | None = FileSnapshotProvider._extract_timestamp(matches[0])
@@ -61,9 +98,12 @@ class FileSnapshotProvider(SnapshotProvider):
         else:
             for file in matches:
                 ts: datetime | None = FileSnapshotProvider._extract_timestamp(file)
+                print(f"[DEBUG FileSnapshotProvider.snapshots] file={file[-40:]}, ts={ts}")
                 if ts is None:
+                    print(f"[DEBUG FileSnapshotProvider.snapshots]   SKIPPED: ts extraction failed")
                     continue
                 self._snapshot_ids[file] = ts
+        print(f"[DEBUG FileSnapshotProvider.snapshots] final snapshot_ids: {len(self._snapshot_ids)}")
         return iter(self._snapshot_ids.values())
 
     def load(self, *args, time: datetime | None = None, **kwargs) -> Snapshot | None:
@@ -176,4 +216,3 @@ class FileSnapshotProvider(SnapshotProvider):
 if __name__ == "__main__":
     provider = FileSnapshotProvider("default+file:./data/sample", None)
     print(list(provider.snapshots(datetime.fromtimestamp(0, tz=timezone.utc), datetime.fromtimestamp(999_999_999, tz=timezone.utc))))
-

@@ -16,13 +16,12 @@ from dash import html
 from dynreact.app import state
 
 dash.register_page(__name__, path="/stp")
-pg = state.get_stp_page()
 
 
 def layout(*args, **kwargs):
+    pg = state.get_stp_page()
     if pg is None:
         return html.H1("Not found")
     if isinstance(pg, Callable):
         return pg(*args, **kwargs)
     return pg
-

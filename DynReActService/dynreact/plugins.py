@@ -31,6 +31,7 @@ from dynreact.base.impl.SimpleLongTermPlanning import SimpleLongTermPlanning
 from dynreact.base.model import Site
 
 from dynreact.app_config import DynReActSrvConfig
+from dynreact.container import Container
 import inspect
 
 
@@ -38,6 +39,7 @@ class Plugins:
 
     def __init__(self, config: DynReActSrvConfig):
         self._config = config
+        self._container = Container(config)
         self._config_provider: ConfigurationProvider | None = None
         self._snapshot_provider: SnapshotProvider | None = None
         self._downtime_provider: DowntimeProvider | None = None
@@ -55,10 +57,20 @@ class Plugins:
     def get_snapshot_provider(self) -> SnapshotProvider:
         if self._snapshot_provider is None:
             site = self.get_config_provider().site_config()
+            # Direct instance (for testing)
             if isinstance(self._config.snapshot_provider, SnapshotProvider):
-                self._snapshot_provider =  self._config.snapshot_provider
+                self._snapshot_provider = self._config.snapshot_provider
+            # Keep default+file pinned to the OSS base implementation. Otherwise,
+            # namespace-package merging can resolve dynreact.snapshot from a
+            # profile package like ShortTermRAS even in PROFILE=oss.
             elif self._config.snapshot_provider.startswith("default+file:"):
                 self._snapshot_provider = FileSnapshotProvider(self._config.snapshot_provider, site)
+            # Try Container-based loading (supports any profile)
+            elif self._config.snapshot_provider.startswith("ras+file:"):
+                try:
+                    self._snapshot_provider = self._container.get_snapshot_provider(site)
+                except Exception:
+                    raise
             else:
                 self._snapshot_provider = Plugins._load_snapshot_provider(self._config.snapshot_provider, site)
                 if self._snapshot_provider is None:
@@ -67,10 +79,17 @@ class Plugins:
 
     def get_config_provider(self) -> ConfigurationProvider:
         if self._config_provider is None:
+            # Direct instance (for testing)
             if isinstance(self._config.config_provider, ConfigurationProvider):
                 self._config_provider = self._config.config_provider
             elif self._config.config_provider.startswith("default+file:"):
                 self._config_provider = FileConfigProvider(self._config.config_provider)
+            # Try Container-based loading (supports any profile)
+            elif self._config.config_provider.startswith("ras+file:"):
+                try:
+                    self._config_provider = self._container.get_config_provider()
+                except Exception:
+                    raise
             else:
                 self._config_provider = Plugins._load_module("dynreact.config.ConfigurationProviderImpl", ConfigurationProvider, self._config.config_provider)
                 if self._config_provider is None:
@@ -82,6 +101,12 @@ class Plugins:
             site = self.get_config_provider().site_config()
             if self._config.downtime_provider.startswith("default+file:"):
                 self._downtime_provider = FileDowntimeProvider(self._config.downtime_provider, site)
+            # Try Container-based loading (supports any profile)
+            elif self._config.downtime_provider.startswith("ras+file:"):
+                try:
+                    self._downtime_provider = self._container.get_downtime_provider(site)
+                except Exception:
+                    raise
             else:
                 self._downtime_provider = Plugins._load_module("dynreact.downtimes.DowntimeProviderImpl", DowntimeProvider, self._config.downtime_provider)
                 if self._downtime_provider is None:
@@ -210,6 +235,15 @@ class Plugins:
                 print("Failed to load standard Agents page")
                 traceback.print_exc()
                 return None
+        try:
+            modl = importlib.import_module(stp)
+            layout = getattr(modl, "layout", None)
+            if layout is not None:
+                return layout
+        except Exception:
+            print(f"An error occurred loading the STP frontend {stp}")
+            traceback.print_exc()
+
         importers = iter(sys.meta_path)
         for importer in importers:
             try:
@@ -217,11 +251,11 @@ class Plugins:
                 if spec_res is not None:
                     modl = importlib.util.module_from_spec(spec_res)
                     spec_res.loader.exec_module(modl)
-                    for name, element in inspect.getmembers(modl):
-                        if name == "layout":
-                            sys.modules[stp] = modl
-                            return element  # return the layout function
-            except:
+                    layout = getattr(modl, "layout", None)
+                    if layout is not None:
+                        sys.modules[stp] = modl
+                        return layout
+            except Exception:
                 print(f"An error occurred loading the STP frontend {stp}")
                 traceback.print_exc()
         return None
@@ -313,4 +347,3 @@ if __name__ == "__main__":
     print("Snapshot", snapshot.timestamp, "coils:", len(snapshot.material), ", orders:", len(snapshot.orders), ", lots:", len(snapshot.lots))
     status0 = p.get_cost_provider().status(snapshot, site.equipment[0].id)
     print("Status0", status0)
-

@@ -1,5 +1,5 @@
 node {
-    def IMAGE_NAME = "dynreact-shortterm"
+    def IMAGE_NAME = "dynreact-oss-shortterm"
     def IMAGE_TAG = "latest"
     def LOCAL_REGISTRY = "192.168.110.176:5000/"
 
@@ -31,12 +31,12 @@ node {
 
     def runStageWithCleanup = { stageName, body ->
         stage(stageName) {
-            sh '''
-                echo "[PRE] Cleaning up dynreact-shortterm containers..."
-                docker ps -a --filter ancestor=dynreact-shortterm -q | xargs -r docker stop
-                docker ps -a --filter ancestor=dynreact-shortterm -q | xargs -r docker rm
+            sh """
+                echo "[PRE] Cleaning up ${IMAGE_NAME} containers..."
+                docker ps -a --filter ancestor=${IMAGE_NAME} -q | xargs -r docker stop
+                docker ps -a --filter ancestor=${IMAGE_NAME} -q | xargs -r docker rm
                 docker system prune -f
-            '''
+            """
             body()
         }
     }
@@ -79,7 +79,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e PIP_CACHE_DIR=/tmp/pip-cache \\
           --user "0:0" \\
           ${envArgs} \\
-          192.168.110.176:5000/dynreact-shortterm:latest \\
+          ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG} \\
           bash -lc 'set -euo pipefail
                 source .venv/bin/activate
                 COMP=DynReActService

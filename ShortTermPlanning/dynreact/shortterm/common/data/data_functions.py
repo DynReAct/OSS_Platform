@@ -74,9 +74,14 @@ def get_transition_cost_and_status(
         print("Payload:")
         print(json.dumps(payload, indent=4))
 
-    new_status = load_url_json_post(URL_UPDATE_STATUS, payload=payload)
-    new_status = new_status["status"]
-    cost = new_status["planning"]["transition_costs"]
+    try:
+        new_status = load_url_json_post(URL_UPDATE_STATUS, payload=payload)
+        new_status = new_status["status"]
+        cost = new_status["planning"]["transition_costs"]
+    except Exception as e:
+        if verbose > 0:
+            print(f"Error {e} trying to check the cost. Assiging cost 0.")
+        return 0, equipment_status
 
     if cost is None:
         if verbose > 0:

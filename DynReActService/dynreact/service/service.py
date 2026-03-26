@@ -88,6 +88,20 @@ def _get_snapshot_plant(snapshot_id: str|datetime|None, plant_id: int) -> tuple[
     return snapshot, plant
 
 
+def _get_cost_provider():
+    try:
+        return state.get_cost_provider()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        configured_provider = config.cost_provider
+        if configured_provider is None or str(configured_provider).strip() == "":
+            detail = "Cost provider is not configured for this service."
+        else:
+            detail = f"Cost provider '{configured_provider}' is not available."
+        raise HTTPException(status_code=503, detail=detail) from exc
+
+
 @fastapi_app.get("/snapshots",
                  tags=["dynreact"],
                  response_model_exclude_unset=True,
@@ -387,7 +401,7 @@ def transition_cost(transition: EquipmentTransition, username = username) -> flo
             raise HTTPException(status_code=404, detail="Coil " + str(transition.next_material) + " not found")
         if current_coil is None:
             raise HTTPException(status_code=404, detail="Current coil " + str(transition.current_material) + " not found or not provided")
-    costs: float = state.get_cost_provider().transition_costs(plant, current_order, next_order, current_material=current_coil, next_material=next_coil)
+    costs: float = _get_cost_provider().transition_costs(plant, current_order, next_order, current_material=current_coil, next_material=next_coil)
     return costs
 
 
@@ -406,7 +420,7 @@ def logistics_cost(transfer_data: MaterialTransfer, username = username) -> floa
         coil = snapshot.get_material(transfer_data.material)
         if coil is None:
             raise HTTPException(status_code=404, detail=f"Current coil {transfer_data.material} not found or not provided")
-    costs: float = state.get_cost_provider().logistic_costs(new_equipment=plant, order=order, material=coil)
+    costs: float = _get_cost_provider().logistic_costs(new_equipment=plant, order=order, material=coil)
     return costs
 
 
@@ -424,7 +438,7 @@ def assignment_cost(equipment_id: int=Path(..., description="Equipment id"),
     none_orders = [oid for oid, o in orders.items() if o is None]
     if len(none_orders) > 0:
         raise HTTPException(404, f"Orders not found in snapshot {snapshot_id}: {none_orders}")
-    cost_provider = state.get_cost_provider()
+    cost_provider = _get_cost_provider()
     costs: dict[str, float] = {oid: cost_provider.assignment_costs(equipment, o) for oid, o in orders.items()}
     return costs
 
@@ -471,8 +485,8 @@ def plant_status(equipment_id: int, snapshot_timestamp: datetime | str = Path(..
     if target_weight is None:
         target_weights = state.get_snapshot_provider().target_weights_from_snapshot(snapshot, plant.process)
         target_weight = target_weights.get(plant.id, 0)
-    return state.get_cost_provider().equipment_status(snapshot, plant, planning_period=interval, target_weight=target_weight,
-                                                      material_based=coil_based, current=current_order, current_material=current_coils)
+    return _get_cost_provider().equipment_status(snapshot, plant, planning_period=interval, target_weight=target_weight,
+                                                 material_based=coil_based, current=current_order, current_material=current_coils)
 
 
 @fastapi_app.post("/costs/transitions-stateful",
@@ -508,7 +522,7 @@ def target_function_update(transition: EquipmentTransitionStateful, username = u
     initial_solution = ProductionPlanning(process=plant.process, equipment_status={plant.id: status}, order_assignments={})
     targets = ProductionTargets(process=plant.process, target_weight={plant.id: status.targets},
                                 period=status.planning_period)
-    optimizer: LotsOptimizer = state.get_lots_optimization().create_instance(plant.process, snapshot, state.get_cost_provider(),
+    optimizer: LotsOptimizer = state.get_lots_optimization().create_instance(plant.process, snapshot, _get_cost_provider(),
                                                                     initial_solution=initial_solution, targets=targets)
     new_status, new_objective = optimizer.update_transition_costs(plant, current_order, next_order, status,
                                                                     snapshot, current_material=current_coil, next_material=next_coil)
@@ -524,7 +538,7 @@ def relevant_fields(equipment_id: int=Path(..., description="Equipment id"), use
     equipment = state.get_site().get_equipment(equipment_id)
     if equipment is None:
         raise HTTPException(status_code=404, detail=f"No such equipment: {equipment_id}")
-    return state.get_cost_provider().relevant_fields(equipment)
+    return _get_cost_provider().relevant_fields(equipment)
 
 
 lots_optimization: tuple[int, LotsOptimizationListener]|None = None
@@ -542,7 +556,7 @@ def run_lots_optimization(data: LotsOptimizationInput, username = username) -> i
     snapshot: Snapshot = state.get_snapshot(data.snapshot)
     if snapshot is None:
         raise HTTPException(status_code=404, detail=f"Snapshot {data.snapshot} not found")
-    instance = optimizer.create_instance(data.targets.process, snapshot, state.get_cost_provider(),
+    instance = optimizer.create_instance(data.targets.process, snapshot, _get_cost_provider(),
                 targets=data.targets, initial_solution=data.initial_solution, min_due_date=data.min_due_date,
                 orders=data.orders)
     instance_id: int = random.randint(0, sys.maxsize)
@@ -782,4 +796,3 @@ def _get_process_name(process: int|str) -> str:
     if proc is None:
         raise HTTPException(status_code=404, detail=f"Process not found: {process}")
     return proc.name_short
-

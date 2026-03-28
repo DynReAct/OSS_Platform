@@ -23,8 +23,17 @@ def get_equipment_status(equipment_id: int, snapshot_time: str) -> dict:
     :rtype: dict
     """
     url_equipment_status = URL_INITIAL_STATE.format(equipment_id=equipment_id, snapshot_timestamp=snapshot_time)
-    return load_url_json_get(url_equipment_status)
-
+    try:
+        return load_url_json_get(url_equipment_status)
+    except Exception as e:
+        print(f"Error {e} trying to get the status of equipment {equipment_id}.")
+        return {
+            "targets": {"equipment": equipment_id},
+            "snapshot_id": snapshot_time,
+            "current_order": None,
+            "current_material": [],
+            "planning": {"transition_costs": 0}
+        }
 
 def get_transition_cost_and_status(
         material_params: dict, equipment_status: dict, verbose: int = 1

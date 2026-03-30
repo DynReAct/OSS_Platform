@@ -6,6 +6,7 @@ This module defines the functions used outside to get relevant data.
 import json
 import time
 from confluent_kafka import Producer
+import requests
 
 from dynreact.shortterm.common import sendmsgtopic
 from dynreact.shortterm.common.data.load_url import URL_INITIAL_STATE, URL_UPDATE_STATUS, load_url_json_get, \
@@ -24,11 +25,20 @@ def get_equipment_status(equipment_id: int, snapshot_time: str) -> dict:
     """
 
     url_equipment_status = URL_INITIAL_STATE.format(equipment_id=equipment_id, snapshot_timestamp=snapshot_time)
+
     try:
-        print("DEBUG: entering try block")
         return load_url_json_get(url_equipment_status)
+    except (requests.exceptions.HTTPError, requests.exceptions.RequestException) as e:
+        print(f"Error {e} trying to get the status of equipment {equipment_id}. Using fallback status.")
+        return {
+            "targets": {"equipment": equipment_id},
+            "snapshot_id": snapshot_time,
+            "current_order": None,
+            "current_material": [],
+            "planning": {"transition_costs": 0}
+        }
     except Exception as e:
-        print(f"Error {e} trying to get the status of equipment {equipment_id}.")
+        print(f"Unexpected error getting status of equipment {equipment_id}: {e}. Using fallback status.")
         return {
             "targets": {"equipment": equipment_id},
             "snapshot_id": snapshot_time,
@@ -89,9 +99,11 @@ def get_transition_cost_and_status(
         new_status = load_url_json_post(URL_UPDATE_STATUS, payload=payload)
         new_status = new_status["status"]
         cost = new_status["planning"]["transition_costs"]
+    except (requests.exceptions.HTTPError, requests.exceptions.RequestException) as e:
+        print(f"Error {e} trying to check the cost. Assigning cost 0.")
+        return 0, equipment_status
     except Exception as e:
-        if verbose > 0:
-            print(f"Error {e} trying to check the cost. Assiging cost 0.")
+        print(f"Unexpected error checking transition cost: {e}. Assigning cost 0.")
         return 0, equipment_status
 
     if cost is None:

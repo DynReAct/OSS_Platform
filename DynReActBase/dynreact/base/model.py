@@ -670,6 +670,15 @@ class Snapshot(Model, Generic[MATERIAL_PROPERTIES]):
                                 coil.current_equipment is not None and \
                                 coil.current_equipment_name != equipment_name])
 
+    def get_material_current_equipment(self, equipment_name: str) -> list[str]:
+        """
+        Get materials currently assigned to the specified equipment.
+        """
+        return [
+            coil.id for coil in self.material
+            if coil.current_equipment_name == equipment_name
+        ]
+
     def get_orders_equipment(self, site: Site, equipment_name: str, \
                              storage:str, assigned:int=-1) -> list[str]:
         """
@@ -708,6 +717,22 @@ class Snapshot(Model, Generic[MATERIAL_PROPERTIES]):
                 result_list.append(order)
 
         return result_list
+
+    def get_orders_current_equipment(self, equipment_name: str) -> list[str]:
+        """
+        Get orders that currently have at least one material assigned to the
+        specified equipment.
+        """
+        unique_orders: list[str] = []
+        seen: set[str] = set()
+        for coil in self.material:
+            if coil.current_equipment_name != equipment_name:
+                continue
+            if coil.order in seen:
+                continue
+            seen.add(coil.order)
+            unique_orders.append(coil.order)
+        return unique_orders
     #
     def get_material_selected_orders(self, orders: list[str], plant_names: list[str], \
                                     site: Site) -> list[str]:

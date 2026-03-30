@@ -1,11 +1,7 @@
 import os
-from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
-
-
-_DOTENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 
 
 class DynReActSrvConfig:
@@ -106,7 +102,9 @@ class DynReActSrvConfig:
                  time_zone: str | None = None,
                  profile: str|None = None
                  ):
-        load_dotenv(dotenv_path=_DOTENV_PATH, override=True)
+        # Resolve .env from the current working directory / standard dotenv search
+        # so packaged executions do not depend on the source-tree layout.
+        load_dotenv(override=True)
         if time_zone is None:
             time_zone = os.getenv("TIME_ZONE", DynReActSrvConfig.time_zone)
         self.time_zone = time_zone
@@ -244,4 +242,3 @@ class ConfigProvider:
     """
 
     config = DynReActSrvConfig()
-

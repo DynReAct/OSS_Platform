@@ -11,12 +11,13 @@ import dash_ag_grid as dash_ag
 import pandas as pd
 from confluent_kafka import Producer, Consumer
 from confluent_kafka.admin import AdminClient
-from dash import html, dcc, ctx, callback, Input, Output, State
+from dash import html, dcc, ctx, Input, Output, State
 from jsonpath_ng.ext import parse
 from dynreact.auction.auction import Auction, JobStatus
 
 from dynreact.gui_stp.agents_state import AgentsState
 from dynreact.app import state
+from dynreact.gui.dash_app import app
 from dynreact.shortterm.common import KeySearch, purge_topics, delete_topics
 from dynreact.shortterm.short_term_planning import create_auction, start_auction, genauction, ask_results
 from dynreact.gui.localization import Localization
@@ -34,9 +35,30 @@ translations_key = "agp"
 # We force the extaction of the configuration object before finding the values.
 agents_state: AgentsState = AgentsState()
 stp_params = agents_state.get_stp_config_params() # O el método que recupere el ShortTermTargets
-if stp_params:
+if stp_params and hasattr(stp_params, "_stpConfigParams"):
     KeySearch.set_global(stp_params._stpConfigParams)
-# state.set_stp_config()
+else:
+    state.set_stp_config()
+
+
+def _get_page_context() -> tuple[object | None, list[str], object | None]:
+    current = state.get_snapshot_provider().current_snapshot_id()
+    res_lst = [j.name_short for j in state.get_site().get_process_all_equipment()]
+    snapshot = state.get_snapshot(current) if current is not None else state.get_snapshot()
+    return current, res_lst, snapshot
+
+
+def _get_stp_runtime_context() -> tuple[str | None, str | None, str | None, object | None, str | None]:
+    state.set_stp_config()
+    return (
+        KeySearch.search_for_value("PERF_URL"),
+        KeySearch.search_for_value("KAFKA_IP"),
+        KeySearch.search_for_value("TOPIC_GEN"),
+        KeySearch.search_for_value("TOPIC_CALLBACK"),
+        KeySearch.search_for_value("SMALL_WAIT"),
+    )
+
+
 EXTERNAL_PERF_URL = KeySearch.search_for_value("PERF_URL")
 
 # Recovering the last snapshot selected as well as Site related plants
@@ -106,10 +128,11 @@ def sleep(seconds: float, producer: Producer, verbose: int):
     :param producer: Kafka object producer.
     :param verbose: Level of verbosity.
     """
+    _, _, topic_gen, _, _ = _get_stp_runtime_context()
     if verbose > 0:
         sendmsgtopic(
-            producer=producer, tsend=TOPIC_GEN, topic=TOPIC_GEN, source="UX",
-            dest="LOG:" + TOPIC_GEN, action="WRITE",
+            producer=producer, tsend=topic_gen, topic=topic_gen, source="UX",
+            dest="LOG:" + topic_gen, action="WRITE",
             payload=dict(msg=f"Waiting for {seconds}s..."), vb=verbose
         )
     time.sleep(seconds)
@@ -454,6 +477,7 @@ def layout(*args, **kwargs):
     # Initialize default values
     snpshot, mat_def, res_all, res_def, lmats, s_mats = initialize_defaults()
     o_mats, amats, as_mats, mat_ass_def, txt_def, resul, res_no_all, res_no_def = initialize_defaults(extra=True)
+    current, res_lst, _ = _get_page_context()
 
     # Update values if there is a current state
     if current is not None:
@@ -505,7 +529,7 @@ def layout(*args, **kwargs):
     return htmscr
 
 
-@callback(  Output('ag-cont_item-materials','children'),
+@app.callback(  Output('ag-cont_item-materials','children'),
             Output('ag-materials','options'),
             Output('ag-sect3','style'),
             Output('ag-materials','value'),
@@ -524,15 +548,20 @@ def set_materials(matype, plants):
     if len(matype) > 0 and len(plants) > 0:
         res  = []
         site = state.get_site()
+        current = state.get_snapshot_provider().current_snapshot_id()
+        snapshot = state.get_snapshot(current) if current is not None else state.get_snapshot()
+        if snapshot is None:
+            titx = f'Targeted {matype} (no active snapshot available):'
+            return titx, [], DISPLAY_BLOCK, []
         all_materials = []
 
         for ir in plants:
             stg_act = site.get_equipment_by_name(ir).storage_in
 
             if matype == 'Materials':
-                lmts = snapshot.get_material_equipment(site, ir, stg_act)
+                lmts = snapshot.get_material_current_equipment(ir)
             else:
-                lmts = snapshot.get_orders_equipment(site, ir, stg_act)
+                lmts = snapshot.get_orders_current_equipment(ir)
 
             all_materials.extend(sorted(lmts))
 
@@ -559,7 +588,7 @@ def set_materials(matype, plants):
         return titx, [], NO_DISPLAY, []
 
 #
-@callback( Output('ag-cont_item-ass-materials','children'),
+@app.callback( Output('ag-cont_item-ass-materials','children'),
            Output('ag-ass-materials','options'),
            Output('ag-sect5','style'),
            Output('ag-ass-materials','value'),
@@ -580,6 +609,10 @@ def set_ass_materials(matype, plants, ass_mats):
     if len(matype) > 0 and len(plants) > 0 and ass_mats == 'Yes':
         res = []
         site = state.get_site()
+        current = state.get_snapshot_provider().current_snapshot_id()
+        snapshot = state.get_snapshot(current) if current is not None else state.get_snapshot()
+        if snapshot is None:
+            return '', [], NO_DISPLAY, []
         all_assigned_materials = []
 
         for ir in plants:
@@ -610,7 +643,7 @@ def set_ass_materials(matype, plants, ass_mats):
 
     return '', [], NO_DISPLAY, []
 
-@callback(
+@app.callback(
     Output('ag-status', 'children'),
     Output('ag-submit', 'style'),
     Output('ag-start', 'style'),
@@ -1033,7 +1066,7 @@ def initialize_auction(topic: str, snap_name: str, resources: list,
     )
 
 
-@callback(
+@app.callback(
     Output('tab-content', 'children'),
     Input('tabs', 'value'),
     State('auction-store', 'data')
@@ -1058,7 +1091,7 @@ def render_tab_content(selected_tab, auction_data):
 
     return html.Div("No results for this equipment.")
 
-@callback(
+@app.callback(
     Output("download-csv", "data"),
     Input("download-btn", "n_clicks"),
     State('tabs', 'value'),
@@ -1100,7 +1133,7 @@ def download_equipment_csv(n_clicks, selected_tab, auction_data):
     return dash.no_update
 
 
-@callback(
+@app.callback(
     Output("ag-equipment-configs", "children"),
     Input("ag-resources", "value"),
     prevent_initial_call=True
@@ -1135,7 +1168,7 @@ def update_equipment_inputs(selected_equipments):
 
     return content
 
-@callback(
+@app.callback(
     Output("agp-title", "children"),
     Output("ag-cont_item-matypes", "children"),
     Output("ag-cont_item-resources", "children"),
@@ -1170,7 +1203,7 @@ def update_page_localization(lang: str):
         Localization.get_value(translation, "btn_restart", "Restart")
     )
 
-@callback(
+@app.callback(
     Output("ag-matypes", "options"),
     Input("lang", "data")
 )
@@ -1189,7 +1222,7 @@ def update_radio_options_localization(lang: str):
     ]
 
 
-@callback(
+@app.callback(
     Output("ag-ass-matypes", "options"),
     Input("lang", "data")
 )

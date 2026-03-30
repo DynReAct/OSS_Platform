@@ -1,7 +1,8 @@
 import importlib
+import importlib.util
 import sys
 import traceback
-from typing import Any, Iterator
+from typing import Any
 
 from dynreact.auth.authentication import get_permission_manager
 from dynreact.base.ConfigurationProvider import ConfigurationProvider
@@ -32,7 +33,7 @@ from dynreact.base.model import Site
 
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.container import Container
-import inspect
+from dynreact.module_loader import instantiate_first_matching
 
 
 class Plugins:
@@ -54,6 +55,14 @@ class Plugins:
         self._aggregation_persistence: AggregationPersistence|None = None
         self._permissions: PermissionManager|None = None
 
+    def _matches_active_profile_uri(self, uri: str | None) -> bool:
+        if not isinstance(uri, str):
+            return False
+        profile = (self._config.profile or "").strip().lower()
+        if profile == "":
+            return False
+        return uri.lower().startswith(f"{profile}+")
+
     def get_snapshot_provider(self) -> SnapshotProvider:
         if self._snapshot_provider is None:
             site = self.get_config_provider().site_config()
@@ -65,8 +74,8 @@ class Plugins:
             # profile package like ShortTermRAS even in PROFILE=oss.
             elif self._config.snapshot_provider.startswith("default+file:"):
                 self._snapshot_provider = FileSnapshotProvider(self._config.snapshot_provider, site)
-            # Try Container-based loading (supports any profile)
-            elif self._config.snapshot_provider.startswith("ras+file:"):
+            # Resolve active profile-specific providers without hardcoding names.
+            elif self._matches_active_profile_uri(self._config.snapshot_provider):
                 try:
                     self._snapshot_provider = self._container.get_snapshot_provider(site)
                 except Exception:
@@ -84,8 +93,8 @@ class Plugins:
                 self._config_provider = self._config.config_provider
             elif self._config.config_provider.startswith("default+file:"):
                 self._config_provider = FileConfigProvider(self._config.config_provider)
-            # Try Container-based loading (supports any profile)
-            elif self._config.config_provider.startswith("ras+file:"):
+            # Resolve active profile-specific providers without hardcoding names.
+            elif self._matches_active_profile_uri(self._config.config_provider):
                 try:
                     self._config_provider = self._container.get_config_provider()
                 except Exception:
@@ -101,8 +110,8 @@ class Plugins:
             site = self.get_config_provider().site_config()
             if self._config.downtime_provider.startswith("default+file:"):
                 self._downtime_provider = FileDowntimeProvider(self._config.downtime_provider, site)
-            # Try Container-based loading (supports any profile)
-            elif self._config.downtime_provider.startswith("ras+file:"):
+            # Resolve active profile-specific providers without hardcoding names.
+            elif self._matches_active_profile_uri(self._config.downtime_provider):
                 try:
                     self._downtime_provider = self._container.get_downtime_provider(site)
                 except Exception:
@@ -283,59 +292,19 @@ class Plugins:
 
     @staticmethod
     def _load_module(module: str, clzz, *args, **kwargs) -> Any|None:   # returns an instance of the clzz, if found
-        # if *args starts with class: replace module by that arg
-        if len(args) > 0 and isinstance(args[0], str) and args[0].startswith("class:"):
-            first = args[0]
-            module = first[first.index(":")+1:first.index(",")]
-            first = first[first.index(",")+1:]
-            args = tuple(a if idx > 0 else first for idx, a in enumerate(args))
-        mod0 = sys.modules.get(module)
         do_raise = kwargs.pop("do_raise", False)
-        errors = []
-        mod_set: bool = mod0 is not None
-        mod_iterator: Iterator = iter([mod0]) if mod_set else _ModIterator(module)
-        for mod in mod_iterator:
-            for name, element in inspect.getmembers(mod):
-                try:
-                    if inspect.isclass(element) and issubclass(element, clzz) and element != clzz:
-                        result = element(*args, **kwargs)
-                        if not mod_set:
-                            sys.modules[module] = mod
-                        return result
-                except Exception as e:
-                    if not isinstance(e, NotApplicableException):
-                        errors.append(e)
-                        if do_raise:
-                            raise
-        if len(errors) > 0:
-            print(f"Failed to load module {module} of type {clzz}: {errors[0]}")
-            raise errors[0]
-        if do_raise:
-            raise Exception(f"Module {module} not found")
-        return None
-
-
-class _ModIterator(Iterator):   # returns loaded modules
-
-    def __init__(self, module: str):
-        # Note: this works if there are duplicates in editable installations,
-        # but not if there are duplicate modules in separate wheels
-        self._importers = iter(sys.meta_path + [importlib.util])
-        # self._importers = iter([importlib.util]) # TODO maybe we do not need this sys.meta_path voodoo at all?
-        self._module = module
-
-    def __next__(self):
-        while True:
-            importer = next(self._importers)
-            try:
-                spec_res = importer.find_spec(self._module)
-                if spec_res is not None:
-                    mod = importlib.util.module_from_spec(spec_res)
-                    # sys.modules[module] = mod  # we'll check first if this is the correct module
-                    spec_res.loader.exec_module(mod)
-                    return mod
-            except:
-                pass
+        try:
+            return instantiate_first_matching(
+                module,
+                clzz,
+                *args,
+                do_raise=do_raise,
+                ignored_exceptions=(NotApplicableException,),
+                **kwargs,
+            )
+        except Exception as exc:
+            print(f"Failed to load module {module} of type {clzz}: {exc}")
+            raise
 
 
 # for testing

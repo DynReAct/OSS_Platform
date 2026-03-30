@@ -37,6 +37,9 @@ class FileSnapshotProvider(SnapshotProvider):
         Path(self._folder).mkdir(parents=True, exist_ok=True)
         self._snapshot_ids: dict[str, datetime] = {}
         self._snapshots: dict[datetime, Snapshot] = {}
+        self._snapshot_index_complete: bool = False
+        self._latest_snapshot_file: str | None = None
+        self._latest_snapshot_id: datetime | None = None
 
     @staticmethod
     def _extract_timestamp(fl: str) -> datetime | None:
@@ -75,20 +78,12 @@ class FileSnapshotProvider(SnapshotProvider):
         return None
 
     def snapshots(self, start_time: datetime, end_time: datetime, order: Literal["asc", "desc"] = "asc") -> Iterator[datetime]:
-        print(f"[DEBUG FileSnapshotProvider.snapshots] self._folder: {self._folder}")
-        print(f"[DEBUG FileSnapshotProvider.snapshots] folder exists: {os.path.exists(self._folder)}")
-        if len(self._snapshot_ids) > 0:
-            print(f"[DEBUG FileSnapshotProvider.snapshots] returning cached {len(self._snapshot_ids)} snapshots")
+        if self._snapshot_index_complete and len(self._snapshot_ids) > 0:
             return iter(self._snapshot_ids.values())
         file_types = ",".join(FileSnapshotProvider._FILE_TYPES)
         glob_pattern = os.path.join(self._folder, f"*.[{file_types}]*")
-        print(f"[DEBUG FileSnapshotProvider.snapshots] glob_pattern: {glob_pattern}")
         glob_matches = sorted(glob.glob(glob_pattern, recursive=False), reverse=order == "desc")
-        print(f"[DEBUG FileSnapshotProvider.snapshots] glob_matches count: {len(glob_matches)}")
-        for m in glob_matches[:3]:
-            print(f"[DEBUG FileSnapshotProvider.snapshots]   - {m}")
         matches = [f for f in (f.replace("\\", "/") for f in glob_matches) if "snapshot" in f and ("/" not in f or f.rindex("/") < f.rindex("snapshot"))]
-        print(f"[DEBUG FileSnapshotProvider.snapshots] matches after filter: {len(matches)}")
         num_matches: int = len(matches)
         if num_matches == 1:
             ts: datetime | None = FileSnapshotProvider._extract_timestamp(matches[0])
@@ -98,16 +93,48 @@ class FileSnapshotProvider(SnapshotProvider):
         else:
             for file in matches:
                 ts: datetime | None = FileSnapshotProvider._extract_timestamp(file)
-                print(f"[DEBUG FileSnapshotProvider.snapshots] file={file[-40:]}, ts={ts}")
                 if ts is None:
-                    print(f"[DEBUG FileSnapshotProvider.snapshots]   SKIPPED: ts extraction failed")
                     continue
                 self._snapshot_ids[file] = ts
-        print(f"[DEBUG FileSnapshotProvider.snapshots] final snapshot_ids: {len(self._snapshot_ids)}")
+        self._snapshot_index_complete = True
         return iter(self._snapshot_ids.values())
 
+    def current_snapshot_id(self) -> datetime | None:
+        if self._latest_snapshot_id is not None:
+            return self._latest_snapshot_id
+
+        file_types = tuple(f".{ext}" for ext in FileSnapshotProvider._FILE_TYPES)
+        latest_ts: datetime | None = None
+        latest_file: str | None = None
+
+        try:
+            with os.scandir(self._folder) as entries:
+                for entry in entries:
+                    if not entry.is_file():
+                        continue
+                    name = entry.name.lower()
+                    if not name.startswith("snapshot_") or not name.endswith(file_types):
+                        continue
+                    file_path = entry.path.replace("\\", "/")
+                    ts = FileSnapshotProvider._extract_timestamp(file_path)
+                    if ts is None:
+                        continue
+                    if latest_ts is None or ts > latest_ts:
+                        latest_ts = ts
+                        latest_file = file_path
+        except FileNotFoundError:
+            return None
+
+        self._latest_snapshot_id = latest_ts
+        self._latest_snapshot_file = latest_file
+        if latest_ts is not None and latest_file is not None:
+            self._snapshot_ids.setdefault(latest_file, latest_ts)
+        return latest_ts
+
     def load(self, *args, time: datetime | None = None, **kwargs) -> Snapshot | None:
-        timestamp = self.previous(time=time)
+        timestamp = time
+        if timestamp is None:
+            timestamp = self.previous(time=time)
         if timestamp is None:
             return None
         if len(self._snapshots) > 0:
@@ -120,6 +147,24 @@ class FileSnapshotProvider(SnapshotProvider):
                 if snap is not None:
                     self._snapshots[ts] = snap
                     return snap
+        if timestamp == self._latest_snapshot_id and self._latest_snapshot_file is not None:
+            snap = self._read_file(self._latest_snapshot_file, timestamp, *args, **kwargs)
+            if snap is not None:
+                self._snapshots[timestamp] = snap
+                self._snapshot_ids.setdefault(self._latest_snapshot_file, timestamp)
+                return snap
+        if not self._snapshot_index_complete:
+            list(self.snapshots(
+                start_time=datetime.fromtimestamp(0, tz=timezone.utc),
+                end_time=datetime(year=3000, month=1, day=1, tzinfo=timezone.utc),
+                order="desc",
+            ))
+            for file, ts in self._snapshot_ids.items():
+                if timestamp == ts:
+                    snap = self._read_file(file, timestamp, *args, **kwargs)
+                    if snap is not None:
+                        self._snapshots[ts] = snap
+                        return snap
         return None
 
     def _read_file(self, fl: str, timestamp: datetime, *args, **kwargs) -> Snapshot | None:

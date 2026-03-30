@@ -303,35 +303,26 @@ class DynReActSrvState:
             self.get_stp_config_params()
 
     def get_stp_context_params(self):
-        from dynreact.shortterm.common import KeySearch
         self.set_stp_config()
-        return (
-            KeySearch.search_for_value("KAFKA_IP"),
-            KeySearch.search_for_value("TOPIC_GEN"),
-            KeySearch.search_for_value("TOPIC_CALLBACK"),
-            KeySearch.search_for_value("VB"),
-        )
+        return self._stp.stp_context_params()
 
     def get_stp_context_timing(self):
         self.set_stp_config()
-        return (
-            self._stp._stpConfigParams.TimeDelays.AUCTION_WAIT,
-            self._stp._stpConfigParams.TimeDelays.COUNTERBID_WAIT,
-            self._stp._stpConfigParams.TimeDelays.CLONING_WAIT,
-            self._stp._stpConfigParams.TimeDelays.EXIT_WAIT,
-            self._stp._stpConfigParams.TimeDelays.SMALL_WAIT,
-        )
+        return self._stp.stp_context_timing()
 
     def get_stp_config_params(self):
         if self._stp is None:
             uri = self._config.short_term_planning
+            profile = (self._config.profile or "").strip().lower()
             if uri.startswith("default+file:"):
                 from dynreact.shortterm.ShortTermPlanning import ShortTermPlanning
                 self._stp = ShortTermPlanning(uri)
-            elif uri.startswith("ras+file:"):
-                from dynreact.shortterm.ras_short_term_planning_impl import RasFileShortTermPlanning
-                self._stp = RasFileShortTermPlanning(uri)
+            elif isinstance(uri, str) and profile != "" and uri.lower().startswith(f"{profile}+"):
+                self._stp = self._plugins._container._create_provider(
+                    self._plugins._container._load_profile_module("shortterm"),
+                    uri
+                )
             else:
                 from dynreact.shortterm.ShortTermPlanning import ShortTermPlanning
                 self._stp = Plugins._load_module("dynreact.shorttermplanning", ShortTermPlanning, uri)
-        return self._stp
+        return self._stp.stp_config_params()

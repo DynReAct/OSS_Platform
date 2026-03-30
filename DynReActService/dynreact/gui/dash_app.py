@@ -249,7 +249,7 @@ clientside_callback(
 )
 
 # Set client timezone once on page load
-@callback(
+@app.callback(
     Output("client-tz", "data"),
     Input("menu-url", "pathname"),
     prevent_initial_call=False

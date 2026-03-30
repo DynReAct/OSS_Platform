@@ -2,13 +2,11 @@
 Dependency Injection Container for DynReAct
 Manages plugin loading based on profile (oss, ras, etc.)
 """
-import importlib
-import sys
-from typing import Any, Optional, Type
-from pathlib import Path
+from typing import Any
 
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.base.model import Site
+from dynreact.module_loader import import_module
 
 
 class Container:
@@ -90,29 +88,41 @@ class Container:
         Load a profile-specific module.
         
         Order of resolution:
-        1. Try {profile}.dynreact.{component}
-        2. Fallback to dynreact.{component} (OSS default)
+        1. Try dynreact.{component}.{profile}
+        2. Try {profile}.dynreact.{component} (legacy transition path)
+        3. Fallback to dynreact.{component} (OSS/default path)
         
         Example: profile="ras", component="snapshot"
-        Tries: ShortTermRAS.dynreact.snapshot -> dynreact.snapshot
+        Tries: dynreact.snapshot.ras -> ras.dynreact.snapshot -> dynreact.snapshot
         """
-        # Try profile-specific first
-        profile_module_name = f"{self.profile}.dynreact.{component}"
-        try:
-            return importlib.import_module(profile_module_name)
-        except ImportError as e:
-            # Fallback to OSS default
-            default_module_name = f"dynreact.{component}"
+        # Keep profile implementations inside the dynreact namespace package.
+        candidates = [
+            f"dynreact.{component}.{self.profile}",
+            f"{self.profile}.dynreact.{component}",
+            f"dynreact.{component}",
+        ]
+        errors: list[tuple[str, Exception]] = []
+        for module_name in candidates:
             try:
-                return importlib.import_module(default_module_name)
-            except ImportError:
-                raise ImportError(
-                    f"Could not load {component} for profile '{self.profile}'.\n"
-                    f"Tried:\n"
-                    f"  1. {profile_module_name}\n"
-                    f"  2. {default_module_name}\n"
-                    f"Original error: {e}"
-                )
+                return self._import_module(module_name)
+            except ImportError as exc:
+                errors.append((module_name, exc))
+        err_lines = "\n".join(f"  - {name}: {exc}" for name, exc in errors)
+        raise ImportError(
+            f"Could not load {component} for profile '{self.profile}'.\n"
+            f"Tried:\n"
+            f"  1. {candidates[0]}\n"
+            f"  2. {candidates[1]}\n"
+            f"  3. {candidates[2]}\n"
+            f"Original errors:\n{err_lines}"
+        )
+
+    @staticmethod
+    def _import_module(module_name: str) -> Any:
+        """
+        Import a module through the shared tolerant loader used by plugins.py.
+        """
+        return import_module(module_name)
     
     def _create_provider(self, module: Any, *args, **kwargs) -> Any:
         """

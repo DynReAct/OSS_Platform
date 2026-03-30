@@ -14,7 +14,8 @@ La arquitectura de DI implementada permite cargar diferentes implementaciones de
 3. Plugins crea Container con profile
    ↓
 4. Container.get_snapshot_provider()
-   → Intenta cargar: {profile}.dynreact.snapshot
+   → Intenta cargar: dynreact.snapshot.{profile}
+   → Compatibilidad transitoria: {profile}.dynreact.snapshot
    → Fallback a: dynreact.snapshot (si profile falla)
    ↓
 5. Retorna implementación RAS/OSS/Custom
@@ -80,7 +81,8 @@ El `Container` en `OSS_Platform/DynReActService/dynreact/container.py`:
 
 1. **Recibe profile** (ej: "ras") de config
 2. **Intenta cargar módulos dinámicamente**:
-   - Primero: `{profile}.dynreact.{component}`
+   - Primero: `dynreact.{component}.{profile}`
+   - Compatibilidad transitoria: `{profile}.dynreact.{component}`
    - Luego: `dynreact.{component}` (fallback OSS)
 3. **Busca implementación en el módulo**:
    - Clases terminadas en `Impl` (ej: `RasSnapshotProviderImpl`)

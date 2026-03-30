@@ -86,7 +86,11 @@ class Equipment(Agent):
 
         :param dict material_params:
         """
-        self.status = get_new_equipment_status(material_params=material_params, equipment_status=self.status, verbose=self.verbose)
+        try:
+            self.status = get_new_equipment_status(material_params=material_params, equipment_status=self.status, verbose=self.verbose)
+        except Exception as e:
+            self.write_log(f"Error obtaining status: {e}", "0294d45b-a09a-4160-92a7-fca19b34cd6b")
+
         roundless_name = self.agent[:self.agent.rfind(":")]
         self.round_number += 1
         self.agent = roundless_name + f":{self.round_number}"
@@ -137,7 +141,11 @@ class Equipment(Agent):
             start_time = user_start_time if user_start_time is not None else payload.get('start_time')
 
             agent = f"EQUIPMENT:{topic}:{equipment}:0"
-            status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)
+            try:
+                status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)
+            except Exception as e:
+                self.write_log(f"Error obtaining status: {e}", "634d800c-4e16-4f8b-8bd6-aee4aa8431ff")
+
             self.equipment = equipment
 
             init_kwargs = {
@@ -206,7 +214,11 @@ class Equipment(Agent):
         material_params = payload['material_params']
         bidding_price = payload['price']
 
-        prod_cost = calculate_production_cost(material_params=material_params, equipment_status=self.status, verbose=self.verbose)
+        try:
+            prod_cost = calculate_production_cost(material_params=material_params, equipment_status=self.status, verbose=self.verbose)
+        except Exception as e:
+            self.write_log(f"Error calculating production cost: {e}", "5361db43-03b4-4527-b1f6-fc280ceaca68")
+
         if prod_cost is None:
             if self.verbose > 1:
                 self.write_log(

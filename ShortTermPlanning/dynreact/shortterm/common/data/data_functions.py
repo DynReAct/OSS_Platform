@@ -62,7 +62,8 @@ def get_transition_cost_and_status(
     :return: Tuple of cost(float) and status(dict)
     :rtype: tuple
     """
-    equipment_id = equipment_status["targets"]["equipment"]
+
+    equipment_id = equipment_status["targets"]["equipment"] if equipment_status["targets"] is not None else None
     next_material = material_params["id"]
     prev_material = (equipment_status.get("current_material") or [None])[-1]
     current_order = equipment_status.get("current_order")
@@ -71,7 +72,7 @@ def get_transition_cost_and_status(
         print(f"Transition of equipment {equipment_id} from {prev_material} to {next_material}...")
 
     msg_incompatible = "The transition is not possible."
-    if equipment_id not in material_params["order"]["allowed_equipment"]:
+    if equipment_id is not None and equipment_id not in material_params["order"]["allowed_equipment"]:
         if verbose > 0:
             print(msg_incompatible, f"The equipment {equipment_id} is not among the allowed equipments of {next_material}")
         return None, None

@@ -259,8 +259,7 @@ class Material(Agent):
         """
         # Reject offer is equipment is not among the allowed equipments of the material
         # JOM 2025
-        allowed_equipments = [int(equipment) for equipment in material_params['order']['allowed_equipment']]
-        if int(equipment_status['targets']['equipment']) not in allowed_equipments: #TODO: is this an int?
+        if equipment_status['targets'] is not None and equipment_status['targets']['equipment'] not in material_params['order']['allowed_equipment']:
             return None
 
         # For now, the bidding price is greater when the delivery date is sooner. If due_date is not present simulate a value

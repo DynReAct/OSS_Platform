@@ -1,12 +1,14 @@
 ﻿import os
+import time
 from unittest.mock import patch, MagicMock
 
 import pytest
+from confluent_kafka import Producer
 
 from datetime import datetime, timedelta
 from dynreact.shortterm.common import purge_topics, KeySearch
 from dynreact.shortterm.common.handler import DockerManager
-from dynreact.shortterm.short_term_planning import execute_short_term_planning
+from dynreact.shortterm.short_term_planning import execute_short_term_planning, run_general_agents, clean_agents
 from dynreact.shortterm.shorttermtargets import ShortTermTargets
 
 KeySearch.set_global(config_provider=ShortTermTargets())
@@ -18,7 +20,24 @@ def initialize():
     print("Setting up for a test.")
     print("Purging topics.")
     purge_topics(topics=[topic_callback, topic_gen, 'DYN_TEST'])
+
+    remote_base_agents = os.environ.get("REMOTE_BASE_AGENTS") == "1"
+    producer = None
+    if remote_base_agents:
+        print("Starting remote verification base agents.")
+        producer = Producer({
+            "bootstrap.servers": KeySearch.search_for_value("KAFKA_IP"),
+            "linger.ms": 100,
+            "acks": "all",
+        })
+        run_general_agents(producer=producer, gagents="111", verbose=3)
+        time.sleep(10)
+
     yield
+    if remote_base_agents and producer is not None:
+        print("Stopping remote verification base agents.")
+        clean_agents(producer=producer, verbose=3, rungagnts="111")
+        time.sleep(5)
     print("Tearing down after a test.")
 
 @pytest.fixture

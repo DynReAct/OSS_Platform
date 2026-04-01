@@ -321,7 +321,7 @@ class Log(Agent):
             KeySearch.assign_values(new_values=variables)
 
             agent = f"LOG:{topic}"
-            log_file = f"{KeySearch.search_for_value("LOG_FILE_PATH")}{topic}.log"
+            log_file = os.path.join(KeySearch.search_for_value("LOG_FILE_PATH"), f"{topic}.log")
 
             init_kwargs = {
                 "topic": topic, 

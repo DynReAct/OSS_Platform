@@ -76,7 +76,6 @@ COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 COPY --from=builder /usr/lib/lib* /usr/lib/
 
 COPY dynreact/shortterm/common/ ./shortterm/dynreact/shortterm/common/
-
 # IMPORTANTE: Copiamos la carpeta entera para que __main__.py quede en su sitio correcto
 COPY dynreact/shortterm/agents/ ./shortterm/dynreact/shortterm/agents/
 

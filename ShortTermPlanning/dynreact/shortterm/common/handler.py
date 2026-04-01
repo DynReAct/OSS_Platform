@@ -54,17 +54,35 @@ class DockerManager:
                   "TOPIC_CALLBACK": KeySearch.search_for_value("TOPIC_CALLBACK")
                 }
 
+                inherited_env_keys = (
+                    "CONTAINER_NAME_PREFIX",
+                    "DOCKER_NETWORK",
+                    "IMAGE_TAG",
+                    "KAFKA_IP",
+                    "LOCAL_REGISTRY",
+                    "LOG_FILE_PATH",
+                    "PERF_URL",
+                    "REST_URL",
+                    "SNAPSHOT_VERSION",
+                )
+
+                for key in inherited_env_keys:
+                    value = os.environ.get(key)
+                    if value:
+                        environment_variables[key] = value
+
                 if envs:
                     environment_variables.update(envs)
 
                 name = f"{container_prefix + '_' if container_prefix else ''}{agent.upper()}_{name}"
+                docker_network = os.environ.get("DOCKER_NETWORK")
 
                 if any((d['name'] == name and d['status'] == "exited") for d in all_containers):
                     print("Container with the same name found, auto removing")
                     self.clean_container(name)
 
-                container = self.client.containers.run(
-                    image=f"{os.environ.get("LOCAL_REGISTRY", "")}dynreact-shortterm:{os.environ.get("IMAGE_TAG", "latest")}",
+                run_kwargs = dict(
+                    image=f"{os.environ.get('LOCAL_REGISTRY', '')}dynreact-shortterm:{os.environ.get('IMAGE_TAG', 'latest')}",
                     name=name,
                     detach=True,
                     auto_remove=auto_remove,
@@ -79,6 +97,11 @@ class DockerManager:
                     },
                     labels={"owner": self.tag} if self.tag else []  # Use a label to track ownership
                 )
+
+                if docker_network:
+                    run_kwargs["network"] = docker_network
+
+                container = self.client.containers.run(**run_kwargs)
                 self.tracked_containers.append({
                     "id": container.id,
                     "status": container.status,

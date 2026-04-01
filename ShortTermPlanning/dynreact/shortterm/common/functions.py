@@ -5,6 +5,7 @@ Functions that depend on the material parameters and equipment status.
 These functions depend on how these values are given.
 """
 import os
+from pathlib import Path
 from datetime import datetime, timedelta
 import random
 from dynreact.shortterm.common.data.data_functions import get_transition_cost_and_status
@@ -50,12 +51,27 @@ def load_transport_times(file_path: str) -> dict[str, dict[str, int]]:
     """
 
     transport_times = {}
-    if not os.path.exists(file_path):
+    resolved_path = Path(file_path)
+
+    if not resolved_path.exists() and not resolved_path.is_absolute():
+        candidate_roots = (
+            Path.cwd(),
+            Path("/app"),
+            Path(__file__).resolve().parents[3],
+            Path(__file__).resolve().parents[5],
+        )
+        for root in candidate_roots:
+            candidate = root / resolved_path
+            if candidate.exists():
+                resolved_path = candidate
+                break
+
+    if not resolved_path.exists():
         print(f"File not found: {file_path}")
         return transport_times
 
-    with open(file_path, 'r') as file:
-        print(f"Opening file: {file_path}")
+    with open(resolved_path, 'r') as file:
+        print(f"Opening file: {resolved_path}")
         next(file) # Skip the header
         for line in file:
             parts = line.strip().split(';')

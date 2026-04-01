@@ -24,8 +24,8 @@ import argparse
 import time
 
 from confluent_kafka import Producer
-from dynreact.shortterm.common import VAction, KeySearch
-from dynreact.shortterm.short_term_planning import clean_agents
+from dynreact.shortterm.common import VAction, KeySearch, purge_topics
+from dynreact.shortterm.short_term_planning import clean_agents, run_general_agents
 from dynreact.shortterm.shorttermtargets import ShortTermTargets
 
 
@@ -67,17 +67,24 @@ def main():
     }
     producer = Producer(producer_config)
 
+    topic_callback = KeySearch.search_for_value("TOPIC_CALLBACK")
+    topic_gen = KeySearch.search_for_value("TOPIC_GEN")
+
+    if verbose > 0:
+        print(f"Purging verification topics: {topic_gen}, {topic_callback}, DYN_TEST")
+    purge_topics(topics=[topic_callback, topic_gen, "DYN_TEST"])
+
     clean_agents(producer=producer, verbose=verbose, rungagnts=rungagnts)
+
+    run_general_agents(producer=producer, gagents=rungagnts, verbose=verbose)
 
     print("Sleeping for 2 minutes")
     time.sleep(120)
 
-    print("Done, containers should be restarting")
+    print("Done, containers should be restarted")
 
     return None
 
 
 if __name__ == '__main__':
     main()
-
-

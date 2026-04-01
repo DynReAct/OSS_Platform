@@ -18,12 +18,8 @@ def on_assign(consumer, partitions):
 def on_revoke(consumer, partitions):
     global current_partitions
     print("Partitions revoked:", partitions)
-
-    if len(partitions) == current_partitions:
-        print("ERROR: Change on topic partition, shutting down", BaseException("No partitions left"))
-        sys.exit(1)
-    else:
-        consumer.unassign()
+    current_partitions = max(0, current_partitions - len(partitions))
+    consumer.unassign()
 
 class Agent:
     """
@@ -182,9 +178,11 @@ class Agent:
         pass
 
     def kafka_error_callback(self, err: KafkaError):
-        if err.UNKNOWN_TOPIC_OR_PART or err._UNKNOWN_PARTITION:
-            print("ERROR: Change on topic partition, shutting down", err)
-            sys.exit(1)
+        error_code = err.code() if hasattr(err, "code") else None
+        if error_code in {KafkaError.UNKNOWN_TOPIC_OR_PART, KafkaError._UNKNOWN_PARTITION}:
+            print("WARNING: Topic or partition is temporarily unavailable", err)
+            return
+        print("WARNING: Kafka consumer callback reported an error", err)
 
     def read_message(self) -> str:
         """
@@ -295,4 +293,3 @@ class Agent:
         self.consumer.close()
         if self.verbose > 1:
             self.write_log(f"Ending spawned process for agent {self.agent} in topic {self.topic}.", "8dc03f6b-dce4-4a52-a427-900547dd7a5a")
-

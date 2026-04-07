@@ -110,7 +110,7 @@ class Plugins:
             if self._config.long_term_provider.startswith("default:"):
                 self._long_term_planning = SimpleLongTermPlanning(self._config.long_term_provider, site)
             else:
-                self._long_term_planning = Plugins._load_module("dynreact.longtermplanning",  self._config.long_term_provider, self._profile, LongTermPlanning, site, do_raise=True)
+                self._long_term_planning = Plugins._load_module("dynreact.ltp",  self._config.long_term_provider, self._profile, LongTermPlanning, site, do_raise=True)
         return self._long_term_planning
 
     def get_results_persistence(self) -> ResultsPersistence:

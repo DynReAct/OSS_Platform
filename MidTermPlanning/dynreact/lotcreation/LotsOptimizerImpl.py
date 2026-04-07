@@ -13,6 +13,7 @@ import numpy.typing as npt
 import dynreact.lotcreation.LotCreationGoogleOR as lcor
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo, LotsOptimizer, LotsOptimizationState
+from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation
 from dynreact.base.model import Snapshot, ProductionPlanning, ProductionTargets, Site, OrderAssignment, Order, \
     EquipmentStatus, Lot, Equipment, EquipmentProduction, ObjectiveFunction
@@ -887,8 +888,10 @@ class LotsAllocator:
 
 class TabuAlgorithm(LotsOptimizationAlgo):
 
-    def __init__(self, site: Site):
-        super().__init__(site)
+    def __init__(self, provider_url: str, site: Site):
+        super().__init__(provider_url, site)
+        if provider_url.lower() != "default:tabu-search":
+            raise NotApplicableException()
         self._params = TabuParams()
 
     def _create_instance_internal(self, process: str, snapshot: Snapshot, targets: ProductionTargets,

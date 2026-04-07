@@ -16,7 +16,7 @@ from dynreact.lotcreation.TabuParams import TabuParams
 
 
 def _init_algo(site: Site) -> LotsOptimizationAlgo:
-    algo: TabuAlgorithm = TabuAlgorithm(site)
+    algo: TabuAlgorithm = TabuAlgorithm("default:tabu-search", site)
     # disable limited number of tsps per worker to guarantee deterministic test behaviour
     # params.tsp_solver_global_timeout = 2  # higher timeout in tests to avoid spurious failures?
     algo.set_params(TabuParams(tsp_solver_final_tsp=False, max_tsps_per_worker=-1, rand_seed=42, strict=True))
@@ -486,7 +486,7 @@ class OptimizationTest(unittest.TestCase):
         start_assignments: dict[str, OrderAssignment] = {o: OrderAssignment(order=o, lot=lot.id, equipment=lot.equipment, lot_idx=idx+1) for lot in initial_lots.values() for idx, o in enumerate(lot.orders)}
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
-        algo: TabuAlgorithm = TabuAlgorithm(test_site)
+        algo: TabuAlgorithm = TabuAlgorithm("default:tabu-search", test_site)
         algo.set_params(TabuParams(max_tsps_per_worker=0, rand_seed=42, strict=True))
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
 
@@ -540,7 +540,7 @@ class OptimizationTest(unittest.TestCase):
                                                                                    lot_idx=o+1 if o < 2 else -1 if o == 4 else o-1) for o in range(num_orders)}
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
-        algo: TabuAlgorithm = TabuAlgorithm(test_site)
+        algo: TabuAlgorithm = TabuAlgorithm("default:tabu-search", test_site)
         algo.set_params(TabuParams(max_tsps_per_worker=0, NParallel=1, rand_seed=42, strict=True))
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
 
@@ -599,7 +599,7 @@ class OptimizationTest(unittest.TestCase):
                                                                                    lot_idx=o+1 if o < 2 else o-1) for o in range(num_orders)}
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
-        algo: TabuAlgorithm= TabuAlgorithm(test_site)
+        algo: TabuAlgorithm= TabuAlgorithm("default:tabu-search", test_site)
         # params.tsp_solver_global_timeout = 2  # higher timeout in tests to avoid spurious failures?
         algo.set_params(TabuParams(max_tsps_per_worker = 0, NParallel=1, rand_seed=42, strict=True))
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)

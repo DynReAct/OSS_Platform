@@ -242,7 +242,8 @@ class LotsOptimizationAlgo:
     Implementation expected in module dynreact.lotscreation.LotsOptimizerImpl
     """
 
-    def __init__(self, site: Site):
+    def __init__(self, provider_url: str, site: Site):
+        self._url = provider_url
         self._site = site
         self._stats: dict[str, OptimizationStatistics] = {}
 

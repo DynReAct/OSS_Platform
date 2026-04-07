@@ -16,6 +16,8 @@ def iter_module_variants(module: str) -> Iterator[Any]:
             mod = importlib.util.module_from_spec(spec_res)
             spec_res.loader.exec_module(mod)
             yield mod
+        except GeneratorExit:
+            raise
         except:
             continue
 

@@ -165,7 +165,7 @@ class Plugins:
             site = self.get_config_provider().site_config()
             if isinstance(self._config.shifts_provider, ShiftsProvider):
                 self._shifts_provider = self._config.shifts_provider
-            elif self._config.shifts_provider.startswith("dummy:"):
+            elif self._config.shifts_provider.startswith("dummy:") or (not self._profile and not self._config.shifts_provider):
                 self._shifts_provider = DummyShiftsProvider(self._config.shifts_provider, site)
             else:
                 self._shifts_provider = Plugins._load_module("dynreact.shifts", self._config.shifts_provider, self._profile,

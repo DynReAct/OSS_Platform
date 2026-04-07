@@ -10,46 +10,14 @@ def iter_module_variants(module: str) -> Iterator[Any]:
     Yield module candidates using the tolerant resolution strategy that was
     previously implemented directly in plugins.py.
     """
-    mod0 = sys.modules.get(module)
-    if mod0 is not None:
-        yield mod0
-        return
-
     for importer in sys.meta_path + [importlib.util]:
-        find_spec = getattr(importer, "find_spec", None)
-        if find_spec is None:
-            continue
         try:
-            spec_res = find_spec(module, path=None)
-        except TypeError:
-            try:
-                spec_res = find_spec(module)
-            except Exception:
-                continue
-        except Exception:
+            spec_res = importer.find_spec(module)
+            mod = importlib.util.module_from_spec(spec_res)
+            spec_res.loader.exec_module(mod)
+            yield mod
+        except:
             continue
-
-        if spec_res is None or spec_res.loader is None:
-            continue
-
-        mod = importlib.util.module_from_spec(spec_res)
-        spec_res.loader.exec_module(mod)
-        yield mod
-
-
-def import_module(module: str) -> Any:
-    """
-    Import a module through the tolerant namespace-aware resolution strategy.
-    """
-    mod0 = sys.modules.get(module)
-    if mod0 is not None:
-        return mod0
-
-    for mod in iter_module_variants(module):
-        sys.modules[module] = mod
-        return mod
-
-    raise ImportError(f"Module {module} not found")
 
 
 def instantiate_first_matching(
@@ -63,6 +31,16 @@ def instantiate_first_matching(
     """
     Instantiate the first discovered subclass of ``clzz`` in the resolved
     module, preserving the historical behavior from plugins.py.
+    Parameters:
+        module: can be full path (incl. file name w/o .py ending) or a pure package path
+        clzz: required interface/superclass
+        args:
+        do_raise:
+        ignored_exceptions:
+        kwargs:
+
+    Returns:
+         A class instance
     """
     if len(args) > 0 and isinstance(args[0], str) and args[0].startswith("class:"):
         first = args[0]
@@ -74,21 +52,23 @@ def instantiate_first_matching(
     mod0 = sys.modules.get(module)
     mod_set = mod0 is not None
     mod_iterator = iter([mod0]) if mod_set else iter_module_variants(module)
+    _fallback_creates = []  # TODO tbd
 
     for mod in mod_iterator:
-        for _, element in inspect.getmembers(mod):
+        for name, element in inspect.getmembers(mod):
             try:
                 if inspect.isclass(element) and issubclass(element, clzz) and element != clzz:
                     result = element(*args, **kwargs)
                     if not mod_set:
                         sys.modules[module] = mod
                     return result
+                elif (name == "create" or name == "create_provider") and inspect.isfunction(element):
+                    _fallback_creates.append(element)
             except Exception as exc:
                 if not isinstance(exc, ignored_exceptions):
                     errors.append(exc)
-                    if do_raise:
-                        raise
-
+    if len(_fallback_creates) > 0:
+        return _fallback_creates[0](*args, **kwargs)
     if len(errors) > 0:
         raise errors[0]
     if do_raise:

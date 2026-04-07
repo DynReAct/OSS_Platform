@@ -13,9 +13,10 @@ class DynReActSrvConfig:
     snapshot_provider: str = "default+file:./data/snapshots"
     "Snapshot provider id. Alternatively, it is also admissible to set this field to the snapshot provider itself (for testing)"
     downtime_provider: str = "default+file:./data/downtimes.json"
-    cost_provider: str|None = None  # needs to be specified
-    "If None, an arbitrary cost provider will be used, if available"
-    long_term_provider: str = "default:8h"
+    cost_provider: str|None = None
+    "If None and the `profile` configuration is set, an attempt will be made to load the cost provider from the module dynreact.cost.<profile>."
+    long_term_provider: str = "default:8h"  # TODO use of profiles tbd
+    lot_creation: str = "default:tabu-search"
     short_term_planning: str = "default+file:./data/stp_context.json"
     results_persistence: str = "default+file:./results"
     "Results persistence id. Alternatively, it is also admissible to set this field to the persistence provider itself (for testing)"
@@ -40,7 +41,8 @@ class DynReActSrvConfig:
             
         Where lh = lots horizon, sa = snapshot age
     """
-    shifts_provider: str = "dummy:default"
+    shifts_provider: str|None = None  # TODO
+    "If not specified and the `profile` configuration is set, an attempt will be made to load the shifts provider from teh module dynreact.shifts.<profile>. Else fallback to 'dummy:default'."
     out_directory: str = "./out"
     cors: bool = False
     auth_method: Literal["dummy", "ldap", "ldap_simple"]|None = None
@@ -63,8 +65,8 @@ class DynReActSrvConfig:
     # model-specific initialization data
     plant_performance_models: list[str]|None = None
     stp_frontend: str = "default"  # default is the frontend provided in this module
-    profile: str = "oss"
-    "Profile name for component loading: 'oss' (default), 'ras', or custom. Determines which implementations to load."
+    profile: str|None = None
+    "Profile name for loading of custom components. Determines which implementations to load (e.g. cost provider, or shifts provider). Can be overwritten for individual components, usage is optional."
 
     def __init__(self,
                  config_provider: str | None = None,
@@ -76,6 +78,7 @@ class DynReActSrvConfig:
                  aggregation_persistence: str|None = None,
                  aggregation_exec_interval_minutes: int|None=None,
                  aggregation_exec_offset_minutes: int|None = None,
+                 lot_creation: str|None=None,
                  lot_sinks: list[str]|str|None = None,
                  cost_provider: str|None = None,
                  long_term_provider: str|None = None,
@@ -109,7 +112,7 @@ class DynReActSrvConfig:
             time_zone = os.getenv("TIME_ZONE", DynReActSrvConfig.time_zone)
         self.time_zone = time_zone
         if profile is None:
-            profile = os.getenv("PROFILE", DynReActSrvConfig.profile)
+            profile = os.getenv("DYNREACT_PROFILE", DynReActSrvConfig.profile)
         self.profile = profile
         if config_provider is None:
             config_provider = os.getenv("CONFIG_PROVIDER", DynReActSrvConfig.config_provider)
@@ -121,6 +124,8 @@ class DynReActSrvConfig:
             cost_provider = os.getenv("COST_PROVIDER", DynReActSrvConfig.cost_provider)
         if long_term_provider is None:
             long_term_provider = os.getenv("LONG_TERM_PLANNING", DynReActSrvConfig.long_term_provider)
+        if lot_creation is None:
+            lot_creation = os.getenv("LOT_CREATION", DynReActSrvConfig.lot_creation)
         if short_term_planning is None:
             short_term_planning = os.getenv("SHORT_TERM_PLANNING_PARAMS", DynReActSrvConfig.short_term_planning)
         if results_persistence is None:
@@ -151,6 +156,7 @@ class DynReActSrvConfig:
         self.downtime_provider = downtime_provider
         self.cost_provider: str = cost_provider
         self.long_term_provider: str = long_term_provider
+        self.lot_creation = lot_creation
         self.short_term_planning: str = short_term_planning
         self.results_persistence = results_persistence
         self.availability_persistence = availability_persistence

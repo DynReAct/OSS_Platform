@@ -32,7 +32,6 @@ from dynreact.base.impl.SimpleLongTermPlanning import SimpleLongTermPlanning
 from dynreact.base.model import Site
 
 from dynreact.app_config import DynReActSrvConfig
-from dynreact.container import Container
 from dynreact.module_loader import instantiate_first_matching
 
 
@@ -40,7 +39,7 @@ class Plugins:
 
     def __init__(self, config: DynReActSrvConfig):
         self._config = config
-        self._container = Container(config)
+        self._profile: str|None = config.profile
         self._config_provider: ConfigurationProvider | None = None
         self._snapshot_provider: SnapshotProvider | None = None
         self._downtime_provider: DowntimeProvider | None = None
@@ -55,35 +54,16 @@ class Plugins:
         self._aggregation_persistence: AggregationPersistence|None = None
         self._permissions: PermissionManager|None = None
 
-    def _matches_active_profile_uri(self, uri: str | None) -> bool:
-        if not isinstance(uri, str):
-            return False
-        profile = (self._config.profile or "").strip().lower()
-        if profile == "":
-            return False
-        return uri.lower().startswith(f"{profile}+")
-
     def get_snapshot_provider(self) -> SnapshotProvider:
         if self._snapshot_provider is None:
             site = self.get_config_provider().site_config()
             # Direct instance (for testing)
             if isinstance(self._config.snapshot_provider, SnapshotProvider):
                 self._snapshot_provider = self._config.snapshot_provider
-            # Keep default+file pinned to the OSS base implementation. Otherwise,
-            # namespace-package merging can resolve dynreact.snapshot from a
-            # profile package like ShortTermRAS even in PROFILE=oss.
             elif self._config.snapshot_provider.startswith("default+file:"):
                 self._snapshot_provider = FileSnapshotProvider(self._config.snapshot_provider, site)
-            # Resolve active profile-specific providers without hardcoding names.
-            elif self._matches_active_profile_uri(self._config.snapshot_provider):
-                try:
-                    self._snapshot_provider = self._container.get_snapshot_provider(site)
-                except Exception:
-                    raise
             else:
-                self._snapshot_provider = Plugins._load_snapshot_provider(self._config.snapshot_provider, site)
-                if self._snapshot_provider is None:
-                    raise Exception("Snapshot provider not found " + self._config.snapshot_provider)
+                self._snapshot_provider = Plugins._load_module("dynreact.snapshot", self._config.snapshot_provider, self._profile, SnapshotProvider, site, do_raise=True)
         return self._snapshot_provider
 
     def get_config_provider(self) -> ConfigurationProvider:
@@ -93,16 +73,8 @@ class Plugins:
                 self._config_provider = self._config.config_provider
             elif self._config.config_provider.startswith("default+file:"):
                 self._config_provider = FileConfigProvider(self._config.config_provider)
-            # Resolve active profile-specific providers without hardcoding names.
-            elif self._matches_active_profile_uri(self._config.config_provider):
-                try:
-                    self._config_provider = self._container.get_config_provider()
-                except Exception:
-                    raise
             else:
-                self._config_provider = Plugins._load_module("dynreact.config.ConfigurationProviderImpl", ConfigurationProvider, self._config.config_provider)
-                if self._config_provider is None:
-                    raise Exception("Config provider not found " + self._config.config_provider)
+                self._config_provider = Plugins._load_module("dynreact.config", self._config.config_provider, self._profile, ConfigurationProvider, do_raise=True)
         return self._config_provider
 
     def get_downtime_provider(self) -> DowntimeProvider:
@@ -110,16 +82,8 @@ class Plugins:
             site = self.get_config_provider().site_config()
             if self._config.downtime_provider.startswith("default+file:"):
                 self._downtime_provider = FileDowntimeProvider(self._config.downtime_provider, site)
-            # Resolve active profile-specific providers without hardcoding names.
-            elif self._matches_active_profile_uri(self._config.downtime_provider):
-                try:
-                    self._downtime_provider = self._container.get_downtime_provider(site)
-                except Exception:
-                    raise
             else:
-                self._downtime_provider = Plugins._load_module("dynreact.downtimes.DowntimeProviderImpl", DowntimeProvider, self._config.downtime_provider)
-                if self._downtime_provider is None:
-                    raise Exception("Downtime provider not found " + self._config.downtime_provider)
+                self._downtime_provider = Plugins._load_module("dynreact.downtimes", self._config.downtime_provider, self._profile, DowntimeProvider, site, do_raise=True)
         return self._downtime_provider
 
     def get_cost_provider(self) -> CostProvider:
@@ -128,14 +92,15 @@ class Plugins:
                 self._cost_provider = self._config.cost_provider
             else:
                 site = self.get_config_provider().site_config()
-                self._cost_provider = Plugins._load_cost_provider(self._config.cost_provider, site)
-                if self._cost_provider is None:
-                    raise Exception("Cost provider not found " + str(self._config.cost_provider))
+                self._cost_provider = Plugins._load_module("dynreact.cost", self._config.cost_provider, self._profile, CostProvider, site, do_raise=True)
         return self._cost_provider
 
     def get_lots_optimization(self) -> LotsOptimizationAlgo:
         if self._lots_optimizer is None:
-            self._lots_optimizer = Plugins._load_module("dynreact.lotcreation.LotsOptimizerImpl", LotsOptimizationAlgo,
+            cfg = self._config.lot_creation
+            if cfg == "default:tabu-search":
+                cfg = f"class:dynreact.lotcreation.LotsOptimizerImpl,{cfg}"
+            self._lots_optimizer = Plugins._load_module("dynreact.lotcreation", cfg, self._profile, LotsOptimizationAlgo,
                                                         self.get_config_provider().site_config(), do_raise=True)
         return self._lots_optimizer
 
@@ -145,10 +110,7 @@ class Plugins:
             if self._config.long_term_provider.startswith("default:"):
                 self._long_term_planning = SimpleLongTermPlanning(self._config.long_term_provider, site)
             else:
-                self._long_term_planning = Plugins._load_module("dynreact.longtermplanning.LongTermPlanningImpl", LongTermPlanning,
-                                                        self._config.long_term_provider, site)
-            if self._long_term_planning is None:
-                raise Exception("Long term planning not found: " + str(self._config.long_term_provider))
+                self._long_term_planning = Plugins._load_module("dynreact.longtermplanning",  self._config.long_term_provider, self._profile, LongTermPlanning, site, do_raise=True)
         return self._long_term_planning
 
     def get_results_persistence(self) -> ResultsPersistence:
@@ -160,10 +122,7 @@ class Plugins:
                 if self._config.results_persistence.startswith("default+file:"):
                     self._results_persistence = FileResultsPersistence(self._config.results_persistence, site)
                 else:
-                    self._results_persistence = Plugins._load_module("dynreact.results.ResultsPersistenceImpl",
-                            ResultsPersistence, self._config.results_persistence, site)
-                    if self._results_persistence is None:
-                        raise Exception("Results persistence not found " + self._config.results_persistence)
+                    self._results_persistence = Plugins._load_module("dynreact.results", self._config.results_persistence, self._profile, ResultsPersistence, site, do_raise=True)
         return self._results_persistence
 
     def get_availability_persistence(self) -> PlantAvailabilityPersistence:
@@ -172,10 +131,8 @@ class Plugins:
             if self._config.availability_persistence.startswith("default+file:"):
                 self._availability_persistence = FileAvailabilityPersistence(self._config.availability_persistence, site)
             else:
-                self._availability_persistence = Plugins._load_module("dynreact.availability.AvailabilityPersistenceImpl",
-                        PlantAvailabilityPersistence, self._config.availability_persistence, site)
-                if self._availability_persistence is None:
-                    raise Exception("Plant availability persistence not found " + self._config.availability_persistence)
+                self._availability_persistence = Plugins._load_module("dynreact.availability", self._config.availability_persistence, self._profile,
+                                                                      PlantAvailabilityPersistence, site, do_raise=True)
         return self._availability_persistence
 
     def get_aggregation_persistence(self) -> AggregationPersistence:
@@ -184,10 +141,8 @@ class Plugins:
             if self._config.aggregation_persistence.startswith("default+file:"):
                 self._aggregation_persistence = FileAggregationPersistence(self._config.aggregation_persistence)
             else:
-                self._aggregation_persistence = Plugins._load_module("dynreact.aggregation.AggregationPersistenceImpl",
-                                                                 AggregationPersistence, self._config.aggregation_persistence)
-                if self._aggregation_persistence is None:
-                    raise Exception("Aggregation persistence not found " + self._config.aggregation_persistence)
+                self._aggregation_persistence = Plugins._load_module("dynreact.aggregation", self._config.aggregation_persistence, self._profile,
+                                                                 AggregationPersistence, self._config.aggregation_persistence, do_raise=True)
         return self._aggregation_persistence
 
     def get_lot_sinks(self, if_exists: bool=False) -> dict[str, LotSink]:
@@ -199,25 +154,22 @@ class Plugins:
                 if sink_config.startswith("default+file:"):
                     sink = FileLotSink(sink_config, site, permissions)
                 else:
-                    sink = Plugins._load_module("dynreact.lots.LotSinkImpl", LotSink, sink_config, site, permissions)
+                    sink = Plugins._load_module("dynreact.lotsink", sink_config, self._profile, LotSink, site, permissions)
                 if sink is not None:
                     sinks[sink.id()] = sink
             self._lot_sinks = sinks
-        return self._lot_sinks
+        return dict(self._lot_sinks)
 
     def get_shifts_provider(self, if_exists: bool=False) -> ShiftsProvider:
         if self._shifts_provider is None and not if_exists:
+            site = self.get_config_provider().site_config()
             if isinstance(self._config.shifts_provider, ShiftsProvider):
                 self._shifts_provider = self._config.shifts_provider
+            elif self._config.shifts_provider.startswith("dummy:"):
+                self._shifts_provider = DummyShiftsProvider(self._config.shifts_provider, site)
             else:
-                site = self.get_config_provider().site_config()
-                if self._config.shifts_provider.startswith("dummy:"):
-                    self._shifts_provider = DummyShiftsProvider(self._config.shifts_provider, site)
-                else:
-                    self._shifts_provider = Plugins._load_module("dynreact.shifts.ShiftProviderImpl",
-                                                                 ShiftsProvider, self._config.shifts_provider, site)
-                    if self._shifts_provider is None:
-                        raise Exception("Shifts provider not found " + self._config.shifts_provider)
+                self._shifts_provider = Plugins._load_module("dynreact.shifts", self._config.shifts_provider, self._profile,
+                                                                 ShiftsProvider, site, do_raise=True)
         return self._shifts_provider
 
     def get_permission_manager(self) -> PermissionManager:
@@ -280,25 +232,31 @@ class Plugins:
         uri = config[idx+2:] if not has_token else config[idx+2:last_idx]
         token = config[last_idx+2:] if has_token else None
         config = PerformanceModelClientConfig(address=uri, token=token)
-        return Plugins._load_module(class_name, PlantPerformanceModel, config, do_raise=True)
+        return instantiate_first_matching(class_name, PlantPerformanceModel, config, do_raise=True)
 
     @staticmethod
-    def _load_snapshot_provider(provider_url: str, site: Site) -> SnapshotProvider|None:
-        return Plugins._load_module("dynreact.snapshot.SnapshotProviderImpl", SnapshotProvider, provider_url, site)
-
-    @staticmethod
-    def _load_cost_provider(cost_provider: str|None, site: Site) -> CostProvider|None:
-        return Plugins._load_module("dynreact.cost.CostCalculatorImpl", CostProvider, cost_provider, site)
-
-    @staticmethod
-    def _load_module(module: str, clzz, *args, **kwargs) -> Any|None:   # returns an instance of the clzz, if found
-        do_raise = kwargs.pop("do_raise", False)
+    def _load_module(
+            base_module: str,
+            provider_url: str|None,
+            profile: str|None,
+            clzz,
+            *args,
+            **kwargs
+        ) -> Any|None:   # returns an instance of the clzz, if found
+        module: str|None = None
+        if provider_url is not None and provider_url.startswith("class:"):
+            module = provider_url[provider_url.index(":") + 1:provider_url.index(",")]
+            provider_url = provider_url[provider_url.index(",") + 1:]
+        elif profile is not None:
+            module = f"{base_module}.{profile}"
+        if module is None:
+            raise Exception(f"Module not specified for {clzz}, provider url {provider_url}, profile: {profile}.")
         try:
             return instantiate_first_matching(
                 module,
                 clzz,
+                provider_url,
                 *args,
-                do_raise=do_raise,
                 ignored_exceptions=(NotApplicableException,),
                 **kwargs,
             )

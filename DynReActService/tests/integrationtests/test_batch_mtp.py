@@ -16,7 +16,10 @@ from dynreact.base.model import Site, Snapshot, Equipment, Process, Order, LotCr
     ProcessLotCreationSettings, Lot, PlannedWorkingShift, Material
 from dynreact.plugins import Plugins
 from dynreact.state import DynReActSrvState
-from tests.integrationtests.TestSetup import TestSetup
+try:
+    from TestSetup import TestSetup
+except ImportError:  # depends on whether the unittest module is used or not
+    from tests.integrationtests.TestSetup import TestSetup
 
 
 class BatchMtpTest(unittest.TestCase):

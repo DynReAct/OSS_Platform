@@ -8,7 +8,11 @@ from fastapi.testclient import TestClient
 
 from dynreact.service.model import EquipmentTransitionStateful, TransitionInfo
 # Must come before all app imports
-from tests.integrationtests.TestSetup import TestSetup, DynReActAssertions
+
+try:
+    from TestSetup import TestSetup, DynReActAssertions
+except ImportError:  # depends on whether the unittest module is used or not
+    from tests.integrationtests.TestSetup import TestSetup, DynReActAssertions
 
 
 class ServiceTest(unittest.TestCase):

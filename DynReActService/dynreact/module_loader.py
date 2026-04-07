@@ -44,12 +44,6 @@ def instantiate_first_matching(
     Returns:
          A class instance
     """
-    if len(args) > 0 and isinstance(args[0], str) and args[0].startswith("class:"):
-        first = args[0]
-        module = first[first.index(":") + 1:first.index(",")]
-        first = first[first.index(",") + 1:]
-        args = tuple(a if idx > 0 else first for idx, a in enumerate(args))
-
     errors: list[Exception] = []
     mod0 = sys.modules.get(module)
     mod_set = mod0 is not None

@@ -68,7 +68,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH="/app/shortterm" \
     IS_DOCKER="true" \
     LOCAL_REGISTRY=$DOCKER_REGISTRY \
-    PATH="/app/.venv/bin:$PATH"
+    PATH="/app/.venv/bin:$PATH" \
     KAFKA_TOPIC_PREFIX="Dynreact_OSS" \
     TOPIC_GEN="Dynreact-OSS-Gen"
 

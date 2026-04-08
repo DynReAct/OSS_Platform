@@ -53,7 +53,14 @@ class Material(Agent):
         self.assigned_equipment = ""
         self.params = params
         self.transport_times = transport_times if transport_times is not None else {}
-        self.coil_lengths = coil_lengths if coil_lengths is not None else [0.0]
+
+        if coil_lengths is None:
+            self.coil_lengths = [0.0]
+        elif isinstance(coil_lengths, (float, int)):
+            self.coil_lengths = [float(coil_lengths)]
+        else:
+            self.coil_lengths = coil_lengths
+
         if self.verbose > 1:
             self.write_log(msg=f"Finished creating the agent {self.agent} with parameters {self.params}.",
                            identifier="ddea8374-6149-41e1-b86f-4cc147580d13",
@@ -252,7 +259,7 @@ class Material(Agent):
         """
         # Reject offer is equipment is not among the allowed equipments of the material
         # JOM 2025
-        if equipment_status['targets']['equipment'] not in material_params['order']['allowed_equipment']:
+        if equipment_status['targets'] is not None and equipment_status['targets']['equipment'] not in material_params['order']['allowed_equipment']:
             return None
 
         # For now, the bidding price is greater when the delivery date is sooner. If due_date is not present simulate a value

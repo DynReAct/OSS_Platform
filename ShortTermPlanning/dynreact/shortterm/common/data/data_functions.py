@@ -6,6 +6,7 @@ This module defines the functions used outside to get relevant data.
 import json
 import time
 from confluent_kafka import Producer
+import requests
 
 from dynreact.shortterm.common import sendmsgtopic
 from dynreact.shortterm.common.data.load_url import URL_INITIAL_STATE, URL_UPDATE_STATUS, load_url_json_get, \
@@ -22,9 +23,29 @@ def get_equipment_status(equipment_id: int, snapshot_time: str) -> dict:
     :return: Status of the interesting equipment
     :rtype: dict
     """
-    url_equipment_status = URL_INITIAL_STATE.format(equipment_id=equipment_id, snapshot_timestamp=snapshot_time)
-    return load_url_json_get(url_equipment_status)
 
+    url_equipment_status = URL_INITIAL_STATE.format(equipment_id=equipment_id, snapshot_timestamp=snapshot_time)
+
+    try:
+        return load_url_json_get(url_equipment_status)
+    except (requests.exceptions.HTTPError, requests.exceptions.RequestException) as e:
+        print(f"Error {e} trying to get the status of equipment {equipment_id}. Using fallback status.")
+        return {
+            "targets": None,
+            "snapshot_id": snapshot_time,
+            "current_order": None,
+            "current_material": [],
+            "planning": {"transition_costs": 0}
+        }
+    except Exception as e:
+        print(f"Unexpected error getting status of equipment {equipment_id}: {e}. Using fallback status.")
+        return {
+            "targets": None,
+            "snapshot_id": snapshot_time,
+            "current_order": None,
+            "current_material": [],
+            "planning": {"transition_costs": 0}
+        }
 
 def get_transition_cost_and_status(
         material_params: dict, equipment_status: dict, verbose: int = 1
@@ -41,18 +62,25 @@ def get_transition_cost_and_status(
     :return: Tuple of cost(float) and status(dict)
     :rtype: tuple
     """
-    equipment_id = equipment_status["targets"]["equipment"]
+
+    equipment_id = equipment_status["targets"]["equipment"] if equipment_status["targets"] is not None else None
     next_material = material_params["id"]
-    prev_material = equipment_status["current_material"][-1]
+    prev_material = (equipment_status.get("current_material") or [None])[-1]
+    current_order = equipment_status.get("current_order")
 
     if verbose > 0:
         print(f"Transition of equipment {equipment_id} from {prev_material} to {next_material}...")
 
     msg_incompatible = "The transition is not possible."
-    if equipment_id not in material_params["order"]["allowed_equipment"]:
+    if equipment_id is not None and equipment_id not in material_params["order"]["allowed_equipment"]:
         if verbose > 0:
             print(msg_incompatible, f"The equipment {equipment_id} is not among the allowed equipments of {next_material}")
         return None, None
+
+    if current_order is None:
+        if verbose > 0:
+            print(f"First order for equipment {equipment_id}, assigning cost 0.")
+        return 0, equipment_status
 
     payload = {
         "equipment": equipment_id,
@@ -68,9 +96,16 @@ def get_transition_cost_and_status(
         print("Payload:")
         print(json.dumps(payload, indent=4))
 
-    new_status = load_url_json_post(URL_UPDATE_STATUS, payload=payload)
-    new_status = new_status["status"]
-    cost = new_status["planning"]["transition_costs"]
+    try:
+        new_status = load_url_json_post(URL_UPDATE_STATUS, payload=payload)
+        new_status = new_status["status"]
+        cost = new_status["planning"]["transition_costs"]
+    except (requests.exceptions.HTTPError, requests.exceptions.RequestException) as e:
+        print(f"Error {e} trying to check the cost. Assigning cost 0.")
+        return 0, equipment_status
+    except Exception as e:
+        print(f"Unexpected error checking transition cost: {e}. Assigning cost 0.")
+        return 0, equipment_status
 
     if cost is None:
         if verbose > 0:

@@ -1156,6 +1156,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     snapshot = DatetimeUtils.parse_date(snapshot)
     if snapshot is None or process is None or planning_start is None:
         return None, None, None, "sizeToFit"
+    snapshot_provider = state.get_snapshot_provider()
     snapshot_serialized: str = DatetimeUtils.format(snapshot)
     snapshot_obj = state.get_snapshot(snapshot)
     changed_ids: list[str] = GuiUtils.changed_ids()
@@ -1376,7 +1377,6 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
         prev_processes = [p.name_short for p in site.processes if p.next_steps is not None and process in p.next_steps]
         prev_process_ids = [pid for p in prev_procs for pid in p.process_ids]
         follow_up_process_ids = [pid for p in next_procs for pid in p.process_ids]
-        snapshot_provider = state.get_snapshot_provider()
         current_process_ids = proc_obj.process_ids
 
         def _filter_order(o: Order) -> bool:

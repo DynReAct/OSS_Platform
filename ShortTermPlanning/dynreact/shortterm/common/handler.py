@@ -57,6 +57,7 @@ class DockerManager:
                 inherited_env_keys = (
                     "CONTAINER_NAME_PREFIX",
                     "DOCKER_NETWORK",
+                    "IMAGE_NAME",
                     "IMAGE_TAG",
                     "KAFKA_IP",
                     "LOCAL_REGISTRY",

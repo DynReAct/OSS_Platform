@@ -13,7 +13,7 @@ from dynreact.base.impl.SimpleCostProvider import SimpleCostProvider
 from dynreact.base.impl.StaticConfigurationProvider import StaticConfigurationProvider
 from dynreact.base.impl.StaticSnapshotProvider import StaticSnapshotProvider
 from dynreact.base.model import Site, Snapshot, Equipment, Process, Order, LotCreationSettings, \
-    ProcessLotCreationSettings, Lot, PlannedWorkingShift, Material
+    ProcessLotCreationSettings, Lot, PlannedWorkingShift, Material, TransportTimes
 from dynreact.plugins import Plugins
 from dynreact.state import DynReActSrvState
 try:
@@ -37,7 +37,8 @@ class BatchMtpTest(unittest.TestCase):
     def _init_for_tests(process: str, orders: int|Sequence[Order], order_weight: float=10, num_plants: int=1, transition_costs: dict[str, dict[str, float]]|None=None,
                         shifts: dict[int, dict[datetime, tuple[timedelta, timedelta]]]|None=None,
                         lots: dict[int, list[Lot]]|None=None, surplus_weight_costs=3, new_lot_costs=10,
-                        missing_weight_costs: float=1, batch_config: str="", lot_creation: LotCreationSettings|None=None) -> tuple[DynReActSrvState, Snapshot]:
+                        missing_weight_costs: float=1, batch_config: str="", lot_creation: LotCreationSettings|None=None,
+                        transport_times: TransportTimes|None=None) -> tuple[DynReActSrvState, Snapshot]:
         """
         :param shifts:  dict[int, dict[shift start => (shift duration, working time)]]
         :return:
@@ -46,7 +47,7 @@ class BatchMtpTest(unittest.TestCase):
         plants = [Equipment(id=p, name_short="Plant" + str(p), process=process) for p in range(num_plants)]
         test_site = Site(
             processes=[Process(name_short=process, process_ids=[process_id])], equipment=plants,
-            storages=[], material_categories=[], lot_creation=lot_creation
+            storages=[], material_categories=[], lot_creation=lot_creation, transport_times=transport_times
         )
         order_lots: dict[str, str]|None = None  # keys: order ids
         if lots is not None:
@@ -399,6 +400,63 @@ class BatchMtpTest(unittest.TestCase):
             assert all("forbidden" not in o for o in scheduled_orders), f"Forbidden orders scheduled: {[o for o in scheduled_orders if 'forbidden' in o]}"
 
         sol = BatchMtpTest._wait_for_solution(_check_solution, results_persistence, snapshot.timestamp, process, seconds=10, do_raise=True)
+        #assignments = sol.best_solution.order_assignments
+        #for ass in assignments.values():
+        #    print(f"|  {ass.order} |  {ass.equipment} |  {ass.lot}  |")
+
+    def test_batch_mtp_respects_transport_times(self):
+        """Here all orders are currently at the predecessor stage, and have different transport times to the targeted stage"""
+        num_orders = 10
+        order_weight = 20
+        plants_per_proc = 3
+        processes = [Process(name_short=f"proc_{idx+1}", process_ids=[idx], next_steps=["proc_2"] if idx == 0 else None) for idx in range(2)]
+        target_process = "proc_2"
+        equipments = [Equipment(id=idx, name_short=f"Plant{idx}", process="proc_" + str(1 if idx < plants_per_proc else 2)) for idx in range(2 * plants_per_proc)]
+        plant_ids = [e.id for e in equipments]
+        # Transport times for orders at plants 0 and 1 have too long transport times to be considered for scheduling in this example
+        transport_times = TransportTimes(equipment_matrix={1: {3: 12, 4: 24, 5: 17}, 2: {3: 2, 4: 4, 5: 1}}, default=24, unit=timedelta(hours=1))
+        # o orders ready in time, 2 not
+        orders = [TestSetup.create_order(f"order_{o}", plant_ids, order_weight, lots={"proc_1": "Plant2.01"}, current_processes=(0, ), current_equipment=[2]) for o in range(num_orders-2)] + \
+                 [TestSetup.create_order(f"order_{num_orders - 2}", plant_ids, order_weight, lots={"proc_1": "Plant0.01"}, current_processes=(0, ), current_equipment=[0])] + \
+                 [TestSetup.create_order(f"order_{num_orders - 1}", plant_ids, order_weight, lots={"proc_1": "Plant1.01"}, current_processes=(0, ), current_equipment=[1])] + \
+                 [TestSetup.create_order(f"order_{num_orders + idx}", plant_ids, order_weight, lots={"proc_2": f"Plant{plants_per_proc+idx}.01"}, current_processes=(1, ), current_equipment=[plants_per_proc+idx]) for idx in range(plants_per_proc)]
+        now = DatetimeUtils.now()
+        lots_start = now
+        lots_end = lots_start + timedelta(days=1)
+        lots: dict[int, list[Lot]] = {
+            0: [Lot(id="Plant0.01", equipment=0, active=True, status=4, weight=order_weight, start_time=lots_start, end_time=lots_end, orders=[f"order_{num_orders - 2}"], processing_status="STARTED")],
+            1: [Lot(id="Plant1.01", equipment=1, active=True, status=4, weight=order_weight, start_time=lots_start, end_time=lots_end, orders=[f"order_{num_orders - 1}"], processing_status="STARTED")],
+            2: [Lot(id="Plant2.01", equipment=2, active=True, status=4, weight=order_weight*(num_orders-2), start_time=lots_start, end_time=lots_end, orders=[f"order_{idx}" for idx in range(num_orders-2)], processing_status="STARTED")],
+            # ensure the planning period will start at lots_end + 12h
+            3: [Lot(id="Plant3.01", equipment=3, active=True, status=4, weight=order_weight, start_time=lots_start, end_time=lots_end + timedelta(hours=12), orders=[f"order_{num_orders}"], processing_status="STARTED")],
+            4: [Lot(id="Plant4.01", equipment=4, active=True, status=4, weight=order_weight, start_time=lots_start, end_time=lots_end + timedelta(hours=12), orders=[f"order_{num_orders + 1}"], processing_status="STARTED")],
+            5: [Lot(id="Plant5.01", equipment=5, active=True, status=4, weight=order_weight, start_time=lots_start, end_time=lots_end + timedelta(hours=12), orders=[f"order_{num_orders + 2}"], processing_status="STARTED")]
+
+        }
+        # we ask for all orders to be assigned, although 2 of them won't be available in time
+        lot_creation_settings = LotCreationSettings(processes={target_process: ProcessLotCreationSettings(total_size=num_orders*order_weight/plants_per_proc)}, duration=timedelta(days=1))
+        test_site = Site(
+            processes=processes, equipment=equipments,
+            storages=[], material_categories=[], lot_creation=lot_creation_settings, transport_times=transport_times
+        )
+        snapshot = Snapshot(timestamp=now, orders=orders, material=TestSetup.create_coils_for_orders(orders, 0), inline_material={}, lots=lots)
+        cost_provider = SimpleCostProvider("simple:costs", test_site, missing_weight_costs=1, surplus_weight_costs=3, new_lot_costs=10)
+        batch_config = f"00:00,mode:append,lh:P5D;P1D;{target_process}:10:PT1M;test"
+        cfg = DynReActSrvConfig(config_provider=StaticConfigurationProvider(test_site), lots_batch_config=batch_config,
+                                snapshot_provider=StaticSnapshotProvider(test_site, snapshot), cost_provider=cost_provider,
+                                results_persistence=MemoryResultsPersistence("memory:1", test_site))
+        plugins = Plugins(cfg)
+        state = DynReActSrvState(cfg, plugins)
+        state.start()
+        results_persistence = state.get_results_persistence()
+
+        def _check_solution(sol_id: str, result: LotsOptimizationState):
+            assert result is not None, "Result is None"
+            assert result.best_solution is not None, "Best solution is None"
+            orders_assigned = len([o for o, ass in result.best_solution.order_assignments.items() if ass.equipment >= 0])
+            assert orders_assigned == num_orders-2, f"Unexpected number of orders assigned, wanted {num_orders-2}, got {orders_assigned}"
+
+        sol = BatchMtpTest._wait_for_solution(_check_solution, results_persistence, snapshot.timestamp, target_process, seconds=10, do_raise=True)
         #assignments = sol.best_solution.order_assignments
         #for ass in assignments.values():
         #    print(f"|  {ass.order} |  {ass.equipment} |  {ass.lot}  |")

@@ -204,7 +204,7 @@ def test_scenario_04():
         "counterbidWait": "15",
         "smallWait": "5",
         "exitWait": "10",
-        "equipments": os.environ.get("SCENARIO_4_5_EQUIPMENT", "1").split(" "),
+        "equipments": os.environ.get("SCENARIO_4_5_EQUIPMENT", "7").split(" "),
         "nmaterials": 1,
         "rungagents": 111,
         "snapshot": os.environ.get("SNAPSHOT_VERSION", "2025-01-18T08:00:00Z"),

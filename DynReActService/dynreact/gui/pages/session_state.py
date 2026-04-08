@@ -1,6 +1,7 @@
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 
+import pandas as pd
 from dash import dcc
 
 from dynreact.auth.authentication import dash_authenticated
@@ -12,7 +13,11 @@ from dynreact.app import state, config
 language = dcc.Store(id="lang", storage_type="local")
 
 # Those ones must not be changed from the pages, only from within dash_app
-site: dcc.Store = dcc.Store(id="site-store", storage_type="memory", data=state.get_site().model_dump(exclude_none=True, exclude_unset=True))
+_st0 = state.get_site().model_dump(exclude_none=True, exclude_unset=True)
+if "transport_times" in _st0 and "unit" in _st0["transport_times"] and isinstance(_st0["transport_times"]["unit"], timedelta):
+    _st0["transport_times"]["unit"] = pd.Timedelta(_st0["transport_times"]["unit"]).isoformat()
+
+site: dcc.Store = dcc.Store(id="site-store", storage_type="memory", data=_st0)
 # Type: datetime (the snapshot id)
 # FIXME session persistence is not working; but neither does local, it only stores the initial value, no updates
 selected_snapshot: dcc.Store = dcc.Store(id="selected-snapshot", storage_type="session")

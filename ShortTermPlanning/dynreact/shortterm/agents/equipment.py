@@ -87,6 +87,7 @@ class Equipment(Agent):
         :param dict material_params:
         """
         self.status = get_new_equipment_status(material_params=material_params, equipment_status=self.status, verbose=self.verbose)
+
         roundless_name = self.agent[:self.agent.rfind(":")]
         self.round_number += 1
         self.agent = roundless_name + f":{self.round_number}"
@@ -138,6 +139,7 @@ class Equipment(Agent):
 
             agent = f"EQUIPMENT:{topic}:{equipment}:0"
             status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)
+
             self.equipment = equipment
 
             init_kwargs = {
@@ -207,6 +209,7 @@ class Equipment(Agent):
         bidding_price = payload['price']
 
         prod_cost = calculate_production_cost(material_params=material_params, equipment_status=self.status, verbose=self.verbose)
+
         if prod_cost is None:
             if self.verbose > 1:
                 self.write_log(

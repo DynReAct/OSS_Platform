@@ -326,7 +326,8 @@ class SnapshotProvider:
         applicable_orders: list[str] = []
         for order in snapshot.orders:
             # step 0: any equipment allowed at all?
-            if not any(e in equipment for e in order.allowed_equipment):
+            order_equipment = [e for e in equipment if e in order.allowed_equipment]
+            if len(order_equipment) == 0:
                 continue
             # step 1: check if order is already scheduled at the considered process stage
             lot: Lot|None = None
@@ -346,7 +347,7 @@ class SnapshotProvider:
                         continue
                     first_start_time = lt.end_time   # first we check the overall lot time
                     if first_start_time is not None:
-                        trsp = min(transport_times(lt.equipment, e) for e in equipment) if transport_times is not None else timedelta()
+                        trsp = max(transport_times(lt.equipment, e) for e in order_equipment) if transport_times is not None else timedelta()
                         first_start_time = first_start_time + trsp
                         if first_start_time <= planning_horizon[0]:   # case 1: the complete lot is expected to be done
                             applicable_orders.append(order.id)

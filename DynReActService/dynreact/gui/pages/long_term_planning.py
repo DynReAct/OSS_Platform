@@ -8,6 +8,7 @@ from typing import Any, Sequence, Literal
 
 import dash
 from dash import html, dcc, callback, Output, Input, clientside_callback, ClientsideFunction, State
+from dash.development.base_component import Component
 
 from dynreact.auth.authentication import dash_authenticated
 from dynreact.base.InterruptedException import InterruptedException
@@ -761,10 +762,30 @@ def set_storage_targets_overview(levels: str|None):  # {storage id: StorageLevel
         level: float = lv.filling_level if lv is not None else 0
         capacity = storage.capacity_weight or 0
         name = html.Div(storage.name_short)
-        value_abs = html.Div(f"{(level * capacity)/1000} kt")
-        value_rel = html.Div(f"{round(level * 100)}%")
+        #value_abs = html.Div(f"{(level * capacity)/1000} kt")
+        #value_rel = html.Div(f"{round(level * 100)}%")
+        value_abs = html.Div([
+            dcc.Input(value=level * capacity / 1000, min=0, max=capacity/1000, type="number", className="ltp-stg-level-abs"),
+            html.Span("kt")
+        ], **{"data-capacity": str(capacity)})
+        value_rel = html.Div([
+            dcc.Input(value=round(level * 100), min=0, max=100, type="number", className="ltp-stg-level-abs"),
+            html.Span("%")
+        ], **{"data-storage": storage.name_short})
         divs.extend((name, value_abs, value_rel))
     return None, None, divs
+
+
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="ltp",
+        function_name="setStorageListeners"
+    ),
+    Output("ltp-init-storages-result", "title"),
+    Input("ltp-init-storages-total", "title"),
+    State("ltp-init-storages-result", "id"),
+)
 
 
 @callback(Output("ltp-start", "disabled"),
@@ -782,13 +803,14 @@ def set_storage_targets_overview(levels: str|None):  # {storage id: StorageLevel
           Input("ltp-interval", "n_intervals"),
           Input("ltp-material-setpoints", "data"),  # keys: material class id, values: production / t
           Input("ltp-storage-levels", "data"),
+          State("ltp-init-storages-result", "children"),
           State("ltp-start-time", "value"),
           State("ltp-horizon-weeks", "value"),
           State("ltp-shift-hours", "value"),
           State("ltp-production-total", "value"),
           State("ltp-results-store", "value"),
           config_prevent_initial_callbacks=True)
-def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: str|None, start_time: datetime|str, horizon_weeks: str|int, shift_duration_hours: str|int,
+def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: str|None, storage_children, start_time: datetime|str, horizon_weeks: str|int, shift_duration_hours: str|int,
                      total_production: float|str|None, do_store0: Sequence[Literal[""]]):
     if not dash_authenticated(config):
         return None, None, None, None, None, None, None, None
@@ -808,6 +830,7 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
             start, end = _get_start_end_time(start_time, horizon_weeks)
             if start is None or end is None:
                 raise Exception(f"Invalid start time or horizon: {start_time}, {horizon_weeks}")
+            start_dt, end_dt = _date_range_to_datetime(start, end)
             shift_duration_hours = allowed_shift_durations[int(shift_duration_hours)]
             if total_production is None:
                 raise Exception("Total production not set")
@@ -815,10 +838,11 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
                 total_production = float(total_production)
             if total_production <= 0:
                 raise ValueError("Total production must be positive, got " + str(total_production))
-            if storage_levels is None:
+            adapted_storage_levels: dict[str, StorageLevel] = _get_storage_levels(storage_children, start_dt)
+            if adapted_storage_levels is None:
                 raise Exception("Storage levels not defined yet")
         except Exception as e:
-            return (True,  # start disabled
+            return (False,  # start disabled
                     dash.no_update,
                     True,  # end disabled
                     "Not running.",  # end title
@@ -827,9 +851,9 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
                     {"msg": f"An error occurred: {e}", "type": "error"}
                     )
         if ltp_thread is None and total_amount is not None:
-            levels = TypeAdapter(dict[str, StorageLevel]).validate_json(storage_levels)
+            # FIXME these may have changed due to user interaction
+            #levels = TypeAdapter(dict[str, StorageLevel]).validate_json(storage_levels)
             availabilities: dict[int, list[EquipmentAvailability]] = state.get_availability_persistence().load_all(start, end)
-            start_dt, end_dt = _date_range_to_datetime(start, end)
             shifts: dict[int, Sequence[PlannedWorkingShift]] = state.get_shifts_provider().load_all(start_dt, end_dt)
             for eq, eq_shifts in dict(shifts).items():  # correction for shifts that only partially belong to the month (night shifts)
                 if len(shifts[eq]) == 0:
@@ -846,7 +870,7 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
                     new_shifts = [new_first] + list(eq_shifts)[1:-1] + [new_last]
                     shifts[eq] = new_shifts
             availabilities_aggregated = PlantAvailabilityPersistence.aggregate([p.id for p in state.get_site().equipment], start, end, availabilities, shifts=shifts)
-            run(start_dt, end_dt, shift_duration_hours, setpoints, total_production, levels, availabilities_aggregated, do_store)
+            run(start_dt, end_dt, shift_duration_hours, setpoints, total_production, adapted_storage_levels, availabilities_aggregated, do_store)
             message = {"msg": "Long term planning started", "type": "info", "options": {"timeout": 4_000}}
     if "ltp-stop" in changed_ids and ltp_thread is not None:
         stop()
@@ -893,6 +917,36 @@ def check_running_optimization() -> tuple[bool, str|None, date|None, Exception|N
             error = ltp_thread.error()
             ltp_thread = None
     return ltp_thread is not None, solution_id, start_date, error
+
+def _get_storage_levels(children: list[Component]|None, start_date: datetime) -> dict[str, StorageLevel]|None:
+    if not children:
+        return None
+    site = state.get_site()
+    storages = {stg.name_short: stg for stg in site.storages}
+    levels = {}
+    for child in children:
+        stg = child.get("props").get("data-storage")
+        if not stg:
+            continue
+        level = next(c for c in child.get("props").get("children") if c.get("type") == "Input").get("props").get("value")/100
+        material_levels = {cl.id: level * (cl.default_share if cl.default_share is not None else 1 if cl.is_default else 0) \
+                                for cat in site.material_categories for cl in cat.classes}
+        storage = storages[stg]
+        if storage.material_constraints is not None:
+            exclusions = storage.material_constraints.excluded
+            for cl in exclusions:
+                material_levels.pop(cl)
+            affected_categories = [cat for cat in site.material_categories if any(cl.id in exclusions for cl in cat.classes)]
+            for cat in affected_categories:
+                remaining_classes = [cl for cl in cat.classes if cl.id not in exclusions]
+                total_share = sum(
+                    cl.default_share if cl.default_share is not None else 1 if cl.is_default else 0 for cl in
+                    remaining_classes)
+                if 0 < total_share < 1:
+                    for cl in remaining_classes:
+                        material_levels[cl.id] = min(1., material_levels[cl.id] / total_share)
+        levels[stg] = StorageLevel(storage=stg, filling_level=level, timestamp=start_date, material_levels=material_levels)
+    return levels
 
 
 def run(start_time: datetime, end_time: datetime, shift_duration_hours: int, setpoints: dict[str, float],

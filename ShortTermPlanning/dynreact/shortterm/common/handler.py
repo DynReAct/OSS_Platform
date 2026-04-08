@@ -82,7 +82,7 @@ class DockerManager:
                     self.clean_container(name)
 
                 run_kwargs = dict(
-                    image=f"{os.environ.get('LOCAL_REGISTRY', '')}dynreact-shortterm:{os.environ.get('IMAGE_TAG', 'latest')}",
+                    image=f"{os.environ.get('LOCAL_REGISTRY', '')}{os.environ.get('IMAGE_NAME', 'dynreact-oss-shortterm')}:{os.environ.get('IMAGE_TAG', 'latest')}",
                     name=name,
                     detach=True,
                     auto_remove=auto_remove,

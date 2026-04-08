@@ -35,6 +35,8 @@
     globalThis.dash_clientside.ltp.initCalendar = function(plantAvailabilities, shifts, plant, startTime, horizonWeeks, divId) {
         if (!globalThis.customElements.get(plantCalendarTag))
             globalThis.customElements.define(plantCalendarTag, PlantCalendar);
+        if (!isFinite(plant))
+            return;
         const parent = document.querySelector("div#" + divId);
         JsUtils.clear(parent);
         const el = JsUtils.createElement(plantCalendarTag, {parent: parent});
@@ -45,6 +47,33 @@
     globalThis.dash_clientside.ltp.getAvailabilities = function(_, divId) {
         const calendar = document.querySelector("div#" + divId + " " + plantCalendarTag);
         return calendar?.getAvailabilities();
+    }
+
+    const storageListener = (event) => {
+        const target = event.currentTarget;
+        const value = Number.parseFloat(target.value);
+        if (!Number.isFinite(value))
+            return;
+        const isAbsoluteLevel = !!target.parentElement?.dataset?.capacity;
+        const capacityEl = isAbsoluteLevel ? target.parentElement : target.parentElement.previousElementSibling;
+        const capacity = Number.parseFloat(capacityEl.dataset.capacity);
+        const limit = isAbsoluteLevel ? capacity/1000 : 100;
+        const level = value / limit;
+        if (isAbsoluteLevel)
+            target.parentElement.nextElementSibling.querySelector("input").value = level * 100;
+        else
+            capacityEl.querySelector("input").value = level * capacity / 1000;
+    };
+
+    globalThis.dash_clientside.ltp.setStorageListeners = function(dummyTitle, id) {
+        const elements = document.querySelector("#" + id)?.children;
+        if (!elements)
+            return dummyTitle;
+        for (const element of elements) {
+            const inp = element.querySelector("input");
+            inp?.addEventListener("change", storageListener);
+        }
+        return dummyTitle;
     }
 
 })();

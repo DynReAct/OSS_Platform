@@ -1,252 +1,148 @@
-# Arquitectura de Plugins DynReAct - Dependency Injection
+# DynReAct Profile Architecture
 
-## Descripción General
+## Overview
 
-La arquitectura de DI implementada permite cargar diferentes implementaciones de componentes (Snapshot, Config, Performance, etc.) basados en **profiles** (oss, ras, custom, etc.) sin acoplar el código específico de cada dominio al código OSS base.
+DynReAct uses profile-based dependency injection to load domain-specific implementations such as `ras`, `oss`, or custom extensions without coupling them directly to the core service code.
 
-## Flujo de Carga
+The current model is based on:
 
-```
-1. DynReActSrvConfig (carga profile)
-   ↓
-2. Plugins inicia con config
-   ↓
-3. Plugins crea Container con profile
-   ↓
-4. Container.get_snapshot_provider()
-   → Intenta cargar: dynreact.snapshot.{profile}
-   → Compatibilidad transitoria: {profile}.dynreact.snapshot
-   → Fallback a: dynreact.snapshot (si profile falla)
-   ↓
-5. Retorna implementación RAS/OSS/Custom
-```
+- `plugins.py` as the service-facing entry point
+- `module_loader.py` as the shared module/class resolver
+- `state.py` using the same profile-aware loading flow for short-term planning
 
-## Configuración
+`container.py` is no longer the active loading path in the `profiles` branch.
 
-### Opción 1: Variable de Entorno
+## Loading Flow
 
-```bash
-export PROFILE=ras
-python -m uvicorn run:fastapi_app --host 192.168.110.68 --reload --log-level debug
+```text
+1. DynReActSrvConfig reads the active profile
+2. Plugins receives the config
+3. Plugins selects the target module path
+4. module_loader resolves and instantiates an explicit subclass
+5. The resulting provider is cached by Plugins/state
 ```
 
-### Opción 2: Archivo `.env`
+## Resolution Rules
 
-```env
-PROFILE=ras
-SNAPSHOT_PROVIDER=ras+file:../../data/snapshots
-CONFIG_PROVIDER=ras+file:../../data/config/site.json
-SHORT_TERM_PLANNING_PARAMS=ras+file:../../data/config/stp_context.json
+### 1. Explicit class override
+
+If a service config uses an explicit class reference such as:
+
+```text
+class:dynreact.custom.MySnapshotProvider,customs+file:./snapshot.csv
 ```
 
-### Opción 3: Parámetro en código
+DynReAct:
 
-```python
-from dynreact.app_config import DynReActSrvConfig
+1. resolves `dynreact.custom.MySnapshotProvider`
+2. verifies that it is a subclass of the expected interface
+3. instantiates it with the remaining provider URL
 
-config = DynReActSrvConfig(
-    profile="ras",
-    snapshot_provider="ras+file:../../data/snapshots"
-)
-```
+This path has priority over profile loading and is the preferred way to override a single service while keeping a profile active.
 
-## Estructura de Directorios
+### 2. Profile module resolution
 
-Para agregar un nuevo profile (ej: "ras"):
+If a profile is configured, DynReAct tries modules like:
 
-```
+- `dynreact.snapshot.ras`
+- `dynreact.config.ras`
+- `dynreact.shortterm.ras`
+- `dynreact.shifts.ras`
+
+The loader searches the module for an explicit subclass of the expected interface. It does not require an `Impl` suffix.
+
+### 3. Default fallback
+
+For services with a known built-in default implementation, DynReAct falls back to the base implementation when appropriate, for example:
+
+- `FileSnapshotProvider`
+- `FileConfigProvider`
+- `FileDowntimeProvider`
+- `FileResultsPersistence`
+- `FileAvailabilityPersistence`
+- `FileAggregationPersistence`
+- `FileLotSink`
+- `DummyShiftsProvider`
+- `SimpleLongTermPlanning`
+
+## Important Design Choice
+
+DynReAct now uses explicit classes only for provider discovery.
+
+Legacy factory functions such as `create()` and `create_provider()` are no longer part of the active loading contract. This improves:
+
+- subtype validation before instantiation
+- readability of profile modules
+- maintainability of the shared loader
+- predictability during CI/CD verification
+
+## Directory Pattern For A Profile
+
+Example layout for a `ras` profile:
+
+```text
 ShortTermRAS/
-├── pyproject.toml
 ├── dynreact/
-│   ├── snapshot/
-│   │   ├── __init__.py
-│   │   └── SnapshotProviderImpl.py      # RasSnapshotProviderImpl
-│   │
 │   ├── config/
-│   │   ├── __init__.py
-│   │   └── ConfigurationProviderImpl.py # RasConfigurationProviderImpl
-│   │
-│   ├── performance/
-│   │   ├── __init__.py
-│   │   └── PerformanceModelImpl.py      # RasPerformanceModelImpl
-│   │
-│   └── energy_kpi/
-│       ├── __init__.py
-│       └── EnergyKpiImpl.py             # RasEnergyKpiImpl
+│   │   └── ras.py
+│   ├── snapshot/
+│   │   └── ras.py
+│   ├── shifts/
+│   │   └── ras.py
+│   └── shortterm/
+│       └── ras.py
 ```
 
-## Cómo Funciona el Container
+Each profile module should expose a concrete class compatible with the corresponding DynReAct interface.
 
-El `Container` en `OSS_Platform/DynReActService/dynreact/container.py`:
-
-1. **Recibe profile** (ej: "ras") de config
-2. **Intenta cargar módulos dinámicamente**:
-   - Primero: `dynreact.{component}.{profile}`
-   - Compatibilidad transitoria: `{profile}.dynreact.{component}`
-   - Luego: `dynreact.{component}` (fallback OSS)
-3. **Busca implementación en el módulo**:
-   - Clases terminadas en `Impl` (ej: `RasSnapshotProviderImpl`)
-   - Funciones `create()` o `create_provider()`
-4. **Instancia y cachea** el resultado
-
-## Implementación de Componentes RAS
-
-### 1. SnapshotProviderImpl
+## Implementation Example
 
 ```python
-# ShortTermRAS/dynreact/snapshot/SnapshotProviderImpl.py
+from dynreact.base.SnapshotProvider import SnapshotProvider
 
-from dynreact.base.impl.FileSnapshotProvider import FileSnapshotProvider
 
-class RasSnapshotProviderImpl(FileSnapshotProvider):
-    def __init__(self, provider_url: str, site: Site):
-        super().__init__(provider_url, site)
-        # Agregar lógica RAS-específica
-```
-
-**Requisitos:**
-- Nombre de clase debe terminar en `Impl`
-- Constructor recibe: `(provider_url: str, site: Site)`
-- Debe extender o implementar `SnapshotProvider` interface
-
-### 2. ConfigurationProviderImpl
-
-```python
-# ShortTermRAS/dynreact/config/ConfigurationProviderImpl.py
-
-from dynreact.base.impl.FileConfigProvider import FileConfigProvider
-
-class RasConfigurationProviderImpl(FileConfigProvider):
-    def __init__(self, config_url: str):
-        super().__init__(config_url)
-```
-
-### 3. PerformanceModelImpl
-
-```python
-# ShortTermRAS/dynreact/performance/PerformanceModelImpl.py
-
-from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
-
-class RasPerformanceModelImpl(PlantPerformanceModel):
-    def __init__(self, url: str, site: Site):
-        self._url = url
+class RasSnapshotProvider(SnapshotProvider):
+    def __init__(self, provider_url: str, site):
+        self._provider_url = provider_url
         self._site = site
 ```
 
-### 4. Energy KPI Provider
+This class can live in `dynreact.snapshot.ras` directly, or be imported there from another file.
 
-```python
-# ShortTermRAS/dynreact/energy_kpi/EnergyKpiImpl.py
+## What Is No Longer Required
 
-class RasEnergyKpiImpl:
-    def __init__(self, site=None):
-        self._site = site
-```
-
-## Agregar Nuevos Componentes
-
-### Paso 1: Crear directorio en ShortTermRAS
-
-```bash
-mkdir -p ShortTermRAS/dynreact/<component_name>
-```
-
-### Paso 2: Crear `__init__.py`
-
-```python
-# ShortTermRAS/dynreact/<component_name>/__init__.py
-
-from .ComponentImpl import RasComponentImpl
-
-__all__ = ["RasComponentImpl"]
-```
-
-### Paso 3: Crear implementación
-
-```python
-# ShortTermRAS/dynreact/<component_name>/ComponentImpl.py
-
-class RasComponentImpl:
-    def __init__(self, *args, **kwargs):
-        pass
-```
-
-### Paso 4: Agregar al Container (si es necesario)
-
-```python
-# OSS_Platform/DynReActService/dynreact/container.py
-
-def get_<component_name>(self, *args):
-    if '<component_name>' not in self._cache:
-        module = self._load_profile_module('<component_name>')
-        self._cache['<component_name>'] = self._create_provider(module, *args)
-    return self._cache.get('<component_name>')
-```
+- a class name ending in `Impl`
+- a `create()` factory function
+- a `create_provider()` factory function
+- wiring through `container.py`
 
 ## Debugging
 
-### Ver qué profile está activo
+### Check which class was loaded
 
 ```python
-# En tu código
-from dynreact.app import config
-print(f"Profile: {config.profile}")
+from dynreact.plugins import Plugins
+from dynreact.app_config import DynReActSrvConfig
+
+plugins = Plugins(DynReActSrvConfig(profile="ras"))
+provider = plugins.get_snapshot_provider()
+print(type(provider).__module__, type(provider).__name__)
 ```
 
-### Erro común: "Could not load snapshot for profile 'ras'"
+### Common failure modes
 
-**Causas:**
-1. Módulo `ShortTermRAS.dynreact.snapshot` no existe
-2. Clase no termina en `Impl`
-3. Constructor tiene argumentos incorrectos
+| Issue | Likely cause | Suggested fix |
+|---|---|---|
+| `Module ... not found` | The profile module does not exist | Add the corresponding `dynreact.<service>.<profile>` module |
+| `Failed to load module ... of type ...` | No compatible subclass is exposed | Export a class that subclasses the expected interface |
+| Explicit `class:` override fails | Wrong module path or class name | Verify the full `module.ClassName` reference |
 
-**Solución:**
-- Verifica que `ShortTermRAS/dynreact/snapshot/SnapshotProviderImpl.py` existe
-- Clase debe llamarse `RasSnapshotProviderImpl` (termina en `Impl`)
-- Constructor: `__init__(self, provider_url: str, site: Site)`
+## CI/CD Note
 
-## Backward Compatibility
+The local verification harness in `verification_local/` has been aligned with the current profile architecture and validated against short-term planning scenarios `00` through `08`.
 
-El código mantiene compatibilidad backward:
-- `default+file:` sigue funcionando con `FileSnapshotProvider` hardcodeado
-- `ras+file:` usa Container (carga desde ShortTermRAS si está disponible)
-- Profiles custom pueden agregar sus propias implementaciones
+## References
 
-## Ejemplo Completo: Usar RAS
-
-1. **Instala ShortTermRAS** en el entorno
-
-2. **Configura variables de entorno**:
-```bash
-export PROFILE=ras
-export SNAPSHOT_PROVIDER=ras+file:../../data/snapshots
-export CONFIG_PROVIDER=ras+file:../../data/config/site.json
-```
-
-3. **Inicia la aplicación**:
-```bash
-cd OSS_Platform/DynReActService
-python -m uvicorn run:fastapi_app --host 192.168.110.68 --reload --log-level debug
-```
-
-4. **Verifica logs**:
-```
-INFO: Loading profile 'ras'
-INFO: Using RasSnapshotProviderImpl
-INFO: Using RasConfigurationProviderImpl
-```
-
-## Preguntas Frecuentes
-
-**P: ¿Puedo tener múltiples profiles instalados?**
-A: Sí. Elige uno en tiempo de ejecución con `PROFILE=ras` u `PROFILE=oss`
-
-**P: ¿Qué pasa si RAS no está instalado pero PROFILE=ras?**
-A: El Container intenta cargar `ras.dynreact.snapshot`, falla, y fallback a `dynreact.snapshot` (OSS default)
-
-**P: ¿Cómo creo un profile personalizado?**
-A: Crea un paquete con la misma estructura de directorios (`{package}/dynreact/{component}/`) y usa `PROFILE={package_name}`
-
-**P: ¿Puedo mezclar componentes de diferentes profiles?**
-A: No, actualmente solo puedes tener un profile activo. Para mezclar, implementa la lógica en tu profile específico.
+- [module_loader.py](/home/jordieres/soft/RAS_main/OSS_Platform/DynReActService/dynreact/module_loader.py)
+- [plugins.py](/home/jordieres/soft/RAS_main/OSS_Platform/DynReActService/dynreact/plugins.py)
+- [state.py](/home/jordieres/soft/RAS_main/OSS_Platform/DynReActService/dynreact/state.py)

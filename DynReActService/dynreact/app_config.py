@@ -66,7 +66,7 @@ class DynReActSrvConfig:
     plant_performance_models: list[str]|None = None
     stp_frontend: str = "default"  # default is the frontend provided in this module
     profile: str|None = None
-    "Profile name for loading of custom components. Determines which implementations to load (e.g. cost provider, or shifts provider). Can be overwritten for individual components, usage is optional."
+    "Optional profile name for loading of custom components. If unset, DynReAct uses the base OSS/default loading path. Can be overwritten for individual components."
 
     def __init__(self,
                  config_provider: str | None = None,

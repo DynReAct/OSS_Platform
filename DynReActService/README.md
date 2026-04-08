@@ -56,6 +56,8 @@ python -m pip install -r requirements.txt -r requirements_local.txt
 
 Environment variables can be configured via a *.env* file in this folder. See [app_config.py](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/dynreact/app_config.py) for applicable variables.
 
+Profile-based loading uses `DYNREACT_PROFILE`. If it is unset, DynReAct stays on the base OSS/default loading path.
+
 Furthermore, the *data* subfolder contains site configuration [site.json](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/data/site.json) and [snapshot data](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/data/snapshot_2024-12-31T00_00.csv).
 
 ## Run
@@ -183,4 +185,3 @@ python evaluate_lot.py -h
 The two last scripts, *evaluate_lot.py* and *create_lots.py* allow for convenient benchmarking of the lot creation algorithm. The *create_lots.py* script
 can take an existing lot id as argument (e.g. `python create_lots.py -l FIN01.17`) and then assigns the orders available in this lot to one or many new lots.
 The objective value of the newly created solution should normally be at least as good (low) as the objective value of the existing snapshot lot. 
-

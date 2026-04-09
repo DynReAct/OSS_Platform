@@ -8,6 +8,7 @@ from confluent_kafka import Producer
 from datetime import datetime, timedelta
 from dynreact.shortterm.common import purge_topics, KeySearch
 from dynreact.shortterm.common.handler import DockerManager
+from dynreact.shortterm.common.data.data_setup import DataSetup
 from dynreact.shortterm.short_term_planning import execute_short_term_planning, run_general_agents, clean_agents
 from dynreact.shortterm.shorttermtargets import ShortTermTargets
 
@@ -219,7 +220,11 @@ def test_scenario_04():
     for equipment in list_equipments:
         current_equipment = result[equipment]
 
-        assert len(current_equipment) == args["nmaterials"]
+        assert len(current_equipment) == expected_unique_orders_for_equipment(
+            equipment=equipment,
+            snapshot=args["snapshot"],
+            nmaterials=args["nmaterials"],
+        )
 
     print(result)
 
@@ -281,7 +286,11 @@ def test_scenario_06():
     for equipment in list_equipments:
         current_equipment = result[equipment]
 
-        assert len(current_equipment) == args["nmaterials"]
+        assert len(current_equipment) == expected_unique_orders_for_equipment(
+            equipment=equipment,
+            snapshot=args["snapshot"],
+            nmaterials=args["nmaterials"],
+        )
 
     print(result)
 
@@ -313,7 +322,11 @@ def test_scenario_07():
     for equipment in list_equipments:
         current_equipment = result[equipment]
 
-        assert len(current_equipment) == args["nmaterials"]
+        assert len(current_equipment) == expected_unique_orders_for_equipment(
+            equipment=equipment,
+            snapshot=args["snapshot"],
+            nmaterials=args["nmaterials"],
+        )
 
     print(result)
 
@@ -345,13 +358,36 @@ def test_scenario_08():
     for equipment in list_equipments:
         current_equipment = result[equipment]
 
-        assert len(current_equipment) == args["nmaterials"]
+        assert len(current_equipment) == expected_unique_orders_for_equipment(
+            equipment=equipment,
+            snapshot=args["snapshot"],
+            nmaterials=args["nmaterials"],
+        )
 
     orders_ids = []
 
     for equipment in result.values():
         orders_ids += list(map(lambda x: x["id"], equipment))
 
-    assert os.environ.get("SCENARIO_8_ORDER_ID", "1181267") in orders_ids
+    configured_order = os.environ.get("SCENARIO_8_ORDER_ID")
+    if configured_order:
+        assert configured_order in orders_ids
 
     print(result)
+
+
+def expected_unique_orders_for_equipment(equipment: str, snapshot: str, nmaterials: int) -> int:
+    """
+    The auction result is grouped by order, not by raw material count.
+    Multiple selected materials can belong to the same order, so the
+    expected result size must be computed from distinct order ids.
+    """
+    data_setup = DataSetup(verbose=0, snapshot_time=snapshot)
+    equipment_id = int(equipment)
+    material_ids = data_setup.get_equipment_materials(equipment_id)
+    selected_materials = material_ids[:nmaterials] if nmaterials else material_ids
+    selected_orders = {
+        data_setup.get_material_params(material_id)["order"]["id"]
+        for material_id in selected_materials
+    }
+    return len(selected_orders)

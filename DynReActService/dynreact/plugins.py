@@ -184,14 +184,11 @@ class Plugins:
             site = self.get_config_provider().site_config()
             if isinstance(self._config.shifts_provider, ShiftsProvider):
                 self._shifts_provider = self._config.shifts_provider
-            elif self._profile_module_exists("dynreact.shifts"):
-                self._shifts_provider = Plugins._load_module("dynreact.shifts", self._config.shifts_provider, self._profile,
-                                                                 ShiftsProvider, site, do_raise=True)
-            elif not self._config.shifts_provider or self._config.shifts_provider.startswith("dummy:"):
+            elif (self._config.shifts_provider and self._config.shifts_provider.startswith("dummy:")) or (not self._profile and not self._config.shifts_provider):
                 self._shifts_provider = DummyShiftsProvider(self._config.shifts_provider, site)
             else:
-                self._shifts_provider = Plugins._load_module("dynreact.shifts", self._config.shifts_provider, None,
-                                                                 ShiftsProvider, site, do_raise=True)
+                self._shifts_provider = Plugins._load_module("dynreact.shifts", self._config.shifts_provider, self._profile,
+                                                             ShiftsProvider, site, do_raise=True)
         return self._shifts_provider
 
     def get_permission_manager(self) -> PermissionManager:

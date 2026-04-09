@@ -81,6 +81,10 @@ COPY dynreact/shortterm/common/ ./shortterm/dynreact/shortterm/common/
 # IMPORTANTE: Copiamos la carpeta entera para que __main__.py quede en su sitio correcto
 COPY dynreact/shortterm/agents/ ./shortterm/dynreact/shortterm/agents/
 
+COPY dynreact/shortterm/__init__.py ./shortterm/dynreact/shortterm/
+COPY dynreact/shortterm/ShortTermPlanning.py ./shortterm/dynreact/shortterm/
+COPY dynreact/shortterm/short_term_planning.py ./shortterm/dynreact/shortterm/
+COPY dynreact/shortterm/replace_base.py ./shortterm/dynreact/shortterm/
 COPY dynreact/shortterm/shorttermtargets.py ./shortterm/dynreact/shortterm/
 COPY dynreact/shortterm/timedelay.py ./shortterm/dynreact/shortterm/
 

@@ -617,7 +617,7 @@ def get_longtermplanning_results(
         start = parse_datetime_str(start)
     if isinstance(end, str):
         end = parse_datetime_str(end)
-    results_ctrl = state.get_results_persistence()
+    results_ctrl = state.get_results_persistence_aggregate()
     start_times = results_ctrl.start_times_ltp(start=start, end=end, sort=sort, limit=limit)
     return {DatetimeUtils.format(time): results_ctrl.solutions_ltp(time) for time in start_times}
 
@@ -635,7 +635,7 @@ def get_longtermplanning_result(
         solution_id: str = Path(..., description="Unique solution id"), username = username) -> LongTermPlanningResults|None:
     if isinstance(start, str):
         start = parse_datetime_str(start)
-    results_ctrl = state.get_results_persistence()
+    results_ctrl = state.get_results_persistence_aggregate()
     targets, levels = results_ctrl.load_ltp(start, solution_id)
     return LongTermPlanningResults(targets=targets, storage_levels=levels)
 

@@ -853,25 +853,36 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
         if ltp_thread is None and total_amount is not None:
             # FIXME these may have changed due to user interaction
             #levels = TypeAdapter(dict[str, StorageLevel]).validate_json(storage_levels)
-            availabilities: dict[int, list[EquipmentAvailability]] = state.get_availability_persistence().load_all(start, end)
-            shifts: dict[int, Sequence[PlannedWorkingShift]] = state.get_shifts_provider().load_all(start_dt, end_dt)
-            for eq, eq_shifts in dict(shifts).items():  # correction for shifts that only partially belong to the month (night shifts)
-                if len(shifts[eq]) == 0:
-                    continue
-                first = eq_shifts[0]
-                last = eq_shifts[-1]
-                start_correction = first.period[0] < start_dt < first.period[1]
-                end_correction = last.period[0] < end_dt < last.period[1]
-                if start_correction or end_correction:
-                    new_first = PlannedWorkingShift(equipment=eq, period=(start_dt, first.period[1]), worktime=((first.period[1]-start_dt).total_seconds()/(first.period[1]-first.period[0]).total_seconds())*first.worktime) \
-                            if start_correction else first
-                    new_last = PlannedWorkingShift(equipment=eq, period=(last.period[0], end_dt), worktime=((end_dt - last.period[0]).total_seconds()/(last.period[1]-last.period[0]).total_seconds())*last.worktime) \
-                        if end_correction else last
-                    new_shifts = [new_first] + list(eq_shifts)[1:-1] + [new_last]
-                    shifts[eq] = new_shifts
-            availabilities_aggregated = PlantAvailabilityPersistence.aggregate([p.id for p in state.get_site().equipment], start, end, availabilities, shifts=shifts)
-            run(start_dt, end_dt, shift_duration_hours, setpoints, total_production, adapted_storage_levels, availabilities_aggregated, do_store)
-            message = {"msg": "Long term planning started", "type": "info", "options": {"timeout": 4_000}}
+            try:
+                availabilities: dict[int, list[EquipmentAvailability]] = state.get_availability_persistence().load_all(start, end)
+                shifts: dict[int, Sequence[PlannedWorkingShift]] = state.get_shifts_provider().load_all(start_dt, end_dt)
+                for eq, eq_shifts in dict(shifts).items():  # correction for shifts that only partially belong to the month (night shifts)
+                    if len(shifts[eq]) == 0:
+                        continue
+                    first = eq_shifts[0]
+                    last = eq_shifts[-1]
+                    start_correction = first.period[0] < start_dt < first.period[1]
+                    end_correction = last.period[0] < end_dt < last.period[1]
+                    if start_correction or end_correction:
+                        new_first = PlannedWorkingShift(equipment=eq, period=(start_dt, first.period[1]), worktime=((first.period[1]-start_dt).total_seconds()/(first.period[1]-first.period[0]).total_seconds())*first.worktime) \
+                                if start_correction else first
+                        new_last = PlannedWorkingShift(equipment=eq, period=(last.period[0], end_dt), worktime=((end_dt - last.period[0]).total_seconds()/(last.period[1]-last.period[0]).total_seconds())*last.worktime) \
+                            if end_correction else last
+                        new_shifts = [new_first] + list(eq_shifts)[1:-1] + [new_last]
+                        shifts[eq] = new_shifts
+                availabilities_aggregated = PlantAvailabilityPersistence.aggregate([p.id for p in state.get_site().equipment], start, end, availabilities, shifts=shifts)
+                run(start_dt, end_dt, shift_duration_hours, setpoints, total_production, adapted_storage_levels, availabilities_aggregated, do_store)
+                message = {"msg": "Long term planning started", "type": "info", "options": {"timeout": 4_000}}
+            except Exception as e:
+                traceback.print_exc()
+                return (False,  # start disabled
+                    dash.no_update,
+                    True,  # end disabled
+                    "Not running.",  # end title
+                    dash.no_update,
+                    True,   # running indicator hidden
+                    {"msg": f"An error occurred: {e}", "type": "error"}
+                    )
     if "ltp-stop" in changed_ids and ltp_thread is not None:
         stop()
         message = {"msg": "Long term planning stopped", "type": "info", "options": {"timeout": 4_000}}
@@ -929,6 +940,7 @@ def _get_storage_levels(children: list[Component]|None, start_date: datetime) ->
         if not stg:
             continue
         level = next(c for c in child.get("props").get("children") if c.get("type") == "Input").get("props").get("value")/100
+
         material_levels = {cl.id: level * (cl.default_share if cl.default_share is not None else 1 if cl.is_default else 0) \
                                 for cat in site.material_categories for cl in cat.classes}
         storage = storages[stg]

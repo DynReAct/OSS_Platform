@@ -62,14 +62,33 @@ class Equipment(LabeledItem, ProcessInformation):
 
     storage_in: str = None
     "Default storage location of material waiting to be processed by this equipment"
-    storage_out: str = None
+    storage_out: str|None = None
     "Default storage locations of material processed by this equipment"
+    storages_out: tuple[str|dict[str, tuple[str, ...]], ...]|None = None
+    """
+    Default storage locations of material processed by this equipment; may be more than one.
+    If a dictionary is provided, the keys are storage ids and the values are material class ids. This represents
+    constraints on the type of material that can take this path.
+    """
+    material_constraints: MaterialConstraint | None = None
+    "Constraints on the type of material that can be processed by this equipment."
 
     def get_equipment_name(self, idp: int):
         return self.name_short
 
     def get_equipment_id(self):
         return self.id
+
+    @model_validator(mode="after")
+    def _set_storages(self):
+        if self.storages_out is None and self.storage_out is not None:
+            self.storages_out = (self.storage_out, )
+        elif self.storage_out is None and self.storages_out is not None and len(self.storages_out) > 0:
+            storage_0 = self.storages_out[0]
+            if isinstance(storage_0, Mapping):
+                storage_0 = next(iter(storage_0.keys()))
+            self.storage_out = storage_0
+        return self
 
 
 class MaterialConstraint(Model):

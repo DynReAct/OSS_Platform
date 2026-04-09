@@ -24,7 +24,6 @@ from dynreact.lots_optimization import LotCreator
 from dynreact.AggregateResultsPersistence import AggregateResultsPersistence
 
 from dynreact.app_config import DynReActSrvConfig
-from dynreact.module_loader import module_exists
 from dynreact.plugins import Plugins
 
 
@@ -313,16 +312,5 @@ class DynReActSrvState:
 
     def get_stp_config_params(self):
         if self._stp is None:
-            uri = self._config.short_term_planning
-            profile = (self._config.profile or "").strip().lower()
-            if uri.startswith("default+file:"):
-                if profile != "" and module_exists(f"dynreact.shortterm.{profile}"):
-                    from dynreact.shortterm.ShortTermPlanning import ShortTermPlanning
-                    self._stp = Plugins._load_module("dynreact.shortterm", uri, profile, ShortTermPlanning, do_raise=True)
-                else:
-                    from dynreact.shortterm.ShortTermPlanning import ShortTermPlanning
-                    self._stp = ShortTermPlanning(uri)
-            else:
-                from dynreact.shortterm.ShortTermPlanning import ShortTermPlanning
-                self._stp = Plugins._load_module("dynreact.shortterm", uri, profile if profile != "" else None, ShortTermPlanning, do_raise=True)
+            self._stp = self._plugins.load_short_term_planning()
         return self._stp.stp_config_params()

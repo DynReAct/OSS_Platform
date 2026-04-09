@@ -32,7 +32,7 @@ from dynreact.base.impl.SimpleLongTermPlanning import SimpleLongTermPlanning
 from dynreact.base.model import Site
 
 from dynreact.app_config import DynReActSrvConfig
-from dynreact.module_loader import instantiate_first_matching, module_exists, resolve_explicit_reference
+from dynreact.module_loader import instantiate_first_matching, resolve_explicit_reference
 
 
 class Plugins:
@@ -54,21 +54,16 @@ class Plugins:
         self._aggregation_persistence: AggregationPersistence|None = None
         self._permissions: PermissionManager|None = None
 
-    def _profile_module_exists(self, base_module: str) -> bool:
-        return self._profile is not None and module_exists(f"{base_module}.{self._profile}")
-
     def get_snapshot_provider(self) -> SnapshotProvider:
         if self._snapshot_provider is None:
             site = self.get_config_provider().site_config()
             # Direct instance (for testing)
             if isinstance(self._config.snapshot_provider, SnapshotProvider):
                 self._snapshot_provider = self._config.snapshot_provider
-            elif self._profile_module_exists("dynreact.snapshot"):
-                self._snapshot_provider = Plugins._load_module("dynreact.snapshot", self._config.snapshot_provider, self._profile, SnapshotProvider, site, do_raise=True)
             elif self._config.snapshot_provider.startswith("default+file:"):
                 self._snapshot_provider = FileSnapshotProvider(self._config.snapshot_provider, site)
             else:
-                self._snapshot_provider = Plugins._load_module("dynreact.snapshot", self._config.snapshot_provider, None, SnapshotProvider, site, do_raise=True)
+                self._snapshot_provider = Plugins._load_module("dynreact.snapshot", self._config.snapshot_provider, self._profile, SnapshotProvider, site, do_raise=True)
         return self._snapshot_provider
 
     def get_config_provider(self) -> ConfigurationProvider:
@@ -76,23 +71,19 @@ class Plugins:
             # Direct instance (for testing)
             if isinstance(self._config.config_provider, ConfigurationProvider):
                 self._config_provider = self._config.config_provider
-            elif self._profile_module_exists("dynreact.config"):
-                self._config_provider = Plugins._load_module("dynreact.config", self._config.config_provider, self._profile, ConfigurationProvider, do_raise=True)
             elif self._config.config_provider.startswith("default+file:"):
                 self._config_provider = FileConfigProvider(self._config.config_provider)
             else:
-                self._config_provider = Plugins._load_module("dynreact.config", self._config.config_provider, None, ConfigurationProvider, do_raise=True)
+                self._config_provider = Plugins._load_module("dynreact.config", self._config.config_provider, self._profile, ConfigurationProvider, do_raise=True)
         return self._config_provider
 
     def get_downtime_provider(self) -> DowntimeProvider:
         if self._downtime_provider is None:
             site = self.get_config_provider().site_config()
-            if self._profile_module_exists("dynreact.downtimes"):
-                self._downtime_provider = Plugins._load_module("dynreact.downtimes", self._config.downtime_provider, self._profile, DowntimeProvider, site, do_raise=True)
-            elif self._config.downtime_provider.startswith("default+file:"):
+            if self._config.downtime_provider.startswith("default+file:"):
                 self._downtime_provider = FileDowntimeProvider(self._config.downtime_provider, site)
             else:
-                self._downtime_provider = Plugins._load_module("dynreact.downtimes", self._config.downtime_provider, None, DowntimeProvider, site, do_raise=True)
+                self._downtime_provider = Plugins._load_module("dynreact.downtimes", self._config.downtime_provider, self._profile, DowntimeProvider, site, do_raise=True)
         return self._downtime_provider
 
     def get_cost_provider(self) -> CostProvider:
@@ -101,25 +92,25 @@ class Plugins:
                 self._cost_provider = self._config.cost_provider
             else:
                 site = self.get_config_provider().site_config()
-                self._cost_provider = Plugins._load_module("dynreact.cost", self._config.cost_provider, self._profile if self._profile_module_exists("dynreact.cost") else None, CostProvider, site, do_raise=True)
+                self._cost_provider = Plugins._load_module("dynreact.cost", self._config.cost_provider, self._profile, CostProvider, site, do_raise=True)
         return self._cost_provider
 
     def get_lots_optimization(self) -> LotsOptimizationAlgo:
         if self._lots_optimizer is None:
             cfg = self._config.lot_creation
-            self._lots_optimizer = Plugins._load_module("dynreact.lotcreation", cfg, self._profile if self._profile_module_exists("dynreact.lotcreation") else None, LotsOptimizationAlgo,
+            if cfg == "default:tabu-search":
+                cfg = f"class:dynreact.lotcreation.LotsOptimizerImpl,{cfg}"
+            self._lots_optimizer = Plugins._load_module("dynreact.lotcreation", cfg, self._profile, LotsOptimizationAlgo,
                                                         self.get_config_provider().site_config(), do_raise=True)
         return self._lots_optimizer
 
     def get_long_term_planning(self) -> LongTermPlanning:
         if self._long_term_planning is None:
             site = self.get_config_provider().site_config()
-            if self._profile_module_exists("dynreact.ltp"):
-                self._long_term_planning = Plugins._load_module("dynreact.ltp", self._config.long_term_provider, self._profile, LongTermPlanning, site, do_raise=True)
-            elif self._config.long_term_provider.startswith("default:"):
+            if self._config.long_term_provider.startswith("default:"):
                 self._long_term_planning = SimpleLongTermPlanning(self._config.long_term_provider, site)
             else:
-                self._long_term_planning = Plugins._load_module("dynreact.ltp",  self._config.long_term_provider, None, LongTermPlanning, site, do_raise=True)
+                self._long_term_planning = Plugins._load_module("dynreact.ltp",  self._config.long_term_provider, self._profile, LongTermPlanning, site, do_raise=True)
         return self._long_term_planning
 
     def get_results_persistence(self) -> ResultsPersistence:
@@ -128,37 +119,29 @@ class Plugins:
                 self._results_persistence = self._config.results_persistence
             else:
                 site = self.get_config_provider().site_config()
-                if self._profile_module_exists("dynreact.results"):
-                    self._results_persistence = Plugins._load_module("dynreact.results", self._config.results_persistence, self._profile, ResultsPersistence, site, do_raise=True)
-                elif self._config.results_persistence.startswith("default+file:"):
+                if self._config.results_persistence.startswith("default+file:"):
                     self._results_persistence = FileResultsPersistence(self._config.results_persistence, site)
                 else:
-                    self._results_persistence = Plugins._load_module("dynreact.results", self._config.results_persistence, None, ResultsPersistence, site, do_raise=True)
+                    self._results_persistence = Plugins._load_module("dynreact.results", self._config.results_persistence, self._profile, ResultsPersistence, site, do_raise=True)
         return self._results_persistence
 
     def get_availability_persistence(self) -> PlantAvailabilityPersistence:
         if self._availability_persistence is None:
             site = self.get_config_provider().site_config()
-            if self._profile_module_exists("dynreact.availability"):
-                self._availability_persistence = Plugins._load_module("dynreact.availability", self._config.availability_persistence, self._profile,
-                                                                      PlantAvailabilityPersistence, site, do_raise=True)
-            elif self._config.availability_persistence.startswith("default+file:"):
+            if self._config.availability_persistence.startswith("default+file:"):
                 self._availability_persistence = FileAvailabilityPersistence(self._config.availability_persistence, site)
             else:
-                self._availability_persistence = Plugins._load_module("dynreact.availability", self._config.availability_persistence, None,
+                self._availability_persistence = Plugins._load_module("dynreact.availability", self._config.availability_persistence, self._profile,
                                                                       PlantAvailabilityPersistence, site, do_raise=True)
         return self._availability_persistence
 
     def get_aggregation_persistence(self) -> AggregationPersistence:
         if self._aggregation_persistence is None:
             #site = self.get_config_provider().site_config()
-            if self._profile_module_exists("dynreact.aggregation"):
-                self._aggregation_persistence = Plugins._load_module("dynreact.aggregation", self._config.aggregation_persistence, self._profile,
-                                                                 AggregationPersistence, self._config.aggregation_persistence, do_raise=True)
-            elif self._config.aggregation_persistence.startswith("default+file:"):
+            if self._config.aggregation_persistence.startswith("default+file:"):
                 self._aggregation_persistence = FileAggregationPersistence(self._config.aggregation_persistence)
             else:
-                self._aggregation_persistence = Plugins._load_module("dynreact.aggregation", self._config.aggregation_persistence, None,
+                self._aggregation_persistence = Plugins._load_module("dynreact.aggregation", self._config.aggregation_persistence, self._profile,
                                                                  AggregationPersistence, self._config.aggregation_persistence, do_raise=True)
         return self._aggregation_persistence
 
@@ -168,12 +151,10 @@ class Plugins:
             sinks = {}
             permissions = self.get_permission_manager()
             for sink_config in self._config.lot_sinks:
-                if self._profile_module_exists("dynreact.lotsink"):
-                    sink = Plugins._load_module("dynreact.lotsink", sink_config, self._profile, LotSink, site, permissions)
-                elif sink_config.startswith("default+file:"):
+                if sink_config.startswith("default+file:"):
                     sink = FileLotSink(sink_config, site, permissions)
                 else:
-                    sink = Plugins._load_module("dynreact.lotsink", sink_config, None, LotSink, site, permissions)
+                    sink = Plugins._load_module("dynreact.lotsink", sink_config, self._profile, LotSink, site, permissions)
                 if sink is not None:
                     sinks[sink.id()] = sink
             self._lot_sinks = sinks
@@ -202,6 +183,14 @@ class Plugins:
             self._plant_performance_models = [Plugins._load_plant_performance_model(config, site) for
                                 config in self._config.plant_performance_models] if self._config.plant_performance_models is not None else []
         return self._plant_performance_models
+
+    def load_short_term_planning(self):
+        uri = self._config.short_term_planning
+        profile = (self._config.profile or "").strip().lower()
+        from dynreact.shortterm.ShortTermPlanning import ShortTermPlanning
+        if uri.startswith("default+file:"):
+            return ShortTermPlanning(uri)
+        return Plugins._load_module("dynreact.shortterm", uri, profile if profile != "" else None, ShortTermPlanning, do_raise=True)
 
     def load_stp_page(self):
         stp = self._config.stp_frontend
@@ -269,10 +258,10 @@ class Plugins:
             explicit_ref = provider_url[provider_url.index(":") + 1:] if separator < 0 else provider_url[provider_url.index(":") + 1:separator]
             module, explicit_class_name = resolve_explicit_reference(explicit_ref)
             provider_url = None if separator < 0 else provider_url[separator + 1:]
-        elif profile is not None and module_exists(f"{base_module}.{profile}"):
+        elif profile is not None:
             module = f"{base_module}.{profile}"
-        else:
-            module = base_module
+        if module is None:
+            raise Exception(f"Module not specified for {clzz}, provider url {provider_url}, profile: {profile}.")
         try:
             return instantiate_first_matching(
                 module,

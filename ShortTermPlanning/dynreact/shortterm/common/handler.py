@@ -57,6 +57,7 @@ class DockerManager:
                 inherited_env_keys = (
                     "CONTAINER_NAME_PREFIX",
                     "DOCKER_NETWORK",
+                    "IMAGE_NAME",
                     "IMAGE_TAG",
                     "KAFKA_IP",
                     "LOCAL_REGISTRY",
@@ -82,7 +83,7 @@ class DockerManager:
                     self.clean_container(name)
 
                 run_kwargs = dict(
-                    image=f"{os.environ.get('LOCAL_REGISTRY', '')}dynreact-shortterm:{os.environ.get('IMAGE_TAG', 'latest')}",
+                    image=f"{os.environ.get('LOCAL_REGISTRY', '')}{os.environ.get('IMAGE_NAME', 'dynreact-oss-shortterm')}:{os.environ.get('IMAGE_TAG', 'latest')}",
                     name=name,
                     detach=True,
                     auto_remove=auto_remove,

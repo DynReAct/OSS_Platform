@@ -219,8 +219,11 @@ class LotsBatchOptimizationJob:
                 if final_total_production <= 0:  # process already covered completely
                     continue
                 # eligible_orders: list[str] = self._snapshot_provider.eligible_orders(snap, proc.process, process_period, method=method)
-                fixed_transport_duration = timedelta(hours=4)
-                transport_times = lambda eq1, eq2: fixed_transport_duration    # TODO configurable transport times
+                if site.transport_times is None:
+                    fixed_transport_duration = timedelta(hours=8)
+                    transport_times = lambda eq1, eq2: fixed_transport_duration
+                else:
+                    transport_times = site.transport_times.transport_times
                 if initial_solutions is not None and proc.process in initial_solutions:
                     initial_solution = initial_solutions[proc.process]
                     eligible_orders: list[str] = list(initial_solution.order_assignments.keys())

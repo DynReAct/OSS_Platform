@@ -150,3 +150,7 @@
     font-weight: bold;
     color: rgba(2, 69, 17, 1);;
 }
+
+.ltp-stg-level-abs {
+    max-width: 6em;
+}

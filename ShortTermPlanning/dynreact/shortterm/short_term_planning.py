@@ -109,7 +109,9 @@ def genauction(act: str = None) -> str:
     if act is None:
         act = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
 
-    return 'DynReact-' + act
+    topic_prefix = os.environ.get("KAFKA_TOPIC_PREFIX", "Dynreact_OSS")
+
+    return f"{topic_prefix}-" + act
 
 def run_general_agents(producer: Producer, gagents: str, verbose: int):
     """

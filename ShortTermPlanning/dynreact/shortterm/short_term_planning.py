@@ -498,6 +498,54 @@ def ask_results(
     return dict()
 
 
+def normalize_auction_results(results: dict) -> dict:
+    """
+    Compact auction results to one entry per order and equipment.
+
+    Multiple materials can belong to the same order and trigger repeated
+    confirmations across rounds. The external auction result is expected to
+    represent unique orders per equipment, so we keep the most recent entry
+    for each order id within every equipment bucket.
+    """
+    normalized_results = {}
+
+    for equipment, assignments in results.items():
+        if not isinstance(assignments, list):
+            normalized_results[equipment] = assignments
+            continue
+
+        latest_assignment_by_order = {}
+        assignment_order = []
+
+        for assignment in assignments:
+            if not isinstance(assignment, dict):
+                continue
+
+            order_id = assignment.get("id")
+            if order_id is None:
+                continue
+
+            if order_id not in latest_assignment_by_order:
+                assignment_order.append(order_id)
+                latest_assignment_by_order[order_id] = assignment
+                continue
+
+            previous_assignment = latest_assignment_by_order[order_id]
+            previous_round = int(previous_assignment.get("round", -1))
+            current_round = int(assignment.get("round", -1))
+
+            if current_round >= previous_round:
+                latest_assignment_by_order[order_id] = assignment
+
+        normalized_results[equipment] = [
+            latest_assignment_by_order[order_id]
+            for order_id in assignment_order
+            if order_id in latest_assignment_by_order
+        ]
+
+    return normalized_results
+
+
 def sleep(seconds: float, producer: Producer, verbose: int):
     """
     Sleep for the specified number of seconds and notify the general LOG about it.
@@ -699,6 +747,7 @@ def execute_short_term_planning(args: dict):
             start_auction(topic=act, consumer=consumer, producer=producer, verbose=verbose, num_agents=n_agents)
             sleep(KeySearch.search_for_value("AUCTION_WAIT"), producer=producer, verbose=verbose)
             results = ask_results(topic=act, producer=producer, consumer=consumer, verbose=verbose)
+            results = normalize_auction_results(results)
             if verbose > 0:
                 print("---- RESULTS ----")
                 print(results)

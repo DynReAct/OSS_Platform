@@ -64,6 +64,8 @@ class DynReActSrvConfig:
     # where the first component identifies a class name (sub class of PlantPerformanceModel) and uri may contain
     # model-specific initialization data
     plant_performance_models: list[str]|None = None
+    energy_provider: str|None = None
+    "Optional energy analysis provider. Example values: `http:http://host:5028`, `http://host:5028`, `file:./data/energy_context.json`."
     stp_frontend: str = "default"  # default is the frontend provided in this module
     profile: str|None = None
     "Optional profile name for loading of custom components. If unset, DynReAct uses the base OSS/default loading path. Can be overwritten for individual components."
@@ -101,6 +103,7 @@ class DynReActSrvConfig:
                  ldap_use_ssl: bool|None = None,
                  ldap_permissions: dict[str, str]|None=None,
                  plant_performance_models: list[str]|None = None,
+                 energy_provider: str|None = None,
                  stp_frontend: str|None = None,
                  time_zone: str | None = None,
                  profile: str|None = None
@@ -236,6 +239,9 @@ class DynReActSrvConfig:
                 idx += 1
         if len(plant_performance_models) > 0:
             self.plant_performance_models = plant_performance_models
+        if energy_provider is None:
+            energy_provider = os.getenv("DYNREACT_ENERGY", DynReActSrvConfig.energy_provider)
+        self.energy_provider = energy_provider
         if stp_frontend is None:
             stp_frontend = os.getenv("STP_FRONTEND", DynReActSrvConfig.stp_frontend)
         self.stp_frontend = stp_frontend

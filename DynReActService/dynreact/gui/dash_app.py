@@ -108,8 +108,15 @@ def layout(*args, **kwargs):
             dcc.Link("Short term planning", id="menu-agents_header", className="menu-link login-required",
                      href="/dash/stp", title="Open short term planning tab"),
             snapshot_link,
-            dcc.Link("Performance models", id="menu-perf_header", className="menu-link login-required",
-                     href="/dash/perfmodels", title="Open plant performance models tab"),
+            html.Div([
+                html.Div([
+                    html.Div("Performance models", id="menu-perf_header"),
+                    html.Div([
+                        dcc.Link("Quality", id="menu-perf-quality_header", className="menu-link", href="/dash/perfmodels", title="Open quality performance models tab"),
+                        dcc.Link("Energy", id="menu-perf-energy_header", className="menu-link", href="/dash/perfmodels/energy", title="Open energy performance models tab"),
+                    ], className="submenu-content")
+                ]),
+            ], className="menu-link login-required", title="Open plant performance models tabs"),
             html.Div(id="menu-user_header"),
             html.Div([
                 html.Img(src="/dash/assets/icons/globe.svg", role="img"),

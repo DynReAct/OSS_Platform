@@ -58,6 +58,16 @@ Environment variables can be configured via a *.env* file in this folder. See [a
 
 Profile-based loading uses `DYNREACT_PROFILE`. If it is unset, DynReAct stays on the base OSS/default loading path.
 
+The energy analysis page can be configured independently via `DYNREACT_ENERGY`. Supported values are:
+
+```text
+DYNREACT_ENERGY=http:http://192.168.111.11:5028
+DYNREACT_ENERGY=http://192.168.111.11:5028
+DYNREACT_ENERGY=file:./data/energy_context.json
+```
+
+The `http` backend delegates the calculation to an external service. The `file` backend evaluates local formulas from `data/energy_context.json`.
+
 Furthermore, the *data* subfolder contains site configuration [site.json](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/data/site.json) and [snapshot data](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/data/snapshot_2024-12-31T00_00.csv).
 
 ## Run

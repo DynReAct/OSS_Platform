@@ -141,7 +141,7 @@ class ProfileLoaderTest(unittest.TestCase):
     def test_missing_profile_module_raises_instead_of_falling_back(self):
         cfg = DynReActSrvConfig(
             config_provider="test",
-            profile="ras",
+            profile="missing_profile",
             shifts_provider=None,
         )
         plugins = Plugins(cfg)

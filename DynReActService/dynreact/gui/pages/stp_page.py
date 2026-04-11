@@ -17,6 +17,11 @@ from dynreact.app import state
 
 dash.register_page(__name__, path="/stp")
 
+# Preload the configured STP frontend once during page module import so any
+# callbacks declared in that module are registered before Dash serves
+# `/_dash-dependencies`.
+state.get_stp_page()
+
 
 def layout(*args, **kwargs):
     pg = state.get_stp_page()

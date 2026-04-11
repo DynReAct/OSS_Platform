@@ -50,7 +50,7 @@ transfer-lot = "dynreact.cli:transfer_lot"
 
 # See https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#setuptools-specific-configuration
 [tool.setuptools]
-packages = ["dynreact", "dynreact.auth", "dynreact.service", "dynreact.gui", "dynreact.gui.pages"]
+packages = ["dynreact", "dynreact.auth", "dynreact.cost", "dynreact.service", "dynreact.gui", "dynreact.gui.pages"]
 # JOM addin 20241101 # TODO
 #packages = ["dynreact", "dynreact.auth", "dynreact.service", "dynreact.gui", "dynreact.gui.pages", "dynreact.gui.pages.auction"]
 package-dir = {"" = "."}
@@ -61,4 +61,3 @@ dependencies = {file = ["requirements.txt"]}
 
 [tool.setuptools.dynamic.optional-dependencies]
 dev = {file = ["requirements-dev.txt"]}
-

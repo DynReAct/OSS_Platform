@@ -13,14 +13,20 @@ from typing import Callable
 import dash
 from dash import html
 
-from dynreact.app import state
+from dynreact.app import config, state
 
 dash.register_page(__name__, path="/stp")
 
 # Preload the configured STP frontend once during page module import so any
 # callbacks declared in that module are registered before Dash serves
 # `/_dash-dependencies`.
-state.get_stp_page()
+#
+# The legacy OSS frontend `default` imports `dynreact.gui.dash_app.app`, so
+# preloading it here would create a circular import while `dash_app` is still
+# being initialized. Custom/profile-specific frontends do not have that
+# dependency and benefit from eager callback registration.
+if config.stp_frontend and config.stp_frontend != "default":
+    state.get_stp_page()
 
 
 def layout(*args, **kwargs):

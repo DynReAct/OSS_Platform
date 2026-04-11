@@ -2,8 +2,12 @@ import sys
 import types
 import unittest
 from contextlib import contextmanager
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
 
+import dash
 from dynreact.app_config import DynReActSrvConfig
+from dynreact.base.CostProvider import CostProvider
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.model import Site
 from dynreact.base.ShiftsProvider import ShiftsProvider
@@ -52,6 +56,14 @@ class _PackageSnapshotProvider(SnapshotProvider):
 class _ProfileShiftsProvider(ShiftsProvider):
 
     def __init__(self, provider_url: str | None, site: Site):
+        self.provider_url = provider_url
+        self.site = site
+
+
+class _ProfileCostProvider(CostProvider):
+
+    def __init__(self, provider_url: str | None, site: Site):
+        super().__init__(provider_url, site)
         self.provider_url = provider_url
         self.site = site
 
@@ -164,6 +176,23 @@ class ProfileLoaderTest(unittest.TestCase):
         self.assertIsInstance(provider, _ProfileShiftsProvider)
         self.assertIsNone(provider.provider_url)
 
+    def test_profile_cost_provider_is_used_for_oss(self):
+        module = types.ModuleType("dynreact.cost.oss")
+        module.OssCostProvider = _ProfileCostProvider
+        cfg = DynReActSrvConfig(
+            config_provider="test",
+            cost_provider="oss:costs",
+            profile="oss",
+        )
+        plugins = Plugins(cfg)
+        plugins.get_config_provider = lambda: types.SimpleNamespace(
+            site_config=lambda: Site(processes=[], equipment=[], storages=[], material_categories=[])
+        )
+        with patched_modules(("dynreact.cost.oss", module)):
+            provider = plugins.get_cost_provider()
+        self.assertIsInstance(provider, _ProfileCostProvider)
+        self.assertEqual(provider.provider_url, "oss:costs")
+
     def test_state_short_term_profile_no_longer_depends_on_container(self):
         shortterm_package, shortterm_base_module, ShortTermPlanning = build_short_term_modules()
         common_module = types.ModuleType("dynreact.shortterm.common")
@@ -229,6 +258,46 @@ class ProfileLoaderTest(unittest.TestCase):
                 state = DynReActSrvState(cfg, Plugins(cfg))
                 params = state.get_stp_config_params()
         self.assertEqual(params["uri"], "default+file:./stp.json")
+
+    def test_stp_page_does_not_preload_default_frontend(self):
+        calls = {"count": 0}
+        fake_state = types.SimpleNamespace(get_stp_page=lambda: calls.__setitem__("count", calls["count"] + 1))
+        fake_config = types.SimpleNamespace(stp_frontend="default")
+        module_path = Path(__file__).resolve().parents[2] / "dynreact" / "gui" / "pages" / "stp_page.py"
+        spec = spec_from_file_location("test_stp_page_default", module_path)
+        self.assertIsNotNone(spec)
+        module = module_from_spec(spec)
+        fake_app = types.ModuleType("dynreact.app")
+        fake_app.state = fake_state
+        fake_app.config = fake_config
+        original_register_page = dash.register_page
+        dash.register_page = lambda *args, **kwargs: None
+        try:
+            with patched_modules(("dynreact.app", fake_app)):
+                spec.loader.exec_module(module)
+        finally:
+            dash.register_page = original_register_page
+        self.assertEqual(calls["count"], 0)
+
+    def test_stp_page_preloads_custom_frontend(self):
+        calls = {"count": 0}
+        fake_state = types.SimpleNamespace(get_stp_page=lambda: calls.__setitem__("count", calls["count"] + 1))
+        fake_config = types.SimpleNamespace(stp_frontend="dynreact.stp_gui_ras.agentPageRas")
+        module_path = Path(__file__).resolve().parents[2] / "dynreact" / "gui" / "pages" / "stp_page.py"
+        spec = spec_from_file_location("test_stp_page_custom", module_path)
+        self.assertIsNotNone(spec)
+        module = module_from_spec(spec)
+        fake_app = types.ModuleType("dynreact.app")
+        fake_app.state = fake_state
+        fake_app.config = fake_config
+        original_register_page = dash.register_page
+        dash.register_page = lambda *args, **kwargs: None
+        try:
+            with patched_modules(("dynreact.app", fake_app)):
+                spec.loader.exec_module(module)
+        finally:
+            dash.register_page = original_register_page
+        self.assertEqual(calls["count"], 1)
 
 
 if __name__ == "__main__":

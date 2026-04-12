@@ -64,8 +64,8 @@ class DynReActSrvConfig:
     # where the first component identifies a class name (sub class of PlantPerformanceModel) and uri may contain
     # model-specific initialization data
     plant_performance_models: list[str]|None = None
-    energy_provider: str|None = None
-    "Optional energy analysis provider. Example values: `http:http://host:5028`, `http://host:5028`, `file:./data/energy_context.json`."
+    energy_provider: str|None = "default+file:./data/energy_context.json"
+    "Optional energy analysis provider. Preferred values: `default+file:./data/energy_context.json` or `ras+file:./data/context/energy_context.json`."
     stp_frontend: str = "default"  # default is the frontend provided in this module
     profile: str|None = None
     "Optional profile name for loading of custom components. If unset, DynReAct uses the base OSS/default loading path. Can be overwritten for individual components."

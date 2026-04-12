@@ -61,12 +61,17 @@ Profile-based loading uses `DYNREACT_PROFILE`. If it is unset, DynReAct stays on
 The energy analysis page can be configured independently via `DYNREACT_ENERGY`. Supported values are:
 
 ```text
-DYNREACT_ENERGY=http:http://192.168.111.11:5028
-DYNREACT_ENERGY=http://192.168.111.11:5028
-DYNREACT_ENERGY=file:./data/energy_context.json
+DYNREACT_ENERGY=default+file:./data/energy_context.json
+DYNREACT_ENERGY=ras+file:./data/context/energy_context.json
 ```
 
-The `http` backend delegates the calculation to an external service. The `file` backend evaluates local formulas from `data/energy_context.json`.
+The selected JSON file defines the energy backend. The context can be structured in blocks such as `http` and `energy_functions`. The OSS context evaluates local formulas from `data/energy_context.json`, while the RAS context delegates the calculation to an external HTTP service configured in `data/context/energy_context.json`.
+
+If the HTTP backend needs authentication, define the token separately in the environment:
+
+```text
+DYNREACT_ENERGY_HTTP_TOKEN=...
+```
 
 Furthermore, the *data* subfolder contains site configuration [site.json](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/data/site.json) and [snapshot data](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/data/snapshot_2024-12-31T00_00.csv).
 

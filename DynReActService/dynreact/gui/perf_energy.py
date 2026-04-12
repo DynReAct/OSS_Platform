@@ -1,16 +1,20 @@
 """Configurable energy analysis page.
 
-The energy page supports two providers selected through the
-`DYNREACT_ENERGY` configuration:
+The energy page is selected through the `DYNREACT_ENERGY` configuration.
+Recommended values follow the standard DynReAct file-provider style:
 
-- `http:http://host:port` or a plain `http://...` URL for an external service.
-- `file:./data/energy_context.json` for a local formula-based evaluator.
+- `default+file:./data/energy_context.json` for the local OSS evaluator.
+- `ras+file:./data/context/energy_context.json` for the RAS HTTP-backed evaluator.
+
+Legacy values such as `http:http://host:port` or `file:./data/energy_context.json`
+are still accepted for backwards compatibility.
 """
 
 from __future__ import annotations
 
 import json
 import math
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -28,14 +32,6 @@ try:
     from dynreact.snapshot.ras import RasSnapshotProvider
 except Exception:
     RasSnapshotProvider = None
-
-
-DEFAULT_HTTP_URL = "http://192.168.111.11:5028"
-DEFAULT_HTTP_TOKEN = "7c99bacffbb3fcdcd600013ae8f3189ec67d07137fc6eb542d4ef3f5dbc75712"
-DEFAULT_HTTP_REGION = "DE"
-DEFAULT_HTTP_TIMEOUT = 20.0
-DEFAULT_FILE_PATH = "./data/energy_context.json"
-
 
 @dataclass(frozen=True)
 class ScheduledCoil:
@@ -101,28 +97,34 @@ class EnergyBackend:
 class HttpEnergyBackend(EnergyBackend):
     """Backend that delegates the analysis to the external FastAPI service."""
 
-    SUPPORTED = {
-        "TDS01": {"service_equipment": "TD1", "lot_prefix": "TD", "performance_column": "TDS01-Performance (t/h)"},
-        "TDS02": {"service_equipment": "TD2", "lot_prefix": "TD", "performance_column": "TDS02-Performance (t/h)"},
-        "VEA09": {"service_equipment": "VA09", "lot_prefix": "VEA", "performance_column": "VEA09-Performance (t/h)"},
-    }
-
-    def __init__(self, base_url: str) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        region: str,
+        timeout: float,
+        token: str | None = None,
+        equipment: dict[str, dict[str, str]] | None = None,
+    ) -> None:
         self._base_url = base_url.rstrip("/")
-        self._region = DEFAULT_HTTP_REGION
+        self._region = region
+        self._timeout = timeout
+        self._supported = equipment or {}
         self._session = requests.Session()
-        self._session.headers.update({"X-Token": DEFAULT_HTTP_TOKEN, "accept": "application/json"})
+        self._session.headers.update({"accept": "application/json"})
+        if token:
+            self._session.headers["X-Token"] = token
 
     def available_equipment(self) -> list[dict[str, str]]:
         site_names = {eq.name_short for eq in state.get_site().get_process_all_equipment()}
-        return [{"label": eq, "value": eq} for eq in self.SUPPORTED if eq in site_names]
+        return [{"label": eq, "value": eq} for eq in self._supported if eq in site_names]
 
     def analyse(self, equipment_names: list[str], start_time: datetime, end_time: datetime) -> tuple[list[dict[str, Any]], str]:
         provider = state.get_snapshot_provider()
         if RasSnapshotProvider is None or not isinstance(provider, RasSnapshotProvider):
             raise ValueError("The HTTP energy backend currently requires the RAS snapshot provider.")
         rows = provider.get_snapshot_rows()
-        selected = {eq: self.SUPPORTED[eq] for eq in equipment_names if eq in self.SUPPORTED}
+        selected = {eq: self._supported[eq] for eq in equipment_names if eq in self._supported}
         scheduled = self._scheduled_from_rows(rows, selected, start_time, end_time)
         if len(scheduled) == 0:
             return [], "No scheduled coils were found for the selected equipment and time window."
@@ -257,7 +259,7 @@ class HttpEnergyBackend(EnergyBackend):
         }
 
     def _post_json(self, path: str, params: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-        response = self._session.post(f"{self._base_url}{path}", params=params, json=payload, timeout=DEFAULT_HTTP_TIMEOUT)
+        response = self._session.post(f"{self._base_url}{path}", params=params, json=payload, timeout=self._timeout)
         response.raise_for_status()
         data = response.json()
         return data if isinstance(data, dict) else {}
@@ -271,7 +273,7 @@ class FileEnergyBackend(EnergyBackend):
         if not self._path.is_absolute():
             self._path = (Path.cwd() / self._path).resolve()
         with self._path.open("r", encoding="utf-8") as handle:
-            self._context = json.load(handle)
+            self._context = _normalize_energy_context(json.load(handle))
 
     def available_equipment(self) -> list[dict[str, str]]:
         equipment_cfg = self._context.get("equipment") or {}
@@ -442,22 +444,97 @@ def _file_eval_context(item: ScheduledCoil, equipment_cfg: dict[str, Any]) -> di
 
 def _energy_source() -> str:
     """Return the configured energy provider URI."""
-    if config.energy_provider:
-        return config.energy_provider
-    return f"http:{DEFAULT_HTTP_URL}" if (config.profile or "").strip().lower() == "ras" else f"file:{DEFAULT_FILE_PATH}"
+    provider = (config.energy_provider or "").strip()
+    if provider == "":
+        raise ValueError("DYNREACT_ENERGY is not configured.")
+    return provider
+
+
+def _provider_file_path(provider: str) -> Path | None:
+    """Resolve one file-backed provider URI to an absolute path."""
+    if provider.startswith("default+file:"):
+        provider = provider[len("default+file:"):]
+    elif provider.startswith("ras+file:"):
+        provider = provider[len("ras+file:"):]
+    elif provider.startswith("file:"):
+        provider = provider[len("file:"):]
+    else:
+        return None
+    path = Path(provider)
+    if not path.is_absolute():
+        path = (Path.cwd() / path).resolve()
+    return path
+
+
+def _resolve_http_token(http_cfg: dict[str, Any]) -> str | None:
+    """Resolve the HTTP token, preferably from the environment."""
+    token = http_cfg.get("token")
+    if token:
+        return str(token)
+    token_env = str(http_cfg.get("token_env") or "DYNREACT_ENERGY_HTTP_TOKEN").strip()
+    return os.getenv(token_env)
+
+
+def _build_http_backend(http_cfg: dict[str, Any]) -> HttpEnergyBackend:
+    """Instantiate the HTTP backend from one JSON config block."""
+    base_url = str(http_cfg.get("base_url") or "").strip()
+    if base_url == "":
+        raise ValueError("Energy HTTP configuration is missing `base_url`.")
+    equipment = http_cfg.get("equipment")
+    if not isinstance(equipment, dict) or len(equipment) == 0:
+        raise ValueError("Energy HTTP configuration is missing `equipment` mappings.")
+    return HttpEnergyBackend(
+        base_url,
+        region=str(http_cfg.get("region") or "DE"),
+        timeout=float(http_cfg.get("timeout", 20.0)),
+        token=_resolve_http_token(http_cfg),
+        equipment=equipment,
+    )
+
+
+def _normalize_energy_context(context: dict[str, Any]) -> dict[str, Any]:
+    """Normalize legacy and structured energy context layouts."""
+    normalized = dict(context)
+    functions_cfg = normalized.get("energy_functions")
+    if isinstance(functions_cfg, dict):
+        normalized["defaults"] = functions_cfg.get("defaults", normalized.get("defaults") or {})
+        normalized["equipment"] = functions_cfg.get("equipment", normalized.get("equipment") or {})
+    return normalized
+
+
+def _build_backend_from_context(path: Path, context: dict[str, Any]) -> EnergyBackend:
+    """Instantiate one backend from a JSON energy context file."""
+    normalized = _normalize_energy_context(context)
+    provider_type = str(normalized.get("provider") or "file").strip().lower()
+    if provider_type == "file":
+        return FileEnergyBackend(str(path))
+    if provider_type == "http":
+        http_cfg = normalized.get("http") if isinstance(normalized.get("http"), dict) else normalized
+        return _build_http_backend(http_cfg)
+    raise ValueError(f"Unsupported energy context provider `{provider_type}` in {path}.")
 
 
 def _build_backend() -> EnergyBackend:
     """Instantiate the configured backend."""
     provider = _energy_source().strip()
-    if provider.startswith("file:"):
-        return FileEnergyBackend(provider[len("file:"):])
+    file_path = _provider_file_path(provider)
+    if file_path is not None:
+        with file_path.open("r", encoding="utf-8") as handle:
+            context = json.load(handle)
+        return _build_backend_from_context(file_path, context)
+    if provider.endswith(".json") or provider.startswith("./") or provider.startswith("../") or provider.startswith("/"):
+        path = Path(provider)
+        if not path.is_absolute():
+            path = (Path.cwd() / path).resolve()
+        with path.open("r", encoding="utf-8") as handle:
+            context = json.load(handle)
+        return _build_backend_from_context(path, context)
     if provider.startswith("http://") or provider.startswith("https://"):
-        return HttpEnergyBackend(provider)
+        return HttpEnergyBackend(provider, region="DE", timeout=20.0, token=os.getenv("DYNREACT_ENERGY_HTTP_TOKEN"))
     if provider.startswith("http:") and not provider.startswith("http://"):
-        return HttpEnergyBackend(provider[len("http:"):])
+        return HttpEnergyBackend(provider[len("http:"):], region="DE", timeout=20.0, token=os.getenv("DYNREACT_ENERGY_HTTP_TOKEN"))
     if provider.startswith("https:") and not provider.startswith("https://"):
-        return HttpEnergyBackend(provider[len("https:"):])
+        return HttpEnergyBackend(provider[len("https:"):], region="DE", timeout=20.0, token=os.getenv("DYNREACT_ENERGY_HTTP_TOKEN"))
     raise ValueError(f"Unsupported DYNREACT_ENERGY value: {provider}")
 
 
@@ -538,7 +615,7 @@ def layout(*args: Any, **kwargs: Any) -> html.Div:
             dcc.ConfirmDialog(id="perf-energy-validation-dialog"),
             html.H1("Energy"),
             html.H2(f"Snapshot: {snapshot_label}"),
-            html.Div([html.Div("Configured source", style={"fontWeight": "bold"}), html.Div(_energy_source(), id="perf-energy-source")], style={"marginBottom": "1rem"}),
+            # html.Div([html.Div("Configured source", style={"fontWeight": "bold"}), html.Div(_energy_source(), id="perf-energy-source")], style={"marginBottom": "1rem"}),
             html.Div([html.Div("Supported equipment", style={"fontWeight": "bold", "marginBottom": "0.5rem"}), dcc.Checklist(id="perf-energy-equipment-checklist", options=_backend.available_equipment(), value=[], inline=True, inputStyle={"marginRight": "0.35rem", "marginLeft": "0.75rem"})], style={"marginBottom": "1rem"}),
             html.Div(
                 [

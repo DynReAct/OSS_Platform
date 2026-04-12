@@ -193,6 +193,21 @@ class ProfileLoaderTest(unittest.TestCase):
         self.assertIsInstance(provider, _ProfileCostProvider)
         self.assertEqual(provider.provider_url, "oss:costs")
 
+    def test_real_oss_cost_provider_module_is_loadable(self):
+        cfg = DynReActSrvConfig(
+            config_provider="test",
+            cost_provider="oss:costs",
+            profile="oss",
+        )
+        plugins = Plugins(cfg)
+        plugins.get_config_provider = lambda: types.SimpleNamespace(
+            site_config=lambda: Site(processes=[], equipment=[], storages=[], material_categories=[])
+        )
+        provider = plugins.get_cost_provider()
+        self.assertEqual(type(provider).__module__, "dynreact.cost.oss")
+        self.assertEqual(type(provider).__name__, "OssCostProvider")
+        self.assertEqual(provider._url, "oss:costs")
+
     def test_state_short_term_profile_no_longer_depends_on_container(self):
         shortterm_package, shortterm_base_module, ShortTermPlanning = build_short_term_modules()
         common_module = types.ModuleType("dynreact.shortterm.common")

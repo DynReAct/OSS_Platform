@@ -65,6 +65,7 @@ class DockerManager:
                     "PERF_URL",
                     "REST_URL",
                     "SNAPSHOT_VERSION",
+                    "TRANSPORT_TIMES_URL",
                 )
 
                 for key in inherited_env_keys:

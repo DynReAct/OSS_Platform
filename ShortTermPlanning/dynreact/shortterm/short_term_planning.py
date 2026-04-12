@@ -178,7 +178,7 @@ def create_auction(
     """
 
     topic_gen = KeySearch.search_for_value("TOPIC_GEN")
-    perf_url = KeySearch.search_for_value("PERF_URL")
+    transport_times_url = KeySearch.search_for_value("TRANSPORT_TIMES_URL")
 
     if nmaterials is not None and materials is not None:
         dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
@@ -290,7 +290,7 @@ def create_auction(
     all_materials = list(set(all_materials))
     print("Final material list size is {}".format(len(all_materials)))
 
-    transport_times = get_transport_times(perf_url)
+    transport_times = get_transport_times(transport_times_url)
     print(f"Transport times: {transport_times}")
 
     # Clone the master MATERIAL for each material ID

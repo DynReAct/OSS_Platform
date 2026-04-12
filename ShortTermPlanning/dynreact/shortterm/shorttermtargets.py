@@ -24,6 +24,7 @@ class ShortTermTargets(BaseModel):
         REST_URL: REST API URL
         VB: verbosity level
         PERF_URL: REST API PERF URL  (http://192.168.110.68:5017)
+        TRANSPORT_TIMES_URL: transport times source
     """
 
     model_config = {
@@ -40,4 +41,5 @@ class ShortTermTargets(BaseModel):
     TableMappings: list[ColumnDefinitions] | None = Field(None, description="Column description recordset for RAS Auction")
     REST_URL: str | None = Field(None, description="REST API URL.")
     PERF_URL: str | None = Field(None, description="REST API PERF URL.")
+    TRANSPORT_TIMES_URL: str | None = Field(None, description="Transport times source URL.")
     VB: int | None = Field(None, description="Verbosity Levels [0=> Nothing ... ]")

@@ -514,11 +514,11 @@ def _build_backend_from_context(path: Path, context: dict[str, Any]) -> EnergyBa
     raise ValueError(f"Unsupported energy context provider `{provider_type}` in {path}.")
 
 
-def _build_backend() -> EnergyBackend:
+def _build_backend() -> EnergyBackend|None:
     """Instantiate the configured backend."""
     provider = _energy_source().strip()
     file_path = _provider_file_path(provider)
-    if file_path is not None:
+    if file_path is not None and os.path.isfile(file_path):
         with file_path.open("r", encoding="utf-8") as handle:
             context = json.load(handle)
         return _build_backend_from_context(file_path, context)
@@ -526,16 +526,18 @@ def _build_backend() -> EnergyBackend:
         path = Path(provider)
         if not path.is_absolute():
             path = (Path.cwd() / path).resolve()
-        with path.open("r", encoding="utf-8") as handle:
-            context = json.load(handle)
-        return _build_backend_from_context(path, context)
+        if os.path.isfile(path):
+            with path.open("r", encoding="utf-8") as handle:
+                context = json.load(handle)
+            return _build_backend_from_context(path, context)
     if provider.startswith("http://") or provider.startswith("https://"):
         return HttpEnergyBackend(provider, region="DE", timeout=20.0, token=os.getenv("DYNREACT_ENERGY_HTTP_TOKEN"))
     if provider.startswith("http:") and not provider.startswith("http://"):
         return HttpEnergyBackend(provider[len("http:"):], region="DE", timeout=20.0, token=os.getenv("DYNREACT_ENERGY_HTTP_TOKEN"))
     if provider.startswith("https:") and not provider.startswith("https://"):
         return HttpEnergyBackend(provider[len("https:"):], region="DE", timeout=20.0, token=os.getenv("DYNREACT_ENERGY_HTTP_TOKEN"))
-    raise ValueError(f"Unsupported DYNREACT_ENERGY value: {provider}")
+    # raise ValueError(f"Unsupported DYNREACT_ENERGY value: {provider}")
+    return None
 
 
 _backend = _build_backend()
@@ -606,7 +608,9 @@ def _build_figure(rows: list[dict[str, Any]], start_value: str, end_value: str) 
     return fig
 
 
-def layout(*args: Any, **kwargs: Any) -> html.Div:
+def layout(*args: Any, **kwargs: Any) -> html.Div|None:
+    if _backend is None:
+        return None
     """Render the energy page."""
     snapshot_id = state.get_snapshot_provider().current_snapshot_id()
     snapshot_label = snapshot_id.strftime("%Y-%m-%d %H:%M:%S %Z") if snapshot_id is not None else "None"

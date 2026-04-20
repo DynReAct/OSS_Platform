@@ -9,7 +9,7 @@ from typing_extensions import Any
 
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import LongTermTargets, EquipmentAvailability, StorageLevel, MidTermTargets
+from dynreact.base.model import LongTermTargets, EquipmentAvailability, StorageLevel, MidTermTargets, ProductionTargets
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
@@ -32,9 +32,11 @@ def layout(*args, **kwargs):
     initial_solution_id = None if selected is None else kwargs.get("solution")
     materials = [{"value": mat.id, "label": mat.name if mat.name is not None else mat.id, "selected": mat.id == selected_material} for mat in materials]
     anim_tab_active: bool = kwargs.get("tab") is not None and kwargs.get("tab").lower() in ("anim", "animation")
-    tabular_tab_active = not anim_tab_active
+    tabular_tab_active = not anim_tab_active and kwargs.get("tab") is not None and kwargs.get("tab").lower() in ("tab", "table")
+    overview_tab_active = not anim_tab_active and not tabular_tab_active
     tabular_tab_class = _tab_button_class(tabular_tab_active)
     anim_tab_class = _tab_button_class(anim_tab_active)
+    overview_tab_class = _tab_button_class(overview_tab_active)
     return html.Div([
         html.H1("Long term planning results", id="ltp_res-title"),
         html.Div([
@@ -72,6 +74,7 @@ def layout(*args, **kwargs):
         ),
         html.Div([
             html.Div([
+                html.Button("Overview", id="ltp_res-overview-btn", className=overview_tab_class, title="Overeview of the long-term planning results"),
                 html.Button("Table", id="ltp_res-tabular-btn", className=tabular_tab_class, title="Tabular view of the long-term planning results"),
                 html.Button("Animation", id="ltp_res-anim-btn", className=anim_tab_class, title="Animation of the long-term planning results"),
                 html.Div()
@@ -80,15 +83,27 @@ def layout(*args, **kwargs):
             html.Div([
                 _tabular_tab(not tabular_tab_active),
                 _anim_tab(not anim_tab_active),
+                _overview_tab(not overview_tab_active)
             ], className="ltp_res-tabs-container"),
         ], id="ltp_res-tabs-hider", hidden=True),
-        dcc.Store(id="ltp_res-active-tab", data="tabular" if tabular_tab_active else "anim", storage_type="memory"),  # either tabular or anim
+        dcc.Store(id="ltp_res-active-tab", data="tabular" if tabular_tab_active else "anim" if anim_tab_active else "overview", storage_type="memory"),  # either tabular or anim or overview
         dcc.Store(id="ltp_res-solutions"),              # array of json docs
         dcc.Store(id="ltp_res-selected-solution-id"),   # string
         dcc.Store(id="ltp_res-selected-solution"),      # json doc
         dcc.Store(id="ltp_res-initial_solution_id", data=initial_solution_id, storage_type="memory"),
+        dcc.Store(id="ltp_res_material_structure", storage_type="memory"),  #  # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
+        dcc.Store(id="ltp_res_material-setpoints", storage_type="memory"),  # dict[str, float]
         dcc.Store(id="ltp_res-client-init", storage_type="memory"),  # to ensure the selected ltp solution is transferred to the client before running any script there
    ])
+
+
+def _overview_tab(hidden: bool):
+    return html.Div([
+        html.H2("Material production"),
+        html.Div(id="ltp_res-structure-overview"),
+        html.H2("Equipment shifts"),
+        html.Div(id="ltp_res-equipment-shifts", className="ltp_res-plant-results"),
+    ], id="ltp_res-overview-tab", hidden=hidden)
 
 def _tabular_tab(hidden: bool):
     return html.Div([
@@ -150,21 +165,24 @@ def _anim_tab(hidden: bool):
 
 @callback(Output("ltp_res-active-tab", "data"),
           Input("ltp_res-tabular-btn", "n_clicks"),
-          Input("ltp_res-anim-btn", "n_clicks"))
-def set_active_tab(_, __) -> str|None:
+          Input("ltp_res-anim-btn", "n_clicks"),
+          Input("ltp_res-overview-btn", "n_clicks"))
+def set_active_tab(_, __, ___) -> str|None:
     if not dash_authenticated(config):
         return None
     changed_ids = GuiUtils.changed_ids()
-    return "tabular" if "ltp_res-tabular-btn" in changed_ids else "anim" if "ltp_res-anim-btn" in changed_ids else dash.no_update
+    return "tabular" if "ltp_res-tabular-btn" in changed_ids else "anim" if "ltp_res-anim-btn" in changed_ids else "overview" if "ltp_res-overview-btn" in changed_ids else dash.no_update
 
 
 @callback(Output("ltp_res-tabular-btn", "className"),
         Output("ltp_res-anim-btn", "className"),
+        Output("ltp_res-overview-btn", "className"),
         Input("ltp_res-active-tab", "data"))
-def highlight_active_tab(active_tab: Literal["tabular", "anim"]|None):
+def highlight_active_tab(active_tab: Literal["tabular", "anim", "overview"]|None):
     tab_selected: bool = active_tab == "tabular"
     anim_selected: bool = active_tab == "anim"
-    return _tab_button_class(tab_selected), _tab_button_class(anim_selected)
+    overview_selected: bool = active_tab == "overview"
+    return _tab_button_class(tab_selected), _tab_button_class(anim_selected), _tab_button_class(overview_selected)
 
 def _tab_button_class(selected: bool) -> str:
     name = "ltp_res-tab-button"
@@ -175,11 +193,12 @@ def _tab_button_class(selected: bool) -> str:
 @callback(
     Output("ltp_res-tabular-tab", "hidden"),
     Output("ltp_res-anim-tab", "hidden"),
+    Output("ltp_res-overview-tab", "hidden"),
     Input("ltp_res-active-tab", "data"))
-def apply_active_tab(active_tab: Literal["tabular", "anim"]|None):
+def apply_active_tab(active_tab: Literal["tabular", "anim", "overview"]|None):
     if not active_tab:
-        return True, True
-    return active_tab != "tabular", active_tab != "anim"
+        return True, True, True
+    return active_tab != "tabular", active_tab != "anim", active_tab != "overview"
 
 
 def get_date_range(start_date: date|None=None) -> tuple[date, date, list[date], date]:
@@ -333,6 +352,61 @@ def update_storages_table(solution: dict[str, Any], rel_abs: Literal["relative",
     # TODO final level
     return column_defs, row_data
 
+
+@callback(
+    Output("ltp_res_material_structure", "data"),
+    Output("ltp_res_material-setpoints", "data"),
+    Input("ltp_res-selected-solution", "data")
+)
+def update_solution_structure(solution: dict[str, Any]):
+    if solution is None or "storage_levels" not in solution or len(solution["storage_levels"]) == 0 or "DONE" not in solution["storage_levels"][-1]:
+        return None, None
+    prod_targets = solution["targets"]["production_targets"]
+    done_storage = solution["storage_levels"][-1]["DONE"]["material_levels"]
+    cats = state.get_site().material_categories
+    # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
+    json_result = {}
+    for cat in cats:
+        cat_obj = {"name": cat.name or cat.id, "classes": {}}
+        classes_obj = cat_obj["classes"]
+        for cl in cat.classes:
+            value = done_storage.get(cl.id, 0.)
+            if value != 0 and abs(value) < 1e-2:
+                value = 0
+            cl_obj = {"name": cl.name or cl.id, "weight": value}
+            classes_obj[cl.id] = cl_obj
+        json_result[cat.id] = cat_obj
+    return json_result, prod_targets
+
+
+@callback(
+    Output("ltp_res-equipment-shifts", "children"),
+    Input("ltp_res-selected-solution", "data")
+)
+def update_solution_shifts(solution: dict[str, Any]):
+    if solution is None or "targets" not in solution:
+        return None
+    prod_targets = solution["targets"]["production_sub_targets"]  # : dict[str, list[ProductionTargets]]
+    components = [html.Span("Equipment"), html.Span("Shifts"), html.Span("Production / kt"), html.Span()]
+    for eq in state.get_site().equipment:
+        proc = eq.process
+        components.append(html.Span(eq.name or eq.name_short or eq.id))
+        if proc not in prod_targets:
+            components.append(html.Span(""))
+            components.append(html.Span(""))
+            components.append(html.Span())
+            continue
+        process_targets = prod_targets[proc]  # list[ProductionTargets]
+        applicable_targets = [t for t in process_targets if str(eq.id) in t["target_weight"]]
+        num_shifts = sum(1 for targets in applicable_targets if targets["target_weight"][str(eq.id)]["total_weight"] >= 1e-2)
+        components.append(html.Span(str(num_shifts)))
+        total_prod = sum(targets["target_weight"][str(eq.id)]["total_weight"] for targets in applicable_targets) / 1_000
+        components.append(html.Span(f"{total_prod:.2f}"))
+        components.append(html.Span())
+    return components
+
+
+
 clientside_callback(
     ClientsideFunction(
         namespace="dynreact",
@@ -363,3 +437,15 @@ clientside_callback(
     Input("ltp_res-initial_solution_id", "data"),
     State("ltp_res-solutions-table", "id")
 )
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="lots2",
+        function_name="setBacklogStructureOverview"
+    ),
+    Output("ltp_res-structure-overview", "title"),
+    Input("ltp_res_material_structure", "data"),   # dict[str, dict[str, float]]
+    Input("ltp_res_material-setpoints", "data"),
+    State("ltp_res-structure-overview", "id"),
+)
+

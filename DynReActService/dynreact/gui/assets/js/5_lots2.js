@@ -56,7 +56,7 @@
         return "ltr";
     }
 
-    // used by lot creation page and lots planning page
+    // used by lot creation page, lots planning page and ltp results page
     globalThis.dash_clientside.lots2.setBacklogStructureOverview = function(weightAggregation, targetWeights, parentId) {
         const container = document.querySelector("#" + parentId);
          if (!globalThis.customElements.get(catAggregationWidgetTag))

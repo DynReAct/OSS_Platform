@@ -64,3 +64,9 @@
     margin-bottom: 15em;
 }
 
+.ltp_res-plant-results {
+    display: grid;
+    grid-template-columns: repeat(3, auto) 1fr;
+    column-gap: 1em;
+    row-gap: 0.5em;
+}

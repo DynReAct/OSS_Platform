@@ -59,7 +59,7 @@ def layout(*args, **kwargs):
     excluded_processes = [] if site.lot_creation is None or site.lot_creation.processes is None else \
             [proc for proc, config in site.lot_creation.processes.items() if config.plannable == False]
     procs = [p for p in site.processes if p.name_short not in excluded_processes]
-    snap = GuiUtils.format_snapshot(kwargs["snapshot"], None) if "snapshot" in kwargs else None
+    snap = GuiUtils.format_snapshot(kwargs["snapshot"], None, state=state) if "snapshot" in kwargs else None
     layout = html.Div([
         html.H1("Lot creation", id="lots2-title"),
         # ======= Top row: snapshot and process selector =========
@@ -505,11 +505,11 @@ def proc_changed2(process: str|None) -> str:
 
 
 @callback(Output("lots2-current_snapshot", "children"),
-          Input("selected-snapshot", "data"), #     selected-snapshot is a page-global store
-          Input("client-tz", "data"))  # client timezone, global store
-def snapshot_changed(snapshot: datetime|None, tz: str|None) -> str:
+          Input("selected-snapshot", "data")) #     selected-snapshot is a page-global store
+          # Input("client-tz", "data"))  # client timezone, global store
+def snapshot_changed(snapshot: datetime|None) -> str:  # , tz: str|None
     #snapshot = selected_snapshot.data if hasattr(selected_snapshot, "data") else snapshot
-    return GuiUtils.format_snapshot(snapshot, tz)
+    return GuiUtils.format_snapshot(snapshot, None, state=state)
 
 
 @callback(

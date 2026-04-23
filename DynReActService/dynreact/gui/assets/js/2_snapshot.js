@@ -47,10 +47,10 @@
                 }
                 dynreact._ltp = ltp;
                 return ltp?.id;
-            },
+            } /*,
             getTimezoneOffset: () => {
                 return Intl.DateTimeFormat().resolvedOptions().timeZone; // new Date().getTimezoneOffset();
-            }
+            } */
         }
     });
 

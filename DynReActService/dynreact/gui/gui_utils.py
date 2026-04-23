@@ -5,6 +5,7 @@ from dash import html, callback_context
 
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Equipment
+from dynreact.state import DynReActSrvState
 
 
 class GuiUtils:
@@ -27,13 +28,16 @@ class GuiUtils:
         return [cid for cid in (p['prop_id'].split(".")[0] for p in callback_context.triggered) if excluded_ids is None or cid not in excluded_ids]
 
     @staticmethod
-    def format_snapshot(snapshot: datetime|str|None, tz: str|None) -> str:
+    def format_snapshot(snapshot: datetime|str|None, tz: str|None, state: DynReActSrvState|None=None) -> str:
         snapshot = DatetimeUtils.parse_date(snapshot)
         if snapshot is None:
             return ""
-        zi = None
-        try:
-            zi = ZoneInfo(tz)
-        except:
-            pass
-        return DatetimeUtils.format(snapshot.astimezone(zi))
+        if tz is not None or state is None:
+            zi = None
+            try:
+                zi = ZoneInfo(tz)
+            except:
+                pass
+            return DatetimeUtils.format(snapshot.astimezone(zi))
+        return DatetimeUtils.format(state.as_timezone(snapshot))
+

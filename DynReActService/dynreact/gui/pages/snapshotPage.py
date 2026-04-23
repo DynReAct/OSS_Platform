@@ -110,22 +110,22 @@ def _material_overview(categories: list[MaterialCategory]):
     Output("snapshots-date-range", "start_date"),
     Output("snapshots-date-range", "end_date"),
     Output("snapshot-init-interval", "interval"),
-    Input("client-tz", "data"),  # client timezone, defined in dash_app
+    #Input("client-tz", "data"),  # client timezone, defined in dash_app
     Input("snapshot-init-interval", "n_intervals"),
     # this would best be an input, but we need to avoid the circular dependency, since it is updated by snapshots-selector.value
     State("selected-snapshot", "data")
 )
-def set_snapshot_options(tz: str|None, _, snapshot: str|None):
+def set_snapshot_options( _, snapshot: str|None):  # tz: str|None,
     if not dash_authenticated(config):
         return dash.no_update, dash.no_update,dash.no_update,dash.no_update, 30_000
     if snapshot is None:
         return dash.no_update, dash.no_update,dash.no_update,dash.no_update,dash.no_update
-    zi = None
-    try:
-        zi = ZoneInfo(tz)
-    except:
-        pass
-    start_date, end_date, snap_options, selected_snap = get_date_range(snapshot, zi=zi)
+    #zi = None
+    #try:
+    #    zi = ZoneInfo(tz)
+    #except:
+    #    pass
+    start_date, end_date, snap_options, selected_snap = get_date_range(snapshot)  #, zi=zi)
     return snap_options, selected_snap, start_date, end_date, 7_200_000
 
 

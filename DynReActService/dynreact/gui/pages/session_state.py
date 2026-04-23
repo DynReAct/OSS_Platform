@@ -8,6 +8,7 @@ from dynreact.auth.authentication import dash_authenticated
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 
 from dynreact.app import state, config
+from dynreact.gui.gui_utils import GuiUtils
 
 # Type: string ("en", "de")
 language = dcc.Store(id="lang", storage_type="local")
@@ -34,17 +35,18 @@ lotplanning_process_selector: dcc.Store = dcc.Store(id="lotplanning_process-sele
 # Type: str
 #selected_process = dcc.Store(id="selected-process", storage_type="session")
 
-def get_date_range(current_snapshot: str|datetime|None, zi: ZoneInfo|None = None) -> tuple[date, date, list[datetime], str]:  # list[options] not list[datetime]
+def get_date_range(current_snapshot: str|datetime|None, zi: ZoneInfo|None = None) -> tuple[date, date, list[dict], str]:  # list[options] not list[datetime]
     if not dash_authenticated(config):
         return None, None, [], None
     # 1) snapshot already selected
     current: datetime | None = DatetimeUtils.parse_date(current_snapshot)
+    current = state.as_timezone(current) if current is not None else None
     current_initial = current
     if current is None:
         # 3) use current snapshot
         current = state.get_snapshot_provider().current_snapshot_id()
     if current is None:  # should not really happen
-        now = DatetimeUtils.now().astimezone(zi)
+        now = state.as_timezone(DatetimeUtils.now())
         return (now - timedelta(days=30)).date(), (now + timedelta(days=1)).date(), [], None
     dates: list[datetime] = []
     cnt = 0
@@ -72,11 +74,13 @@ def get_date_range(current_snapshot: str|datetime|None, zi: ZoneInfo|None = None
         if distance < min_dist:
             to_be_selected = dt
             min_dist = distance
-    options = [{"label": DatetimeUtils.format(dt.astimezone(zi)), "value": DatetimeUtils.format(dt), "selected": selected} for dt, selected in ((d, d == to_be_selected) for d in dates)]
+    options = [{"label": DatetimeUtils.format(dt.astimezone(zi)) if zi is not None else GuiUtils.format_snapshot(dt, None, state=state),
+                "value": DatetimeUtils.format(dt.astimezone(zi)) if zi is not None else GuiUtils.format_snapshot(dt, None, state=state),
+                "selected": selected} for dt, selected in ((d, d == to_be_selected) for d in dates)]
     if len(options) == 1:
-        dt = dates[0].astimezone(zi).date()
-        return dt - timedelta(days=1), dt + timedelta(days=1), options, DatetimeUtils.format(to_be_selected)
-    return dates[-1].date(), dates[0].date(), options, DatetimeUtils.format(to_be_selected)
+        dt = dates[0].astimezone(zi).date() if zi is not None else state.as_timezone(dates[0]).date()
+        return dt - timedelta(days=1), dt + timedelta(days=1), options, DatetimeUtils.format(to_be_selected.astimezone(zi)) if zi is not None else GuiUtils.format_snapshot(to_be_selected, None, state=state)
+    return dates[-1].date(), dates[0].date(), options, DatetimeUtils.format(to_be_selected.astimezone(zi)) if zi is not None else GuiUtils.format_snapshot(to_be_selected, None, state=state)
 
 
 try:

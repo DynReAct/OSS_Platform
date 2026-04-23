@@ -47,7 +47,7 @@ def layout(*args, **kwargs):
     process: str|None = kwargs.get("process")
     lot_size: str|None = kwargs.get("lotsize", "weight")   # constant, weight, orders, coils are allowed values
     site = state.get_site()
-    snap = GuiUtils.format_snapshot(kwargs["snapshot"], None) if "snapshot" in kwargs else None
+    snap = GuiUtils.format_snapshot(kwargs["snapshot"], None, state=state) if "snapshot" in kwargs else None
     return html.Div([
         html.H1("Lots planning", id="lotsplanning-title"),
         html.Div([
@@ -233,11 +233,11 @@ def proc_changed2(process: str|None) -> str:
 
 
 @callback(Output("current_snapshot_lotplanning", "children"),
-          Input("selected-snapshot", "data"),
-          Input("client-tz", "data")  # client timezone, global store
+          Input("selected-snapshot", "data")
+          #Input("client-tz", "data")  # client timezone, global store
 )
-def snapshot_changed(snapshot: datetime|str|None, tz: str|None) -> str:
-    return GuiUtils.format_snapshot(snapshot, tz)
+def snapshot_changed(snapshot: datetime|str|None) -> str:  #, tz: str|None
+    return GuiUtils.format_snapshot(snapshot, None, state=state)
 
 @callback(
     Output("plan-link-create", "href"),

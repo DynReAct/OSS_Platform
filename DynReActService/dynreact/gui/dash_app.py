@@ -72,7 +72,7 @@ def layout(*args, **kwargs):
         language,
         #dcc.Store(id="lang2", storage_type="memory"),
         dcc.Store(id="lang3", storage_type="memory"),  # dummy output for client side callbacks?
-        dcc.Store(id="client-tz", storage_type="memory", data="UTC"),  # Initialize with UTC, will be overridden by client
+        # dcc.Store(id="client-tz", storage_type="memory", data="UTC"),  # Initialize with UTC, will be overridden by client
         site, selected_snapshot, selected_snapshot_obj, selected_process, snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector,
         #html.Div("DynReAct", className="dynreact-header"),
         html.Img(src=app.get_asset_url(DYNREACT_LOGO), className="menu-logo"),
@@ -182,19 +182,19 @@ clientside_callback(
     Input("snapshot_selected-snapshot", "data"),
     Input("create_process-selector", "data"),
     Input("lotplanning_process-selector", "data"),
-    Input("client-tz", "data"),
+    #Input("client-tz", "data"),
     State("selected-snapshot", "data"),
     prevent_initial_call=False
 )
-def params_changed(params: str|None, user_set_snapshot: str|None, create_process: str|None, planning_process: str|None, client_tz: str|None, old_snapshot: str|None):
+def params_changed(params: str|None, user_set_snapshot: str|None, create_process: str|None, planning_process: str|None, old_snapshot: str|None):  # , client_tz: str|None
     """
     Setting shared state between pages
     """
     changed = GuiUtils.changed_ids()
     
-    # If only client-tz changed, don't update anything
-    if changed == ["client-tz"]:
-        return dash.no_update, dash.no_update, dash.no_update
+    ## If only client-tz changed, don't update anything
+    #if changed == ["client-tz"]:
+    #    return dash.no_update, dash.no_update, dash.no_update
     
     process_changed_by_user = "create_process-selector" in changed or  "lotplanning_process-selector" in changed
     if "snapshot_selected-snapshot" in changed:
@@ -216,10 +216,10 @@ def params_changed(params: str|None, user_set_snapshot: str|None, create_process
     if snapshot == dash.no_update and old_snapshot is None and not process_changed_by_user:
         ## init snapshot
         snap = state.get_snapshot()
-        snapshot = GuiUtils.format_snapshot(snap.timestamp, client_tz) if snap is not None else None
+        snapshot = GuiUtils.format_snapshot(snap.timestamp, None, state=state) if snap is not None else None
     elif snapshot != dash.no_update:
         snap = state.get_snapshot(DatetimeUtils.parse_date(snapshot))
-        snapshot = GuiUtils.format_snapshot(snap.timestamp, client_tz) if snap is not None else None
+        snapshot = GuiUtils.format_snapshot(snap.timestamp, None, state=state) if snap is not None else None
     if snap != dash.no_update and snap is not None:
         snap = snap.model_dump(exclude_none=True, exclude_unset=True)
     return snapshot, snap, process
@@ -260,14 +260,14 @@ clientside_callback(
 )
 
 # Set client timezone once on page load
-@app.callback(
-    Output("client-tz", "data"),
-    Input("menu-url", "pathname"),
-    prevent_initial_call=False
-)
-def init_timezone(pathname):
-    # Return default timezone - client will override via JavaScript if needed
-    return "UTC"
+#@app.callback(
+#    Output("client-tz", "data"),
+#    Input("menu-url", "pathname"),
+#    prevent_initial_call=False
+#)
+#def init_timezone(pathname):
+#    # Return default timezone - client will override via JavaScript if needed
+#    return "UTC"
 
 
 if __name__ == "__main__":

@@ -105,7 +105,6 @@ def test_scenario_01(run_agents_handler_spy):
         "auctionWait": "0",
         "counterbidWait": "0",
         "smallWait": "5",
-        "smallWait": "5",
         "exitWait": "0",
         "equipments": [],
         "nmaterials": 0,

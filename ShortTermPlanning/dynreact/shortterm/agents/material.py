@@ -120,51 +120,52 @@ class Material(Agent):
         equipment_id = payload['id']
         equipment_status = payload['status']
         previous_price = payload.get('previous_price')
-        auction_start_time = payload.get('start_time')
-        auction_start_time = datetime.strptime(auction_start_time, '%Y-%m-%dT%H:%M:%SZ')
+        #auction_start_time = payload.get('start_time')
+        #auction_start_time = datetime.strptime(auction_start_time, '%Y-%m-%dT%H:%M:%SZ')
         origin = str(self.params['current_equipment'])
         destination = str(equipment_id.split(":")[2])
         print(f"Origin: {origin} Destination: {destination}")
 
-        time_to_equipment = timedelta(seconds=int(self.transport_times[origin][destination]))
-        material_start_time = datetime.now() + time_to_equipment
+        #time_to_equipment = timedelta(seconds=int(self.transport_times[origin][destination]))
+        #material_start_time = datetime.now() + time_to_equipment
 
-        if material_start_time <= auction_start_time:
+        #if material_start_time <= auction_start_time:
 
             # Calculate the bidding price based on EQUIPMENT status and MATERIAL parameters
-            bidding_price = self.calculate_bidding_price(
-                material_params=self.params, equipment_status=equipment_status, previous_price=previous_price, auction_start_time=auction_start_time
+            #bidding_price = calculate_bidding_price(material_params=self.params, equipment_status=equipment_status, previous_price=previous_price, auction_start_time=auction_start_time)
+        bidding_price = self.calculate_bidding_price(material_params=self.params, equipment_status=equipment_status, previous_price=previous_price)
+        if bidding_price is not None: #TODO: reindent when de-comment
+            sendmsgtopic(
+                producer=self.producer,
+                tsend=topic,
+                topic=topic,
+                source=self.agent,
+                dest=equipment_id,
+                action="COUNTERBID",
+                payload=dict(id=self.agent, material_params=self.params, price=bidding_price),
+                vb=self.verbose
             )
-            if bidding_price is not None:
-                sendmsgtopic(
-                    producer=self.producer,
-                    tsend=topic,
-                    topic=topic,
-                    source=self.agent,
-                    dest=equipment_id,
-                    action="COUNTERBID",
-                    payload=dict(id=self.agent, material_params=self.params, price=bidding_price),
-                    vb=self.verbose
-                )
-                if self.verbose > 2:
-                    self.write_log(f"Instructed {equipment_id} to counterbid", "1df48bc3-a57f-40fa-a2db-effca1d2d40b")
-            else:
-                if self.verbose > 1:
-                    self.write_log(
-                        f"Rejected offer from {equipment_id}. "
-                        f"This equipment is not among the allowed equipments for the material",
-                        "8c068331-38bf-4b1f-acd4-f9659c8c7be7"
-                    )
+            if self.verbose > 2:
+                self.write_log(f"Instructed {equipment_id} to counterbid", "1df48bc3-a57f-40fa-a2db-effca1d2d40b")
         else:
             if self.verbose > 1:
                 self.write_log(
-                    f"Material can't reach the equipment {equipment_id} in time."
-                    f"Start of the auction: {auction_start_time.strftime('%H:%M:%S %d/%m/%Y')}"
-                    f"Material time of arrival: {material_start_time.strftime('%H:%M:%S %d/%m/%Y')}",
-                    "4a2e5658-3f55-4f2d-9b47-7737cc4f9517"
+                    f"Rejected offer from {equipment_id}. "
+                    f"This equipment is not among the allowed equipments for the material",
+                    "8c068331-38bf-4b1f-acd4-f9659c8c7be7"
                 )
 
         return 'CONTINUE'
+        #else:
+        #    if self.verbose > 1:
+        #        self.write_log(
+        #            f"Material can't reach the equipment {equipment_id} in time."
+        #            f"Start of the auction: {auction_start_time.strftime('%H:%M:%S %d/%m/%Y')}"
+        #            f"Material time of arrival: {material_start_time.strftime('%H:%M:%S %d/%m/%Y')}",
+        #            "4a2e5658-3f55-4f2d-9b47-7737cc4f9517"
+        #        )
+
+        #return 'CONTINUE'
 
     def handle_askconfirm_action(self, dctmsg: dict) -> str:
         """
@@ -240,8 +241,12 @@ class Material(Agent):
         """
         return sum(self.coil_lengths)
 
-    def calculate_bidding_price(self, material_params: dict, equipment_status: dict,
-                                previous_price: float | None, auction_start_time: datetime) -> float | None:
+    #def calculate_bidding_price(self, material_params: dict, equipment_status: dict,
+    #                            previous_price: float | None, auction_start_time: datetime) -> float | None:
+
+    @staticmethod
+    def calculate_bidding_price(material_params: dict, equipment_status: dict, previous_price: float | None) -> float | None:
+
         """
         Calculates the bidding price that the MATERIAL would pay to be processed in the EQUIPMENT with the given status.
         Returns None if the EQUIPMENT's status is not compatible with the MATERIAL's parameters.
@@ -275,7 +280,8 @@ class Material(Agent):
         #a = 150 / (delivery_date - datetime(2020, 1, 1)).days
         #b = 90000 / (auction_start_time - datetime(2020, 1, 1)).seconds
 
-        bidding_price = 150 / (delivery_date - datetime(2020, 1, 1)).days + 90000 / (auction_start_time - datetime(2020, 1, 1)).seconds
+        #bidding_price = a / b
+        bidding_price = 150 / (delivery_date - datetime(2020, 1, 1)).days
 
         # For now, the bidding price is simply increased by the previous bidding price
         if previous_price is not None:

@@ -3,6 +3,7 @@ node {
     def IMAGE_TAG = "latest"
     def LOCAL_REGISTRY = "192.168.110.176:5000/"
 
+    env.IMAGE_NAME = IMAGE_NAME
     env.LOCAL_REGISTRY = LOCAL_REGISTRY
     env.IMAGE_TAG = IMAGE_TAG
     env.TOPIC_CALLBACK = "DynReact-TEST-Callback"
@@ -35,12 +36,12 @@ node {
 
     def runStageWithCleanup = { stageName, body ->
         stage(stageName) {
-            sh """
-                echo "[PRE] Cleaning up ${IMAGE_NAME} containers..."
-                docker ps -a --filter ancestor=${IMAGE_NAME} -q | xargs -r docker stop
-                docker ps -a --filter ancestor=${IMAGE_NAME} -q | xargs -r docker rm
+            sh '''
+                echo "[PRE] Cleaning up $IMAGE_NAME containers..."
+                docker ps -a --filter "ancestor=$IMAGE_NAME" -q | xargs -r docker stop
+                docker ps -a --filter "ancestor=$IMAGE_NAME" -q | xargs -r docker rm
                 docker system prune -f
-            """
+            '''
             body()
         }
     }
@@ -50,38 +51,52 @@ node {
     }
 
     stage('Build Docker Image') {
-    sh """
+    sh '''
         cd ShortTermPlanning
         docker build \\
-            --build-arg DOCKER_REGISTRY="$REGISTRY" \\
+            --build-arg DOCKER_REGISTRY="$LOCAL_REGISTRY" \\
             --build-arg BUILD_DATE="\$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \\
             --build-arg JENKINS_BUILD_ID="$BUILD_ID" \\
-            -t ${IMAGE_NAME}:${IMAGE_TAG} .
-    """
+            -t "$IMAGE_NAME:$IMAGE_TAG" .
+    '''
     }
 
     stage('Tag & Push Image') {
-        sh """
-        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}
-        docker push ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}
-        """
+        sh '''
+        docker tag "$IMAGE_NAME:$IMAGE_TAG" "$LOCAL_REGISTRY$IMAGE_NAME:$IMAGE_TAG"
+        docker push "$LOCAL_REGISTRY$IMAGE_NAME:$IMAGE_TAG"
+        '''
     }
 
     stage('Replace BASE agents') {
-        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'CONTAINER_NAME_PREFIX', 'LOCAL_REGISTRY', 'IMAGE_TAG', 'DOCKER_NETWORK']
-        def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
-        sh """
+        sh '''
+        docker rm -f \
+          "${CONTAINER_NAME_PREFIX}_LOG_Base" \
+          "${CONTAINER_NAME_PREFIX}_EQUIPMENT_Base" \
+          "${CONTAINER_NAME_PREFIX}_MATERIAL_Base" >/dev/null 2>&1 || true
+
         docker run --rm \\
           --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
           -v /var/log/dynreact-logs:/var/log/dynreact-logs:rw,rshared \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
-          ${envArgs} \\
+          -e KAFKA_IP="$KAFKA_IP" \\
+          -e LOG_FILE_PATH="$LOG_FILE_PATH" \\
+          -e REST_URL="$REST_URL" \\
+          -e PERF_URL="$PERF_URL" \\
+          -e TRANSPORT_TIMES_URL="$TRANSPORT_TIMES_URL" \\
+          -e TOPIC_CALLBACK="$TOPIC_CALLBACK" \\
+          -e TOPIC_GEN="$TOPIC_GEN" \\
+          -e CONTAINER_NAME_PREFIX="$CONTAINER_NAME_PREFIX" \\
+          -e LOCAL_REGISTRY="$LOCAL_REGISTRY" \\
+          -e IMAGE_NAME="$IMAGE_NAME" \\
+          -e IMAGE_TAG="$IMAGE_TAG" \\
+          -e DOCKER_NETWORK="$DOCKER_NETWORK" \\
           --user "0:0" \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "$LOCAL_REGISTRY$IMAGE_NAME:$IMAGE_TAG" \\
           python -m dynreact.shortterm.replace_base -v 3 -g 111
-        """
+        '''
     }
 
 runStageWithCleanup('Run Scenario 0') {

@@ -142,6 +142,8 @@ class Equipment(Agent):
 
             agent = f"EQUIPMENT:{topic}:{equipment}:0"
             status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)
+            if status.get("targets") is None:
+                status["targets"] = {"equipment": int(equipment)}
 
             self.equipment = equipment
 

@@ -498,7 +498,36 @@ def ask_results(
     return dict()
 
 
-def normalize_auction_results(results: dict) -> dict:
+def _equipment_order_scope(equipments: list[str], snapshot: str, nmaterials: int | None, materials: list[str] | None = None) -> dict[str, set[str]]:
+    """
+    Return the order ids that belong to the material selection requested for each equipment.
+    """
+    data_setup = DataSetup(verbose=0, snapshot_time=snapshot)
+    scope = {str(equipment): set() for equipment in equipments}
+
+    if materials is not None:
+        for material_id in materials:
+            order = data_setup.get_material_params(material_id)["order"]
+            order_id = order["id"]
+            allowed_equipment = {str(equipment_id) for equipment_id in order.get("allowed_equipment", [])}
+            for equipment in scope:
+                if equipment in allowed_equipment:
+                    scope[equipment].add(order_id)
+        return scope
+
+    for equipment in equipments:
+        equipment_key = str(equipment)
+        equipment_id = int(equipment_key)
+        material_ids = data_setup.get_equipment_materials(equipment_id)
+        selected_materials = material_ids[:nmaterials] if nmaterials else material_ids
+        scope[equipment_key] = {
+            data_setup.get_material_params(material_id)["order"]["id"]
+            for material_id in selected_materials
+        }
+    return scope
+
+
+def normalize_auction_results(results: dict, order_scope: dict[str, set[str]] | None = None) -> dict:
     """
     Compact auction results to one entry per order and equipment.
 
@@ -510,6 +539,7 @@ def normalize_auction_results(results: dict) -> dict:
     normalized_results = {}
 
     for equipment, assignments in results.items():
+        equipment_key = str(equipment)
         if not isinstance(assignments, list):
             normalized_results[equipment] = assignments
             continue
@@ -523,6 +553,14 @@ def normalize_auction_results(results: dict) -> dict:
 
             order_id = assignment.get("id")
             if order_id is None:
+                continue
+            order_id = str(order_id)
+
+            allowed_equipment = {str(equipment_id) for equipment_id in assignment.get("allowed_equipment", [])}
+            if allowed_equipment and equipment_key not in allowed_equipment:
+                continue
+
+            if order_scope is not None and order_id not in order_scope.get(equipment_key, set()):
                 continue
 
             if order_id not in latest_assignment_by_order:
@@ -731,6 +769,7 @@ def execute_short_term_planning(args: dict):
     results = {}
 
     equip_configs = {equipment: {'start_time': start_time} for equipment in equipments} if start_time else None
+    order_scope = _equipment_order_scope(equipments=equipments, snapshot=snapshot, nmaterials=nmaterials, materials=None)
 
     try:
         act, n_agents = create_auction(
@@ -747,7 +786,7 @@ def execute_short_term_planning(args: dict):
             start_auction(topic=act, consumer=consumer, producer=producer, verbose=verbose, num_agents=n_agents)
             sleep(KeySearch.search_for_value("AUCTION_WAIT"), producer=producer, verbose=verbose)
             results = ask_results(topic=act, producer=producer, consumer=consumer, verbose=verbose)
-            results = normalize_auction_results(results)
+            results = normalize_auction_results(results, order_scope=order_scope)
             if verbose > 0:
                 print("---- RESULTS ----")
                 print(results)

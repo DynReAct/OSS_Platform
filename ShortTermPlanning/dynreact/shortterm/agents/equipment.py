@@ -34,7 +34,10 @@ class Equipment(Agent):
         current_order_length (float): The total length of the current assigned order in meters.
 
     """
-    def __init__(self, topic: str, agent: str, status: dict, operation_speed: float = None, start_time: datetime = None, current_order_length: float = None, manager=True):
+    def __init__(
+            self, topic: str, agent: str, status: dict, operation_speed: float = None,
+            start_time: datetime | str = None, current_order_length: float = None, manager=True
+    ):
 
         super().__init__(topic=topic, agent=agent)
         """
@@ -67,7 +70,7 @@ class Equipment(Agent):
         self.bid_to_confirm = dict()
         self.previous_price = None
 
-        if isinstance(start_time, str):
+        if isinstance(start_time, str) and start_time:
             self.start_time = datetime.strptime(start_time, '%Y-%m-%dT%H:%M:%SZ')
         else:
             self.start_time = start_time if start_time is not None else datetime.now()
@@ -99,8 +102,8 @@ class Equipment(Agent):
         self.last_bid_time = None
         self.bid_to_confirm = dict()
 
-        if self.start_time is not None and self.current_order_length is not None and self.operation_speed > 0:
-            self.start_time += timedelta(seconds=self.current_order_length / self.operation_speed)
+        #if self.start_time is not None and self.current_order_length is not None and self.operation_speed > 0:
+        #    self.start_time += timedelta(seconds=self.current_order_length / self.operation_speed)
 
         self.current_order_length = None
         full_msg = dict(
@@ -139,6 +142,8 @@ class Equipment(Agent):
 
             agent = f"EQUIPMENT:{topic}:{equipment}:0"
             status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)
+            if status.get("targets") is None:
+                status["targets"] = {"equipment": int(equipment)}
 
             self.equipment = equipment
 
@@ -147,9 +152,10 @@ class Equipment(Agent):
                 "agent": agent,
                 "status": status,
                 "operation_speed": float(operation_speed),
-                "start_time": start_time,
                 "variables": KeySearch.dump_model(),
             }
+            if start_time is not None:
+                init_kwargs["start_time"] = start_time
 
             self.handler.launch_container(name=f"{topic}_{equipment}", agent="equipment", mode="replica", params=init_kwargs, auto_remove=False)
 
@@ -182,7 +188,8 @@ class Equipment(Agent):
             source=self.agent,
             dest="MATERIAL:" + topic + ":.*",
             action="BID",
-            payload=dict(id=self.agent, status=self.status, start_time=self.start_time.strftime('%Y-%m-%dT%H:%M:%SZ'), previous_price=previous_price),
+            #payload=dict(id=self.agent, status=self.status, start_time=self.start_time.strftime('%Y-%m-%dT%H:%M:%SZ'), previous_price=previous_price),
+            payload=dict(id=self.agent, status=self.status, previous_price=previous_price),
             vb=self.verbose
         )
         if self.verbose > 2:

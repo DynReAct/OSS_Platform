@@ -19,6 +19,10 @@ class DockerManager:
         self.max_allowed = max_allowed
         self.tracked_containers = []
 
+    @staticmethod
+    def _normalize_container_name(name: str) -> str:
+        return name[1:] if name.startswith("/") else name
+
     def launch_container(self, name:str, agent:str, mode:str, params:dict, envs: dict = None, auto_remove=False):
         """
         Launch a new Docker container and tag it with the instance's unique identifier.
@@ -79,8 +83,8 @@ class DockerManager:
                 name = f"{container_prefix + '_' if container_prefix else ''}{agent.upper()}_{name}"
                 docker_network = os.environ.get("DOCKER_NETWORK")
 
-                if any((d['name'] == name and d['status'] == "exited") for d in all_containers):
-                    print("Container with the same name found, auto removing")
+                if any(d['name'] == name for d in all_containers):
+                    print("Container with the same name found, replacing it")
                     self.clean_container(name)
 
                 run_kwargs = dict(
@@ -141,15 +145,20 @@ class DockerManager:
         Stop and remove all containers launched by this instance (using the tag).
         """
         try:
-            result  = self.client.containers.prune(filters={"label": f"owner={self.tag}"} if self.tag else {})
-            deleted_containers = result.get("ContainersDeleted", [])
+            containers = self.client.containers.list(
+                filters={"label": f"owner={self.tag}"} if self.tag else {},
+                all=True
+            )
 
-            if not deleted_containers:
+            if not containers:
                 print("No tracked containers found.")
                 return
 
-            for container_id in deleted_containers:
-                print(f"Container '{container_id}' removed.")
+            for container in containers:
+                if container.status == "running":
+                    container.stop()
+                container.remove(force=True)
+                print(f"Container '{container.name}' removed.")
 
         except Exception as e:
             print(f"Error cleaning containers: {e}")
@@ -162,15 +171,20 @@ class DockerManager:
         :return: The container object.
         """
         try:
-            result  = self.client.containers.prune(filters={"name": container_name})
-            deleted_containers = result.get("ContainersDeleted", [])
+            matched_containers = [
+                container for container in self.client.containers.list(all=True)
+                if self._normalize_container_name(container.name) == self._normalize_container_name(container_name)
+            ]
 
-            if not deleted_containers:
+            if not matched_containers:
                 print("No tracked containers found.")
                 return
 
-            for container_name in deleted_containers:
-                print(f"Container '{container_name}' removed.")
+            for container in matched_containers:
+                if container.status == "running":
+                    container.stop()
+                container.remove(force=True)
+                print(f"Container '{container.name}' removed.")
 
         except Exception as e:
             print(f"Error cleaning containers: {e}")

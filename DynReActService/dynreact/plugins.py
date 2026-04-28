@@ -4,6 +4,8 @@ import sys
 import traceback
 from typing import Any
 
+from dash import html
+
 from dynreact.auth.authentication import get_permission_manager
 from dynreact.base.ConfigurationProvider import ConfigurationProvider
 from dynreact.base.CostProvider import CostProvider
@@ -53,6 +55,17 @@ class Plugins:
         self._lot_sinks: dict[str, LotSink]|None = None
         self._aggregation_persistence: AggregationPersistence|None = None
         self._permissions: PermissionManager|None = None
+
+    @staticmethod
+    def _stp_error_page(stp: str, error: Exception|None = None):
+        msg = f"Failed to load STP frontend '{stp}'."
+        details = str(error) if error is not None else "Unknown error"
+        return html.Div([
+            html.H2("Short Term Planning Unavailable"),
+            html.P(msg),
+            html.Pre(details, style={"whiteSpace": "pre-wrap"}),
+            html.P("Check that the frontend package is installed and that its Python dependencies are available."),
+        ], style={"padding": "1.5rem"})
 
     def get_snapshot_provider(self) -> SnapshotProvider:
         if self._snapshot_provider is None:
@@ -200,18 +213,21 @@ class Plugins:
             try:
                 import dynreact.gui_stp.agentsPage
                 return dynreact.gui_stp.agentsPage.layout
-            except:
+            except Exception as exc:
                 print("Failed to load standard Agents page")
                 traceback.print_exc()
-                return None
+                return Plugins._stp_error_page(stp, exc)
         try:
             modl = importlib.import_module(stp)
             layout = getattr(modl, "layout", None)
             if layout is not None:
                 return layout
-        except Exception:
+        except Exception as exc:
             print(f"An error occurred loading the STP frontend {stp}")
             traceback.print_exc()
+            import_error = exc
+        else:
+            import_error = None
 
         importers = iter(sys.meta_path)
         for importer in importers:
@@ -224,10 +240,11 @@ class Plugins:
                     if layout is not None:
                         sys.modules[stp] = modl
                         return layout
-            except Exception:
+            except Exception as exc:
                 print(f"An error occurred loading the STP frontend {stp}")
                 traceback.print_exc()
-        return None
+                import_error = exc
+        return Plugins._stp_error_page(stp, import_error)
 
     @staticmethod
     def _load_plant_performance_model(config: str, site: Site) -> PlantPerformanceModel|None:

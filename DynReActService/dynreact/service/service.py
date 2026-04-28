@@ -13,7 +13,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, \
     MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction, AggregatedStorageContent, \
-    AggregatedMaterial, Histogram, ServiceMetrics, PrimitiveMetric, PlannedWorkingShift, Lot, LotTimes
+    AggregatedMaterial, Histogram, ServiceMetrics, PrimitiveMetric, PlannedWorkingShift, Lot, LotTimes, TransportTimes
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.params import Path, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -542,6 +542,35 @@ def relevant_fields(equipment_id: int=Path(..., description="Equipment id"), use
     if equipment is None:
         raise HTTPException(status_code=404, detail=f"No such equipment: {equipment_id}")
     return _get_cost_provider().relevant_fields(equipment)
+
+
+@fastapi_app.get("/logistics/transfer-time/{equipment_id_1}/{equipment_id_2}",
+                tags=["dynreact"],
+                response_model_exclude_unset=True,
+                response_model_exclude_none=True,
+                summary="Transfer time from equipment 1 to equipment 2")
+def transfer_times(equipment_id_1: int|str=Path(..., description="Source equipment id"), equipment_id_2: int|str=Path(..., description="Target equipment id"), username = username) -> timedelta|None:
+    site = state.get_site()
+    id1 = _get_equipment_id(equipment_id_1)
+    id2 = _get_equipment_id(equipment_id_2)
+    tt: TransportTimes|None = site.transport_times
+    if tt is None:
+        raise HTTPException(status_code=500, detail=f"Transport times not configured")
+    delta: timedelta|None = tt.transport_times(id1, id2)
+    return delta
+
+
+@fastapi_app.get("/logistics/transfer-time",
+                tags=["dynreact"],
+                response_model_exclude_unset=True,
+                response_model_exclude_none=True,
+                summary="Query order fields relevant to the transition cost function")
+def all_transfer_times(username = username) -> TransportTimes:
+    site = state.get_site()
+    tt: TransportTimes|None = site.transport_times
+    if tt is None:
+        raise HTTPException(status_code=500, detail=f"Transport times not configured")
+    return tt
 
 
 lots_optimization: tuple[int, LotsOptimizationListener]|None = None

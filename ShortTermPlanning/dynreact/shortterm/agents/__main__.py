@@ -127,6 +127,7 @@ def main():
     parser_equipment_replica.add_argument("-v", "--variables", type=str, required=True, help="Dynamic values from the KeySearch dump model")
     parser_equipment_replica.add_argument("--os", "--operation_speed", type=float, dest="operation_speed", help="Operation speed")
     parser_equipment_replica.add_argument("--st", "--start_time", type=str, dest="start_time", help="Start time")
+    parser_equipment_replica.add_argument("--target_tons", type=float, default=150000.0, help="Target assigned tonnage before the equipment stops bidding")
 
     # ------------------------
     # Instance Material Subparser
@@ -190,6 +191,7 @@ def main():
                 status=json.loads(args.status),
                 operation_speed=args.operation_speed,
                 start_time=args.start_time,
+                target_tons=args.target_tons,
                 manager=False
             )
 

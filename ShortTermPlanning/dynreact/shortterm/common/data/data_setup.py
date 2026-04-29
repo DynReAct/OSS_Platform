@@ -18,7 +18,7 @@ class DataSetup:
 
     """
 
-    def __init__(self, verbose: int = 1, snapshot_time: str = None):
+    def __init__(self, verbose: int = 1, snapshot_time: str | None = None):
         """
         Constructor function for the Log Class
 
@@ -96,7 +96,7 @@ class DataSetup:
         return equipment_materials
 
 
-    def get_material_params(self, material_id: str) -> dict:
+    def get_material_params(self, material_id: str | int) -> dict:
         """
         Get the parameters of the given material.
 

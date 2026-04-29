@@ -7,13 +7,56 @@ Version History:
 - 1.0 (2024-03-09): Initial version developed by Rodrigo Castro Freibott.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from dynreact.shortterm.common import sendmsgtopic, KeySearch
 from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
 from dynreact.shortterm.agents.agent import Agent
 from dynreact.shortterm.common.handler import DockerManager
-from datetime import datetime, timedelta
 import random
+
+
+def _parse_utc_datetime(value: str | None) -> datetime | None:
+    """
+    Parse an ISO datetime and normalize it to UTC.
+
+    :param str value: Datetime value from an equipment BID payload.
+    :return: UTC datetime, or ``None`` when no usable value is provided.
+    :rtype: datetime
+    """
+    if not value:
+        return None
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _transfer_seconds(transport_times: dict[str, dict[str, int]], origin: str, destination: str) -> int | None:
+    """
+    Return the transfer duration between two equipment ids in seconds.
+
+    The normalized matrix may include a ``__default__`` entry derived from the
+    DynReAct ``TransportTimes.default`` value. A transfer from an equipment to
+    itself is treated as instantaneous.
+
+    :param dict transport_times: Nested transport-time matrix in seconds.
+    :param str origin: Source equipment id.
+    :param str destination: Target equipment id.
+    :return: Transfer duration in seconds, or ``None`` when no route is known.
+    :rtype: int
+    """
+    if origin == destination:
+        return 0
+    origin_times = transport_times.get(str(origin), {})
+    if str(destination) in origin_times:
+        return int(origin_times[str(destination)])
+    default_times = transport_times.get("__default__", {})
+    default_value = default_times.get("__default__")
+    return int(default_value) if default_value is not None else None
 
 
 class Material(Agent):
@@ -27,7 +70,12 @@ class Material(Agent):
         transport_times (dict): Nested dictionary with the transport times for each equipment expressed in seconds (origin, (destination, time)).
         coil_lengths (list): List with the coil lengths for each equipment expressed in meters.
     """
-    def __init__(self, topic: str, agent: str, params: dict, transport_times: dict[str, dict[str, int]] = None, coil_lengths: list[float] = None, manager=True):
+    def __init__(
+            self, topic: str, agent: str, params: dict,
+            transport_times: dict[str, dict[str, int]] | None = None,
+            coil_lengths: list[float] | float | None = None,
+            manager: bool = True
+    ):
 
         super().__init__(topic=topic, agent=agent)
         """
@@ -120,19 +168,32 @@ class Material(Agent):
         equipment_id = payload['id']
         equipment_status = payload['status']
         previous_price = payload.get('previous_price')
-        #auction_start_time = payload.get('start_time')
-        #auction_start_time = datetime.strptime(auction_start_time, '%Y-%m-%dT%H:%M:%SZ')
+        auction_start_time = _parse_utc_datetime(payload.get('start_time'))
         origin = str(self.params['current_equipment'])
         destination = str(equipment_id.split(":")[2])
         print(f"Origin: {origin} Destination: {destination}")
 
-        #time_to_equipment = timedelta(seconds=int(self.transport_times[origin][destination]))
-        #material_start_time = datetime.now() + time_to_equipment
+        if auction_start_time is not None and self.transport_times:
+            transfer_seconds = _transfer_seconds(self.transport_times, origin, destination)
+            if transfer_seconds is None:
+                if self.verbose > 1:
+                    self.write_log(
+                        f"Rejected offer from {equipment_id}. "
+                        f"No transfer time is known from equipment {origin} to {destination}.",
+                        "991ca971-7227-4f88-8236-cd7a633faeca"
+                    )
+                return 'CONTINUE'
+            material_start_time = datetime.now(timezone.utc) + timedelta(seconds=transfer_seconds)
+            if material_start_time > auction_start_time:
+                if self.verbose > 1:
+                    self.write_log(
+                        f"Rejected offer from {equipment_id}. "
+                        f"Material arrival {material_start_time.isoformat()} is after equipment start "
+                        f"{auction_start_time.isoformat()}.",
+                        "4a2e5658-3f55-4f2d-9b47-7737cc4f9517"
+                    )
+                return 'CONTINUE'
 
-        #if material_start_time <= auction_start_time:
-
-            # Calculate the bidding price based on EQUIPMENT status and MATERIAL parameters
-            #bidding_price = calculate_bidding_price(material_params=self.params, equipment_status=equipment_status, previous_price=previous_price, auction_start_time=auction_start_time)
         bidding_price = self.calculate_bidding_price(material_params=self.params, equipment_status=equipment_status, previous_price=previous_price)
         if bidding_price is not None: #TODO: reindent when de-comment
             sendmsgtopic(
@@ -156,16 +217,6 @@ class Material(Agent):
                 )
 
         return 'CONTINUE'
-        #else:
-        #    if self.verbose > 1:
-        #        self.write_log(
-        #            f"Material can't reach the equipment {equipment_id} in time."
-        #            f"Start of the auction: {auction_start_time.strftime('%H:%M:%S %d/%m/%Y')}"
-        #            f"Material time of arrival: {material_start_time.strftime('%H:%M:%S %d/%m/%Y')}",
-        #            "4a2e5658-3f55-4f2d-9b47-7737cc4f9517"
-        #        )
-
-        #return 'CONTINUE'
 
     def handle_askconfirm_action(self, dctmsg: dict) -> str:
         """

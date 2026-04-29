@@ -9,7 +9,7 @@ Version History:
 """
 
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sphinx.ext.ifconfig import ifconfig
 
@@ -19,6 +19,96 @@ from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
 from dynreact.shortterm.common.functions import calculate_production_cost, get_new_equipment_status
 from dynreact.shortterm.agents.agent import Agent
 from dynreact.shortterm.common.handler import DockerManager
+
+
+DEFAULT_TARGET_TONS = 150000.0
+
+
+def _coerce_float(value: object, default: float = 0.0) -> float:
+    """
+    Convert a numeric payload value to ``float``.
+
+    :param object value: Raw value received from a payload or CLI argument.
+    :param float default: Fallback used when the value is absent or invalid.
+    :return: Numeric value as a float, or the fallback value.
+    :rtype: float
+    """
+    if value in (None, ""):
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _coerce_optional_float(value: object) -> float | None:
+    """
+    Convert a value to ``float``.
+
+    :param object value: Raw value to convert.
+    :return: Numeric value, or ``None`` when absent or invalid.
+    :rtype: float
+    """
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def material_weight_tons(material_params: dict) -> float:
+    """
+    Extract the tonnage represented by an assigned material/order.
+
+    RAS auctions send orders as material parameters and expose their weight as
+    ``target_weight`` or ``actual_weight``. OSS material payloads may not carry a
+    weight, in which case the function returns ``0.0`` and preserves existing
+    behavior.
+
+    :param dict material_params: Material parameters received in a confirmation.
+    :return: Material/order weight in tons.
+    :rtype: float
+    """
+    if not isinstance(material_params, dict):
+        return 0.0
+
+    for key in ("target_weight", "actual_weight", "weight"):
+        weight = _coerce_optional_float(material_params.get(key))
+        if weight is not None:
+            return weight
+
+    order = material_params.get("order")
+    if isinstance(order, dict):
+        for key in ("target_weight", "actual_weight", "weight"):
+            weight = _coerce_optional_float(order.get(key))
+            if weight is not None:
+                return weight
+
+    return 0.0
+
+
+def parse_start_time(value: datetime | str | None) -> datetime | None:
+    """
+    Parse one equipment start time and normalize it as UTC.
+
+    :param datetime value: Raw start time received from CLI or Kafka payload.
+    :return: UTC datetime, or ``None`` when no start time was supplied.
+    :rtype: datetime
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        normalized = str(value).replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            parsed = datetime.strptime(str(value), '%Y-%m-%dT%H:%M:%SZ')
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 class Equipment(Agent):
@@ -32,11 +122,14 @@ class Equipment(Agent):
         operation_speed (float): Operation speed of the equipment in m/s.
         start_time (datetime): Start time of the auction for the equipment.
         current_order_length (float): The total length of the current assigned order in meters.
+        target_tons (float): Maximum accumulated assigned tonnage before the equipment stops bidding.
+        accumulated_tons (float): Tonnage already assigned to this equipment in the auction.
 
     """
     def __init__(
-            self, topic: str, agent: str, status: dict, operation_speed: float = None,
-            start_time: datetime | str = None, current_order_length: float = None, manager=True
+            self, topic: str, agent: str, status: dict, operation_speed: float | None = None,
+            start_time: datetime | str | None = None, current_order_length: float | None = None,
+            target_tons: float = DEFAULT_TARGET_TONS, accumulated_tons: float = 0.0, manager: bool = True
     ):
 
         super().__init__(topic=topic, agent=agent)
@@ -49,6 +142,8 @@ class Equipment(Agent):
         :param float operation_speed: Operation speed of the equipment in m/s.
         :param datetime start_time: Start time of the auction for the equipment.
         :param float current_order_length: The total length of the current assigned order in meters.
+        :param float target_tons: Maximum accumulated assigned tonnage before stopping the equipment agent.
+        :param float accumulated_tons: Initial accumulated assigned tonnage.
         :param str manager: Is this instance a base.
         """
         self.action_methods.update({
@@ -70,26 +165,48 @@ class Equipment(Agent):
         self.bid_to_confirm = dict()
         self.previous_price = None
 
-        if isinstance(start_time, str) and start_time:
-            self.start_time = datetime.strptime(start_time, '%Y-%m-%dT%H:%M:%SZ')
-        else:
-            self.start_time = start_time if start_time is not None else datetime.now()
+        parsed_start_time = parse_start_time(start_time)
+        self.start_time = parsed_start_time if parsed_start_time is not None else datetime.now(timezone.utc)
 
         self.current_order_length = current_order_length
+        self.target_tons = _coerce_float(target_tons, DEFAULT_TARGET_TONS)
+        self.accumulated_tons = _coerce_float(accumulated_tons, 0.0)
 
         if self.verbose > 1:
             self.write_log(msg=f"Finished creating the agent {self.agent} with status {self.status}.",
                            identifier="5e0e90e2-12be-4048-b70f-73917bfe947b",
                            to_stdout=True)
 
-    def move_to_next_round(self, material_params: dict):
+    def has_reached_target_tons(self) -> bool:
+        """
+        Return whether the equipment has reached its assigned target tonnage.
+
+        :return: ``True`` when accumulated tonnage is greater than or equal to the target.
+        :rtype: bool
+        """
+        return self.accumulated_tons >= self.target_tons
+
+    def move_to_next_round(self, material_params: dict) -> str:
         """
         Moves the equipment to the next round by updating its status according to the assigned material's parameters,
         updating its name with the next round number, and starting the round.
 
         :param dict material_params:
+        :return: Status of the handling.
+        :rtype: str
         """
+        assigned_tons = material_weight_tons(material_params)
+        self.accumulated_tons += assigned_tons
         self.status = get_new_equipment_status(material_params=material_params, equipment_status=self.status, verbose=self.verbose)
+
+        if self.has_reached_target_tons():
+            self.write_log(
+                f"Equipment {self.agent} reached target tonnage "
+                f"({self.accumulated_tons:.2f}/{self.target_tons:.2f} t). Ending equipment agent.",
+                "c30f4607-46d7-40d3-8ad2-f0c2ac4763ef",
+                to_stdout=True
+            )
+            return 'END'
 
         roundless_name = self.agent[:self.agent.rfind(":")]
         self.round_number += 1
@@ -111,6 +228,7 @@ class Equipment(Agent):
             payload=dict(price=self.previous_price)
         )
         self.handle_start_action(full_msg)
+        return 'CONTINUE'
 
     def handle_create_action(self, dctmsg: dict) -> str:
         """
@@ -139,6 +257,7 @@ class Equipment(Agent):
             snapshot = payload['snapshot']
             operation_speed = payload.get('operation_speed', 0)
             start_time = user_start_time if user_start_time is not None else payload.get('start_time')
+            target_tons = payload.get('target_tons', DEFAULT_TARGET_TONS)
 
             agent = f"EQUIPMENT:{topic}:{equipment}:0"
             status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)
@@ -152,6 +271,7 @@ class Equipment(Agent):
                 "agent": agent,
                 "status": status,
                 "operation_speed": float(operation_speed),
+                "target_tons": _coerce_float(target_tons, DEFAULT_TARGET_TONS),
                 "variables": KeySearch.dump_model(),
             }
             if start_time is not None:
@@ -180,6 +300,12 @@ class Equipment(Agent):
         topic = dctmsg['topic']
         payload = dctmsg['payload']
         previous_price = payload.get('price')
+        bid_payload = dict(
+            id=self.agent,
+            status=self.status,
+            start_time=self.start_time.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            previous_price=previous_price,
+        )
 
         sendmsgtopic(
             producer=self.producer,
@@ -188,8 +314,7 @@ class Equipment(Agent):
             source=self.agent,
             dest="MATERIAL:" + topic + ":.*",
             action="BID",
-            #payload=dict(id=self.agent, status=self.status, start_time=self.start_time.strftime('%Y-%m-%dT%H:%M:%SZ'), previous_price=previous_price),
-            payload=dict(id=self.agent, status=self.status, previous_price=previous_price),
+            payload=bid_payload,
             vb=self.verbose
         )
         if self.verbose > 2:
@@ -294,8 +419,7 @@ class Equipment(Agent):
                 f"Moving to the next round...",
                 "0f906ad0-5526-45de-8a51-bc43a2a5c19d"
             )
-        self.move_to_next_round(material_params=material_params)
-        return 'CONTINUE'
+        return self.move_to_next_round(material_params=material_params)
 
     def handle_assigned_action(self, dctmsg: dict) -> str:
         """

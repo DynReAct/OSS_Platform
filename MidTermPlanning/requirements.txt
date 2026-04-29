@@ -7,7 +7,6 @@ numpy>=2.1.2, <3
 # Google tools for linear and mixed integer linear programming and other stuff
 ortools>=9.11.4210,<10
 pandas>=2.2.3, <3
-#pydantic>=1.10.13,<2.0.0
 pydantic>=2.7, <3
 python-dotenv>=1, <2
 

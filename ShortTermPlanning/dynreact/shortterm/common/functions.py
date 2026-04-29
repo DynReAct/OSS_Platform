@@ -6,6 +6,7 @@ These functions depend on how these values are given.
 """
 import os
 import json
+import re
 from pathlib import Path
 from datetime import datetime, timedelta
 import random
@@ -62,7 +63,13 @@ def _resolve_path(file_path: str) -> Path:
 
 
 def _duration_unit_to_seconds(unit: str | int | float | None) -> float:
-    """Convert one JSON transport-times unit to seconds."""
+    """
+    Convert one JSON transport-times unit to seconds.
+
+    :param str unit: Unit returned by a file or REST transport-times source.
+    :return: Number of seconds represented by one matrix unit.
+    :rtype: float
+    """
     if unit is None:
         return 1.0
     if isinstance(unit, (int, float)):
@@ -81,6 +88,24 @@ def _duration_unit_to_seconds(unit: str | int | float | None) -> float:
     }
     if normalized in mapping:
         return mapping[normalized]
+    clock_match = re.fullmatch(r"(?:(\d+)\s+DAY[S]?,\s*)?(\d+):(\d{2}):(\d{2}(?:\.\d+)?)", normalized)
+    if clock_match is not None:
+        days = float(clock_match.group(1) or 0)
+        hours = float(clock_match.group(2))
+        minutes = float(clock_match.group(3))
+        seconds = float(clock_match.group(4))
+        return days * 86400.0 + hours * 3600.0 + minutes * 60.0 + seconds
+    iso_match = re.fullmatch(
+        r"P(?:(?P<days>\d+(?:\.\d+)?)D)?"
+        r"(?:T(?:(?P<hours>\d+(?:\.\d+)?)H)?(?:(?P<minutes>\d+(?:\.\d+)?)M)?(?:(?P<seconds>\d+(?:\.\d+)?)S)?)?",
+        normalized,
+    )
+    if iso_match is not None:
+        days = float(iso_match.group("days") or 0)
+        hours = float(iso_match.group("hours") or 0)
+        minutes = float(iso_match.group("minutes") or 0)
+        seconds = float(iso_match.group("seconds") or 0)
+        return days * 86400.0 + hours * 3600.0 + minutes * 60.0 + seconds
     raise ValueError(f"Unsupported transport time unit: {unit}")
 
 
@@ -90,13 +115,17 @@ def _normalize_transport_times_json(data: dict) -> dict[str, dict[str, int]]:
     matrix = cfg.get("equipment_matrix") or {}
     unit_seconds = _duration_unit_to_seconds(cfg.get("unit"))
     transport_times: dict[str, dict[str, int]] = {}
+    default_duration = cfg.get("default")
+    if default_duration is not None:
+        transport_times["__default__"] = {"__default__": int(float(default_duration) * unit_seconds)}
     for origin, destinations in matrix.items():
         if not isinstance(destinations, dict):
             continue
         origin_key = str(origin)
         transport_times[origin_key] = {}
         for destination, duration in destinations.items():
-            transport_times[origin_key][str(destination)] = int(float(duration) * unit_seconds)
+            if duration is not None:
+                transport_times[origin_key][str(destination)] = int(float(duration) * unit_seconds)
     return transport_times
 
 
@@ -163,7 +192,7 @@ def load_transport_times_http(base_url: str, timeout: float = 20.0) -> dict[str,
     - Objects exposing the edge list under `links` or `results`
     """
     candidate_urls = [base_url.rstrip("/")]
-    for suffix in ("/transport_times", "/transport-times", "/transportTimes"):
+    for suffix in ("/logistics/transfer-time", "/transport_times", "/transport-times", "/transportTimes"):
         candidate = base_url.rstrip("/") + suffix
         if candidate not in candidate_urls:
             candidate_urls.append(candidate)
@@ -186,8 +215,18 @@ def load_transport_times_http(base_url: str, timeout: float = 20.0) -> dict[str,
         print(f"Failed to load transport times from {base_url}: {last_error}")
     return {}
 
-def get_transport_times(transport_times_url: str) -> dict:
-#TODO: add docs
+def get_transport_times(transport_times_url: str | None) -> dict:
+    """
+    Load transport times for short-term planning.
+
+    The source may be a local ``default+file:`` JSON, an HTTP endpoint returning
+    a transport-times payload, or the base ``REST_URL`` of DynReActService. In
+    the last case the loader probes ``/logistics/transfer-time`` first.
+
+    :param str transport_times_url: Transport-times source URL or file URI.
+    :return: Nested transport-time matrix in seconds.
+    :rtype: dict
+    """
 
     print(f"TRANSPORT_TIMES_URL: {transport_times_url}, type: {type(transport_times_url)}")
 

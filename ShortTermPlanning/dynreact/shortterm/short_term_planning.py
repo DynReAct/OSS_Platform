@@ -26,10 +26,10 @@ import time
 import random
 import string
 import argparse
-from typing import Generator, Optional
+from typing import Any, Generator, cast
 from datetime import datetime
 
-from confluent_kafka import Producer, Consumer, Message
+from confluent_kafka import Producer, Consumer
 from confluent_kafka.admin import AdminClient
 import configparser
 
@@ -43,6 +43,24 @@ from dynreact.shortterm.common.data.load_url import DOCKER_MANAGER
 from dynreact.shortterm.common.handler import DockerManager
 from dynreact.shortterm.shorttermtargets import ShortTermTargets
 from dynreact.shortterm.timedelay import TimeDelay
+
+
+def _key_str(key: str, default: str = "") -> str:
+    """Return one ``KeySearch`` value as a string."""
+    value = KeySearch.search_for_value(key, default)
+    return default if value is None else str(value)
+
+
+def _key_float(key: str, default: float = 0.0) -> float:
+    """Return one ``KeySearch`` value as a float."""
+    value = KeySearch.search_for_value(key, default)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
 
 def list_all_topics(admin_client: AdminClient, verbose: int):
     """
@@ -98,7 +116,7 @@ def delete_all_topics(admin_client: AdminClient, verbose: int):
         print("Finished deleting all hanging topics.")
 
 
-def genauction(act: str = None) -> str:
+def genauction(act: str | None = None) -> str:
     """Generate the name of a topic with 12 random capital letters and digits
     :param str act: Prefered topic name for the auction.
 
@@ -122,7 +140,7 @@ def run_general_agents(producer: Producer, gagents: str, verbose: int):
     :param int verbose: Verbosity level
     """
 
-    small_wait = KeySearch.search_for_value("SMALL_WAIT")
+    small_wait = _key_float("SMALL_WAIT")
 
     log_handler = None
     equipment_handler = None
@@ -134,7 +152,7 @@ def run_general_agents(producer: Producer, gagents: str, verbose: int):
         log_handler.clean_containers()
         log_handler.launch_container(name="Base", agent="log", mode="base", params={
             "verbose": verbose,
-            "kafka-ip": KeySearch.search_for_value("KAFKA_IP")
+            "kafka-ip": _key_str("KAFKA_IP")
         }, auto_remove=False)
         sleep(small_wait, producer=producer, verbose=verbose)
     if str(gagents)[1] == '1':
@@ -142,7 +160,7 @@ def run_general_agents(producer: Producer, gagents: str, verbose: int):
         equipment_handler.clean_containers()
         equipment_handler.launch_container(name="Base", agent="equipment", mode="base", params={
             "verbose": verbose,
-            "kafka-ip": KeySearch.search_for_value("KAFKA_IP")
+            "kafka-ip": _key_str("KAFKA_IP")
         }, auto_remove=False)
         sleep(small_wait, producer=producer, verbose=verbose)
     if str(gagents)[2] == '1':
@@ -150,7 +168,7 @@ def run_general_agents(producer: Producer, gagents: str, verbose: int):
         material_handler.clean_containers()
         material_handler.launch_container(name="Base", agent="material", mode="base", params={
             "verbose": verbose,
-            "kafka-ip": KeySearch.search_for_value("KAFKA_IP")
+            "kafka-ip": _key_str("KAFKA_IP")
         }, auto_remove=False)
         sleep(small_wait, producer=producer, verbose=verbose)
 
@@ -159,8 +177,10 @@ def run_general_agents(producer: Producer, gagents: str, verbose: int):
 
 def create_auction(
         equipments: list[str], producer: Producer, verbose: int,
-        snapshot: str = None, act: str = None, nmaterials: int = None, materials: list[str] = None, admin_client: AdminClient = None,
-        equip_configs: dict = None) -> tuple[str, int]:
+        snapshot: str | None = None, act: str | None = None, nmaterials: int | None = None,
+        materials: list[str] | None = None, admin_client: AdminClient | None = None,
+        equip_configs: dict[str, dict[str, Any]] | None = None,
+        target_tons: dict[str, int | float | str] | None = None) -> tuple[str, int]:
     """
     Creates an auction by instructing the master LOG, EQUIPMENTS and MATERIAL to clone themselves to follow a new topic
 
@@ -172,13 +192,14 @@ def create_auction(
     :param str act: Preferred auction name, otherwise a random name will be assigned
     :param int nmaterials: Maximum number of cloned used for each equipment (default is to clone all). Can't be used along materials param
     :param list materials: Selected materials to generate the auction, can't be used along nmaterials
+    :param dict target_tons: Optional target tonnage by equipment id. Missing values default in the equipment agent.
 
     :return: Topic name of the auction and number of agents
     :rtype: tuple(str,int)
     """
 
-    topic_gen = KeySearch.search_for_value("TOPIC_GEN")
-    transport_times_url = KeySearch.search_for_value("TRANSPORT_TIMES_URL")
+    topic_gen = _key_str("TOPIC_GEN")
+    transport_times_url = _key_str("TRANSPORT_TIMES_URL") or _key_str("REST_URL")
 
     if nmaterials is not None and materials is not None:
         dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
@@ -223,17 +244,24 @@ def create_auction(
 
     # Instruct the general EQUIPMENT to clone itself for the auction,
     # for as many times as specified by the user
+    target_tons = target_tons or {}
     for equipment in equipments:
 
-        payload_data = dict(
+        payload_data: dict[str, Any] = dict(
             id=equipment,
             snapshot=data_setup.last_snapshot,
             variables=KeySearch.dump_model()
         )
 
-        if equip_configs and equipment in equip_configs:
-            config = equip_configs[equipment]
-            payload_data['user_start_time'] = config['start_time']
+        equipment_config: dict[str, Any] | None = None
+        if equip_configs:
+            equipment_config = equip_configs.get(equipment, equip_configs.get(str(equipment)))
+        if equipment_config:
+            payload_data['user_start_time'] = equipment_config['start_time']
+
+        equipment_target_tons = target_tons.get(equipment, target_tons.get(str(equipment)))
+        if equipment_target_tons is not None:
+            payload_data['target_tons'] = equipment_target_tons
 
         sendmsgtopic(
             producer=producer,
@@ -249,7 +277,7 @@ def create_auction(
 
     # Instruct the general MATERIAL to clone itself for the auction,
     # for as many materials associated to each equipment
-    all_materials = []
+    all_materials: list[Any] = []
 
     if materials is None:
         for equipment in equipments:
@@ -326,8 +354,8 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
     :param int verbose: Verbosity level
     """
 
-    topic_gen = KeySearch.search_for_value("TOPIC_GEN")
-    topic_callback = KeySearch.search_for_value("TOPIC_CALLBACK")
+    topic_gen = _key_str("TOPIC_GEN")
+    topic_callback = _key_str("TOPIC_CALLBACK")
 
     sendmsgtopic(
         producer=producer, tsend=topic_gen, topic=topic, source="UX", dest="LOG:" + topic_gen,
@@ -345,7 +373,7 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
         vb=verbose
     )
 
-    time.sleep(KeySearch.search_for_value("SMALL_WAIT"))
+    time.sleep(_key_float("SMALL_WAIT"))
 
     sendmsgtopic(
         producer=producer, tsend=topic_gen, topic=topic, source="UX", dest="LOG:" + topic_gen,
@@ -385,7 +413,10 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
     raise Exception(f"{dt} | ERROR: Failed to start/run auction, timeout exceeded")
 
 
-def wait_for_callback(topic: str, expected_action: str, consumer: Consumer, verbose: int, sleep_timeout: int = 1, max_iters: int = 10) -> Generator[Optional[Message], None, None]:
+def wait_for_callback(
+        topic: str, expected_action: str, consumer: Consumer, verbose: int,
+        sleep_timeout: int = 1, max_iters: int = 10
+) -> Generator[dict[str, Any] | None, None, None]:
     """
     Starts an auction by instructing the LOG to check the presence of all agents
 
@@ -414,18 +445,26 @@ def wait_for_callback(topic: str, expected_action: str, consumer: Consumer, verb
         else:
             iter_no_msg = 0
 
-            messtpc = message_obj.topic()
-            vals = message_obj.value()
+            if message_obj is not None:
+                messtpc = message_obj.topic()
+                vals = message_obj.value()
+                msg_error = message_obj.error()
+            else:
+                continue
+            if messtpc is None or vals is None:
+                iter_no_msg += 1
+                time.sleep(sleep_timeout)
+                continue
 
             message_is_ok = all([
-                messtpc == topic, 'Subscribed topic not available' not in str(vals), not message_obj.error()
+                messtpc == topic, 'Subscribed topic not available' not in str(vals), msg_error is None
             ])
 
             if message_is_ok:
 
                 consumer.commit(message_obj)
 
-                dctmsg = json.loads(vals)
+                dctmsg = json.loads(vals.decode("utf-8") if isinstance(vals, bytes) else vals)
                 match = re.search(dctmsg['dest'], "UX")
                 action = dctmsg['action'].upper()
 
@@ -450,8 +489,8 @@ def ask_results(
         Maximum iterations with no message (if this parameter is 1, the loop will stop once there are no more messages)
     """
 
-    topic_gen = KeySearch.search_for_value("TOPIC_GEN")
-    topic_callback = KeySearch.search_for_value("TOPIC_CALLBACK")
+    topic_gen = _key_str("TOPIC_GEN")
+    topic_callback = _key_str("TOPIC_CALLBACK")
 
     sendmsgtopic(
         producer=producer,
@@ -584,7 +623,7 @@ def normalize_auction_results(results: dict, order_scope: dict[str, set[str]] | 
     return normalized_results
 
 
-def sleep(seconds: float, producer: Producer, verbose: int):
+def sleep(seconds: float | int | None, producer: Producer, verbose: int):
     """
     Sleep for the specified number of seconds and notify the general LOG about it.
 
@@ -593,14 +632,15 @@ def sleep(seconds: float, producer: Producer, verbose: int):
     :param int verbose: Level of verbosity.
     """
 
-    topic_gen = KeySearch.search_for_value("TOPIC_GEN")
+    seconds_value = 0.0 if seconds is None else float(seconds)
+    topic_gen = _key_str("TOPIC_GEN")
 
     if verbose > 0:
         sendmsgtopic(
             producer=producer, tsend=topic_gen, topic=topic_gen, source="UX", dest="LOG:" + topic_gen, action="WRITE",
-            payload=dict(msg=f"Waiting for {seconds}s..."), vb=verbose
+            payload=dict(msg=f"Waiting for {seconds_value}s..."), vb=verbose
         )
-    time.sleep(seconds)
+    time.sleep(seconds_value)
 
 def main():
     """
@@ -699,7 +739,7 @@ def execute_short_term_planning(args: dict):
                            EXIT_WAIT=exit_wait, CLONING_WAIT=cloning_wait, RUNNING_WAIT=running_wait, SMALL_WAIT=small_wait)
 
     # Other arguments will be retrieved from env variables
-    short_term_config = ShortTermTargets(VB=verbose, TimeDelays=time_delay)
+    short_term_config = cast(ShortTermTargets, ShortTermTargets().model_copy(update={"VB": verbose, "TimeDelays": time_delay}))  # type: ignore
 
     # Class method
     KeySearch.set_global(config_provider=short_term_config)
@@ -708,12 +748,12 @@ def execute_short_term_planning(args: dict):
         # Mock REST_URL for Sphinx Documentation
         ip = '127.0.0.1:9092'
     else:
-        ip = KeySearch.search_for_value("KAFKA_IP")
+        ip = _key_str("KAFKA_IP")
 
     if verbose > 0:
         print(
-            f"Running program with {verbose=}, RW={KeySearch.search_for_value("RUNNING_WAIT")}, CW={KeySearch.search_for_value("CLONING_WAIT")}, AW={KeySearch.search_for_value("AUCTION_WAIT")}, "
-            f"BW={KeySearch.search_for_value("COUNTERBID_WAIT")} EW={KeySearch.search_for_value("EXIT_WAIT")}, SW={KeySearch.search_for_value("SLEEP_WAIT")}, {equipments=}, {nmaterials=}, {snapshot=}, {rungagnts=}."
+            f"Running program with {verbose=}, RW={_key_float('RUNNING_WAIT')}, CW={_key_float('CLONING_WAIT')}, AW={_key_float('AUCTION_WAIT')}, "
+            f"BW={_key_float('COUNTERBID_WAIT')} EW={_key_float('EXIT_WAIT')} SW={_key_float('SLEEP_WAIT')}, {equipments=}, {nmaterials=}, {snapshot=}, {rungagnts=}."
         )
 
     producer_config = {
@@ -741,21 +781,21 @@ def execute_short_term_planning(args: dict):
             gagents=rungagnts,
             verbose=verbose
         )
-        sleep(KeySearch.search_for_value("RUNNING_WAIT"), producer=producer, verbose=verbose)
+        sleep(_key_float("RUNNING_WAIT"), producer=producer, verbose=verbose)
 
-        if str(rungagnts)[0] == '1':
+        if str(rungagnts)[0] == '1' and log_handler is not None:
             log_tracked  = len(list(filter(lambda x: x["status"] == "running", log_handler.list_tracked_containers())))
             running_base_agents = running_base_agents + log_tracked
 
             if verbose >= 3:
                 print(f"Tracked {log_tracked} LOG containers")
-        if str(rungagnts)[1] == '1':
+        if str(rungagnts)[1] == '1' and equipment_handler is not None:
             equipment_tracked = len(list(filter(lambda x: x["status"] == "running", equipment_handler.list_tracked_containers())))
             running_base_agents = running_base_agents + equipment_tracked
 
             if verbose >= 3:
                 print(f"Tracked {equipment_tracked} EQUIPMENT containers")
-        if str(rungagnts)[2] == '1':
+        if str(rungagnts)[2] == '1' and material_handler is not None:
             material_tracked = len(list(filter(lambda x: x["status"] == "running", material_handler.list_tracked_containers())))
             running_base_agents = running_base_agents + material_tracked
 
@@ -779,33 +819,33 @@ def execute_short_term_planning(args: dict):
 
         print(f"Creating auction for topic {act}")
 
-        consumer.subscribe([act, KeySearch.search_for_value("TOPIC_CALLBACK")])
-        sleep(KeySearch.search_for_value("CLONING_WAIT"), producer=producer, verbose=verbose)
+        consumer.subscribe([act, _key_str("TOPIC_CALLBACK")])
+        sleep(_key_float("CLONING_WAIT"), producer=producer, verbose=verbose)
 
         if n_agents > 1:
             start_auction(topic=act, consumer=consumer, producer=producer, verbose=verbose, num_agents=n_agents)
-            sleep(KeySearch.search_for_value("AUCTION_WAIT"), producer=producer, verbose=verbose)
+            sleep(_key_float("AUCTION_WAIT"), producer=producer, verbose=verbose)
             results = ask_results(topic=act, producer=producer, consumer=consumer, verbose=verbose)
             results = normalize_auction_results(results, order_scope=order_scope)
             if verbose > 0:
                 print("---- RESULTS ----")
                 print(results)
                 print("----  ----")
-            sleep(KeySearch.search_for_value("SMALL_WAIT"), producer=producer, verbose=verbose)
+            sleep(_key_float("SMALL_WAIT"), producer=producer, verbose=verbose)
     finally:
-        end_auction(topic=act, producer=producer, verbose=verbose, wait_time=KeySearch.search_for_value("SMALL_WAIT"))
-        sleep(KeySearch.search_for_value("EXIT_WAIT"), producer=producer, verbose=verbose)
+        end_auction(topic=act, producer=producer, verbose=verbose, wait_time=int(_key_float("SMALL_WAIT")))
+        sleep(_key_float("EXIT_WAIT"), producer=producer, verbose=verbose)
 
         # Remove all main agents
         clean_agents(producer, verbose, rungagnts)
 
-        sleep(KeySearch.search_for_value("SMALL_WAIT"), producer=producer, verbose=verbose)
+        sleep(_key_float("SMALL_WAIT"), producer=producer, verbose=verbose)
 
     return results
 
-def clean_agents(producer, verbose, rungagnts):
+def clean_agents(producer: Producer, verbose: int, rungagnts: str):
 
-    topic_gen = KeySearch.search_for_value("TOPIC_GEN")
+    topic_gen = _key_str("TOPIC_GEN")
 
     if int(rungagnts) > 0:
         # Exit EQUIPMENT BASE
@@ -834,7 +874,7 @@ def clean_agents(producer, verbose, rungagnts):
 
         # Exit LOG BASE
         if str(rungagnts)[0] == '1':
-            sleep(KeySearch.search_for_value("SMALL_WAIT"), producer=producer, verbose=verbose)
+            sleep(_key_float("SMALL_WAIT"), producer=producer, verbose=verbose)
             sendmsgtopic(
                 producer=producer,
                 tsend=topic_gen,

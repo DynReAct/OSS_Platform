@@ -477,9 +477,9 @@ def _resolve_http_token(http_cfg: dict[str, Any]) -> str | None:
 
 def _build_http_backend(http_cfg: dict[str, Any]) -> HttpEnergyBackend:
     """Instantiate the HTTP backend from one JSON config block."""
-    base_url = str(http_cfg.get("base_url") or "").strip()
+    base_url = str(http_cfg.get("DYNREACT_ENERGY_PERF") or http_cfg.get("base_url") or "").strip()
     if base_url == "":
-        raise ValueError("Energy HTTP configuration is missing `base_url`.")
+        raise ValueError("Energy HTTP configuration is missing `DYNREACT_ENERGY_PERF`.")
     equipment = http_cfg.get("equipment")
     if not isinstance(equipment, dict) or len(equipment) == 0:
         raise ValueError("Energy HTTP configuration is missing `equipment` mappings.")

@@ -1,3 +1,10 @@
+"""Common short-term planning utilities for OSS_Platform/ShortTermPlanning/dynreact/shortterm/common/__init__.
+
+The module is documented in English to make the short-term planning
+workflow easier to maintain across OSS and RAS-specific integrations.
+"""
+
+from typing import Any
 import json
 import argparse
 from datetime import datetime
@@ -10,7 +17,7 @@ from flatdict import FlatDict
 
 from dynreact.shortterm.shorttermtargets import ShortTermTargets
 
-def _compute_partition_topic(topic_name: str, admin_client: AdminClient):
+def _compute_partition_topic(topic_name: str, admin_client: AdminClient) -> Any:
     """
     Function to list topic partitions.
 
@@ -30,7 +37,7 @@ def _compute_partition_topic(topic_name: str, admin_client: AdminClient):
         partitions = md.topics[topic_name].partitions
         return list(map(lambda p: TopicPartition(topic_name, int(p), offset=OFFSET_END), partitions.keys()))
 
-def purge_topics(topics: list):
+def purge_topics(topics: list) -> None:
     """
     Function to purge list of topics.
 
@@ -54,7 +61,7 @@ def purge_topics(topics: list):
             dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
             raise Exception(f"{dt} | ERROR: Failed: {tp} with error {e}")
 
-def delete_topics(topics: list, silent=False):
+def delete_topics(topics: list, silent: Any=False) -> None:
     """
     Function to delete list of topics.
 
@@ -80,10 +87,16 @@ def delete_topics(topics: list, silent=False):
                 raise Exception(f"{dt} | ERROR: Failed: {tp} with error {e}")
 
 class KeySearch:
+    """Key search.
+    
+    This class belongs to the short-term planning integration layer. It
+    encapsulates state, configuration, or UI behavior used by the planning
+    workflow without changing the runtime semantics of the original module.
+    """
     _global_config: ShortTermTargets = None
 
     @classmethod
-    def is_initialized(cls):
+    def is_initialized(cls) -> Any:
         """
         Returns if the class has been initialized.
 
@@ -92,7 +105,7 @@ class KeySearch:
         return cls._global_config is not None
 
     @classmethod
-    def dump_model(cls):
+    def dump_model(cls) -> Any:
         """
         Dump the class information to a dict, assigning values from the config and environment.
 
@@ -113,7 +126,7 @@ class KeySearch:
         return dump_model.model_copy(update=update).model_dump()
 
     @classmethod
-    def assign_value(cls, key: str, value: str):
+    def assign_value(cls, key: str, value: str) -> None:
         """
         Assign new single value to a key.
 
@@ -128,7 +141,7 @@ class KeySearch:
         cls._global_config = cls._global_config.model_copy(update={key: value})
 
     @classmethod
-    def assign_values(cls, new_values: dict):
+    def assign_values(cls, new_values: dict) -> None:
         """
         Assign new values to keys (batch).
 
@@ -141,7 +154,7 @@ class KeySearch:
         cls._global_config = cls._global_config.model_copy(update=new_values)
 
     @classmethod
-    def set_global(cls, config_provider: ShortTermTargets):
+    def set_global(cls, config_provider: ShortTermTargets) -> None:
         """
         Function to update the config provider.
 
@@ -150,7 +163,7 @@ class KeySearch:
         cls._global_config = config_provider
 
     @classmethod
-    def _get_value(cls, key_name: str, default_value=None):
+    def _get_value(cls, key_name: str, default_value: Any=None) -> Any:
         """
         Retrieve the value associated with a flattened key segment from the configuration.
 
@@ -168,7 +181,7 @@ class KeySearch:
         return default_value if deep_search is None else deep_search
 
     @classmethod
-    def search_for_value(cls, key_name, default_value=None):
+    def search_for_value(cls, key_name: Any, default_value: Any=None) -> Any:
         """
         Function to check for a given key name between env and context including recursive structure.
 
@@ -213,9 +226,9 @@ class VAction(argparse.Action):
         metavar (str):
     """
 
-    def __init__(self, option_strings, dest, nargs=None, const=None,
-                 default=None, type=None, choices=None, required=False,
-                 help=None, metavar=None):
+    def __init__(self, option_strings: Any, dest: Any, nargs: Any=None, const: Any=None,
+                 default: Any=None, type: Any=None, choices: Any=None, required: Any=False,
+                 help: Any=None, metavar: Any=None) -> None:
         super(VAction, self).__init__(option_strings, dest, nargs, const,
                                       default, type, choices, required,
                                       help, metavar)
@@ -236,7 +249,7 @@ class VAction(argparse.Action):
         """
         self.values = 0
 
-    def __call__(self, parser, args, values, option_string=None):
+    def __call__(self, parser: Any, args: Any, values: Any, option_string: Any=None) -> None:
         """
         Function able to handle the arguments.
 

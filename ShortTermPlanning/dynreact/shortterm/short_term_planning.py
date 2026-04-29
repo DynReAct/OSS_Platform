@@ -62,7 +62,7 @@ def _key_float(key: str, default: float = 0.0) -> float:
         return default
 
 
-def list_all_topics(admin_client: AdminClient, verbose: int):
+def list_all_topics(admin_client: AdminClient, verbose: int) -> Any:
     """
     List all topics in the Kafka broker.
 
@@ -76,7 +76,7 @@ def list_all_topics(admin_client: AdminClient, verbose: int):
 
     return topics_metadata.topics or []
 
-def topic_exist(admin_client: AdminClient, topic_name: str, verbose: int):
+def topic_exist(admin_client: AdminClient, topic_name: str, verbose: int) -> Any:
     """
     Check if a topic exist in the Kafka broker.
     This is necessary when to check name duplicity.
@@ -94,7 +94,7 @@ def topic_exist(admin_client: AdminClient, topic_name: str, verbose: int):
 
     return False
 
-def delete_all_topics(admin_client: AdminClient, verbose: int):
+def delete_all_topics(admin_client: AdminClient, verbose: int) -> None:
     """
     Delete all hanging topics in the Kafka broker.
     This is necessary when a previous execution did not finish correctly
@@ -131,7 +131,7 @@ def genauction(act: str | None = None) -> str:
 
     return f"{topic_prefix}-" + act
 
-def run_general_agents(producer: Producer, gagents: str, verbose: int):
+def run_general_agents(producer: Producer, gagents: str, verbose: int) -> Any:
     """
     Creates the general agents by running the corresponding scripts.
 
@@ -623,7 +623,7 @@ def normalize_auction_results(results: dict, order_scope: dict[str, set[str]] | 
     return normalized_results
 
 
-def sleep(seconds: float | int | None, producer: Producer, verbose: int):
+def sleep(seconds: float | int | None, producer: Producer, verbose: int) -> None:
     """
     Sleep for the specified number of seconds and notify the general LOG about it.
 
@@ -642,7 +642,7 @@ def sleep(seconds: float | int | None, producer: Producer, verbose: int):
         )
     time.sleep(seconds_value)
 
-def main():
+def main() -> Any:
     """
     Main module to capture arguments from command line
     params are provided as external arguments in command line.
@@ -712,7 +712,7 @@ def main():
     return execute_short_term_planning(args)
 
 
-def execute_short_term_planning(args: dict):
+def execute_short_term_planning(args: dict) -> Any:
     """
     Method to running tests for validation
 
@@ -843,8 +843,21 @@ def execute_short_term_planning(args: dict):
 
     return results
 
-def clean_agents(producer: Producer, verbose: int, rungagnts: str):
+def clean_agents(producer: Producer, verbose: int, rungagnts: str) -> None:
 
+    """Clean agents.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Args:
+        producer: Input value for the `producer` parameter.
+        verbose: Input value for the `verbose` parameter.
+        rungagnts: Input value for the `rungagnts` parameter.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
     topic_gen = _key_str("TOPIC_GEN")
 
     if int(rungagnts) > 0:

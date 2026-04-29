@@ -5,6 +5,7 @@ Page responsible to present the UI into the global solution
 
 """
 
+from typing import Any
 from enum import Enum
 import dash, json, time, string, random, hashlib, datetime
 import dash_ag_grid as dash_ag
@@ -74,6 +75,12 @@ VB = KeySearch.search_for_value("VB")
 SMALL_WAIT = KeySearch.search_for_value("SMALL_WAIT")
 
 class ParamDef(tuple, Enum):
+    """Param def.
+    
+    This class belongs to the short-term planning integration layer. It
+    encapsulates state, configuration, or UI behavior used by the planning
+    workflow without changing the runtime semantics of the original module.
+    """
     I = (dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update)
     L = (NO_DISPLAY, DISPLAY_FLEX, dash.no_update, dash.no_update, dash.no_update)
     G = (NO_DISPLAY, NO_DISPLAY, DISPLAY_FLEX, DISPLAY_FLEX, dash.no_update)
@@ -120,7 +127,7 @@ def confirm(err: str, msg: str) -> None:
     return None
 
 
-def sleep(seconds: float, producer: Producer, verbose: int):
+def sleep(seconds: float, producer: Producer, verbose: int) -> None:
     """
     Sleep for the specified number of seconds and notify the general LOG about it.
 
@@ -137,7 +144,7 @@ def sleep(seconds: float, producer: Producer, verbose: int):
         )
     time.sleep(seconds)
 
-def flatten_jobs_and_transform(jobs, columns):
+def flatten_jobs_and_transform(jobs: Any, columns: Any) -> Any:
     """
     Generates a dict that matches the expected type of AgGrid
 
@@ -160,7 +167,7 @@ def flatten_jobs_and_transform(jobs, columns):
         flatten_jobs.append(flattened)
     return flatten_jobs
 
-def random_letters(length: int):
+def random_letters(length: int) -> Any:
     """
     Generates a random letter identifier.
 
@@ -171,7 +178,7 @@ def random_letters(length: int):
     """
     return ''.join(random.choices(string.ascii_lowercase, k=length))
 
-def make_ag_grid_for_equipment(equipment_id, jobs):
+def make_ag_grid_for_equipment(equipment_id: Any, jobs: Any) -> Any:
     """
     Generates a random letter identifier.
 
@@ -222,7 +229,7 @@ def make_ag_grid_for_equipment(equipment_id, jobs):
             html.Div("No TABLE_MAPPINGS are defined, unable to render Table")
         ])
 
-def initialize_defaults(extra=False):
+def initialize_defaults(extra: Any=False) -> Any:
     """
     Initializes default values for the layout function.
 
@@ -234,7 +241,7 @@ def initialize_defaults(extra=False):
         return [], [], [], 'No', '', pd.DataFrame(), [], []
     return 'None', 'Orders', [], [], [], []
 
-def build_resources_list(res_lst):
+def build_resources_list(res_lst: Any) -> Any:
     """
     Builds a list of resources for selection.
 
@@ -244,7 +251,7 @@ def build_resources_list(res_lst):
     """
     return res_lst, []
 
-def generate_page_header(snpshot):
+def generate_page_header(snpshot: Any) -> Any:
     """
     Generates the page header section.
 
@@ -259,7 +266,7 @@ def generate_page_header(snpshot):
         html.Br()
     ])
 
-def generate_material_type_section(default_value='Orders'):
+def generate_material_type_section(default_value: Any='Orders') -> Any:
     """
     Generates the material type selection section (Orders vs Materials).
 
@@ -282,7 +289,7 @@ def generate_material_type_section(default_value='Orders'):
         id="ag-sect1"
     )
 
-def generate_resource_section(res_all, res_def):
+def generate_resource_section(res_all: Any, res_def: Any) -> Any:
     """
     Generates the resource selection section using Dropdown.
 
@@ -310,7 +317,7 @@ def generate_resource_section(res_all, res_def):
         html.Br(),
     ])
 
-def generate_materials_section(lmats, s_mats):
+def generate_materials_section(lmats: Any, s_mats: Any) -> Any:
     """
     Generates the materials selection section using Dropdown.
 
@@ -335,7 +342,7 @@ def generate_materials_section(lmats, s_mats):
         style=NO_DISPLAY
     )
 
-def generate_ass_material_type_section(default_value='No'):
+def generate_ass_material_type_section(default_value: Any='No') -> Any:
     """
     Generates the assigned materials type section.
 
@@ -361,7 +368,7 @@ def generate_ass_material_type_section(default_value='No'):
         id="ag-sect4"
     )
 
-def generate_ass_materials_section(amats, as_mats):
+def generate_ass_materials_section(amats: Any, as_mats: Any) -> Any:
     """
     Generates the assigned materials selection section using Dropdown.
 
@@ -386,7 +393,7 @@ def generate_ass_materials_section(amats, as_mats):
         style=NO_DISPLAY
     )
 
-def generate_input_section(txt_def):
+def generate_input_section(txt_def: Any) -> Any:
     """
     Generates the input section for entering reference names.
 
@@ -402,7 +409,7 @@ def generate_input_section(txt_def):
     ])
 
 
-def generate_buttons():
+def generate_buttons() -> Any:
     """
     Generates the buttons for creating and starting an auction.
 
@@ -446,7 +453,7 @@ def generate_buttons():
         style={'display': 'flex', 'justify-content': 'space-between', 'width': '100%'}
     )
 
-def generate_status_section():
+def generate_status_section() -> Any:
     """
     Generates the status display section.
 
@@ -465,7 +472,7 @@ def generate_status_section():
         ),
     ])
 
-def layout(*args, **kwargs):
+def layout(*args: Any, **kwargs: Any) -> Any:
     """
     Function defining the Flask layout for the STP Agents.
 
@@ -535,7 +542,7 @@ def layout(*args, **kwargs):
             Output('ag-materials','value'),
             Input( 'ag-matypes','value'),
             Input( 'ag-resources','value'))
-def set_materials(matype, plants):
+def set_materials(matype: Any, plants: Any) -> Any:
     """
     Function to prepare the list of materials to use in the auction
 
@@ -595,7 +602,7 @@ def set_materials(matype, plants):
            Input( 'ag-matypes','value'),
            Input( 'ag-resources','value'),
            Input( 'ag-ass-matypes','value'))
-def set_ass_materials(matype, plants, ass_mats):
+def set_ass_materials(matype: Any, plants: Any, ass_mats: Any) -> Any:
     """
     Function to prepare the list of materials to use in the aunction
 
@@ -669,9 +676,9 @@ def set_ass_materials(matype, plants, ass_mats):
     State({'type': 'equip-date', 'index': ALL}, 'value'),
     prevent_initial_call=True
 )
-def handle_auction_actions(ag_create, ag_start, ag_refresh, ag_end, ag_restart,
-                          reftxt, matype, resources, materials, ass_type, ass_materials,
-                          auction_data, has_initialized, dates):
+def handle_auction_actions(ag_create: Any, ag_start: Any, ag_refresh: Any, ag_end: Any, ag_restart: Any,
+                          reftxt: Any, matype: Any, resources: Any, materials: Any, ass_type: Any, ass_materials: Any,
+                          auction_data: Any, has_initialized: Any, dates: Any) -> Any:
     """
     Handles all auction-related actions based on button clicks.
     Includes complete logic for both Orders and Materials material types.
@@ -720,7 +727,7 @@ def handle_auction_actions(ag_create, ag_start, ag_refresh, ag_end, ag_restart,
 
     return dash.no_update
 
-def handle_create_click(ag_create, reftxt, matype, plnts, lmats, ass_type, amats, auction, dates):
+def handle_create_click(ag_create: Any, reftxt: Any, matype: Any, plnts: Any, lmats: Any, ass_type: Any, amats: Any, auction: Any, dates: Any) -> Any:
     """
     Handles the logic when the 'Create Auction' button is clicked.
     Supports both Materials and Orders material types with proper conversion logic.
@@ -807,7 +814,7 @@ def handle_create_click(ag_create, reftxt, matype, plnts, lmats, ass_type, amats
                 dash.no_update, dash.no_update)
 
 
-def handle_start_click(ag_start, reftxt, auction):
+def handle_start_click(ag_start: Any, reftxt: Any, auction: Any) -> Any:
     """
     Handles the logic when the 'Start' button is clicked.
 
@@ -872,7 +879,7 @@ def handle_start_click(ag_start, reftxt, auction):
     return (text, dash.no_update, NO_DISPLAY, DISPLAY_FLEX, DISPLAY_FLEX,
             NO_DISPLAY, dash.no_update, auction.model_dump_json(), dash.no_update)
 
-def handle_refresh_click(ag_refresh, reftxt, auction):
+def handle_refresh_click(ag_refresh: Any, reftxt: Any, auction: Any) -> Any:
     """
     Handles the logic when the 'Refresh' button is clicked.
 
@@ -926,7 +933,7 @@ def handle_refresh_click(ag_refresh, reftxt, auction):
             auction.model_dump_json(), dash.no_update)
 
 
-def handle_end_click(ag_end, reftxt, auction):
+def handle_end_click(ag_end: Any, reftxt: Any, auction: Any) -> Any:
     """
     Handles the logic when the 'End' button is clicked.
 
@@ -996,7 +1003,7 @@ def handle_end_click(ag_end, reftxt, auction):
             DISPLAY_FLEX, dash.no_update, auction.model_dump_json(), dash.no_update)
 
 
-def handle_restart_click(ag_restart, reftxt, auction):
+def handle_restart_click(ag_restart: Any, reftxt: Any, auction: Any) -> Any:
     """
     Handles the logic when the 'Restart' button is clicked.
 
@@ -1071,7 +1078,7 @@ def initialize_auction(topic: str, snap_name: str, resources: list,
     Input('tabs', 'value'),
     State('auction-store', 'data')
 )
-def render_tab_content(selected_tab, auction_data):
+def render_tab_content(selected_tab: Any, auction_data: Any) -> Any:
     """
     Renders content for the selected results tab.
 
@@ -1098,7 +1105,7 @@ def render_tab_content(selected_tab, auction_data):
     State('auction-store', 'data'),
     prevent_initial_call=True
 )
-def download_equipment_csv(n_clicks, selected_tab, auction_data):
+def download_equipment_csv(n_clicks: Any, selected_tab: Any, auction_data: Any) -> Any:
     """
     Handles CSV download for the selected equipment.
 
@@ -1138,7 +1145,7 @@ def download_equipment_csv(n_clicks, selected_tab, auction_data):
     Input("ag-resources", "value"),
     prevent_initial_call=True
 )
-def update_equipment_inputs(selected_equipments):
+def update_equipment_inputs(selected_equipments: Any) -> Any:
     """
     Dynamically updates the inputs for the selected equipment.
 
@@ -1180,7 +1187,7 @@ def update_equipment_inputs(selected_equipments):
     Output("ag-restart", "children"),
     Input("lang", "data")
 )
-def update_page_localization(lang: str):
+def update_page_localization(lang: str) -> Any:
     """
     Updates the static text elements on the page based on the selected language.
 
@@ -1207,7 +1214,7 @@ def update_page_localization(lang: str):
     Output("ag-matypes", "options"),
     Input("lang", "data")
 )
-def update_radio_options_localization(lang: str):
+def update_radio_options_localization(lang: str) -> Any:
     """
     Updates the radio options for the material type selection based on the selected language.
 
@@ -1226,7 +1233,7 @@ def update_radio_options_localization(lang: str):
     Output("ag-ass-matypes", "options"),
     Input("lang", "data")
 )
-def update_ass_radio_localization(lang: str):
+def update_ass_radio_localization(lang: str) -> Any:
     """
     Updates the radio options for the assignment type selection based on the selected language.
 

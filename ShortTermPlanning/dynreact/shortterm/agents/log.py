@@ -11,6 +11,7 @@ Version History:
 
 """
 
+from typing import Any
 import time
 import json
 
@@ -45,7 +46,7 @@ class LogWithExtensionHandler(TimedRotatingFileHandler):
        https://google.github.io/styleguide/pyguide.html
     """
 
-    def __init__(self, filename, *args, **kwargs):
+    def __init__(self, filename: Any, *args: Any, **kwargs: Any) -> None:
         """
         Constructor function for the LogWithExtensionHandler Class
         """
@@ -57,7 +58,7 @@ class LogWithExtensionHandler(TimedRotatingFileHandler):
         self.suffix = "%Y-%m-%d" + self._log_extension  # e.g., .2025-07-03.log
 
 
-    def rotation_filename(self, default_name: str):
+    def rotation_filename(self, default_name: str) -> Any:
         """
         Function to rotate the filename
 
@@ -72,7 +73,7 @@ class LogWithExtensionHandler(TimedRotatingFileHandler):
         dfn = base_filename + "." + self.rotation_time_format(time_tuple) + self._log_extension
         return dfn
 
-    def rotation_time_format(self, timestamp: float):
+    def rotation_time_format(self, timestamp: float) -> Any:
         """
         Compute file time format
 
@@ -98,7 +99,7 @@ class Log(Agent):
        https://google.github.io/styleguide/pyguide.html
     """
 
-    def __init__(self, topic: str, agent: str, log_file: str, manager=True):
+    def __init__(self, topic: str, agent: str, log_file: str, manager: Any=True) -> None:
         super().__init__(topic=topic, agent=agent)
         """
         Constructor function for the Log Class
@@ -146,7 +147,7 @@ class Log(Agent):
             self.write_log(f"ERROR: {self.log_file} does not exist", "b82f31ef-1750-4f33-8b2c-7bba4ed408de", action='CREATE')
         self.write_log(f"New log file created for topic {self.topic}.", "1a40e14a-845a-489a-8bea-5768c8940f1f", action='CREATE')
 
-    def write_log(self, msg: str, identifier: str, action: str = 'WRITE', verbose: float = float("inf")):
+    def write_log(self, msg: str, identifier: str, action: str = 'WRITE', verbose: float = float("inf")) -> None:
         """
         Function writing a message to the log itself
 
@@ -159,7 +160,7 @@ class Log(Agent):
         )
         self.handle_write_action(full_msg, verbose)
 
-    def callback_on_topic_not_available(self, topic: str = None):
+    def callback_on_topic_not_available(self, topic: str = None) -> None:
         """
         Function executed when 'Subscribed topic not available'
 
@@ -180,7 +181,7 @@ class Log(Agent):
             self.write_log(f"Created topic {self.topic}.", "762baef6-e85d-4a35-83d3-6298b6970b8c")
         time.sleep(2)
 
-    def callback_on_not_match(self, dctmsg: dict):
+    def callback_on_not_match(self, dctmsg: dict) -> None:
         """
         When the LOG is not the destination, write the message in the log file and record the results.
         This allows the LOG to record all the messages exchanged within the topic.
@@ -392,7 +393,7 @@ class Log(Agent):
                 )
         return 'CONTINUE'
 
-    def count_agents(self, agent_type: str):
+    def count_agents(self, agent_type: str) -> Any:
         """
         Count the number of a specific present agent
 

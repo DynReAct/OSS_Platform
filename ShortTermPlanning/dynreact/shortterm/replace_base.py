@@ -20,6 +20,7 @@ Note:
         To replace all base agents run: python3 replace_base.py -v 3  -b . -g 111
 """
 
+from typing import Any
 import argparse
 import time
 
@@ -29,7 +30,7 @@ from dynreact.shortterm.short_term_planning import clean_agents, run_general_age
 from dynreact.shortterm.shorttermtargets import ShortTermTargets
 
 
-def main():
+def main() -> Any:
     """
     Main module focused on cleaning the kafka queue.
     params are provided as external arguments in command line.

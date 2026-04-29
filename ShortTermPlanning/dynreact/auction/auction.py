@@ -1,3 +1,9 @@
+"""Auction orchestration models and helpers for OSS_Platform/ShortTermPlanning/dynreact/auction/auction.
+
+The module is documented in English to make the short-term planning
+workflow easier to maintain across OSS and RAS-specific integrations.
+"""
+
 from pydantic import BaseModel, Field
 from typing import List, Dict
 from enum import Enum
@@ -5,6 +11,12 @@ import sys, os
 import json, hashlib
 
 class JobStatus(str, Enum):
+    """Job status.
+    
+    This class belongs to the short-term planning integration layer. It
+    encapsulates state, configuration, or UI behavior used by the planning
+    workflow without changing the runtime semantics of the original module.
+    """
     I = "Idle"
     L = "Launched"
     G = "Started"
@@ -12,7 +24,7 @@ class JobStatus(str, Enum):
     F = "Finished"
     E = "Error"
 
-def hash_object(obj):
+def hash_object(obj: Any) -> Any:
     """Serialize the object and return a hash string."""
     obj_str = json.dumps(obj, sort_keys=True)
     return hashlib.sha256(obj_str.encode()).hexdigest()
@@ -75,10 +87,16 @@ class Auction(BaseModel):
     resul: Dict[str, List[dict]] = Field(default_factory=dict)
 
     class Config:
+        """Config.
+        
+        This class belongs to the short-term planning integration layer. It
+        encapsulates state, configuration, or UI behavior used by the planning
+        workflow without changing the runtime semantics of the original module.
+        """
         use_enum_values = True
         validate_assignment = True
 
-    def set_params(self, htmscr):
+    def set_params(self, htmscr: Any) -> None:
         """
         Function parsing the html into UI attributes.
 
@@ -123,7 +141,7 @@ class Auction(BaseModel):
         if 'value' in vtxt:
             self.code = vtxt.value
 
-    def set_lists(self, rftxt: str, lmats: list, mtyp: str, smats: list):
+    def set_lists(self, rftxt: str, lmats: list, mtyp: str, smats: list) -> None:
         """
         Function setting up the list of materials and plants relevant
         for the auction.
@@ -144,7 +162,7 @@ class Auction(BaseModel):
             self.lmats = []
             self.omats = lmats
 
-    def set_materials(self, matype: str, plants: list):
+    def set_materials(self, matype: str, plants: list) -> None:
         """
         Function establishing the Auction parameters of
         materials and equipments.
@@ -155,7 +173,7 @@ class Auction(BaseModel):
         self.matype = matype
         self.equip = plants
 
-    def set_ass_materials(self, matype: str, plants: list, ass_mats: str, amats: list):
+    def set_ass_materials(self, matype: str, plants: list, ass_mats: str, amats: list) -> None:
         """
         Function establishing the Auction parameters of
         assigned materials and equipments.
@@ -170,7 +188,7 @@ class Auction(BaseModel):
         self.mat_ass_type = ass_mats
         self.amats = amats
 
-    def set_resul(self, results: Dict[str, List[dict]]):
+    def set_resul(self, results: Dict[str, List[dict]]) -> None:
         """
         Function establising the auction results
 
@@ -188,7 +206,7 @@ class Auction(BaseModel):
             else:
                 self.resul[equipment] = results[equipment]
 
-    def set_status(self, job_status: JobStatus):
+    def set_status(self, job_status: JobStatus) -> None:
         """
         Function establising the current status for the auction
 
@@ -196,7 +214,7 @@ class Auction(BaseModel):
         """
         self.auction_status = job_status
 
-    def set_message(self,msg):
+    def set_message(self,msg: Any) -> None:
         """
         Function establishing the message describing the current status
 
@@ -204,7 +222,7 @@ class Auction(BaseModel):
         """
         self.msg = msg
 
-    def set_codeid(self, code: str):
+    def set_codeid(self, code: str) -> None:
         """
         Function to setup the code when it requires update
 
@@ -212,7 +230,7 @@ class Auction(BaseModel):
         """
         self.code = code
 
-    def get_params(self):
+    def get_params(self) -> Any:
         """
         Function recovering auction's parameters.
 
@@ -281,7 +299,7 @@ class Auction(BaseModel):
         """
         return self.equip
 
-    def get_codeid(self):
+    def get_codeid(self) -> Any:
         """
         Function returning the CodeId for the auction.
 
@@ -291,7 +309,7 @@ class Auction(BaseModel):
         """
         return self.code
 
-    def get_resul(self):
+    def get_resul(self) -> Any:
         """
         Function returning the results
 
@@ -300,7 +318,7 @@ class Auction(BaseModel):
         """
         return self.resul
 
-    def get_status(self):
+    def get_status(self) -> Any:
         """
         Function returning the status according to a scale
         distinguishing when the auction is not launched, launched,
@@ -312,7 +330,7 @@ class Auction(BaseModel):
         """
         return self.auction_status
 
-    def get_message(self):
+    def get_message(self) -> Any:
         """
         Function recovering the message describing the current status
 
@@ -322,7 +340,7 @@ class Auction(BaseModel):
         """
         return self.msg
 
-    def get_materials(self):
+    def get_materials(self) -> Any:
         """
         Function returning the Auction parameters of materials and equipments
 

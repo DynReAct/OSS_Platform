@@ -1,3 +1,10 @@
+"""Short-term planning agent implementation for OSS_Platform/ShortTermPlanning/dynreact/shortterm/agents/agent.
+
+The module is documented in English to make the short-term planning
+workflow easier to maintain across OSS and RAS-specific integrations.
+"""
+
+from typing import Any
 import json
 import re
 import time
@@ -9,13 +16,37 @@ import traceback
 
 current_partitions = 0
 
-def on_assign(consumer, partitions):
+def on_assign(consumer: Any, partitions: Any) -> None:
+    """On assign.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Args:
+        consumer: Input value for the `consumer` parameter.
+        partitions: Input value for the `partitions` parameter.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
     global current_partitions
     print("Partitions assigned:", partitions)
     current_partitions = len(partitions)
     consumer.assign(partitions)
 
-def on_revoke(consumer, partitions):
+def on_revoke(consumer: Any, partitions: Any) -> None:
+    """On revoke.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Args:
+        consumer: Input value for the `consumer` parameter.
+        partitions: Input value for the `partitions` parameter.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
     global current_partitions
     print("Partitions revoked:", partitions)
     current_partitions = max(0, current_partitions - len(partitions))
@@ -35,7 +66,7 @@ class Agent:
        https://google.github.io/styleguide/pyguide.html
     """
 
-    def __init__(self, topic: str, agent: str):
+    def __init__(self, topic: str, agent: str) -> None:
         """
            Constructor function for the Log Class
 
@@ -69,7 +100,7 @@ class Agent:
         )
         self.consumer.subscribe([self.topic], on_assign=on_assign, on_revoke=on_revoke)
 
-    def write_log(self, msg: str, identifier: str, to_stdout: bool = False):
+    def write_log(self, msg: str, identifier: str, to_stdout: bool = False) -> None:
         """
         Write the given message in the topic's LOG
 
@@ -164,20 +195,31 @@ class Agent:
         """
         return 'CONTINUE'
 
-    def callback_on_topic_not_available(self, topic: str = None):
+    def callback_on_topic_not_available(self, topic: str = None) -> None:
         """
         Function executed when 'Subscribed topic not available'
         
         """
 
-    def callback_on_not_match(self, dctmsg: dict):
+    def callback_on_not_match(self, dctmsg: dict) -> None:
         """
         Function executed when the agent is not the destination of the message
         
         """
         pass
 
-    def kafka_error_callback(self, err: KafkaError):
+    def kafka_error_callback(self, err: KafkaError) -> None:
+        """Kafka error callback.
+        
+        This function is part of the short-term planning workflow and keeps
+        the existing runtime behavior while documenting the public contract.
+        
+        Args:
+            err: Input value for the `err` parameter.
+        
+        Returns:
+            The value produced by the underlying planning, UI, or test helper logic.
+        """
         error_code = err.code() if hasattr(err, "code") else None
         if error_code in {KafkaError.UNKNOWN_TOPIC_OR_PART, KafkaError._UNKNOWN_PARTITION}:
             print("WARNING: Topic or partition is temporarily unavailable", err)

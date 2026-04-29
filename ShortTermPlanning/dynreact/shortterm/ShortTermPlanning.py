@@ -1,3 +1,9 @@
+"""Short-term planning integration module for OSS_Platform/ShortTermPlanning/dynreact/shortterm/ShortTermPlanning.
+
+The module is documented in English to make the short-term planning
+workflow easier to maintain across OSS and RAS-specific integrations.
+"""
+
 from dynreact.shortterm.shorttermtargets import ShortTermTargets
 from dynreact.shortterm.common import KeySearch
 
@@ -6,7 +12,7 @@ class ShortTermPlanning:
     Handling needed params to properly setup the STP context.
     """
 
-    def __init__(self, uri: str):
+    def __init__(self, uri: str) -> None:
         self._uri = uri
         uri = uri.lower()
         if not uri.startswith("default+file:"):
@@ -20,9 +26,25 @@ class ShortTermPlanning:
 
 
     def stp_config_params(self) -> ShortTermTargets:
+        """Stp config params.
+        
+        This function is part of the short-term planning workflow and keeps
+        the existing runtime behavior while documenting the public contract.
+        
+        Returns:
+            The value produced by the underlying planning, UI, or test helper logic.
+        """
         return self._stpConfigParams
 
     def stp_context_params(self) -> tuple[object, object, object, object]:
+        """Stp context params.
+        
+        This function is part of the short-term planning workflow and keeps
+        the existing runtime behavior while documenting the public contract.
+        
+        Returns:
+            The value produced by the underlying planning, UI, or test helper logic.
+        """
         return (
             KeySearch.search_for_value("KAFKA_IP"),
             KeySearch.search_for_value("TOPIC_GEN"),
@@ -31,6 +53,14 @@ class ShortTermPlanning:
         )
 
     def stp_context_timing(self) -> tuple[object, object, object, object, object]:
+        """Stp context timing.
+        
+        This function is part of the short-term planning workflow and keeps
+        the existing runtime behavior while documenting the public contract.
+        
+        Returns:
+            The value produced by the underlying planning, UI, or test helper logic.
+        """
         time_delays = self._stpConfigParams.TimeDelays
         return (
             time_delays.AUCTION_WAIT,

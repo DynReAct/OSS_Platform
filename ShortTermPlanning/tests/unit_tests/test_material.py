@@ -1,9 +1,16 @@
+"""Test support and regression coverage for OSS_Platform/ShortTermPlanning/tests/unit_tests/test_material.
+
+The module is documented in English to make the short-term planning
+workflow easier to maintain across OSS and RAS-specific integrations.
+"""
+
+from typing import Any
 import json
 from unittest.mock import patch, MagicMock
 
 
 @patch('material.Pool')  # Patch Pool inside material.py
-def test_handle_create_action(mock_pool, material_agent):
+def test_handle_create_action(mock_pool: Any, material_agent: Any) -> None:
     """
     Makes sure materials are created successfully.
     """
@@ -42,7 +49,7 @@ def test_handle_create_action(mock_pool, material_agent):
 
 @patch("material.calculate_bidding_price", return_value=250.0)
 @patch("material.sendmsgtopic", return_value=None)
-def test_handle_valid_bid_action(mock_sendmsgtopic, _, material_agent):
+def test_handle_valid_bid_action(mock_sendmsgtopic: Any, _: Any, material_agent: Any) -> None:
     """
     Test whether the bid action is handled correctly when you have a price.
     """
@@ -76,7 +83,7 @@ def test_handle_valid_bid_action(mock_sendmsgtopic, _, material_agent):
 
 @patch("material.calculate_bidding_price", return_value=None)
 @patch("material.sendmsgtopic", return_value=None)
-def test_handle_invalid_bid_action(mock_sendmsgtopic, _, material_agent):
+def test_handle_invalid_bid_action(mock_sendmsgtopic: Any, _: Any, material_agent: Any) -> None:
     """
     Test whether the bid action is handled correctly when you don't have a price.
     """
@@ -97,7 +104,7 @@ def test_handle_invalid_bid_action(mock_sendmsgtopic, _, material_agent):
 
 
 @patch("material.sendmsgtopic")
-def test_handle_askconfirm_action(mock_sendmsgtopic, material_agent):
+def test_handle_askconfirm_action(mock_sendmsgtopic: Any, material_agent: Any) -> None:
     """
     Test whether the ASKCONFIRM action is handled correctly.
     """

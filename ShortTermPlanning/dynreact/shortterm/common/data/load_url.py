@@ -2,6 +2,7 @@
 load_url.py
 This module contains the URLs with relevant data and the functions used to load their data.
 """
+from typing import Any
 from datetime import datetime
 from dynreact.shortterm.common import KeySearch
 import requests
@@ -14,7 +15,7 @@ URL_UPDATE_STATUS = '/costs/transitions-stateful'
 DOCKER_MANAGER="_manager"
 DOCKER_REPLICA="_replica"
 
-def build_url(path: str):
+def build_url(path: str) -> Any:
     """
     Since parameters like IP can change any second, we force to doublecheck the base URL each time to always have the latest.
 

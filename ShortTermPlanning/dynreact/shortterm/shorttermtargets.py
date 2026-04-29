@@ -1,9 +1,21 @@
+"""Short-term planning integration module for OSS_Platform/ShortTermPlanning/dynreact/shortterm/shorttermtargets.
+
+The module is documented in English to make the short-term planning
+workflow easier to maintain across OSS and RAS-specific integrations.
+"""
+
 import os
 from pydantic import BaseModel, Field
 
 from dynreact.shortterm.timedelay import TimeDelay
 
 class ColumnDefinitions(BaseModel):
+    """Column definitions.
+    
+    This class belongs to the short-term planning integration layer. It
+    encapsulates state, configuration, or UI behavior used by the planning
+    workflow without changing the runtime semantics of the original module.
+    """
     headerName: str | None = Field(None, description="Name of the field")
     path: str | None = Field(None, description="Path to the resulting JSON")
     pinned: bool | None = Field(False, description="Whether the field is pinned in the Table")

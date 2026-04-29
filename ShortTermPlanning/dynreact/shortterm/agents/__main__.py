@@ -1,3 +1,10 @@
+"""Short-term planning agent implementation for OSS_Platform/ShortTermPlanning/dynreact/shortterm/agents/__main__.
+
+The module is documented in English to make the short-term planning
+workflow easier to maintain across OSS and RAS-specific integrations.
+"""
+
+from typing import Any
 import argparse
 import json
 from datetime import datetime
@@ -13,8 +20,20 @@ from dynreact.shortterm.common import VAction, KeySearch
 from dynreact.shortterm.shorttermtargets import ShortTermTargets
 
 
-def log_base(verbose: int, kafka_ip: str):
+def log_base(verbose: int, kafka_ip: str) -> Any:
 
+    """Log base.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Args:
+        verbose: Input value for the `verbose` parameter.
+        kafka_ip: Input value for the `kafka_ip` parameter.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
     if verbose > 0:
         print(f"Running log agent with {verbose=}")
 
@@ -47,7 +66,19 @@ def log_base(verbose: int, kafka_ip: str):
 
     return main_log
 
-def equipment_base(verbose: int, kafka_ip: str):
+def equipment_base(verbose: int, kafka_ip: str) -> Any:
+    """Equipment base.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Args:
+        verbose: Input value for the `verbose` parameter.
+        kafka_ip: Input value for the `kafka_ip` parameter.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
     if verbose > 0:
         print(f"Running equipment agent with {verbose=}")
 
@@ -62,7 +93,19 @@ def equipment_base(verbose: int, kafka_ip: str):
 
     return main_equipment
 
-def material_base(verbose: int, kafka_ip: str):
+def material_base(verbose: int, kafka_ip: str) -> Any:
+    """Material base.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Args:
+        verbose: Input value for the `verbose` parameter.
+        kafka_ip: Input value for the `kafka_ip` parameter.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
     if verbose > 0:
         print(f"Running material agent with {verbose=}")
 
@@ -79,7 +122,15 @@ def material_base(verbose: int, kafka_ip: str):
 
 
 
-def main():
+def main() -> None:
+    """Main.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
     print("Starting agent")
 
     parser = argparse.ArgumentParser(description="Select an agent to run.")

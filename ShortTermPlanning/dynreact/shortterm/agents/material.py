@@ -75,7 +75,7 @@ class Material(Agent):
             transport_times: dict[str, dict[str, int]] | None = None,
             coil_lengths: list[float] | float | None = None,
             manager: bool = True
-    ):
+    ) -> None:
 
         super().__init__(topic=topic, agent=agent)
         """

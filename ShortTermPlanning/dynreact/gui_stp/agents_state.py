@@ -1,3 +1,9 @@
+"""Dash user interface helpers and callbacks for OSS_Platform/ShortTermPlanning/dynreact/gui_stp/agents_state.
+
+The module is documented in English to make the short-term planning
+workflow easier to maintain across OSS and RAS-specific integrations.
+"""
+
 import importlib
 import inspect
 import os
@@ -12,9 +18,15 @@ from dynreact.shortterm.ShortTermPlanning import ShortTermPlanning
 
 class AgentsConfig:
 
+    """Agents config.
+    
+    This class belongs to the short-term planning integration layer. It
+    encapsulates state, configuration, or UI behavior used by the planning
+    workflow without changing the runtime semantics of the original module.
+    """
     short_term_planning: str = "default+file:./data/stp_context.json"
 
-    def __init__(self, short_term_planning: str|None = None):
+    def __init__(self, short_term_planning: str|None = None) -> None:
         if short_term_planning is None:
             short_term_planning = os.getenv("SHORT_TERM_PLANNING_PARAMS", AgentsConfig.short_term_planning)
         self.short_term_planning = short_term_planning
@@ -22,21 +34,54 @@ class AgentsConfig:
 
 class AgentsState:
 
-    def __init__(self, config: AgentsConfig|None = None):
+    """Agents state.
+    
+    This class belongs to the short-term planning integration layer. It
+    encapsulates state, configuration, or UI behavior used by the planning
+    workflow without changing the runtime semantics of the original module.
+    """
+    def __init__(self, config: AgentsConfig|None = None) -> None:
         self._auction_obj: Auction | None = None
         self._stp: ShortTermPlanning | None = None
         self._config = config if config is not None else AgentsConfig()
 
-    def get_auction_obj(self):
+    def get_auction_obj(self) -> Any:
+        """Get auction obj.
+        
+        This function is part of the short-term planning workflow and keeps
+        the existing runtime behavior while documenting the public contract.
+        
+        Returns:
+            The value produced by the underlying planning, UI, or test helper logic.
+        """
         if self._auction_obj is not None:
             return(self._auction_obj)
         return None
 
-    def set_auction_obj(self, auction) -> None:
+    def set_auction_obj(self, auction: Any) -> None:
+        """Set auction obj.
+        
+        This function is part of the short-term planning workflow and keeps
+        the existing runtime behavior while documenting the public contract.
+        
+        Args:
+            auction: Input value for the `auction` parameter.
+        
+        Returns:
+            The value produced by the underlying planning, UI, or test helper logic.
+        """
         if self._auction_obj is None:
             self._auction_obj = auction
 
     def set_stp_config(self) -> None:
+        """Set stp config.
+        
+        This function is part of the short-term planning workflow and keeps
+        the existing runtime behavior while documenting the public contract.
+        
+        Returns:
+            The value produced by the underlying planning, UI, or test helper logic.
+        """
         if self._stp is None:
             self.get_stp_config_params()
 
@@ -45,12 +90,28 @@ class AgentsState:
     #    return (self._stp._stpConfigParams.KAFKA_IP, self._stp._stpConfigParams.TOPIC_GEN,
     #            self._stp._stpConfigParams.VB)
 
-    def get_stp_context_params(self):
+    def get_stp_context_params(self) -> Any:
+        """Get stp context params.
+        
+        This function is part of the short-term planning workflow and keeps
+        the existing runtime behavior while documenting the public contract.
+        
+        Returns:
+            The value produced by the underlying planning, UI, or test helper logic.
+        """
         self.set_stp_config()
         return (KeySearch.search_for_value("KAFKA_IP"), KeySearch.search_for_value("TOPIC_GEN"),
                 KeySearch.search_for_value("TOPIC_CALLBACK"), KeySearch.search_for_value("VB"))
 
-    def get_stp_context_timing(self):
+    def get_stp_context_timing(self) -> Any:
+        """Get stp context timing.
+        
+        This function is part of the short-term planning workflow and keeps
+        the existing runtime behavior while documenting the public contract.
+        
+        Returns:
+            The value produced by the underlying planning, UI, or test helper logic.
+        """
         self.set_stp_config()
         return (self._stp._stpConfigParams.TimeDelays.AUCTION_WAIT,
                 self._stp._stpConfigParams.TimeDelays.COUNTERBID_WAIT,
@@ -59,6 +120,14 @@ class AgentsState:
                 self._stp._stpConfigParams.TimeDelays.SMALL_WAIT)
 
     def get_stp_config_params(self) -> ShortTermPlanning:
+        """Get stp config params.
+        
+        This function is part of the short-term planning workflow and keeps
+        the existing runtime behavior while documenting the public contract.
+        
+        Returns:
+            The value produced by the underlying planning, UI, or test helper logic.
+        """
         if self._stp is None:
             if self._config.short_term_planning.startswith("default+file:"):
                 self._stp = ShortTermPlanning(self._config.short_term_planning)
@@ -68,7 +137,7 @@ class AgentsState:
 
     # copied from DynReActService/dynreact/plugins.py
     @staticmethod
-    def _load_module(module: str, clzz, *args, **kwargs) -> Any | None:  # returns an instance of the clzz, if found
+    def _load_module(module: str, clzz: Any, *args: Any, **kwargs: Any) -> Any | None:  # returns an instance of the clzz, if found
         # if *args starts with class: replace module by that arg
         if len(args) > 0 and isinstance(args[0], str) and args[0].startswith("class:"):
             first = args[0]
@@ -103,14 +172,20 @@ class AgentsState:
 
 class _ModIterator(Iterator):  # returns loaded modules
 
-    def __init__(self, module: str):
+    """Mod iterator.
+    
+    This class belongs to the short-term planning integration layer. It
+    encapsulates state, configuration, or UI behavior used by the planning
+    workflow without changing the runtime semantics of the original module.
+    """
+    def __init__(self, module: str) -> None:
         # Note: this works if there are duplicates in editable installations,
         # but not if there are duplicate modules in separate wheels
         self._importers = iter(sys.meta_path + [importlib.util])
         # self._importers = iter([importlib.util]) # TODO maybe we do not need this sys.meta_path voodoo at all?
         self._module = module
 
-    def __next__(self):
+    def __next__(self) -> Any:
         while True:
             importer = next(self._importers)
             try:

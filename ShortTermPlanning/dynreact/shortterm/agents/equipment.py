@@ -130,7 +130,7 @@ class Equipment(Agent):
             self, topic: str, agent: str, status: dict, operation_speed: float | None = None,
             start_time: datetime | str | None = None, current_order_length: float | None = None,
             target_tons: float = DEFAULT_TARGET_TONS, accumulated_tons: float = 0.0, manager: bool = True
-    ):
+    ) -> None:
 
         super().__init__(topic=topic, agent=agent)
         """
@@ -495,7 +495,7 @@ class Equipment(Agent):
 
         return 'CONTINUE'
 
-    def sort_bids(self):
+    def sort_bids(self) -> None:
         """
         Sorts the bids based on their profit in ascending order.
         """

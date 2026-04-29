@@ -1,4 +1,11 @@
-﻿import os
+"""Test support and regression coverage for OSS_Platform/ShortTermPlanning/tests/integration_test/test_auction.
+
+The module is documented in English to make the short-term planning
+workflow easier to maintain across OSS and RAS-specific integrations.
+"""
+
+from typing import Any
+import os
 import time
 from unittest.mock import patch, MagicMock
 
@@ -17,7 +24,15 @@ topic_gen = KeySearch.search_for_value("TOPIC_GEN")
 topic_callback = KeySearch.search_for_value("TOPIC_CALLBACK")
 
 @pytest.fixture(autouse=True)
-def initialize():
+def initialize() -> None:
+    """Initialize.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
     print("Setting up for a test.")
     print("Purging topics.")
     purge_topics(topics=[topic_callback, topic_gen, 'DYN_TEST'])
@@ -42,7 +57,15 @@ def initialize():
     print("Tearing down after a test.")
 
 @pytest.fixture
-def run_agents_handler_spy():
+def run_agents_handler_spy() -> None:
+    """Run agents handler spy.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
     real_log_container = DockerManager(tag="logTEST", max_allowed=1)
     real_equipment_container = DockerManager(tag="equipmentTEST", max_allowed=1)
     real_material_container = DockerManager(tag="materialTEST", max_allowed=1)
@@ -60,7 +83,7 @@ def run_agents_handler_spy():
 
         yield mock_log_handler, mock_equipment_handler, mock_material_handler
 
-def test_scenario_00(run_agents_handler_spy):
+def test_scenario_00(run_agents_handler_spy: Any) -> None:
     """General LOG startup. message sending, and agent exiting"""
 
     args = {
@@ -95,7 +118,7 @@ def test_scenario_00(run_agents_handler_spy):
     assert run_agents_handler_spy[1].launch_container.call_count == 0
     assert run_agents_handler_spy[2].launch_container.call_count == 0
 
-def test_scenario_01(run_agents_handler_spy):
+def test_scenario_01(run_agents_handler_spy: Any) -> None:
     """Startup and exit ot all general agents"""
 
     args = {
@@ -139,7 +162,7 @@ def test_scenario_01(run_agents_handler_spy):
     assert len(run_agents_handler_spy[1].client.containers.list(filters={"label": f"owner=equipmentTEST"}, all=True)) == 1
     assert len(run_agents_handler_spy[2].client.containers.list(filters={"label": f"owner=materialTEST"}, all=True)) == 1
 
-def test_scenario_02(run_agents_handler_spy):
+def test_scenario_02(run_agents_handler_spy: Any) -> None:
     """General LOG startup, agent cloning for an auction. message sending to the clone, and a ents exitin"""
 
     args = {
@@ -164,7 +187,7 @@ def test_scenario_02(run_agents_handler_spy):
 
     assert len(run_agents_handler_spy[0].list_tracked_containers()) == 1
 
-def test_scenario_03(run_agents_handler_spy):
+def test_scenario_03(run_agents_handler_spy: Any) -> None:
     """General LOG and RESOURCES startup. Agents cloning for an auction, and agents exiting"""
 
     args = {
@@ -193,7 +216,7 @@ def test_scenario_03(run_agents_handler_spy):
     assert len(run_agents_handler_spy[2].list_tracked_containers()) == 1
     assert len(run_agents_handler_spy[0].list_tracked_containers()) == 1
 
-def test_scenario_04():
+def test_scenario_04() -> None:
     """Test the return value of short_term_planning() locally."""
 
     args = {
@@ -227,7 +250,7 @@ def test_scenario_04():
 
     print(result)
 
-def test_scenario_05():
+def test_scenario_05() -> None:
     """Test the return value of short_term_planning() remotely with One Equipment, One Material."""
 
     args = {
@@ -257,7 +280,7 @@ def test_scenario_05():
 
     print(result)
 
-def test_scenario_06():
+def test_scenario_06() -> None:
     """Test the return value of short_term_planning() remotely with One Equipment, Two Material."""
 
     args = {
@@ -293,7 +316,7 @@ def test_scenario_06():
 
     print(result)
 
-def test_scenario_07():
+def test_scenario_07() -> None:
     """Test the return value of short_term_planning() remotely with Two Equipments, One Material."""
 
     args = {
@@ -329,7 +352,7 @@ def test_scenario_07():
 
     print(result)
 
-def test_scenario_08():
+def test_scenario_08() -> None:
     """Test the return value of short_term_planning() remotely with Two Equipments, Two Materials."""
 
     args = {

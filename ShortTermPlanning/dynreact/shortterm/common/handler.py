@@ -1,3 +1,10 @@
+"""Common short-term planning utilities for OSS_Platform/ShortTermPlanning/dynreact/shortterm/common/handler.
+
+The module is documented in English to make the short-term planning
+workflow easier to maintain across OSS and RAS-specific integrations.
+"""
+
+from typing import Any
 import json
 import os
 import shlex
@@ -8,7 +15,13 @@ from dynreact.shortterm.common import KeySearch
 
 
 class DockerManager:
-    def __init__(self, tag="default_tag", max_allowed = -1):
+    """Docker manager.
+    
+    This class belongs to the short-term planning integration layer. It
+    encapsulates state, configuration, or UI behavior used by the planning
+    workflow without changing the runtime semantics of the original module.
+    """
+    def __init__(self, tag: Any="default_tag", max_allowed: Any = -1) -> None:
         """
         Initialize Docker client and set a tag to track owned containers.
 
@@ -23,7 +36,7 @@ class DockerManager:
     def _normalize_container_name(name: str) -> str:
         return name[1:] if name.startswith("/") else name
 
-    def launch_container(self, name:str, agent:str, mode:str, params:dict, envs: dict = None, auto_remove=False):
+    def launch_container(self, name:str, agent:str, mode:str, params:dict, envs: dict = None, auto_remove: Any=False) -> Any:
         """
         Launch a new Docker container and tag it with the instance's unique identifier.
 
@@ -120,7 +133,7 @@ class DockerManager:
             dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
             raise Exception(f"{dt} | ERROR: Error launching container: {e}")
 
-    def stop_tracked_containers(self):
+    def stop_tracked_containers(self) -> None:
         """
         Stop and remove all containers launched by this instance (using the tag).
         """
@@ -140,7 +153,7 @@ class DockerManager:
         except Exception as e:
             print(f"Error stopping tracked containers: {e}")
 
-    def clean_containers(self):
+    def clean_containers(self) -> None:
         """
         Stop and remove all containers launched by this instance (using the tag).
         """
@@ -163,7 +176,7 @@ class DockerManager:
         except Exception as e:
             print(f"Error cleaning containers: {e}")
 
-    def clean_container(self, container_name: str):
+    def clean_container(self, container_name: str) -> None:
         """
         Stop and remove all containers launched by this instance (using the tag).
 
@@ -189,7 +202,7 @@ class DockerManager:
         except Exception as e:
             print(f"Error cleaning containers: {e}")
 
-    def stop_tracked_container(self, container_id: str):
+    def stop_tracked_container(self, container_id: str) -> None:
         """
         Stop and remove one container by container ID.
         """
@@ -208,7 +221,7 @@ class DockerManager:
         except Exception as e:
             print(f"Error stopping tracked container: {e}")
 
-    def list_tracked_containers(self):
+    def list_tracked_containers(self) -> Any:
         """
         List all running containers that belong to this instance.
 
@@ -234,7 +247,18 @@ class DockerManager:
 
         return self.tracked_containers
 
-def dict_to_cli_params(params):
+def dict_to_cli_params(params: Any) -> Any:
+    """Dict to cli params.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Args:
+        params: Input value for the `params` parameter.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
     cli_params = []
     for key, value in params.items():
         if isinstance(value, bool):

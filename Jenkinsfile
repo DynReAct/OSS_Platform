@@ -6,7 +6,7 @@ node {
     env.IMAGE_NAME = IMAGE_NAME
     env.LOCAL_REGISTRY = LOCAL_REGISTRY
     env.IMAGE_TAG = IMAGE_TAG
-    env.TOPIC_CALLBACK = "DynReact-TEST-Callback"
+    env.TOPIC_CALLBACK = "DynReact-OSS-TEST-Callback"
     env.TOPIC_GEN = "DynReact-OSS-TEST-Gen"
     env.CONTAINER_NAME_PREFIX = "JENKINS_OSS_TEST"
     env.DOCKER_NETWORK = "host"

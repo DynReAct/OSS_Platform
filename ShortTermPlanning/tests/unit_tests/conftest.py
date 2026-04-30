@@ -4,6 +4,7 @@ The module is documented in English to make the short-term planning
 workflow easier to maintain across OSS and RAS-specific integrations.
 """
 
+from collections.abc import Generator
 from typing import Any
 import pytest
 import re
@@ -84,7 +85,7 @@ with patch("dynreact.shortterm.common.data.load_url.load_url_json_get", side_eff
 
 
 @pytest.fixture
-def mock_kafka() -> None:
+def mock_kafka() -> Generator[tuple[MagicMock, MagicMock], None, None]:
     """Fixture to provide mocked Kafka objects to tests."""
     yield mock_producer_instance, mock_consumer_instance
 

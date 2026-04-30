@@ -211,6 +211,8 @@ def main() -> None:
     if args.type not in ["base", "replica"]:
         raise ValueError(f"Value {args.type} is not supported.")
 
+    agent = None
+
     if args.agent == "log":
         if args.type == "base":
             agent = log_base(verbose=args.verbose, kafka_ip=args.kafka_ip)
@@ -268,6 +270,8 @@ def main() -> None:
 
     print("Running agent")
     # Run the topic
+    if agent is None:
+        raise RuntimeError("Failed to initialize the requested agent.")
     agent.follow_topic()
 
 

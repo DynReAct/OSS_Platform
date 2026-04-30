@@ -9,6 +9,7 @@ Version History:
 """
 
 import time
+from typing import Any, cast
 from datetime import datetime, timedelta, timezone
 
 from sphinx.ext.ifconfig import ifconfig
@@ -36,7 +37,7 @@ def _coerce_float(value: object, default: float = 0.0) -> float:
     if value in (None, ""):
         return default
     try:
-        return float(value)
+        return float(cast(Any, value))
     except (TypeError, ValueError):
         return default
 
@@ -52,7 +53,7 @@ def _coerce_optional_float(value: object) -> float | None:
     if value in (None, ""):
         return None
     try:
-        return float(value)
+        return float(cast(Any, value))
     except (TypeError, ValueError):
         return None
 
@@ -197,7 +198,8 @@ class Equipment(Agent):
         """
         assigned_tons = material_weight_tons(material_params)
         self.accumulated_tons += assigned_tons
-        self.status = get_new_equipment_status(material_params=material_params, equipment_status=self.status, verbose=self.verbose)
+        new_status = get_new_equipment_status(material_params=material_params, equipment_status=self.status, verbose=self.verbose)
+        self.status = new_status if new_status is not None else self.status
 
         if self.has_reached_target_tons():
             self.write_log(

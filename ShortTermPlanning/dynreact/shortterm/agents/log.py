@@ -19,7 +19,8 @@ import multiprocessing
 import logging
 import re
 
-from confluent_kafka.admin import AdminClient, NewTopic
+from confluent_kafka.admin import AdminClient
+from confluent_kafka.cimpl import NewTopic
 from datetime import datetime
 from pathlib import Path
 
@@ -147,7 +148,7 @@ class Log(Agent):
             self.write_log(f"ERROR: {self.log_file} does not exist", "b82f31ef-1750-4f33-8b2c-7bba4ed408de", action='CREATE')
         self.write_log(f"New log file created for topic {self.topic}.", "1a40e14a-845a-489a-8bea-5768c8940f1f", action='CREATE')
 
-    def write_log(self, msg: str, identifier: str, action: str = 'WRITE', verbose: float = float("inf")) -> None:
+    def write_log(self, msg: str, identifier: str, to_stdout: bool = False, action: str = 'WRITE', verbose: float = float("inf")) -> None:
         """
         Function writing a message to the log itself
 
@@ -158,9 +159,11 @@ class Log(Agent):
         full_msg = dict(
             source=self.agent, dest=self.agent, action=action, payload=dict(msg=msg, identifier=identifier)
         )
+        if to_stdout:
+            print(msg)
         self.handle_write_action(full_msg, verbose)
 
-    def callback_on_topic_not_available(self, topic: str = None) -> None:
+    def callback_on_topic_not_available(self, topic: str | None = None) -> None:
         """
         Function executed when 'Subscribed topic not available'
 
@@ -269,7 +272,7 @@ class Log(Agent):
 
         return 'CONTINUE'
 
-    def handle_exit_action(self, dctmsg: dict) -> str:
+    def handle_exit_action(self, dctmsg: dict | None = None) -> str:
         """
         Handles the EXIT action.
 
@@ -278,8 +281,9 @@ class Log(Agent):
         :returns: Status of the handling
         :rtype:  str
         """
+        payload = dctmsg or {"source": self.agent, "dest": self.agent}
         full_msg = dict(
-            source=dctmsg['source'], dest=dctmsg['dest'], action='EXIT',
+            source=payload['source'], dest=payload['dest'], action='EXIT',
             payload=dict(msg=f"Requested Exit")
         )
         self.handle_write_action(full_msg)

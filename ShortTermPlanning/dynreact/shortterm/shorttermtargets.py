@@ -10,33 +10,32 @@ from pydantic import BaseModel, Field
 from dynreact.shortterm.timedelay import TimeDelay
 
 class ColumnDefinitions(BaseModel):
-    """Column definitions.
-    
-    This class belongs to the short-term planning integration layer. It
-    encapsulates state, configuration, or UI behavior used by the planning
-    workflow without changing the runtime semantics of the original module.
+    """Column definition metadata used by the auction tables.
+
+    Attributes:
+        headerName: Label displayed in the table header.
+        path: JSON path used to read the value from an auction payload.
+        pinned: Whether the column remains pinned in the grid.
     """
-    headerName: str | None = Field(None, description="Name of the field")
-    path: str | None = Field(None, description="Path to the resulting JSON")
-    pinned: bool | None = Field(False, description="Whether the field is pinned in the Table")
+
+    headerName: str | None = Field(default=None, description="Name of the field.")
+    path: str | None = Field(default=None, description="Path to the resulting JSON.")
+    pinned: bool | None = Field(default=False, description="Whether the field is pinned in the table.")
 
 class ShortTermTargets(BaseModel):
-    """_summary_
-    It aims to collect mainly configuration parameters required for the Auction System 
-    to work, such as the kafka broker address, etc.
+    """Short-term planning runtime configuration.
 
-    Args:
-        BaseModel (_type_): _description_
-        IP: Kafka broker address
-        TD: Timedelay
-        TOPIC_GEN: Main topic for general channel comms
-        TOPIC_CALLBACK: Main topic for general channel callbacks
-        LOG_FILE_PATH: Log file path
-        TABLE_MAPPINGS: Struct of columns to be shown for auctions
-        REST_URL: REST API URL
-        VB: verbosity level
-        PERF_URL: REST API PERF URL  (http://192.168.110.68:5017)
-        TRANSPORT_TIMES_URL: transport times source
+    Attributes:
+        KAFKA_IP: Kafka broker address.
+        TimeDelays: Delay values used by the auction lifecycle.
+        TOPIC_GEN: Main Kafka topic for general communication.
+        TOPIC_CALLBACK: Main Kafka topic for callbacks.
+        LOG_FILE_PATH: Folder where agent logs are stored.
+        TableMappings: Column definitions exposed by the auction UI.
+        REST_URL: Base URL for the OSS REST API.
+        PERF_URL: Base URL for the performance API.
+        TRANSPORT_TIMES_URL: Endpoint used to retrieve transport times.
+        VB: Verbosity level used by agents and helper scripts.
     """
 
     model_config = {
@@ -45,13 +44,13 @@ class ShortTermTargets(BaseModel):
         "frozen": False
     }
 
-    KAFKA_IP: str | None = Field(None, description="Kafka broker address.")
-    TimeDelays: TimeDelay | None = Field(TimeDelay(), description="Delay recordset for Auction")
-    TOPIC_GEN: str | None = Field("DynReact-OSS-Gen", description="General Kafka topic for comm.")
-    TOPIC_CALLBACK: str | None = Field("DynReact-OSS-Callback", description="General Kafka topic for callbacks.")
-    LOG_FILE_PATH: str | None = Field("/var/log/dynreact-logs/", description="Log file path.")
-    TableMappings: list[ColumnDefinitions] | None = Field(None, description="Column description recordset for RAS Auction")
-    REST_URL: str | None = Field(None, description="REST API URL.")
-    PERF_URL: str | None = Field(None, description="REST API PERF URL.")
-    TRANSPORT_TIMES_URL: str | None = Field(None, description="Transport times source URL.")
-    VB: int | None = Field(None, description="Verbosity Levels [0=> Nothing ... ]")
+    KAFKA_IP: str | None = Field(default=None, description="Kafka broker address.")
+    TimeDelays: TimeDelay = Field(default_factory=TimeDelay, description="Delay recordset for auctions.")
+    TOPIC_GEN: str | None = Field(default="DynReact-OSS-Gen", description="General Kafka topic for communication.")
+    TOPIC_CALLBACK: str | None = Field(default="DynReact-OSS-Callback", description="General Kafka topic for callbacks.")
+    LOG_FILE_PATH: str | None = Field(default="/var/log/dynreact-logs/", description="Log file path.")
+    TableMappings: list[ColumnDefinitions] | None = Field(default=None, description="Column description recordset for the auction UI.")
+    REST_URL: str | None = Field(default=None, description="REST API URL.")
+    PERF_URL: str | None = Field(default=None, description="REST API performance URL.")
+    TRANSPORT_TIMES_URL: str | None = Field(default=None, description="Transport-times source URL.")
+    VB: int | None = Field(default=None, description="Verbosity level.")

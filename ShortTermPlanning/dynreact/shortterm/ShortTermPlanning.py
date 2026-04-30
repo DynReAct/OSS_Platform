@@ -8,9 +8,7 @@ from dynreact.shortterm.shorttermtargets import ShortTermTargets
 from dynreact.shortterm.common import KeySearch
 
 class ShortTermPlanning:
-    """
-    Handling needed params to properly setup the STP context.
-    """
+    """Load and expose the STP runtime configuration from a `default+file:` URI."""
 
     def __init__(self, uri: str) -> None:
         self._uri = uri

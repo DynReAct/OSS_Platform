@@ -36,7 +36,7 @@ class DockerManager:
     def _normalize_container_name(name: str) -> str:
         return name[1:] if name.startswith("/") else name
 
-    def launch_container(self, name:str, agent:str, mode:str, params:dict, envs: dict = None, auto_remove: Any=False) -> Any:
+    def launch_container(self, name:str, agent:str, mode:str, params:dict, envs: dict[str, str] | None = None, auto_remove: Any=False) -> Any:
         """
         Launch a new Docker container and tag it with the instance's unique identifier.
 
@@ -61,7 +61,7 @@ class DockerManager:
 
             print(f"Launching with {command_str}")
 
-            container_prefix = os.environ.get('CONTAINER_NAME_PREFIX', False)
+            container_prefix = os.environ.get('CONTAINER_NAME_PREFIX')
 
             if self.max_allowed == -1 or (len(self.tracked_containers) + 1) <= self.max_allowed:
 
@@ -96,7 +96,7 @@ class DockerManager:
                 name = f"{container_prefix + '_' if container_prefix else ''}{agent.upper()}_{name}"
                 docker_network = os.environ.get("DOCKER_NETWORK")
 
-                if any(d['name'] == name for d in all_containers):
+                if any(d.get('name') == name for d in all_containers):
                     print("Container with the same name found, replacing it")
                     self.clean_container(name)
 
@@ -114,7 +114,7 @@ class DockerManager:
                             "mode": "rw",
                         }
                     },
-                    labels={"owner": self.tag} if self.tag else []  # Use a label to track ownership
+                    labels={"owner": self.tag} if self.tag else {}  # Use a label to track ownership
                 )
 
                 if docker_network:
@@ -184,9 +184,10 @@ class DockerManager:
         :return: The container object.
         """
         try:
+            normalized_name = self._normalize_container_name(container_name)
             matched_containers = [
                 container for container in self.client.containers.list(all=True)
-                if self._normalize_container_name(container.name) == self._normalize_container_name(container_name)
+                if container.name is not None and self._normalize_container_name(container.name) == normalized_name
             ]
 
             if not matched_containers:

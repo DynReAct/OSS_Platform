@@ -4,6 +4,7 @@ The module is documented in English to make the short-term planning
 workflow easier to maintain across OSS and RAS-specific integrations.
 """
 
+from collections.abc import Generator
 from typing import Any
 import os
 import time
@@ -24,7 +25,7 @@ topic_gen = KeySearch.search_for_value("TOPIC_GEN")
 topic_callback = KeySearch.search_for_value("TOPIC_CALLBACK")
 
 @pytest.fixture(autouse=True)
-def initialize() -> None:
+def initialize() -> Generator[None, None, None]:
     """Initialize.
     
     This function is part of the short-term planning workflow and keeps
@@ -57,7 +58,7 @@ def initialize() -> None:
     print("Tearing down after a test.")
 
 @pytest.fixture
-def run_agents_handler_spy() -> None:
+def run_agents_handler_spy() -> Generator[tuple[MagicMock, MagicMock, MagicMock], None, None]:
     """Run agents handler spy.
     
     This function is part of the short-term planning workflow and keeps

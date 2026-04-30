@@ -111,7 +111,8 @@ def _duration_unit_to_seconds(unit: str | int | float | None) -> float:
 
 def _normalize_transport_times_json(data: dict) -> dict[str, dict[str, int]]:
     """Convert DynReAct JSON transport times into the nested STP dictionary."""
-    cfg = data.get("transport_times") if isinstance(data.get("transport_times"), dict) else data
+    raw_transport_times = data.get("transport_times")
+    cfg = raw_transport_times if isinstance(raw_transport_times, dict) else data
     matrix = cfg.get("equipment_matrix") or {}
     unit_seconds = _duration_unit_to_seconds(cfg.get("unit"))
     transport_times: dict[str, dict[str, int]] = {}

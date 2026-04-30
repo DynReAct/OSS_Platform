@@ -4,11 +4,12 @@ The module is documented in English to make the short-term planning
 workflow easier to maintain across OSS and RAS-specific integrations.
 """
 
-import importlib
+import importlib.abc
+import importlib.util
 import inspect
 import os
 import sys
-from typing import Any, Iterator
+from typing import Any, Iterator, cast
 
 from dynreact.auction.auction import Auction
 from dynreact.base.NotApplicableException import NotApplicableException
@@ -17,12 +18,10 @@ from dynreact.shortterm.ShortTermPlanning import ShortTermPlanning
 
 
 class AgentsConfig:
+    """Configuration holder for the STP UI runtime.
 
-    """Agents config.
-    
-    This class belongs to the short-term planning integration layer. It
-    encapsulates state, configuration, or UI behavior used by the planning
-    workflow without changing the runtime semantics of the original module.
+    Attributes:
+        short_term_planning: URI pointing to the STP configuration source.
     """
     short_term_planning: str = "default+file:./data/stp_context.json"
 
@@ -33,13 +32,7 @@ class AgentsConfig:
 
 
 class AgentsState:
-
-    """Agents state.
-    
-    This class belongs to the short-term planning integration layer. It
-    encapsulates state, configuration, or UI behavior used by the planning
-    workflow without changing the runtime semantics of the original module.
-    """
+    """Mutable UI state shared by the STP pages and callbacks."""
     def __init__(self, config: AgentsConfig|None = None) -> None:
         self._auction_obj: Auction | None = None
         self._stp: ShortTermPlanning | None = None
@@ -113,11 +106,14 @@ class AgentsState:
             The value produced by the underlying planning, UI, or test helper logic.
         """
         self.set_stp_config()
-        return (self._stp._stpConfigParams.TimeDelays.AUCTION_WAIT,
-                self._stp._stpConfigParams.TimeDelays.COUNTERBID_WAIT,
-                self._stp._stpConfigParams.TimeDelays.CLONING_WAIT,
-                self._stp._stpConfigParams.TimeDelays.EXIT_WAIT,
-                self._stp._stpConfigParams.TimeDelays.SMALL_WAIT)
+        stp = self.get_stp_config_params()
+        return (
+            stp._stpConfigParams.TimeDelays.AUCTION_WAIT,
+            stp._stpConfigParams.TimeDelays.COUNTERBID_WAIT,
+            stp._stpConfigParams.TimeDelays.CLONING_WAIT,
+            stp._stpConfigParams.TimeDelays.EXIT_WAIT,
+            stp._stpConfigParams.TimeDelays.SMALL_WAIT,
+        )
 
     def get_stp_config_params(self) -> ShortTermPlanning:
         """Get stp config params.
@@ -132,7 +128,10 @@ class AgentsState:
             if self._config.short_term_planning.startswith("default+file:"):
                 self._stp = ShortTermPlanning(self._config.short_term_planning)
             else:
-                self._stp = AgentsState._load_module("dynreact.shorttermplanning", ShortTermPlanning, self._config.short_term_planning)
+                loaded = AgentsState._load_module("dynreact.shorttermplanning", ShortTermPlanning, self._config.short_term_planning)
+                if loaded is None:
+                    raise RuntimeError(f"Unable to load STP module from {self._config.short_term_planning}.")
+                self._stp = cast(ShortTermPlanning, loaded)
         return self._stp
 
     # copied from DynReActService/dynreact/plugins.py
@@ -171,13 +170,7 @@ class AgentsState:
 
 
 class _ModIterator(Iterator):  # returns loaded modules
-
-    """Mod iterator.
-    
-    This class belongs to the short-term planning integration layer. It
-    encapsulates state, configuration, or UI behavior used by the planning
-    workflow without changing the runtime semantics of the original module.
-    """
+    """Iterator over importers able to provide a module specification."""
     def __init__(self, module: str) -> None:
         # Note: this works if there are duplicates in editable installations,
         # but not if there are duplicate modules in separate wheels
@@ -189,11 +182,18 @@ class _ModIterator(Iterator):  # returns loaded modules
         while True:
             importer = next(self._importers)
             try:
-                spec_res = importer.find_spec(self._module)
+                if importer is importlib.util:
+                    spec_res = importlib.util.find_spec(self._module)
+                elif isinstance(importer, importlib.abc.MetaPathFinder):
+                    spec_res = importer.find_spec(self._module, None)
+                else:
+                    continue
                 if spec_res is not None:
                     mod = importlib.util.module_from_spec(spec_res)
                     # sys.modules[module] = mod  # we'll check first if this is the correct module
+                    if spec_res.loader is None:
+                        continue
                     spec_res.loader.exec_module(mod)
                     return mod
-            except:
+            except Exception:
                 pass

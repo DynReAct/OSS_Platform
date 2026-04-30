@@ -11,7 +11,7 @@ from datetime import datetime
 import os
 import traceback
 
-from confluent_kafka import Producer, OFFSET_END, TopicPartition
+from confluent_kafka import KafkaError, Message, Producer, OFFSET_END, TopicPartition
 from confluent_kafka.admin import AdminClient
 from flatdict import FlatDict
 
@@ -37,7 +37,7 @@ def _compute_partition_topic(topic_name: str, admin_client: AdminClient) -> Any:
         partitions = md.topics[topic_name].partitions
         return list(map(lambda p: TopicPartition(topic_name, int(p), offset=OFFSET_END), partitions.keys()))
 
-def purge_topics(topics: list) -> None:
+def purge_topics(topics: list[str]) -> None:
     """
     Function to purge list of topics.
 
@@ -52,16 +52,16 @@ def purge_topics(topics: list) -> None:
     for topic in topics:
         topics_partitions.extend(_compute_partition_topic(topic, admin_client))
 
-    topics = admin_client.delete_records(topics_partitions)
+    delete_results = admin_client.delete_records(topics_partitions)
 
-    for tp, f in topics.items():
+    for tp, f in delete_results.items():
         try:
             f.result()  # Raises exception if delete failed
         except Exception as e:
             dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
             raise Exception(f"{dt} | ERROR: Failed: {tp} with error {e}")
 
-def delete_topics(topics: list, silent: Any=False) -> None:
+def delete_topics(topics: list[str], silent: bool = False) -> None:
     """
     Function to delete list of topics.
 
@@ -76,9 +76,9 @@ def delete_topics(topics: list, silent: Any=False) -> None:
     for topic in topics:
         topics_partitions.extend(_compute_partition_topic(topic, admin_client))
 
-    topics = admin_client.delete_topics(topics=topics)
+    delete_results = admin_client.delete_topics(topics=topics)
 
-    for tp, f in topics.items():
+    for tp, f in delete_results.items():
         try:
             f.result()  # Raises exception if delete failed
         except Exception as e:
@@ -93,7 +93,7 @@ class KeySearch:
     encapsulates state, configuration, or UI behavior used by the planning
     workflow without changing the runtime semantics of the original module.
     """
-    _global_config: ShortTermTargets = None
+    _global_config: ShortTermTargets | None = None
 
     @classmethod
     def is_initialized(cls) -> Any:
@@ -111,6 +111,9 @@ class KeySearch:
 
         :return: dict The model assigned.
         """
+
+        if cls._global_config is None:
+            raise RuntimeError("KeySearch global config has not been set. Call KeySearch.set_global() first.")
 
         dump_model = cls._global_config.model_copy()
         update = {}
@@ -171,6 +174,9 @@ class KeySearch:
         :param default_value: Value to return if no match is found.
         :return: Matched value or the default.
         """
+        if cls._global_config is None:
+            return default_value
+
         cfg = cls._global_config.model_dump()
 
         flatten_cfg = FlatDict(cfg, delimiter='.')
@@ -268,7 +274,7 @@ class VAction(argparse.Action):
         setattr(args, self.dest, self.values)
 
 
-def confirm(err: str, msg: str) -> None:
+def confirm(err: KafkaError | None, msg: Message) -> None:
     """
     Function to confirm the message delivery and prints an error message if any.
 
@@ -276,12 +282,12 @@ def confirm(err: str, msg: str) -> None:
     :param str msg: The message being confirmed.
     """
     if err:
-        print("Error sending message: " + msg + " [" + err + "]")
+        print(f"Error sending message: {msg} [{err}]")
     return None
 
 
 def sendmsgtopic(producer: Producer, tsend: str, topic: str, source: str, dest: str,
-                 action: str, payload: dict = None, vb: int = 0) -> None:
+                 action: str, payload: dict[str, Any] | None = None, vb: int = 0) -> None:
     """
     Send message to a Kafka topic.
 
@@ -305,7 +311,7 @@ def sendmsgtopic(producer: Producer, tsend: str, topic: str, source: str, dest: 
     )
     mtxt = json.dumps(msg)
     try:
-        producer.produce(value=mtxt, topic=tsend, on_delivery=confirm) # 30 seconds
+        producer.produce(value=mtxt.encode("utf-8"), topic=tsend, on_delivery=confirm) # 30 seconds
         producer.flush()
     except Exception as e:
         error_message = traceback.format_exc()

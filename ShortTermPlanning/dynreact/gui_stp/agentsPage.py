@@ -5,12 +5,12 @@ Page responsible to present the UI into the global solution
 
 """
 
-from typing import Any
+from typing import Any, cast
 from enum import Enum
 import dash, json, time, string, random, hashlib, datetime
 import dash_ag_grid as dash_ag
 import pandas as pd
-from confluent_kafka import Producer, Consumer
+from confluent_kafka import Consumer, KafkaError, Message, Producer
 from confluent_kafka.admin import AdminClient
 from dash import html, dcc, ctx, Input, Output, State
 from jsonpath_ng.ext import parse
@@ -43,6 +43,7 @@ else:
 
 
 def _get_page_context() -> tuple[object | None, list[str], object | None]:
+    """Return the current snapshot identifier, equipment names, and snapshot object."""
     current = state.get_snapshot_provider().current_snapshot_id()
     res_lst = [j.name_short for j in state.get_site().get_process_all_equipment()]
     snapshot = state.get_snapshot(current) if current is not None else state.get_snapshot()
@@ -50,6 +51,7 @@ def _get_page_context() -> tuple[object | None, list[str], object | None]:
 
 
 def _get_stp_runtime_context() -> tuple[str | None, str | None, str | None, object | None, str | None]:
+    """Return the STP runtime values used by the Dash callbacks."""
     state.set_stp_config()
     return (
         KeySearch.search_for_value("PERF_URL"),
@@ -87,7 +89,7 @@ class ParamDef(tuple, Enum):
     R = (NO_DISPLAY, dash.no_update, DISPLAY_FLEX, DISPLAY_FLEX, dash.no_update)
 
 def sendmsgtopic(producer: Producer, tsend: str, topic: str, source: str, dest: str,
-                 action: str, payload: dict = None, vb: int = 0) -> None:
+                 action: str, payload: dict[str, Any] | None = None, vb: int = 0) -> None:
     """
     Send message to a Kafka topic.
 
@@ -111,11 +113,11 @@ def sendmsgtopic(producer: Producer, tsend: str, topic: str, source: str, dest: 
     )
     mtxt = json.dumps(msg)
 
-    producer.produce(value=mtxt, topic=tsend, on_delivery=confirm)
+    producer.produce(value=mtxt.encode("utf-8"), topic=tsend, on_delivery=confirm)
     producer.flush()
 
 
-def confirm(err: str, msg: str) -> None:
+def confirm(err: KafkaError | None, msg: Message) -> None:
     """
     Confirms the message delivery and prints an error message if any.
 
@@ -123,7 +125,7 @@ def confirm(err: str, msg: str) -> None:
     :param msg: The message being confirmed.
     """
     if err:
-        print("Error sending message: " + msg + " [" + err + "]")
+        print(f"Error sending message: {msg} [{err}]")
     return None
 
 
@@ -136,6 +138,8 @@ def sleep(seconds: float, producer: Producer, verbose: int) -> None:
     :param verbose: Level of verbosity.
     """
     _, _, topic_gen, _, _ = _get_stp_runtime_context()
+    if topic_gen is None:
+        raise RuntimeError("TOPIC_GEN is not configured.")
     if verbose > 0:
         sendmsgtopic(
             producer=producer, tsend=topic_gen, topic=topic_gen, source="UX",
@@ -488,7 +492,7 @@ def layout(*args: Any, **kwargs: Any) -> Any:
 
     # Update values if there is a current state
     if current is not None:
-        snpshot = current.strftime("%Y-%m-%dT%H:%M:%S%z")
+        snpshot = cast(Any, current).strftime("%Y-%m-%dT%H:%M:%S%z")
         res_all, res_def = build_resources_list(res_lst)
 
     # Generate HTML layout
@@ -563,7 +567,10 @@ def set_materials(matype: Any, plants: Any) -> Any:
         all_materials = []
 
         for ir in plants:
-            stg_act = site.get_equipment_by_name(ir).storage_in
+            equipment = site.get_equipment_by_name(ir)
+            if equipment is None:
+                continue
+            stg_act = equipment.storage_in
 
             if matype == 'Materials':
                 lmts = snapshot.get_material_current_equipment(ir)
@@ -621,9 +628,12 @@ def set_ass_materials(matype: Any, plants: Any, ass_mats: Any) -> Any:
         if snapshot is None:
             return '', [], NO_DISPLAY, []
         all_assigned_materials = []
+        amts: list[Any] = []
 
         for ir in plants:
             cplnt = site.get_equipment_by_name(ir)
+            if cplnt is None:
+                continue
             stg_act = cplnt.storage_in
 
             if matype == 'Materials':
@@ -747,6 +757,7 @@ def handle_create_click(ag_create: Any, reftxt: Any, matype: Any, plnts: Any, lm
     """
 
     equip_configs = {}
+    o_mats: list[Any] = []
     for i, plant_name in enumerate(plnts):
         equip_configs[plant_name] = {
             "start_date": dates[i]
@@ -771,6 +782,9 @@ def handle_create_click(ag_create: Any, reftxt: Any, matype: Any, plnts: Any, lm
             # Combine with assigned materials
             o_mats = list(set(o_mats + amats))
 
+        if snapshot is None:
+            text = "No active snapshot is available to resolve the selected orders."
+            return text, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, JobStatus.E, dash.no_update
         os_mats = snapshot.get_material_selected_orders(o_mats, plnts, state.get_site())
 
     # Create the auction
@@ -1055,6 +1069,8 @@ def initialize_auction(topic: str, snap_name: str, resources: list,
 
     for name in resources:
         equip_obj = state.get_site().get_equipment_by_name(name)
+        if equip_obj is None:
+            continue
         equip_id = equip_obj.get_equipment_id()
         lres.append(equip_id)
 
@@ -1171,7 +1187,7 @@ def update_equipment_inputs(selected_equipments: Any) -> Any:
             html.Hr()
         ], style={"margin-bottom": "15px", "display": "flex", "alignItems": "center"})
 
-        content.append(row)
+        cast(list[Any], content).append(row)
 
     return content
 

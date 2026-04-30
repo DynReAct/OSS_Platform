@@ -4,8 +4,9 @@ The module is documented in English to make the short-term planning
 workflow easier to maintain across OSS and RAS-specific integrations.
 """
 
+from typing import Any, Dict, List
+
 from pydantic import BaseModel, Field
-from typing import List, Dict
 from enum import Enum
 import sys, os
 import json, hashlib
@@ -24,8 +25,8 @@ class JobStatus(str, Enum):
     F = "Finished"
     E = "Error"
 
-def hash_object(obj: Any) -> Any:
-    """Serialize the object and return a hash string."""
+def hash_object(obj: Any) -> str:
+    """Serialize an object and return a stable SHA-256 hash string."""
     obj_str = json.dumps(obj, sort_keys=True)
     return hashlib.sha256(obj_str.encode()).hexdigest()
 
@@ -70,21 +71,21 @@ class Auction(BaseModel):
     mat_ass_type: str = ""
 
     equip: List[str] = Field(default_factory=list)
-    all_equip: List[str | dict] = Field(default_factory=list)
+    all_equip: List[Any] = Field(default_factory=list)
 
-    all_objs: List[str | dict] = Field(default_factory=list)
+    all_objs: List[Any] = Field(default_factory=list)
     smats: List[str] = Field(default_factory=list)
 
     lmats: List[str] = Field(default_factory=list)
     omats: List[str] = Field(default_factory=list)
 
-    anmats: List[str | dict] = Field(default_factory=list)
+    anmats: List[Any] = Field(default_factory=list)
     ass_n_mats: List[str] = Field(default_factory=list)
 
-    amats: List[str | dict] = Field(default_factory=list)
+    amats: List[Any] = Field(default_factory=list)
     ass_mats: List[str] = Field(default_factory=list)
 
-    resul: Dict[str, List[dict]] = Field(default_factory=dict)
+    resul: Dict[str, List[dict[str, Any]]] = Field(default_factory=dict)
 
     class Config:
         """Config.
@@ -141,7 +142,7 @@ class Auction(BaseModel):
         if 'value' in vtxt:
             self.code = vtxt.value
 
-    def set_lists(self, rftxt: str, lmats: list, mtyp: str, smats: list) -> None:
+    def set_lists(self, rftxt: str, lmats: list[str], mtyp: str, smats: list[str]) -> None:
         """
         Function setting up the list of materials and plants relevant
         for the auction.
@@ -162,7 +163,7 @@ class Auction(BaseModel):
             self.lmats = []
             self.omats = lmats
 
-    def set_materials(self, matype: str, plants: list) -> None:
+    def set_materials(self, matype: str, plants: list[str]) -> None:
         """
         Function establishing the Auction parameters of
         materials and equipments.
@@ -173,7 +174,7 @@ class Auction(BaseModel):
         self.matype = matype
         self.equip = plants
 
-    def set_ass_materials(self, matype: str, plants: list, ass_mats: str, amats: list) -> None:
+    def set_ass_materials(self, matype: str, plants: list[str], ass_mats: str, amats: list[Any]) -> None:
         """
         Function establishing the Auction parameters of
         assigned materials and equipments.
@@ -188,7 +189,7 @@ class Auction(BaseModel):
         self.mat_ass_type = ass_mats
         self.amats = amats
 
-    def set_resul(self, results: Dict[str, List[dict]]) -> None:
+    def set_resul(self, results: Dict[str, List[dict[str, Any]]]) -> None:
         """
         Function establising the auction results
 
@@ -280,7 +281,7 @@ class Auction(BaseModel):
         """
         return self.smats
 
-    def get_amats(self) -> List[str]:
+    def get_amats(self) -> List[Any]:
         """
         Function returning the list of equipments of interest already assigned for this Auction
 
@@ -349,4 +350,4 @@ class Auction(BaseModel):
 
         :rtype: struct
         """
-        return({self.matype,self.equip})
+        return {"matype": self.matype, "equip": self.equip}

@@ -4,7 +4,7 @@ The module is documented in English to make the short-term planning
 workflow easier to maintain across OSS and RAS-specific integrations.
 """
 
-from typing import Any
+from typing import Any, cast
 import json
 import re
 import time
@@ -15,6 +15,7 @@ from dynreact.shortterm.common import sendmsgtopic, KeySearch
 import traceback
 
 current_partitions = 0
+UNKNOWN_TOPIC_ERRORS = {-188, -191}
 
 def on_assign(consumer: Any, partitions: Any) -> None:
     """On assign.
@@ -80,6 +81,8 @@ class Agent:
         self.topic_gen = KeySearch.search_for_value("TOPIC_GEN")
         self.verbose = KeySearch.search_for_value("VB", 1)
         self.kafka_ip = KeySearch.search_for_value("KAFKA_IP")
+        if not isinstance(self.topic_callback, str) or not isinstance(self.topic_gen, str) or not isinstance(self.kafka_ip, str):
+            raise RuntimeError("Kafka configuration is incomplete. Expected TOPIC_CALLBACK, TOPIC_GEN, and KAFKA_IP.")
 
         self.iter_no_msg = 0
         self.min_verbose = 1
@@ -95,7 +98,7 @@ class Agent:
                 "bootstrap.servers": self.kafka_ip,
                 "group.id": self.agent,
                 "auto.offset.reset": "earliest",
-                'error_cb': self.kafka_error_callback
+                'error_cb': cast(Any, self.kafka_error_callback)
             }
         )
         self.consumer.subscribe([self.topic], on_assign=on_assign, on_revoke=on_revoke)
@@ -140,7 +143,7 @@ class Agent:
         )
         return 'CONTINUE'
 
-    def handle_exit_action(self, dctmsg: dict = None) -> str:
+    def handle_exit_action(self, dctmsg: dict | None = None) -> str:
         """
         Handles the EXIT action.
 
@@ -195,7 +198,7 @@ class Agent:
         """
         return 'CONTINUE'
 
-    def callback_on_topic_not_available(self, topic: str = None) -> None:
+    def callback_on_topic_not_available(self, topic: str | None = None) -> None:
         """
         Function executed when 'Subscribed topic not available'
         
@@ -221,7 +224,7 @@ class Agent:
             The value produced by the underlying planning, UI, or test helper logic.
         """
         error_code = err.code() if hasattr(err, "code") else None
-        if error_code in {KafkaError.UNKNOWN_TOPIC_OR_PART, KafkaError._UNKNOWN_PARTITION}:
+        if error_code in UNKNOWN_TOPIC_ERRORS:
             print("WARNING: Topic or partition is temporarily unavailable", err)
             return
         print("WARNING: Kafka consumer callback reported an error", err)
@@ -243,7 +246,7 @@ class Agent:
         message_obj = self.consumer.poll(timeout=1)
 
         # If there is no message, go to the next iteration
-        if message_obj.__str__() == 'None':
+        if message_obj is None:
             #if (self.verbose > self.min_verbose) and ((self.iter_no_msg - 1) % 5 == 0):
                 #self.write_log(f"Iteration {self.iter_no_msg - 1}. No message found.")
             time.sleep(1)
@@ -278,14 +281,17 @@ class Agent:
 
         # If the message contains an error, raise it
         if message_obj.error():
+            error_obj = message_obj.error()
             # End of partition event
             if self.verbose > 1:
                 self.write_log("Error encountered.", "41e40c2f-f4fb-4903-aa32-1931e8fb0d40")
             sys.stderr.write('%% %s [%d] reached end at offset %d with code %s\n' %
                              (message_obj.topic(), message_obj.partition(),
-                              message_obj.offset(), message_obj.error().code()))
+                              message_obj.offset(), error_obj.code() if error_obj is not None else "unknown"))
 
         # If the destinations of the message do not include this AGENT, go to the next iteration
+        if vals is None:
+            return 'CONTINUE'
         dctmsg = json.loads(vals)
         match = re.search(dctmsg['dest'], self.agent)
         if not match:

@@ -1,7 +1,8 @@
 from datetime import datetime
+from typing import Sequence
 
 from dynreact.base.model import EquipmentStatus, ProductionPlanning, ProductionTargets, ObjectiveFunction, \
-    MidTermTargets, StorageLevel
+    MidTermTargets, StorageLevel, Lot, Snapshot
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -83,3 +84,11 @@ class LotsOptimizationResults(BaseModel):
 class LongTermPlanningResults(BaseModel, use_attribute_docstrings=True):
     targets: MidTermTargets
     storage_levels: list[dict[str, StorageLevel]]|None
+
+
+class LotExtended(Lot):
+    lot_complete: bool
+
+class SnapshotExtended(Snapshot):
+    lots: dict[int, Sequence[LotExtended]]
+

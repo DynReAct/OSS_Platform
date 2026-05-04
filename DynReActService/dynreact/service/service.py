@@ -22,7 +22,7 @@ from pydantic import AliasChoices
 from dynreact.app import config, state
 from dynreact.auth.authentication import fastapi_authentication
 from dynreact.service.model import EquipmentTransition, EquipmentTransitionStateful, LotsOptimizationInput, \
-    LotsOptimizationResults, TransitionInfo, MaterialTransfer, LongTermPlanningResults
+    LotsOptimizationResults, TransitionInfo, MaterialTransfer, LongTermPlanningResults, SnapshotExtended, LotExtended
 from dynreact.service.optim_listener import LotsOptimizationListener
 
 
@@ -185,16 +185,28 @@ def snapshot(response: Response, timestamp: str | datetime = Path(..., examples=
                 "now": {"description": "Get the most recent snapshot", "value": "now"},
                 "now-1d": {"description": "Get yesterday's snapshot", "value": "now-1d"},
                 "2023-04-25T23:59Z": {"description": "A specific timestamp", "value": "2023-04-25T23:59Z"},
-            }), username = username) -> Snapshot:
+            }), username = username) -> SnapshotExtended:
     is_relative_timestamp: bool = isinstance(timestamp, str) and timestamp.startswith("now")
     if isinstance(timestamp, str):
         timestamp = parse_datetime_str(timestamp)
     snapshot0: Snapshot = state.get_snapshot(timestamp)
+    snap_provider = state.get_snapshot_provider()
+    snap_copy = snapshot0.model_dump(mode="python", exclude_unset=True, exclude_none=True)
+    lots_copy = {}
+    for eq, eq_lots in snapshot0.lots.items():
+        new_lots = []
+        lots_copy[eq] = new_lots
+        for lot in eq_lots:
+            dump = lot.model_dump(mode="python", exclude_unset=True, exclude_none=True)
+            dump["lot_complete"] = snap_provider.is_lot_complete(lot)
+            new_lots.append(LotExtended.model_validate(dump))
+    snap_copy["lots"] = lots_copy
+    snap_copy = SnapshotExtended.model_validate(snap_copy)
     if not is_relative_timestamp:
         response.headers["Cache-Control"] = "max-age=604800"  # 1 week
     else:
         response.headers["Cache-Control"] = "max-age=60"  # 1 minute
-    return snapshot0
+    return snap_copy
 
 @fastapi_app.get("/lots",
                  tags=["dynreact"],

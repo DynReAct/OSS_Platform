@@ -4,8 +4,6 @@ import sys
 import traceback
 from typing import Any
 
-from dash import html
-
 from dynreact.auth.authentication import get_permission_manager
 from dynreact.base.ConfigurationProvider import ConfigurationProvider
 from dynreact.base.CostProvider import CostProvider
@@ -58,6 +56,7 @@ class Plugins:
 
     @staticmethod
     def _stp_error_page(stp: str, error: Exception|None = None):
+        from dash import html
         msg = f"Failed to load STP frontend '{stp}'."
         details = str(error) if error is not None else "Unknown error"
         return html.Div([

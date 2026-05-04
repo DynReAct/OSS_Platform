@@ -249,6 +249,7 @@ class LotsOptimizationAlgo:
 
     # TODO clarify: should we consider the planning horizon here? => would need some information about planned lot execution time
     def snapshot_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider,
+                                snapshot_provider: SnapshotProvider|None=None,
                                 targets: ProductionTargets|None = None,
                                 orders: list[str] | None = None,
                                 include_inactive_lots: bool=False,
@@ -262,7 +263,7 @@ class LotsOptimizationAlgo:
                 continue
             weight_sum: float = 0.
             for lot in lots:
-                if not lot.active and not include_inactive_lots:
+                if not include_inactive_lots and (not lot.active or (snapshot_provider is not None and not snapshot_provider.is_lot_complete(lot))):
                     continue
                 for lot_idx, order_id in enumerate(lot.orders):
                     if orders is not None and order_id not in orders:

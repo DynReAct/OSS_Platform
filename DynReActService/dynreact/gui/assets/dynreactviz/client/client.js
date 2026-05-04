@@ -1,5 +1,6 @@
 import { toConfig } from "./config.js";
 import { JsUtils } from "./jsUtils.js";
+import { fixShifts, fixSnapshot } from "./clientUtils.js";
 export function loadClient(config) {
     config = toConfig(config);
     if (config.serverUrl === "__dash__")
@@ -32,7 +33,7 @@ class DashClient {
         const snap = this.#globalAccess.getSnapshot();
         if (!snap)
             return Promise.reject(new Error("Snapshot not initialized yet"));
-        return Promise.resolve(snap);
+        return Promise.resolve(fixSnapshot(snap));
     }
     // TODO
     snapshotAggregation(snapshot, options) {
@@ -50,6 +51,12 @@ class DashClient {
         if (!ltp)
             return Promise.reject(new Error("LongTermPlanning not initialized yet"));
         return Promise.resolve(ltp);
+    }
+    shifts(options) {
+        const shifts = this.#globalAccess.getShifts();
+        if (!shifts)
+            return Promise.reject(new Error("Shifts not initialized yet"));
+        return Promise.resolve(fixShifts(shifts));
     }
     abortAll() { }
 }

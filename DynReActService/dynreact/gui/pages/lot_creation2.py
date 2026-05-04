@@ -1599,6 +1599,7 @@ def update_solution_state(snapshot: str|datetime|None, process: str|None, _, sel
     history: list[float] | None = None
     solution: ProductionPlanning | None = None
     opti_state = state.get_lot_creator()
+    is_snap_solution: bool = False
     if solution_selected and snapshot is not None and process is not None and selected_solution is not None:
         snapshot = DatetimeUtils.parse_date(snapshot)
         optimization_state: LotsOptimizationState|None = state.get_results_persistence().load(snapshot, process, selected_solution)
@@ -1621,7 +1622,8 @@ def update_solution_state(snapshot: str|datetime|None, process: str|None, _, sel
         solution, _ = state.get_snapshot_solution(process, snapshot, horizon)
         obj = state.get_cost_provider().process_objective_function(solution).total_value
         history = [obj]
-    lots_data = prepare_lots_for_lot_view(snapshot, process, solution)
+        is_snap_solution = True
+    lots_data = prepare_lots_for_lot_view(snapshot, process, solution, is_snap_solution=is_snap_solution)
     return history, lots_data, False
 
 

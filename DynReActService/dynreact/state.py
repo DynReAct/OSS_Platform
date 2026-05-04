@@ -242,7 +242,8 @@ class DynReActSrvState:
             return cached[2], cached[3]
         if horizon is None:
             horizon = timedelta(days=1)
-        result: tuple[ProductionPlanning, ProductionTargets] = self.get_lots_optimization().snapshot_solution(process, snapshot_obj, horizon, self.get_cost_provider())
+        result: tuple[ProductionPlanning, ProductionTargets] = self.get_lots_optimization().snapshot_solution(process, snapshot_obj, horizon, self.get_cost_provider(),
+                                                                                                snapshot_provider=self.get_snapshot_provider())
         if result is not None:
             if len(self._snapshot_solutions_cache) >= self._max_snapshot_solutions_cache:
                 self._snapshot_solutions_cache.pop(0)

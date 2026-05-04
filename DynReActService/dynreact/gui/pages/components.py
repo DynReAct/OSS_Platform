@@ -9,14 +9,16 @@ from dynreact.app import state
 
 # TODO
 def lots_view(id_prefix: str, *args, **kwargs):
-    lot_size: str | None = kwargs.get("lotsize", "weight")
+    lot_size: str | None = kwargs.get("lotsize", "time")
     return html.Div([
         html.Div([
             html.H2("Lots view"),
             html.Div([
                 html.Div("Display mode: "),
                 dcc.Dropdown(id=id_prefix + "-swimlane-mode", options=[
-                    {"value": "constant", "label": "Constant",
+                    {"value": "time", "label": "Time",
+                     "title": "Show a gantt chart of lots."},
+                    {"value": "constant", "label": "Lots",
                      "title": "All lots are shown with the same width, depending on the available screen space."},
                     {"value": "weight", "label": "Weight",
                      "title": "The width of a lot is proportional to the total weight of its coils."},
@@ -31,13 +33,23 @@ def lots_view(id_prefix: str, *args, **kwargs):
     ])
 
 
-def prepare_lots_for_lot_view(snapshot: str|datetime|None, process: str|None, result: ProductionPlanning | None) -> list[dict[str, any]]:
+def prepare_lots_for_lot_view(snapshot: str|datetime|None, process: str|None, result: ProductionPlanning | None, is_snap_solution: bool=False) -> list[dict[str, any]]:
     snapshot = DatetimeUtils.parse_date(snapshot)
     if process is None or snapshot is None or result is None:
         return []
+    # XXX these lots lost the initial timing information
     lots: list[Lot] = [lot for plant_lots in result.get_lots().values() for lot in plant_lots]
     plants = {p.id: p for p in state.get_site().equipment}
     snap_obj = state.get_snapshot(snapshot)
+    if is_snap_solution:
+
+        for eq_lots in snap_obj.lots.values():
+            for lt in eq_lots:
+                match = next((lot for lot in lots if lot.id == lt.id), None)
+
+                if match:
+                    match.start_time = lt.start_time
+                    match.end_time = lt.end_time
     orders_by_lot: dict[str, list[Order | None]] = {}
     for lot in lots:
         lot_orders = [None for order in lot.orders]
@@ -74,7 +86,9 @@ def prepare_lots_for_lot_view(snapshot: str|datetime|None, process: str|None, re
             "order_ids": lot.orders,  # ", ".join(lot.orders),
             "first_due_date": first_due_dates[lot.id],
             "all_due_dates": all_due_dates[lot.id],
-            "total_weight": total_weights[lot.id]
+            "total_weight": total_weights[lot.id],
+            "start_time": lot.start_time,
+            "end_time": lot.end_time
         }
 
     data = sorted([row_for_lot(lot) for lot in lots], key=lambda lot: lot["id"])

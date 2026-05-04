@@ -123,6 +123,9 @@ class StateImpl {
     longTermPlanningSolution(date, solutionId) {
         return this._client.longTermPlanningSolution(date, solutionId);
     }
+    shifts(options) {
+        return this._client.shifts(options);
+    }
     abortAll() {
         this._client.abortAll();
     }

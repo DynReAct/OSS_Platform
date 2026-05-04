@@ -1,6 +1,8 @@
 import { createFetchClient } from "resilient-fetch-client";
 import { JsUtils } from "./jsUtils.js";
+import { fixShifts, fixSnapshot } from "./clientUtils.js";
 export async function createImplClient(config) {
+    // TODO caching, e.g. for shifts
     const client = await createFetchClient({
         baseUrl: config.serverUrl,
         timeoutRequest: 30_000 /* milliseconds */,
@@ -41,11 +43,7 @@ class ClientImpl {
             snapshot = JsUtils.formatDate(snapshot);
         return this.#client.fetchJson("snapshots/" + snapshot)
             .then(r => r.value)
-            .then(snap => {
-            snap.timestamp = new Date(snap.timestamp);
-            snap.orders.filter(o => o.due_date).forEach(o => o.due_date = new Date(o.due_date));
-            return snap;
-        });
+            .then(snap => fixSnapshot(snap, { skipCopy: true }));
     }
     snapshotAggregation(snapshot, options) {
         if (!snapshot)
@@ -84,6 +82,22 @@ class ClientImpl {
         result0.targets.sub_periods = result0.targets.sub_periods.map(([dt1, dt2]) => [new Date(dt1), new Date(dt2)]);
         Object.values(result0.targets.production_sub_targets).forEach(targets => targets.map(target => target.period = target.period.map(dt => new Date(dt))));
         return result0;
+    }
+    async shifts(options) {
+        const start = options?.start instanceof Date ? JsUtils.formatDate(options.start) : options?.start;
+        const end = options?.end instanceof Date ? JsUtils.formatDate(options.end) : options?.end;
+        const queryParams = new URLSearchParams();
+        ClientImpl.#setQueryParams(queryParams, "start", start);
+        ClientImpl.#setQueryParams(queryParams, "end", end);
+        ClientImpl.#setQueryParams(queryParams, "limit", options?.limit);
+        ClientImpl.#setQueryParams(queryParams, "process", options?.process);
+        if (options?.equipment)
+            options?.equipment.forEach(eq => queryParams.append("equipment", eq + ""));
+        let url = "planned-shifts";
+        if (queryParams.size > 0)
+            url = url + "?" + queryParams.toString();
+        const result = await this.#client.fetchJson(url).then(r => r.value);
+        return fixShifts(result);
     }
     abortAll() {
         this.#client.abortAll();

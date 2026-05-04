@@ -585,6 +585,7 @@ def all_transfer_times(username = username) -> TransportTimes:
     return tt
 
 
+# FIXME this does not enable access to stored results
 lots_optimization: tuple[int, LotsOptimizationListener]|None = None
 
 

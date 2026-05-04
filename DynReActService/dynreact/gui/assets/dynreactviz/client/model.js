@@ -33,6 +33,7 @@ export class SiteImpl {
 }
 export class SnapshotImpl {
     _snapshot;
+    #coilsByOrder;
     constructor(_snapshot) {
         this._snapshot = _snapshot;
     }
@@ -50,6 +51,19 @@ export class SnapshotImpl {
         if (!mat && options?.do_raise)
             throw new Error("Material not found: " + mat_id);
         return mat;
+    }
+    get_coils_by_order() {
+        if (!this.#coilsByOrder) {
+            const coilsByOrder = Object.fromEntries(this._snapshot.orders.map(o => [o.id, []]));
+            this._snapshot.material.forEach(coil => {
+                if (!coil.order || !(coil.order in coilsByOrder))
+                    return;
+                coilsByOrder[coil.order].push(coil);
+            });
+            Object.values(coilsByOrder).forEach(arr => Object.freeze(arr));
+            this.#coilsByOrder = Object.freeze(coilsByOrder);
+        }
+        return this.#coilsByOrder;
     }
 }
 //# sourceMappingURL=model.js.map

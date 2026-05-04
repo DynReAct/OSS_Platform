@@ -8,6 +8,30 @@ export class JsUtils {
         return date.getFullYear() + "-" + JsUtils._asTwoDigits(date.getMonth() + 1) + "-" + JsUtils._asTwoDigits(date.getDate()) + "T"
             + JsUtils._asTwoDigits(date.getHours()) + ":" + JsUtils._asTwoDigits(date.getMinutes());
     }
+    static formatDateByUnit(date, unit, options) {
+        const utc = !!options?.utc;
+        unit = unit?.toLowerCase();
+        switch (unit) {
+            case "y":
+            //  @ts-ignore
+            case "a":
+                return (utc ? date.getUTCFullYear() : date.getFullYear()).toString();
+            case "mon":
+                return utc ? JsUtils._asTwoDigits(date.getUTCMonth() + 1) + "/" + date.getUTCFullYear() :
+                    JsUtils._asTwoDigits(date.getMonth() + 1) + "/" + date.getFullYear();
+            default:
+                let formatted = utc ? date.getUTCFullYear() + "-" + JsUtils._asTwoDigits(date.getUTCMonth() + 1) + "-" + JsUtils._asTwoDigits(date.getUTCDate()) :
+                    date.getFullYear() + "-" + JsUtils._asTwoDigits(date.getMonth() + 1) + "-" + JsUtils._asTwoDigits(date.getDate());
+                if (unit === "d")
+                    return formatted;
+                formatted += "T" + (utc ? JsUtils._asTwoDigits(date.getUTCHours()) : JsUtils._asTwoDigits(date.getHours()))
+                    + ":" + (utc ? JsUtils._asTwoDigits(date.getUTCMinutes()) : JsUtils._asTwoDigits(date.getMinutes()));
+                if (unit === "h" || unit === "min")
+                    return formatted;
+                formatted += ":" + (utc ? JsUtils._asTwoDigits(date.getUTCSeconds()) : JsUtils._asTwoDigits(date.getSeconds()));
+                return formatted;
+        }
+    }
     static _asTwoDigits(value) {
         if (value < 10)
             return "0" + value;
@@ -73,8 +97,23 @@ export class JsUtils {
             copy.setHours(0, 0, 0, 0);
         return copy;
     }
+    static startOfMonth(d, options) {
+        const copy = new Date(d);
+        if (options?.useUtc) {
+            copy.setUTCHours(0, 0, 0, 0);
+            copy.setUTCDate(1);
+        }
+        else {
+            copy.setHours(0, 0, 0, 0);
+            copy.setDate(1);
+        }
+        return copy;
+    }
     static isSameDay(d1, d2) {
         return d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
+    }
+    static daysDiff(d1, d2) {
+        return Math.round((d2.getTime() - d1.getTime()) / 86400000);
     }
     static isClose(d1, d2, tolerance) {
         if (d1.getTime() === d2.getTime())
@@ -194,6 +233,29 @@ export class JsUtils {
         if (duration.millis !== undefined)
             result.setMilliseconds(result.getMilliseconds() + factor * duration.millis);
         return result;
+    }
+    static toMillis(duration) {
+        if (typeof duration === "string")
+            duration = JsUtils.parseDuration(duration);
+        let days = 0;
+        if (duration.years !== undefined)
+            days += 365 * duration.years;
+        if (duration.months !== undefined)
+            days += 30 * duration.months;
+        if (duration.weeks !== undefined)
+            days += 7 * duration.weeks;
+        if (duration.days !== undefined)
+            days += duration.days;
+        let millis = days * 86400000;
+        if (duration.hours !== undefined)
+            millis += 3_600_000 * duration.hours;
+        if (duration.minutes !== undefined)
+            millis += 60_000 * duration.minutes;
+        if (duration.seconds !== undefined)
+            millis += 1000 * duration.seconds;
+        if (duration.millis !== undefined)
+            millis += duration.millis;
+        return millis;
     }
     static _removeTrailingZeros(num) {
         const eIdx = num.indexOf("e");
@@ -318,6 +380,171 @@ export class JsUtils {
             l = array.length;
             idx = Math.floor(l / 2);
         }
+    }
+    static findTicks(range, width, minTickDistance, maxTickDistance) {
+        const diff = range[1] - range[0];
+        let cand = JsUtils.find10Multiple(diff);
+        let count = Math.max(Math.floor(diff / cand), 1);
+        let tickDistance = width / count;
+        if (tickDistance > maxTickDistance) {
+            const cand2 = cand / 10;
+            const count2 = Math.max(Math.floor(diff / cand2), 1);
+            const tickDistance2 = width / count2;
+            if (tickDistance2 >= minTickDistance / 2) {
+                cand = cand2;
+                count = count2;
+                tickDistance = tickDistance2;
+            }
+        }
+        while (tickDistance < minTickDistance) {
+            cand = cand * 2;
+            count = Math.max(Math.floor(diff / cand), 1);
+            tickDistance = width / count;
+        }
+        while (tickDistance > maxTickDistance) {
+            cand = cand / 2;
+            count = Math.max(Math.floor(diff / cand), 1);
+            tickDistance = width / count;
+        }
+        let lastTick = range[0];
+        const ticks = [lastTick];
+        while (true) {
+            const next = lastTick + cand;
+            if (next > range[1])
+                break;
+            ticks.push(next);
+            lastTick = next;
+        }
+        return ticks;
+    }
+    static findDateTicks(range, width, minTickDistance, maxTickDistance) {
+        const diffMillis = range[1].getTime() - range[0].getTime();
+        const yr = 31536000000; // 1 year in millis  // up to leap seconds => maybe not a good idea...
+        if (diffMillis > yr) { // 1 year
+            const yrTicks = JsUtils.findTicks([range[0].getTime() / yr, range[1].getTime() / yr], width, minTickDistance, maxTickDistance);
+            // check if these are full year. If yes => use them
+            const allIntegers = yrTicks.find(tick => !Number.isInteger(tick)) === undefined;
+            if (allIntegers)
+                return [yrTicks.map(tick => new Date(tick * yr)), "y"];
+        }
+        // check if months are suitable
+        let monthStart = JsUtils.startOfMonth(range[0]);
+        if (monthStart < range[0])
+            monthStart.setMonth(monthStart.getMonth() + 1);
+        const allMonths = [];
+        while (monthStart <= range[1]) {
+            allMonths.push(monthStart);
+            monthStart = new Date(monthStart);
+            monthStart.setMonth(monthStart.getMonth() + 1);
+        }
+        const monthCount = allMonths.length;
+        if (monthCount > 1 && width / (monthCount - 1) <= maxTickDistance) {
+            if (width / (monthCount - 1) < minTickDistance) {
+                const divisors = [2, 3, 4, 6]; // drop 4? => Jan, May, Sep
+                for (const divisor of divisors) {
+                    const applicableMonths = allMonths.filter(month => month.getMonth() % divisor === 0);
+                    const count = applicableMonths.length;
+                    if (count <= 1)
+                        continue;
+                    const tickDistance = width / (count - 1);
+                    if (tickDistance >= minTickDistance)
+                        return [applicableMonths, "mon"];
+                }
+                return [allMonths.filter((_, idx) => idx % divisors[divisors.length - 1] === 0), "mon"];
+            }
+            return [allMonths, "mon"];
+        }
+        const allDays = [];
+        let dayStart = JsUtils.startOfDay(range[0]);
+        if (dayStart < range[0])
+            dayStart.setDate(dayStart.getDate() + 1);
+        while (dayStart <= range[1]) {
+            allDays.push(dayStart);
+            dayStart = new Date(dayStart);
+            dayStart.setDate(dayStart.getDate() + 1);
+        }
+        const daysCount = allDays.length;
+        if (daysCount > 1 && width / (daysCount - 1) <= maxTickDistance) {
+            if (width / (daysCount - 1) < minTickDistance) {
+                const divisors = [2, 3, 4, 5, 6, 8, 10, 14, 15];
+                for (const divisor of divisors) {
+                    const days = allDays.filter((day, idx) => idx % divisor === 0);
+                    const daysCount = days.length;
+                    if (daysCount <= 1)
+                        continue;
+                    const tickDistance = width / (daysCount - 1);
+                    if (tickDistance >= minTickDistance)
+                        return [days, "d"];
+                }
+                return [allDays.filter((_, idx) => idx % divisors[divisors.length - 1] === 0), "d"];
+            }
+            return [allDays, "d"];
+        }
+        const allHours = [];
+        let hourStart = new Date(range[0]);
+        hourStart.setMinutes(0, 0, 0);
+        if (hourStart < range[0])
+            hourStart.setHours(hourStart.getHours() + 1);
+        while (hourStart <= range[1]) {
+            allHours.push(hourStart);
+            hourStart = new Date(hourStart);
+            hourStart.setHours(hourStart.getHours() + 1);
+        }
+        const hoursCount = allHours.length;
+        if (hoursCount > 1 && width / (hoursCount - 1) <= maxTickDistance) {
+            if (width / (hoursCount - 1) < minTickDistance) {
+                const divisors = [2, 3, 4, 6, 8, 12];
+                for (const divisor of divisors) {
+                    const hours = allHours.filter((hour, idx) => idx % divisor === 0);
+                    const hoursCount = hours.length;
+                    if (hoursCount <= 1)
+                        continue;
+                    const tickDistance = width / (hoursCount - 1);
+                    if (tickDistance >= minTickDistance)
+                        return [hours, "h"];
+                }
+                return [allHours.filter((hour, idx) => idx % divisors[divisors.length - 1] === 0), "h"];
+            }
+            return [allHours, "h"];
+        }
+        const allMinutes = [];
+        let minuteStart = new Date(range[0]);
+        minuteStart.setSeconds(0, 0);
+        if (minuteStart < range[0])
+            minuteStart.setMinutes(minuteStart.getMinutes() + 1);
+        while (minuteStart <= range[1]) {
+            allMinutes.push(minuteStart);
+            minuteStart = new Date(minuteStart);
+            minuteStart.setMinutes(minuteStart.getMinutes() + 1);
+        }
+        const minutesCount = allMinutes.length;
+        if (minutesCount > 1 && width / (minutesCount - 1) <= maxTickDistance) {
+            if (width / (minutesCount - 1) < minTickDistance) {
+                const divisors = [2, 3, 4, 5, 6, 10, 15, 20, 30];
+                for (const divisor of divisors) {
+                    const minutes = allMinutes.filter((min, idx) => idx % divisor === 0);
+                    const minCount = minutes.length;
+                    if (minCount <= 1)
+                        continue;
+                    const tickDistance = width / (minCount - 1);
+                    if (tickDistance >= minTickDistance)
+                        return [minutes, "min"];
+                }
+                return [allMinutes.filter((_, idx) => idx % divisors[divisors.length - 1] === 0), "min"];
+            }
+            return [allMinutes, "min"];
+        }
+        return [range.map(dt => new Date(dt)), ""];
+    }
+    static find10Multiple(num) {
+        let cand = 1;
+        while (num / cand > 10) {
+            cand = cand * 10;
+        }
+        while (cand / num > 1) {
+            cand = cand / 10;
+        }
+        return cand;
     }
 }
 //# sourceMappingURL=jsUtils.js.map

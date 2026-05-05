@@ -134,7 +134,7 @@
     * Section 4: lots swimlane
     *=================================
     */
-    globalThis.dash_clientside.createlots.showLotsSwimlane = async function(data, elementId, process, mode) {
+    globalThis.dash_clientside.createlots.showLotsSwimlane = async function(data, elementId, process, mode, shifts) {
         const site = globalThis.dynreact?.getSite();
         let snap = globalThis.dynreact?.getSnapshot();
         if (!site || !snap || !elementId)
@@ -164,8 +164,10 @@
         }
         if (!swimlane) {
             swimlane = document.createElement("lots-swimlane");
-            if (snapLots)
+            if (snapLots) {
                 swimlane.setAttribute("complete-lots-only", "true");
+                swimlane.setAttribute("shift-horizon", "P1D");
+            }
             const element = document.querySelector("div#" + elementId);
             element.appendChild(swimlane);
         }
@@ -173,11 +175,20 @@
             swimlane?.setPlanning(undefined, undefined, undefined, undefined);
             return "";
         }
+        if (shifts) {  // XXX copied from DynReActViz
+            const _fixShifts = (shifts) => {
+                const shifts2 = shifts.map(shift => {return {...shift, period: shift.period.map(p => new Date(p)), worktime: JsUtils.toMillis(shift.worktime)}});
+                Object.freeze(shifts2);
+                return shifts2;
+            };
+            // TODO fix date fields
+            shifts = Object.fromEntries(Object.entries(shifts).map(([eq, eqShifts]) => [eq, _fixShifts(eqShifts)]));
+        }
         /*
         swimlane.setState(await initDynreactState({serverUrl: "__dash__"}));
         */
         // TODO shifts // FIXME migrate to setState
-        swimlane.setPlanning(site, snap, process, data);
+        swimlane.setPlanning(site, snap, process, data, shifts);
         swimlane.lotSizing = mode;
         return "";
     };

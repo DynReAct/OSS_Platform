@@ -16,9 +16,9 @@ class SimpleLongTermPlanning(LongTermPlanning):
 
     def __init__(self, uri: str, site: Site):
         super().__init__(uri, site)
-        if not uri.startswith("default:"):
+        if not uri.startswith("simple:"):
             raise NotApplicableException("Unexpected URI for simple long term planning provider: " + str(uri))
-        props: dict[str, str] = {pair[0]: pair[1] for pair in (prop.split("=") for prop in uri[len("default:"):].split(",")) if len(pair) == 2}
+        props: dict[str, str] = {pair[0]: pair[1] for pair in (prop.split("=") for prop in uri[len("simple:"):].split(",")) if len(pair) == 2}
         self._shift_duration: str = props.get("shiftDuration", "8h")
         duration: timedelta | None = DatetimeUtils.parse_duration(self._shift_duration)
         if duration is None:

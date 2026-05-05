@@ -15,7 +15,7 @@ class DynReActSrvConfig:
     downtime_provider: str = "default+file:./data/downtimes.json"
     cost_provider: str|None = None
     "If None and the `profile` configuration is set, an attempt will be made to load the cost provider from the module dynreact.cost.<profile>."
-    long_term_provider: str = "default:8h"  # TODO use of profiles tbd
+    long_term_provider: str = "default:"
     lot_creation: str = "default:tabu-search"
     short_term_planning: str = "default+file:./data/stp_context.json"
     results_persistence: str = "default+file:./results"

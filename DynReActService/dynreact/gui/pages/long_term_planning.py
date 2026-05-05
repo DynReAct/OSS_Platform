@@ -648,7 +648,7 @@ def set_initial_availabilities(_: Any, __: Any, start_time: datetime|str, horizo
     if start is None or end is None:
         return "Not available", [], [], 100_000
     plants: dict[int, Equipment] = {p.id: p for p in state.get_site().equipment}
-    plant_data: dict[int, list[EquipmentAvailability]] = persistence.load_all(start, end)
+    plant_data: dict[int, list[EquipmentAvailability]] = {eq: results for eq, results in persistence.load_all(start, end).items() if eq in plants}
     start_dt, end_dt = _date_range_to_datetime(start, end)
     shifts = state.get_shifts_provider().load_all(start_dt, end_dt)
     hours_per_plant: dict[int, timedelta] = {pid: sum((s.worktime for s in shifts.get(pid)), start=timedelta()) if pid in shifts else timedelta() for pid in plants.keys() if pid not in plant_data}

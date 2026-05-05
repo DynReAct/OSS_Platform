@@ -8,7 +8,7 @@
     "name_short": "CRL",
     "process_ids": [2],
     "name": "Cold rolling",
-    "next_steps": ["CRL"]
+    "next_steps": ["FIN"]
   },{
     "name_short": "FIN",
     "process_ids": [3],

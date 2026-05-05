@@ -119,10 +119,12 @@ class Plugins:
     def get_long_term_planning(self) -> LongTermPlanning:
         if self._long_term_planning is None:
             site = self.get_config_provider().site_config()
-            if self._config.long_term_provider.startswith("default:"):
+            if self._config.long_term_provider.startswith("simple:"):
                 self._long_term_planning = SimpleLongTermPlanning(self._config.long_term_provider, site)
             else:
-                self._long_term_planning = Plugins._load_module("dynreact.ltp",  self._config.long_term_provider, self._profile, LongTermPlanning, site, do_raise=True)
+                # default: not using profile
+                profile = "LongTermPlanningImpl" if self._config.long_term_provider.startswith("default:") else self._profile
+                self._long_term_planning = Plugins._load_module("dynreact.ltp",  self._config.long_term_provider, profile, LongTermPlanning, site, do_raise=True)
         return self._long_term_planning
 
     def get_results_persistence(self) -> ResultsPersistence:
@@ -178,7 +180,7 @@ class Plugins:
             if isinstance(self._config.shifts_provider, ShiftsProvider):
                 self._shifts_provider = self._config.shifts_provider
             elif (self._config.shifts_provider and self._config.shifts_provider.startswith("dummy:")) or (not self._profile and not self._config.shifts_provider):
-                self._shifts_provider = DummyShiftsProvider(self._config.shifts_provider, site)
+                self._shifts_provider = DummyShiftsProvider(self._config.shifts_provider or "dummy:", site)
             else:
                 self._shifts_provider = Plugins._load_module("dynreact.shifts", self._config.shifts_provider, self._profile,
                                                              ShiftsProvider, site, do_raise=True)

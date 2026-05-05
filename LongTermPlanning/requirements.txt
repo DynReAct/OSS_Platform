@@ -1,0 +1,8 @@
+numpy>=2.2, <3
+pandas>=2, <4
+python-dotenv>=1, <2
+# NOTE: this is a GPL-v3 dependency
+picos>=2.6, <3
+# NOTE: this is a GPL-v3 dependency
+ecos>=2, <3
+#openpyxl>=3.1, <4

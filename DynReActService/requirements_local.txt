@@ -1,4 +1,5 @@
 -e ../DynReActBase
+-e ../LongTermPlanning
 -e ../MidTermPlanning
 -e ../ShortTermPlanning
 -e ../SampleUseCase

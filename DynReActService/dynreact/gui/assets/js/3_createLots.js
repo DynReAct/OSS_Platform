@@ -135,12 +135,37 @@
     *=================================
     */
     globalThis.dash_clientside.createlots.showLotsSwimlane = async function(data, elementId, process, mode) {
+        const site = globalThis.dynreact?.getSite();
+        let snap = globalThis.dynreact?.getSnapshot();
+        if (!site || !snap || !elementId)
+            return;
+        snap = {...snap, orders: snap.orders.map(o => {return {...o};}), lots: Object.fromEntries(Object.entries(snap.lots).map(([eqId, eqLots]) => [eqId, eqLots.map(lt => {return {...lt};})])) };
+        snap.timestamp = new Date(snap.timestamp);
+        snap.orders.filter(o => o.due_date).forEach(o => o.due_date = new Date(o.due_date));
+        Object.values(snap.lots).forEach(lots => {
+            lots.forEach(lot => {
+                lot.start_time = lot.start_time ? new Date(lot.start_time) : undefined;
+                lot.end_time = lot.end_time ? new Date(lot.end_time) : undefined;
+            })
+        });
         //const initDynreactState = await import("../dynreactviz/client/state.js").then(module => module.initDynreactState);
         const LotsSwimlane = await import("../dynreactviz/components/lots-swimlane.js").then(module => module.LotsSwimlane);
         LotsSwimlane.register();
         let swimlane = document.querySelector("div#" + elementId + ">lots-swimlane");
-        if (!swimlane && data) {
+        let snapLots = false;
+        if (!data || data < 0) {
+            data = Object.values(snap.lots).flatMap(lots => lots);
+            snapLots = true;
+        } else {
+            data.forEach(lot => {
+                lot.start_time = lot.start_time ? new Date(lot.start_time) : undefined;
+                lot.end_time = lot.end_time ? new Date(lot.end_time) : undefined;
+            });
+        }
+        if (!swimlane) {
             swimlane = document.createElement("lots-swimlane");
+            if (snapLots)
+                swimlane.setAttribute("complete-lots-only", "true");
             const element = document.querySelector("div#" + elementId);
             element.appendChild(swimlane);
         }
@@ -152,29 +177,15 @@
         swimlane.setState(await initDynreactState({serverUrl: "__dash__"}));
         */
         // TODO shifts // FIXME migrate to setState
-        const site = globalThis.dynreact?.getSite();
-        let snap = globalThis.dynreact?.getSnapshot();
-        snap = {...snap, orders: snap.orders.map(o => {return {...o};}), lots: Object.fromEntries(Object.entries(snap.lots).map(([eqId, eqLots]) => [eqId, eqLots.map(lt => {return {...lt};})])) };
-        snap.timestamp = new Date(snap.timestamp);
-        snap.orders.filter(o => o.due_date).forEach(o => o.due_date = new Date(o.due_date));
-        Object.values(snap.lots).forEach(lots => {
-            lots.forEach(lot => {
-                lot.start_time = lot.start_time ? new Date(lot.start_time) : undefined;
-                lot.end_time = lot.end_time ? new Date(lot.end_time) : undefined;
-            })
-        });
-        data.forEach(lot => {
-            lot.start_time = lot.start_time ? new Date(lot.start_time) : undefined;
-            lot.end_time = lot.end_time ? new Date(lot.end_time) : undefined;
-        });
         swimlane.setPlanning(site, snap, process, data);
         swimlane.lotSizing = mode;
         return "";
     };
 
-    globalThis.dash_clientside.createlots.setLotsSwimlaneMode = function(mode) {
-         Array.from(document.querySelectorAll("lots-swimlane"))  // all ?
-            .forEach(el => el.lotSizing = mode);
+    globalThis.dash_clientside.createlots.setLotsSwimlaneMode = function(mode, elementId) {
+         const el = document.querySelector("lots-swimlane#" + elementId);
+         if (el)
+            el.lotSizing = mode;
     }
 
 })();

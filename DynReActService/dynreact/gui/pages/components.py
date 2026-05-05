@@ -8,7 +8,7 @@ from dynreact.app import state
 
 
 # TODO
-def lots_view(id_prefix: str, *args, **kwargs):
+def lots_view(id_prefix: str, initial_hidden: bool=True, *args, **kwargs):
     lot_size: str | None = kwargs.get("lotsize", "time")
     return html.Div([
         html.Div([
@@ -28,7 +28,7 @@ def lots_view(id_prefix: str, *args, **kwargs):
                      "title": "The width of a lot is proportional to the number of coils it contains."},
                 ], value=lot_size)
             ], className="planning-swimlane-mode")
-        ], id=id_prefix + "-lotsview-header", hidden=True),
+        ], id=id_prefix + "-lotsview-header", hidden=initial_hidden),
         html.Div(id=id_prefix + "-lots-swimlane")
     ])
 

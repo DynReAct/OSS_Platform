@@ -24,7 +24,7 @@ export class LotsSwimlane extends HTMLElement {
         return LotsSwimlane.#tag;
     }
     static get observedAttributes() {
-        return ["auto-fetch", "row-size", "lot-height", "lot-color", "lot-sizing", "process", "server", "skip-shifts", "complete-lots-only", "min-status"];
+        return ["auto-fetch", "row-size", "lot-height", "lot-color", "lot-sizing", "process", "server", "skip-shifts", "complete-lots-only", "min-status", "shift-horizon"];
     }
     #lanesContainer;
     #tooltipContainer;
@@ -188,6 +188,34 @@ export class LotsSwimlane extends HTMLElement {
         else
             this.removeAttribute("skip-shifts");
     }
+    /**
+     * Returns milliseconds (>= 0)
+     */
+    get shiftHorizon() {
+        let horizon = this.getAttribute("shift-horizon");
+        if (horizon) {
+            try {
+                horizon = JsUtils.toMillis(JsUtils.parseDuration(horizon));
+            }
+            catch (e) { }
+        }
+        const asInt = parseInt(horizon);
+        return asInt >= 0 ? asInt : 0;
+    }
+    /**
+     * horizon: either milliseconds or a duration or a string in ISO duration format, such as "PT1H"
+     */
+    set shiftHorizon(horizon) {
+        if (typeof horizon === "object" || typeof horizon === "string") {
+            horizon = JsUtils.toMillis(horizon);
+        }
+        if (horizon && horizon > 0) {
+            this.setAttribute("shift-horizon", horizon + "");
+        }
+        else {
+            this.removeAttribute("shift-horizon");
+        }
+    }
     constructor() {
         super();
         const shadow = this.attachShadow({ mode: "open" });
@@ -346,11 +374,12 @@ export class LotsSwimlane extends HTMLElement {
                 lotsByPlant[plant] = [];
             lotsByPlant[plant].push(lot);
         });
-
         this.#lots = lots ? lotsByPlant : undefined;
         this.#site = site;
         this.#snapshot = snapshot;
-        const plantIds = [...Object.keys(lotsByPlant)].map(v => parseInt(v));
+        let plantIds = [...Object.keys(lotsByPlant)].map(v => parseInt(v));
+        if (shifts)
+            plantIds = [...plantIds, ...Object.keys(shifts).map(k => parseInt(k))];
         this.#plants = site?.equipment?.filter(plant => plantIds.indexOf(plant.id) >= 0);
         const snapTime = snapshot.snapshot.timestamp.getTime();
         if (snapshot && lots) {
@@ -440,16 +469,22 @@ export class LotsSwimlane extends HTMLElement {
         const width = Math.max(document.body.clientWidth - 100, 200);
         const svgParent = LotsSwimlane.#create("svg", { attributes: {
                 viewbox: "0 0 " + width + " " + (rowSize * this.#plants.length + 1),
-                /*
-                width: "90vw", // FIXME this leads to the disappearance of some content
-                */
                 width: width + "px",
                 height: (rowSize * this.#plants.length + 75) + "px"
             } });
         this.#svgParent = svgParent;
         const sizing = this.#lotSizing;
         const startTime = this.#snapshot.snapshot.timestamp;
-        const endTime = new Date(Math.max(...Object.values(this.#endTimeByPlant).map(dt => dt.getTime())));
+        let endTime = new Date(Math.max(...Object.values(this.#endTimeByPlant).map(dt => dt.getTime())));
+        const shiftHorizon = this.shiftHorizon;
+        if (sizing === "time" && this.#shifts && Object.keys(this.#shifts).length > 0 && shiftHorizon > 0) {
+            const maxShiftHorizon = Math.max(...Object.values(this.#shifts).map(shifts => Math.max(...shifts.map(sh => sh.period[1].getTime()), endTime.getTime())));
+            if (new Date(maxShiftHorizon) > endTime) {
+                const horizonEnd = new Date(endTime);
+                horizonEnd.setMilliseconds(horizonEnd.getMilliseconds() + shiftHorizon);
+                endTime = new Date(Math.min(horizonEnd.getTime(), maxShiftHorizon));
+            }
+        }
         const sizeFactor = sizing === "constant" ? Math.max(...Array.from(Object.values(this.#lots)).map(plantLots => plantLots.length)) :
             sizing === "weight" ? Math.max(...Object.values(this.#weightByPlant)) :
                 sizing === "orders" ? Math.max(...Object.values(this.#numOrdersByPlant)) :
@@ -484,7 +519,7 @@ export class LotsSwimlane extends HTMLElement {
         }
         else if (sizing === "time") {
             const startMillis = startTime.getTime();
-            const [items, unit] = JsUtils.findDateTicks([startTime, endTime], width - xStartGantt, 200, 400);
+            const [items, unit] = JsUtils.findDateTicks([startTime, endTime], width - xStartGantt, 300, 450);
             const factor = (width - xStartGantt) / sizeFactor;
             const positions = items.map(item => Math.floor(xStartGantt + (item.getTime() - startMillis) * factor));
             positions.forEach((pos, idx) => {
@@ -541,7 +576,7 @@ export class LotsSwimlane extends HTMLElement {
         const yFieldStart = idx * rowSize;
         const titleField = new DOMRect(0, yFieldStart, start0, rowSize);
         const lotFields = [];
-        const lots = this.#lots[plant.id];
+        const lots = this.#lots[plant.id] || [];
         const isTime = sizing === "time";
         const effectiveRowWidth = rowWidth - start0;
         const gapFields = [];

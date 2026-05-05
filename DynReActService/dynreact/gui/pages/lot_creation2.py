@@ -2082,7 +2082,8 @@ clientside_callback(
         function_name="setLotsSwimlaneMode"
     ),
     Output("lots2-lotsview-header", "title"),
-    Input("lots2-swimlane-mode", "value")
+    Input("lots2-swimlane-mode", "value"),
+    State("lots2-lots-swimlane", "id")
 )
 
 # modal dialog

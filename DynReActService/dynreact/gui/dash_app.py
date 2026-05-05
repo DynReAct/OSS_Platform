@@ -1,4 +1,5 @@
 import os
+from typing import Sequence
 
 import dash
 from dash import dcc, html, Output, Input, State, clientside_callback, ClientsideFunction, callback
@@ -7,7 +8,7 @@ from flask import Flask
 
 from dynreact.app import config, state
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import Snapshot
+from dynreact.base.model import Snapshot, Lot
 from dynreact.gui.gui_utils import GuiUtils
 from dynreact.gui.pages.session_state import language, site, selected_snapshot, selected_snapshot_obj, selected_process, \
     snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector
@@ -53,19 +54,19 @@ def layout(*args, **kwargs):
     # init_stores(*args, **kwargs)  # it seems that arguments are not passed to the global layout function
     prov = state.get_snapshot_provider()
     is_importer = hasattr(prov, "next_scheduled_import")
-    if is_importer:  # add a submenu for snapshot imports
-        snapshot_link = html.Div([
+    #if is_importer:  # add a submenu for snapshot imports
+    snap_links = [dcc.Link("Snapshot", id="menu-snaps_header-1", className="menu-link login-required", href="/dash/", title="Open snapshots tab"),
+                  dcc.Link("Lots", id="menu-snaps_gantt_header", className="menu-link login-required", href="/dash/lots-gantt", title="Open lots tab")
+                            #dcc.Link("Imports", id="menu-snaps-import_header", className="menu-link", href="/dash/imports", title="Snapshot imports")
+                ]
+    if is_importer:
+        snap_links.append(dcc.Link("Imports", id="menu-snaps-import_header", className="menu-link", href="/dash/imports", title="Snapshot imports"))
+    snapshot_link = html.Div([
                     html.Div([
                         html.Div("Snapshot", id="menu-snaps_header"),
-                        html.Div([
-                            dcc.Link("Snapshot", id="menu-snaps_header-1", className="menu-link login-required", href="/dash/", title="Open snapshots tab"),
-                            #dcc.Link("Lot creation", id="menu-lots-creation_header", className="menu-link", href="/dash/lots/create", title="Lots creation"),
-                            dcc.Link("Imports", id="menu-snaps-import_header", className="menu-link", href="/dash/imports", title="Snapshot imports")
-                        ], className="submenu-content")
+                        html.Div(snap_links, className="submenu-content")
                     ])
                 ], className="menu-link login-required", title="Open snapshots tab")
-    else:
-        snapshot_link =  dcc.Link("Snapshot", id="menu-snaps_header", className="menu-link login-required",  href="/dash/", title="Open snapshots tab")
     menu_container = html.Div([
         dcc.Location(id="menu-url"),
         language,
@@ -128,7 +129,7 @@ def layout(*args, **kwargs):
     className="menu-container", id="menu")  # id should match outer key in translation file
     # see https://dash.plotly.com/urls#query-strings
     page_container = dash.page_container
-    layout_menu = html.Div([menu_container, page_container], className="main-container")
+    layout_menu = html.Div([menu_container, page_container], className="main-container"),
     return layout_menu
 
 
@@ -157,7 +158,6 @@ def update_user_tab(path: str):
         user_header = dcc.Link(login_value, href="/dash/login", title=user_title)
         main_menu_class = "main-menu logged-out"
     return main_menu_class, user_header, user_class_name
-
 
 
 clientside_callback(
@@ -220,7 +220,19 @@ def params_changed(params: str|None, user_set_snapshot: str|None, create_process
         snap = state.get_snapshot(DatetimeUtils.parse_date(snapshot))
         snapshot = GuiUtils.format_snapshot(snap.timestamp, None, state=state) if snap is not None else None
     if snap != dash.no_update and snap is not None:
-        snap = snap.model_dump(exclude_none=True, exclude_unset=True)
+        lots: dict[int, Sequence[Lot]] = snap.lots
+        snap = snap.model_dump(mode="json", exclude_none=True, exclude_unset=True)
+        lots_copy = {}
+        snap_provider = state.get_snapshot_provider()
+        for eq, eq_lots in lots.items():
+            new_lots = []
+            lots_copy[eq] = new_lots
+            for lot in eq_lots:
+                dump = lot.model_dump(mode="json", exclude_unset=True, exclude_none=True)
+                dump["lot_complete"] = snap_provider.is_lot_complete(lot)
+                new_lots.append(dump)
+            lots_copy[eq] = new_lots
+        snap["lots"] = lots_copy
     return snapshot, snap, process
 
 

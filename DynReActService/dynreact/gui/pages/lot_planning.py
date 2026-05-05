@@ -642,7 +642,8 @@ clientside_callback(
         function_name="setLotsSwimlaneMode"
     ),
     Output("planning-lotsview-header", "title"),
-    Input("planning-swimlane-mode", "value")
+    Input("planning-swimlane-mode", "value"),
+    State("planning-lots-swimlane", "id")
 )
 
 clientside_callback(

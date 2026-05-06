@@ -328,6 +328,8 @@ class EquipmentProduction(Model):
     total_weight: float
     lot_weight_range: tuple[float, float] | None = None
     "Weight restriction for lots in t"
+    material_weights: dict[str, float]|None = None
+    "Optional target weights per material class in t"
 
 
 class ObjectiveFunction(Model, extra="allow"):

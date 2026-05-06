@@ -150,7 +150,7 @@
 
         try {
             const ltp = await state.longTermPlanningSolution(Date.now(), solutionId);
-            ltpAnimation.setResults(ltp.storage_levels, ltp.targets.sub_periods);
+            ltpAnimation.setResults(ltp.storage_levels, ltp.targets, ltp.targets.sub_periods);
         } catch(e) {
             storageLevels.remove();
             materialSelector.remove();

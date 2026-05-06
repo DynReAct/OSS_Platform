@@ -76,11 +76,13 @@ class LtpUtils:
                 outgoing_flows: list[np.ndarray] = [flow.np2d if isinstance(flow, pc.RealVariable) else flow for flow in equipment_to_storages[eq].values()]
                 for shift_idx in range(num_shifts):
                     total_weight = sum(fl[-1, shift_idx] for fl in outgoing_flows)
-                    eq_prod = EquipmentProduction(equipment=eq, total_weight=total_weight)
-                    equipment_targets[shift_idx][eq] = eq_prod
+                    eq_material = {}
                     for mat_idx, material in enumerate(materials):
                         mat_weight = sum(fl[mat_idx, shift_idx] for fl in outgoing_flows)
                         material_weights[shift_idx][material] += mat_weight
+                        eq_material[material] = mat_weight
+                    eq_prod = EquipmentProduction(equipment=eq, total_weight=total_weight, material_weights=eq_material)
+                    equipment_targets[shift_idx][eq] = eq_prod
             proc_result: list[ProductionTargets] = [ProductionTargets(process=proc, target_weight=eq_target_dct, material_weights=mat_target_dct, period=shifts[shift_idx])
                                                     for shift_idx, (eq_target_dct, mat_target_dct) in enumerate(zip(equipment_targets, material_weights))]
             result[proc] = proc_result

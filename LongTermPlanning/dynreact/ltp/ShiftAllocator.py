@@ -61,8 +61,6 @@ class ShiftAllocator:
             # FIXME
             print(f" PROCESS allocation starting {next_proc.name_short}")
             self._allocate_process(next_proc)
-            # FIXME
-            print(f"   PROCESS allocation DONE!")
         return LtpUtils.to_results(self._site, self._shifts, self._targets, self._storage_levels_final, self._storages_to_equipment_final, self._equipment_to_storages_final)
 
     def _allocate_process(self, process: Process):

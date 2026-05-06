@@ -11,6 +11,7 @@ export class LongTermPlanningAnimation {
     state;
     site;
     #storageLevels;
+    #targets;
     #dates; // length = storages length - 1
     #timeRange;
     #times; // length = storages length
@@ -80,11 +81,12 @@ export class LongTermPlanningAnimation {
         const date = new Date(min + fraction * (max - min));
         return this.setActive(date);
     }
-    setResults(storageLevels, dates) {
+    setResults(storageLevels, targets, dates) {
         this.state.abortAll(); // note: this state may be shared with other components, this is dangerous... 
         const applicable = storageLevels?.length > 0 && dates?.length > 0;
         if (!applicable) {
             this.#storageLevels = undefined;
+            this.#targets = undefined;
             this.#dates = undefined;
             this.#timeRange = undefined;
             this.#times = undefined;
@@ -93,6 +95,7 @@ export class LongTermPlanningAnimation {
             return;
         }
         this.#storageLevels = storageLevels;
+        this.#targets = targets;
         this.#dates = dates;
         const range = [dates[0][0].getTime(), dates[dates.length - 1][1].getTime()];
         this.#timeRange = range;
@@ -173,11 +176,15 @@ export class LongTermPlanningAnimation {
             return;
         }
         const capacities = this.#storageCapacities;
+        const done = storageLevels["DONE"];
         storageLevels = Object.fromEntries(Object.entries(storageLevels)
             .filter(([storage, levels]) => storage in capacities)
-            .map(([storage, levels]) => [storage, LongTermPlanningAnimation.#relativeLevelToAbsolute(levels, capacities[storage])]));
+            .map(([storage, levels]) => [storage, LongTermPlanningAnimation.#relativeLevelToAbsolute(levels, storage === "DONE" && this.#targets ? this.#targets.total_production : capacities[storage])]));
+        if (done)
+            storageLevels["DONE"] = done;
         const targets = Object.fromEntries(Object.entries(storageLevels).map(([storage, levels]) => [storage, levels.material_levels ? { ...levels.material_levels, __total__: levels.filling_level } : levels.filling_level]));
-        this.storageLevelsComponent.setStorageLevels(targets);
+        const customCapacities = this.#targets ? { "DONE": this.#targets.total_production } : undefined;
+        this.storageLevelsComponent.setStorageLevels(targets, { customCapacities: customCapacities });
     }
     static #relativeLevelToAbsolute(sl, capacity) {
         const absolute = { ...sl, filling_level: sl.filling_level * capacity };

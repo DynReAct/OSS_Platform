@@ -35,6 +35,7 @@ export class StorageLevels extends HTMLElement {
      * from material class id to filling level
      */
     #storageLevels;
+    #customCapacities = {};
     /**
      * Keys: material class ids, values: color codes
      */
@@ -125,8 +126,16 @@ export class StorageLevels extends HTMLElement {
         this.#site = site;
         this.#init();
     }
-    setStorageLevels(levels) {
+    setStorageLevels(levels, options) {
+        if (levels && !("DONE" in levels)) {
+            const materials = Object.values(levels).flatMap(level => typeof level === "object" ? Object.keys(level) : [undefined]).filter(mat => mat);
+            const done = materials.length === 0 ? 0 : Object.fromEntries(materials.map(mat => [mat, 0]));
+            levels = Object.assign(Object.create(null), levels, { "DONE": done });
+        }
         this.#storageLevels = levels;
+        this.#customCapacities = Object.create(null);
+        if (options?.customCapacities)
+            Object.assign(this.#customCapacities, options?.customCapacities);
         if (this.#site)
             this.#init();
     }
@@ -185,6 +194,7 @@ export class StorageLevels extends HTMLElement {
             return [proc_id, storages];
         })) : storageMode === "plant" ? Object.fromEntries(Object.entries(plantsById).map(([key, plants]) => [key, plants.map(p => p.name_short)])) :
             Object.fromEntries(Object.entries(processNamesById).map(([key, names]) => [key, [names.join(",")]]));
+        storagesById["DONE"] = ["DONE"];
         const maxStoragesPerCol = Math.max(...Object.values(storagesById).map(s => s.length));
         const heightPerStorage = Math.max(Math.floor(totalHeight / Math.max(maxStoragesPerCol, 2)), 60);
         // the total storage space contains the storage circle, the content rectangle and 3*border offset
@@ -198,11 +208,13 @@ export class StorageLevels extends HTMLElement {
         const plantWidth = widthPerCol - plantOffset;
         const storageWidth = plantWidth - plantOffset / 2;
         let colStartX = -widthPerCol;
-        for (const [proc_id, procs] of Object.entries(processesByIds)) {
+        const allProcs = Object.assign({}, processesByIds, { "DONE": "DONE" });
+        for (const [proc_id, procs] of Object.entries(allProcs)) {
             colStartX += widthPerCol;
-            const procPlants = plantsById[proc_id];
+            const isFinal = proc_id === "DONE";
+            const procPlants = !isFinal ? plantsById[proc_id] : [];
             const numPlants = procPlants.length;
-            const heightPerPlant = Math.min(...[Math.max(...[Math.floor(totalHeight / numPlants), 25]), 65]);
+            const heightPerPlant = !isFinal ? Math.min(...[Math.max(...[Math.floor(totalHeight / numPlants), 25]), 65]) : 10;
             const storageIds = storagesById[proc_id];
             const numStorages = storageIds.length;
             let rowIdx = 0;
@@ -264,11 +276,13 @@ export class StorageLevels extends HTMLElement {
             const canvasRect = canvas.getClientRects()[0];
             if (!canvasRect) {
                 if (failCnt++ < 100)
-                    this.#initTimer = setTimeout(initTooltip, 100);
-            } else {
-                this.#tooltip.update(canvasRect.x, canvasRect.y, plantsDrawn, storagesDrawn);
+                    this.#initTimer = window.setTimeout(initTooltip, 100);
             }
-        }
+            else {
+                this.#tooltip.update(canvasRect.x, canvasRect.y, plantsDrawn, storagesDrawn);
+                this.#initTimer = undefined;
+            }
+        };
         initTooltip();
     }
     static #validateLevel(level) {
@@ -350,14 +364,14 @@ export class StorageLevels extends HTMLElement {
         if (!site || !mode)
             return {};
         if (mode === "storage")
-            return Object.fromEntries(site.storages.map(s => [s.name_short, s.capacity_weight || defaultCapacity]));
+            return Object.fromEntries(site.storages.map(s => [s.name_short, this.#customCapacities[s.name_short] || s.capacity_weight || defaultCapacity]));
         const plantsByStorage = JsUtils.groupBy(site.equipment, eq => eq.storage_in, eq => eq.name_short);
         const capByPlant = {};
         site.storages.forEach(s => {
             const plants = plantsByStorage[s.name_short];
             if (plants) {
                 const numPlants = plants.length;
-                const cap = s.capacity_weight || defaultCapacity;
+                const cap = this.#customCapacities[s.name_short] || s.capacity_weight || defaultCapacity;
                 plants.forEach(p => capByPlant[p] = cap / numPlants);
             }
         });
@@ -550,7 +564,7 @@ class Tooltip {
             const hasCapacity = !!capacity;
             const capacityGrid = JsUtils.createElement("div", { parent: body, classes: "capacity-grid" });
             if (hasCapacity) {
-                JsUtils.createElement("div", { parent: capacityGrid, text: "Capacity:" });
+                JsUtils.createElement("div", { parent: capacityGrid, text: data.storage.name_short === "DONE" ? "Target:" : "Capacity:" });
                 JsUtils.createElement("div", { parent: capacityGrid, text: JsUtils.formatNumber(capacity, { upperExpoLimitDigits: 5 }) + " t" });
             }
             if (data.storage.materialContainers && site) { // TODO in separate method
@@ -575,9 +589,9 @@ class Tooltip {
                         JsUtils.createElement("div", { parent: frag, classes: "tt-grid-header", text: "Level" });
                     for (const clazz of classes) {
                         JsUtils.createElement("div", { parent: frag, classes: "tt-grid-cell", text: matCats[cat]?.classes?.find(cl => cl.id === clazz.materialId)?.name || clazz.materialId });
-                        JsUtils.createElement("div", { parent: frag, classes: "tt-grid-cell", text: JsUtils.formatNumber(clazz.weight, { upperExpoLimitDigits: 5 }) });
+                        JsUtils.createElement("div", { parent: frag, classes: "tt-grid-cell", text: JsUtils.formatNumber(clazz.weight > 1e-3 ? clazz.weight : 0, { upperExpoLimitDigits: 5 }) });
                         if (hasCapacity)
-                            JsUtils.createElement("div", { parent: frag, classes: "tt-grid-cell", text: (Math.round(clazz.weight / capacity * 1000) / 10) + "%" });
+                            JsUtils.createElement("div", { parent: frag, classes: "tt-grid-cell", text: ((clazz.weight > 1e-3 ? Math.round(clazz.weight / capacity * 1000) / 10 : 0) + "%") });
                     }
                     break; // this assumes there is only a single entry in classesByCats, which should always be the case
                 }

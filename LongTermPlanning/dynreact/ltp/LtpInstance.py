@@ -6,11 +6,13 @@ import numpy as np
 import picos as pc
 
 from dynreact.base.InterruptedException import InterruptedException
-from dynreact.base.model import LongTermTargets, StorageLevel, EquipmentAvailability, MidTermTargets, Site
+from dynreact.base.model import LongTermTargets, StorageLevel, EquipmentAvailability, MidTermTargets, Site, Lot
+from dynreact.ltp.LtpException import LtpException
 from dynreact.ltp.LtpUtils import LtpUtils
 from dynreact.ltp.ShiftAllocator import ShiftAllocator
 
 
+# TODO set constraints based on frozen lots (also in allocator)
 # TODO timeout via run parameters(?)
 # TODO report results of optimization (optimal solution found? Problem feasible? Option to continue; etc.)
 class LtpInstance:
@@ -18,13 +20,15 @@ class LtpInstance:
     _zero_delta: timedelta = timedelta(days=0)
 
     def __init__(self, id0: str, site: Site, structure: LongTermTargets, initial_storage_levels: dict[str, StorageLevel]|None=None,
-                 shifts: list[tuple[datetime, datetime]]|None=None, plant_availabilities: dict[int, EquipmentAvailability] | None=None):
+                 shifts: list[tuple[datetime, datetime]]|None=None, plant_availabilities: dict[int, EquipmentAvailability] | None=None,
+                 frozen_lots: dict[int, Sequence[Lot]] | None = None):
         self._id = id0
         self._site = site
         self._structure = structure
         self._initial_storage_levels = initial_storage_levels
         self._shifts = shifts
         self._availabilities = plant_availabilities
+        self._frozen_lots = frozen_lots
         # state
         self._interrupted = threading.Event()
         self._done = threading.Event()
@@ -52,7 +56,8 @@ class LtpInstance:
         #shifts_allocator = ShiftAllocator(self._site, classes_cnt, self._shifts, self._structure, storage_levels, storages_to_equipment_flow, equipment_to_storages_flow, self._availabilities)
         #return shifts_allocator.run()
         ## return LtpUtils.to_results(self._site, self._shifts, self._structure, storages, storages_to_equipment, equipment_to_storages)
-        shifts_allocator = ShiftAllocator(self._site, self._structure, self._shifts, self._availabilities, storage_levels, equipment_to_storages_flow, storages_to_equipment_flow)
+        shifts_allocator = ShiftAllocator(self._site, self._structure, self._shifts, self._availabilities, storage_levels,
+                                          equipment_to_storages_flow, storages_to_equipment_flow, frozen_lots=self._frozen_lots)
         return shifts_allocator.run()
 
     def interrupt(self) -> bool:
@@ -71,11 +76,26 @@ class LtpInstance:
         if self._interrupted.is_set():
             raise InterruptedException(f"LongTermPlanning interrupted: {self._id}")
 
+    def _determine_frozen_ranges(self) -> dict[int, datetime]:
+        frozen_lots = self._frozen_lots
+        if frozen_lots is None:
+            return None
+        lot_without_endtime = next((lt for lots in frozen_lots.values() for lt in lots if lt.end_time is None or lt.start_time is None), None)
+        if lot_without_endtime is not None:
+            raise LtpException(f"Lot without start and/or end time set: {lot_without_endtime.id}")
+        start_time = self._structure.period[0]
+        end_time = self._structure.period[1]
+        frozen_lots = {e: [lt for lt in lots if lt.end_time > start_time] for e, lots in frozen_lots.items()}
+        frozen_horizons = {e: max(lt.end_time for lt in lots) for e, lots in frozen_lots.items() if len(lots) > 0}
+        return frozen_horizons if len(frozen_horizons) > 0 else None
+
+
     def _build_model(self) -> tuple[pc.Problem, dict[str, pc.RealVariable], dict[str, dict[int, pc.RealVariable]], dict[int, dict[str, pc.RealVariable]], dict[str, pc.expressions.Expression]]:
         """
         Returns:
                 the model, dict of storage variables, dict of [storage->equipment] flow variables, dict of [equipment->storage] flow variables, objective components
         """
+        frozen_horizons: dict[int, datetime]|None = self._determine_frozen_ranges()
         # TODO config
         alpha_storage_level_input = 0.01
         alpha_storage_level = 1
@@ -158,6 +178,21 @@ class LtpInstance:
             if eq.storage_in is not None:
                 u_flow = pc.RealVariable(name=f"u_flow_stg_eq_{eq.storage_in}_{eq.id}", shape=(classes_cnt + 1, num_shifts), lower=0.0, upper=prod_capacity)
                 LtpUtils._set_material_constraints(flow_problem, u_flow, material_categories)
+                if frozen_horizons is not None and eq.id in frozen_horizons:
+                    frozen_horizon: datetime = frozen_horizons[eq.id]
+                    lots: Sequence[Lot] = self._frozen_lots[eq.id]
+                    for shift_idx, shift in enumerate(shifts):
+                        if shift[0] >= frozen_horizon:
+                            break
+                        # TODO constrain the shifts covered by lots already
+                        # TODO special case: partly covered shift
+                        # step 1: determine applicable lots
+                        shift_lots = [lt for lt in lots if lt.start_time < shift[1] and lt.end_time > shift[0]]
+                        if len(shift_lots) == 0:  # no production
+                            flow_problem.require(u_flow[-1, shift_idx] == 0)
+                            continue
+                        shift_lots_with_shares: list[tuple[Lot, float]] = [(lt, (min(lt.end_time, shift[1]) - max(lt.start_time, shift[0]))/(lt.end_time - lt.start_time)) for lt in shift_lots]
+                        # TODO build material vector
                 if eq.storage_in not in storage_to_equipment:
                     storage_to_equipment[eq.storage_in] = {}
                 storage_to_equipment[eq.storage_in][eq.id] = u_flow

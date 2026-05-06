@@ -5,7 +5,7 @@ from typing import Sequence
 import numpy as np
 
 from dynreact.base.model import LongTermTargets, Site, StorageLevel, EquipmentAvailability, Process, Equipment, \
-    MaterialClass
+    MaterialClass, Lot
 from dynreact.ltp.LtpException import LtpException
 from dynreact.ltp.LtpUtils import LtpUtils
 
@@ -23,6 +23,7 @@ class ShiftAllocator:
                  #equipment_targets: dict[int, np.ndarray],  # shape of all arrays: (num_classes + 1, num shifts), where num classes = number material classes
                  equipment_to_storages: dict[int, dict[str, np.ndarray]],
                  storages_to_equipment: dict[str, dict[int, np.ndarray]],
+                 frozen_lots: dict[int, Sequence[Lot]] | None = None,
                  rand_seed: int|None = None
                  ):
         self._site = site
@@ -46,6 +47,7 @@ class ShiftAllocator:
         self._storages_to_equipment_final: dict[str, dict[int, np.ndarray]] = {}  # shape: (num_classes + 1, num_shifts)
         self._equipment_to_storages_final: dict[int, dict[str, np.ndarray]] = {}  # shape: (num_classes + 1, num_shifts)
         self._storage_in_flows_final: dict[str, np.ndarray] = {stg: np.zeros(shape=(len(material_classes)+1, len(shifts))) for stg in storage_levels.keys()}
+        self._frozen_lots = frozen_lots
         self._random = random.Random(x=rand_seed)
 
     def run(self):

@@ -42,12 +42,7 @@ def layout(*args, **kwargs):
     total_production: float = kwargs.get("total", 100_000)
     start_date0: datetime = DatetimeUtils.parse_date(kwargs.get("starttime"))
     if start_date0 is None:
-        try:
-            start_date0 = next(state.get_snapshot_provider().snapshots(datetime(year=1900,month=1,day=1, tzinfo=timezone.utc),
-                                                                       datetime(year=3000,month=1,day=1, tzinfo=timezone.utc), order="desc"))
-        except StopIteration:
-            start_date0 = datetime.now()
-        start_date0 = (start_date0.replace(day=1, minute=0, second=0, microsecond=0) + timedelta(days=32)).replace(day=1)
+        start_date0 = next_month()
     start_date = f"{start_date0.year:4d}-{start_date0.month:2d}-{start_date0.day:2d}".replace(" ", "0")
     num_processes = len(state.get_site().processes)
     return html.Div([
@@ -59,9 +54,17 @@ def layout(*args, **kwargs):
                 # Start time block
                 html.Div([
                     html.Div("Start time", title="Specify the planning start time"),
-                    dcc.Input(type="date", id="ltp-start-time", value=start_date)
+                    html.Div([
+                        html.Div(dcc.RadioItems(id="ltp-start-time-selection", inline=True, options=[
+                                    {"value": "now", "label": "Now ", "title": "Last snapshot"}, {"value": "nextmonth", "label": "Next month "}, {"value": "other", "label": "Other "}], value="now", className="lots2-checkbox")),
+                        dcc.Input(type="date", id="ltp-start-time", value=start_date, disabled=True)
+                    ])
                     #dcc.DatePickerSingle(id="ltp-start-time", date=start_date)
                 ], className="ltp-starttime-block"),
+                html.Div([
+                    html.Div("Previous solution", title="Specify the previous solution for initialization"),
+                    dcc.Dropdown(id="ltp-prev-solution", options=[], style={"width": "12em"})
+                ], className="ltp-prev-sol-block", id="ltp-prev-solution-container", hidden=True),
                 # Horizon (weeks) block
                 html.Div([
                     html.Div("Time horizon (weeks)", title="Specify the planning horizon in weeks"),
@@ -159,6 +162,7 @@ def layout(*args, **kwargs):
         dcc.Store(id="ltp-storage-levels"),  # None or {storage id: StorageLevel}
         dcc.Store(id="ltp-min-capacity", storage_type="memory", data=100_000),
         dcc.Store(id="ltp-result-message", storage_type="memory"),
+        dcc.Store(id="ltp-start-end", storage_type="memory"),
         dcc.Interval(id="ltp-interval", n_intervals=3_600_000),  # for polling when optimization is running
     ], id="ltp")
 
@@ -247,6 +251,16 @@ def graph_stylesheets(start_date: date, end_date: date):
     return default_stylesheet(background_color="darkorange") + additional_style
 
 
+def next_month() -> datetime:
+    try:
+        start_date0 = next(state.get_snapshot_provider().snapshots(datetime(year=1900, month=1, day=1, tzinfo=timezone.utc),
+                                                    datetime(year=3000, month=1, day=1, tzinfo=timezone.utc), order="desc"))
+    except StopIteration:
+        start_date0 = state.replace_timezone(DatetimeUtils.now())
+    start_date0 = (start_date0.replace(day=1, minute=0, second=0, microsecond=0) + timedelta(days=32)).replace(day=1)
+    return start_date0
+
+
 # Moved to js
 """
 def materials_table():
@@ -294,6 +308,99 @@ def shift_duration_changed(duration_idx: int | str | None) -> str:
         return str(allowed_shift_durations[idx])
     except:
         return None
+
+@callback(Output("ltp-start-time", "value"),
+          Output("ltp-start-time", "disabled"),
+          Output("ltp-start-end", "data"),
+          Output("ltp-prev-solution", "options"),
+          Output("ltp-prev-solution-container", "hidden"),
+          Input("ltp-start-time-selection", "value"),
+          Input("ltp-start-time", "value"),
+          Input("ltp-horizon-weeks", "value"),
+          Input("ltp-prev-solution", "value"),
+          State("selected-snapshot", "data"),)
+def start_time_changed(start_time_type: Literal["now", "nextmonth", "other"]|None, start_time: datetime|str, horizon: str|int, previous_solution: str|None, snapshot: str|None):
+    if not start_time_type or not dash_authenticated(config):
+        return dash.no_update, True, [None, None], [], True
+    if previous_solution == "":
+        previous_solution = None
+    changed = GuiUtils.changed_ids()
+    disabled = start_time_type != "other"
+    start_type_changed = "ltp-start-time-selection" in changed or (len(changed) <= 1 and all(c == "" for c in changed))
+    results_persistence = state.get_results_persistence_aggregate()
+    prev_options = dash.no_update
+    prev_hidden = start_time_type != "now"
+    if start_type_changed:
+        if start_time_type == "now":
+            start_time = DatetimeUtils.parse_date(snapshot)
+            if start_time is None:
+                start_time = state.as_timezone(DatetimeUtils.now())
+            all_start_times = results_persistence.start_times_ltp(start=start_time-timedelta(weeks=8), end=start_time, sort="desc")
+            solutions_by_start_times: dict[datetime, list[str]] = {s: results_persistence.solutions_ltp(s) for s in all_start_times}
+            applicable_solutions: dict[datetime, list[str]] = {}
+            for sol_start, sol_ids in solutions_by_start_times.items():
+                if len(sol_ids) == 0:
+                    continue
+                sol_iter = reversed(sol_ids)
+                while True:
+                    try:
+                        sol_id = next(sol_iter)
+                        result = results_persistence.load_ltp(sol_start, sol_id)
+                        if result is None:
+                            continue
+                        is_applicable = result[0].period[1] > start_time
+                        if is_applicable:
+                            applicable_solutions[sol_start] = sol_ids
+                            break
+                        month_start = datetime(start_time)
+                        month_start.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                        if result[0].period[1] <= month_start:  #  if sol_start is in previous month break
+                            break
+                    except StopIteration:
+                        break
+            multiple_start_times = len(applicable_solutions) > 1
+            all_solutions = ((sol_start, sol_id) for sol_start, sol_ids in applicable_solutions.items() for sol_id in sol_ids)
+            prev_options = [{"value": "", "label":""}] + [{"value": f"{sol_start}__x__{sol_id}", "title": f"Start time: {state.as_timezone(sol_start)}",
+                                                           "label": f"{state.as_timezone(sol_start)}: {sol_id}" if multiple_start_times else f"{sol_id}"} for sol_start, sol_id in all_solutions]
+            if previous_solution is None or not any(opt["value"] == previous_solution for opt in prev_options):
+                previous_solution = None if len(prev_options) <= 1 else prev_options[1]["value"]
+        elif start_time_type == "nextmonth":
+            start_time = next_month()
+        else:
+            start_time = DatetimeUtils.parse_date(start_time)
+    else:
+        start_time = DatetimeUtils.parse_date(start_time)
+    if "ltp-prev-solution" in changed or (start_type_changed and start_time_type == "now"):
+        start_end = None
+        if previous_solution is not None:
+            separator_index = previous_solution.index("__x__")
+            prev_start = DatetimeUtils.parse_date(previous_solution[:separator_index])
+            prev_sol_id = previous_solution[separator_index + 5:]
+            # determine time range from previous solution
+            if prev_start is not None:
+                try:
+                    prev_result = state.get_results_persistence_aggregate().load_ltp(prev_start, prev_sol_id)
+                    period = prev_result[0].period
+                    end_time = period[1]
+                    if end_time > start_time:
+                        start_end = (start_time.date(), end_time.date())
+                except:
+                    pass
+        if start_end is None:
+            next_month_start = (start_time.replace(day=1, minute=0, second=0, microsecond=0) + timedelta(days=32)).replace(day=1)
+            start_end = (start_time.date(), next_month_start.date())
+    elif start_time == "now":
+        prev_options = dash.no_update
+        start_end = dash.no_update
+        prev_hidden = False
+    else:
+        start_end = _get_start_end_time(start_time, horizon) if isinstance(start_time, datetime) else dash.no_update
+    if start_end is None or (isinstance(start_end, Sequence) and any(e is None for e in start_end)):
+        return dash.no_update, disabled, [None, None], [], True
+    if isinstance(start_time, datetime):
+        start_time = f"{start_time.year:4d}-{start_time.month:2d}-{start_time.day:2d}".replace(" ", "0")
+    return start_time, disabled, start_end, prev_options, prev_hidden
+
 
 # TODO
 """
@@ -506,7 +613,7 @@ def _get_start_end_time(start_time: datetime|str, horizon: str|int) -> tuple[dat
         return None, None
     start: date = start_time.date()
     month_info: tuple[int, int] = monthrange(start.year, start.month)  # tuple[calendar.Day, int] from Python 3.12
-    end_time = start_time + (timedelta(days=month_info[1]) if horizon == 4 else timedelta(weeks=horizon))
+    end_time = start_time + (timedelta(days=month_info[1]) if horizon == 4 and start.day == 1 else timedelta(weeks=horizon))
     return start, end_time.date()
 
 
@@ -598,11 +705,11 @@ def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
     if start_time is None:
         return dash.no_update
     changed_ids: list[str] = GuiUtils.changed_ids(excluded_ids=[""])
-    if "ltp-storageinit-clear-trigger" in changed_ids:
+    if "ltp-storageinit-clear" in changed_ids:
         return None
     site = state.get_site()
     storages: dict[str, StorageLevel] = {}
-    init_half = "ltp-storageinit-half-trigger" in changed_ids or len(changed_ids) == 0
+    init_half = "ltp-storageinit-half-trigger" in changed_ids or len(changed_ids) == 0 or (levels is None and "ltp-start-time" in changed_ids)
     if init_half:
         for storage in site.storages:
             material_levels = {cl.id: 0.5 * (cl.default_share if cl.default_share is not None else 1 if cl.is_default else 0)  \
@@ -623,12 +730,12 @@ def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
     if "ltp-storageinit-snap-trigger" in changed_ids:
         # TODO
         raise Exception("not implemented yet")
-    if "ltp-start-time" in changed_ids:
-        if levels is None:
-            return dash.no_update
+    if "ltp-start-time" in changed_ids and levels is not None:
         storages = TypeAdapter(dict[str, StorageLevel]).validate_json(levels)
         for level in storages.values():
             level.timestamp = start_time
+    if len(storages) == 0:
+        return dash.no_update
     return TypeAdapter(dict[str, StorageLevel]).dump_json(storages).decode("utf-8")
 
 
@@ -638,15 +745,15 @@ def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
             Output("ltp-min-capacity", "data"),
             Input("ltp-plants-graph", "stylesheet"),  # this is triggered by a change in ltp-availability-buffer.data
             Input("ltp-plant-availability", "data"),  # triggered by calendar-clear => update upon clearing the calendar
-            Input("ltp-start-time", "value"),
-            Input("ltp-horizon-weeks", "value")
+            Input("ltp-start-end", "data")
+            # TODO add information about exact start time in case of snapshot usage
 )
 # TODO currently returns a flat structure, i.e. one div per plant. Better: make it a grid, with 2 divs per plant, also divide between 3 or so columns
-def set_initial_availabilities(_: Any, __: Any, start_time: datetime|str, horizon: str|int):
+def set_initial_availabilities(_: Any, __: Any, start_end: tuple[str|None, str|None]|None):
     persistence = state.get_availability_persistence()
-    start, end = _get_start_end_time(start_time, horizon)
-    if start is None or end is None:
+    if start_end is None or any(e is None for e in start_end):
         return "Not available", [], [], 100_000
+    start, end = [DatetimeUtils.parse_date(e).date() for e in start_end]
     plants: dict[int, Equipment] = {p.id: p for p in state.get_site().equipment}
     plant_data: dict[int, list[EquipmentAvailability]] = {eq: results for eq, results in persistence.load_all(start, end).items() if eq in plants}
     start_dt, end_dt = _date_range_to_datetime(start, end)
@@ -804,17 +911,16 @@ clientside_callback(
           Input("ltp-material-setpoints", "data"),  # keys: material class id, values: production / t
           Input("ltp-storage-levels", "data"),
           State("ltp-init-storages-result", "children"),
-          State("ltp-start-time", "value"),
-          State("ltp-horizon-weeks", "value"),
+          State("ltp-start-end", "data"),
+          # TODO pass information about exact start time in case of snapshot init
           State("ltp-shift-hours", "value"),
           State("ltp-production-total", "value"),
           State("ltp-results-store", "value"),
           config_prevent_initial_callbacks=True)
-def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: str|None, storage_children, start_time: datetime|str, horizon_weeks: str|int, shift_duration_hours: str|int,
+def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: str|None, storage_children, start_end: tuple[str|None, str|None]|None, shift_duration_hours: str|int,
                      total_production: float|str|None, do_store0: Sequence[Literal[""]]):
     if not dash_authenticated(config):
         return None, None, None, None, None, None, None, None
-    horizon_weeks = int(horizon_weeks)
     do_store: bool = do_store0 is not None and len(do_store0) > 0
     is_running, new_solution_id, new_sol_start_date, new_error = check_running_optimization()
     total_amount = _get_total_selected_amount(setpoints)
@@ -827,9 +933,9 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
     starting = not is_running and "ltp-start" in changed_ids
     if starting:
         try:
-            start, end = _get_start_end_time(start_time, horizon_weeks)
-            if start is None or end is None:
-                raise Exception(f"Invalid start time or horizon: {start_time}, {horizon_weeks}")
+            if start_end is None or any(e is None for e in start_end):
+                raise Exception(f"Invalid start/end time: {start_end}")
+            start, end = [DatetimeUtils.parse_date(e).date() for e in start_end]
             start_dt, end_dt = _date_range_to_datetime(start, end)
             shift_duration_hours = allowed_shift_durations[int(shift_duration_hours)]
             if total_production is None:

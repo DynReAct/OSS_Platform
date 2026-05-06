@@ -1,8 +1,9 @@
 from datetime import datetime
+from typing import Sequence
 
 from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.NotApplicableException import NotApplicableException
-from dynreact.base.model import Site, LongTermTargets, StorageLevel, EquipmentAvailability, MidTermTargets
+from dynreact.base.model import Site, LongTermTargets, StorageLevel, EquipmentAvailability, MidTermTargets, Lot
 from dynreact.ltp.LtpInstance import LtpInstance
 
 
@@ -18,10 +19,11 @@ class LongTermPlanningImpl(LongTermPlanning):
             structure: LongTermTargets,
             initial_storage_levels: dict[str, StorageLevel]|None=None,
             shifts: list[tuple[datetime, datetime]]|None=None,
-            plant_availabilities: dict[int, EquipmentAvailability] | None=None) -> tuple[MidTermTargets, list[dict[str, StorageLevel]]]:
+            plant_availabilities: dict[int, EquipmentAvailability] | None=None,
+            frozen_lots: dict[int, Sequence[Lot]]|None=None) -> tuple[MidTermTargets, list[dict[str, StorageLevel]]]:
         if id0 in self._runs:
             raise Exception(f"An optimization with the same id {id0} is already running")
-        instance = LtpInstance(id0, self._site, structure, initial_storage_levels, shifts, plant_availabilities)
+        instance = LtpInstance(id0, self._site, structure, initial_storage_levels, shifts, plant_availabilities, frozen_lots=frozen_lots)
         self._runs[id0] = instance
         result = instance.start()
         self._runs.pop(id0, None)

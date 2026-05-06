@@ -4,14 +4,11 @@ from typing import Sequence
 
 import numpy as np
 
-from dynreact.base.model import LongTermTargets, Site, StorageLevel, EquipmentAvailability, Process, Equipment, \
-    MaterialClass, Lot
+from dynreact.base.model import LongTermTargets, Site, EquipmentAvailability, Process, Equipment, MaterialClass
 from dynreact.ltp.LtpException import LtpException
 from dynreact.ltp.LtpUtils import LtpUtils
 
 
-# FIXME the current LongTermPlanning results structure is insufficient.
-#  * equipment production is not broken down into material classses
 class ShiftAllocator:
 
     def __init__(self,
@@ -23,7 +20,7 @@ class ShiftAllocator:
                  #equipment_targets: dict[int, np.ndarray],  # shape of all arrays: (num_classes + 1, num shifts), where num classes = number material classes
                  equipment_to_storages: dict[int, dict[str, np.ndarray]],
                  storages_to_equipment: dict[str, dict[int, np.ndarray]],
-                 frozen_lots: dict[int, Sequence[Lot]] | None = None,
+                 frozen_horizons: dict[int, datetime] | None = None,
                  rand_seed: int|None = None
                  ):
         self._site = site
@@ -47,7 +44,7 @@ class ShiftAllocator:
         self._storages_to_equipment_final: dict[str, dict[int, np.ndarray]] = {}  # shape: (num_classes + 1, num_shifts)
         self._equipment_to_storages_final: dict[int, dict[str, np.ndarray]] = {}  # shape: (num_classes + 1, num_shifts)
         self._storage_in_flows_final: dict[str, np.ndarray] = {stg: np.zeros(shape=(len(material_classes)+1, len(shifts))) for stg in storage_levels.keys()}
-        self._frozen_lots = frozen_lots
+        self._frozen_horizons = frozen_horizons
         self._random = random.Random(x=rand_seed)
 
     def run(self):
@@ -69,6 +66,7 @@ class ShiftAllocator:
         proc = process.name_short
         shifts = self._shifts
         material_classes = self._material_classes
+        frozen_horizons = self._frozen_horizons or {}
         classes_cnt = len(material_classes)
         num_shifts = len(shifts)
         hours_per_shift = (shifts[0][-1] - shifts[0][0]).total_seconds() / 3600
@@ -85,8 +83,8 @@ class ShiftAllocator:
         storages_in = {s.name_short: s for s in (self._site.get_storage(s, do_raise=True) for s in storages_in_ids)}
         storages_out = {s.name_short: s for s in (self._site.get_storage(s, do_raise=True) for s in storages_out_ids)}
         all_storage_ids = list(storages_in.keys()) + list(storages_out.keys())
-        storage_levels: dict[str, np.ndarray] = \
-            {s: self._storage_levels_final[s] if s in self._storage_levels_final else ShiftAllocator2._levels_for_storage(s, self._storage_levels, material_classes) for s in all_storage_ids}
+        #storage_levels: dict[str, np.ndarray] = \
+        #    {s: self._storage_levels_final[s] if s in self._storage_levels_final else ShiftAllocator._levels_for_storage(s, self._storage_levels, material_classes) for s in all_storage_ids}
         # key 1: equipment id, index: mat class idx
         total_equipment_flows: dict[int, list[float]] = {eq: [np.sum(flow[class_idx, :]) for class_idx in range(classes_cnt+1)] for eq, flow in equipment_targets.items()}
         allocated_equipment_flows: dict[int, list[float]] = {eq: [0. for _ in targets] for eq, targets in total_equipment_flows.items()}
@@ -102,12 +100,21 @@ class ShiftAllocator:
         if "DONE" in storages_out_ids and "DONE" in self._storage_levels_final:
             final_storage_levels["DONE"][:, 0] = self._storage_levels_final["DONE"][:, 0]
         shift_zero = np.zeros(shape=(classes_cnt+1, ))
-        for shift_idx, shift in enumerate(range(num_shifts)):
+        for shift_idx, shift in enumerate(shifts):
             equipment_flows: dict[int, np.ndarray] = {e: shift_zero for e in equipment_ids}
             storage_level_corrections: dict[str, np.ndarray] = {}  # memorize outgoing storage material allocated to some equipment to ensure that storages do not run empty
             self._random.shuffle(equipment_objects)    #  shuffle equipment order in each step, to avoid preferring the same equipment all the time
             for equipment in equipment_objects:
                 if equipment.id not in self._plant_availabilities:
+                    continue
+                if equipment.id in frozen_horizons and shift[0] < frozen_horizons[equipment.id]:
+                    # shift is frozen => keep it as it is  # TODO validate
+                    for stg, flow in self._equipment_to_storages[equipment.id].items():
+                        equipment_to_storages[equipment.id][stg][:, shift_idx] = flow[:, shift_idx]
+                        equipment_flows[equipment.id] += flow[:, shift_idx]   # ok?
+                    for stg, flow_dict in self._storages_to_equipment.items():
+                        if equipment.id in flow_dict:
+                            storages_to_equipment[stg][equipment.id][:, shift_idx] = flow_dict[equipment.id][:, shift_idx]
                     continue
                 hours_by_shift: list[float] = LtpUtils._availability_to_hours(shifts, self._plant_availabilities[equipment.id])
                 limited_shifts = {shift_idx: h for shift_idx, h in enumerate(hours_by_shift) if h < hours_per_shift}

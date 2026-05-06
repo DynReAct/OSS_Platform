@@ -12,7 +12,6 @@ from dynreact.ltp.LtpUtils import LtpUtils
 from dynreact.ltp.ShiftAllocator import ShiftAllocator
 
 
-# TODO set constraints based on frozen lots (also in allocator)
 # TODO timeout via run parameters(?)
 # TODO report results of optimization (optimal solution found? Problem feasible? Option to continue; etc.)
 class LtpInstance:
@@ -34,7 +33,7 @@ class LtpInstance:
         self._done = threading.Event()
 
     def start(self) -> tuple[MidTermTargets, list[dict[str, StorageLevel]]]:
-        model, storages, storages_to_equipment, equipment_to_storages, objective_components = self._build_model()
+        model, storages, storages_to_equipment, equipment_to_storages, objective_components, frozen_horizons = self._build_model()
         # print("  MODEL", model)
         self._check_interrupted()
         # FIXME
@@ -57,7 +56,7 @@ class LtpInstance:
         #return shifts_allocator.run()
         ## return LtpUtils.to_results(self._site, self._shifts, self._structure, storages, storages_to_equipment, equipment_to_storages)
         shifts_allocator = ShiftAllocator(self._site, self._structure, self._shifts, self._availabilities, storage_levels,
-                                          equipment_to_storages_flow, storages_to_equipment_flow, frozen_lots=self._frozen_lots)
+                                          equipment_to_storages_flow, storages_to_equipment_flow, frozen_horizons=frozen_horizons)
         return shifts_allocator.run()
 
     def interrupt(self) -> bool:
@@ -93,10 +92,10 @@ class LtpInstance:
         return frozen_horizons if len(frozen_horizons) > 0 else None
 
 
-    def _build_model(self) -> tuple[pc.Problem, dict[str, pc.RealVariable], dict[str, dict[int, pc.RealVariable]], dict[int, dict[str, pc.RealVariable]], dict[str, pc.expressions.Expression]]:
+    def _build_model(self) -> tuple[pc.Problem, dict[str, pc.RealVariable], dict[str, dict[int, pc.RealVariable]], dict[int, dict[str, pc.RealVariable]], dict[str, pc.expressions.Expression], dict[int, datetime]|None]:
         """
         Returns:
-                the model, dict of storage variables, dict of [storage->equipment] flow variables, dict of [equipment->storage] flow variables, objective components
+                the model, dict of storage variables, dict of [storage->equipment] flow variables, dict of [equipment->storage] flow variables, objective components, frozen horizons per equipment (if applicable)
         """
         frozen_horizons: dict[int, datetime]|None = self._determine_frozen_ranges()
         # TODO config
@@ -333,7 +332,7 @@ class LtpInstance:
                         #objective_components["stg_levels_class_not_none"] = stg_level_class_not_none if "stg_levels_class_not_none" not in objective_components else objective_components["stg_levels_class_not_none"] + stg_level_class_not_none
                         #objective += stg_level_class_not_none
         flow_problem.set_objective("min", objective)
-        return flow_problem, storages, storage_to_equipment, equipment_to_storage, objective_components
+        return flow_problem, storages, storage_to_equipment, equipment_to_storage, objective_components, frozen_horizons
 
     @staticmethod
     def _shift_shares_for_lot(lot_period: [datetime, datetime], shifts: Sequence[tuple[datetime, datetime]], working_hours_by_shift: Sequence[float]) -> dict[int, float]:
@@ -346,8 +345,5 @@ class LtpInstance:
         total_hours = sum(hours for _, __, hours in overlapping_shifts)
         share_per_shift = {idx: hours/total_hours for idx, __, hours in overlapping_shifts}
         return share_per_shift
-
-
-
 
 

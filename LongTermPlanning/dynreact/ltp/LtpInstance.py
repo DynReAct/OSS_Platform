@@ -76,13 +76,16 @@ class LtpInstance:
         if self._interrupted.is_set():
             raise InterruptedException(f"LongTermPlanning interrupted: {self._id}")
 
-    def _determine_frozen_ranges(self) -> dict[int, datetime]:
+    def _determine_frozen_ranges(self) -> dict[int, datetime]|None:
         frozen_lots = self._frozen_lots
         if frozen_lots is None:
             return None
         lot_without_endtime = next((lt for lots in frozen_lots.values() for lt in lots if lt.end_time is None or lt.start_time is None), None)
         if lot_without_endtime is not None:
             raise LtpException(f"Lot without start and/or end time set: {lot_without_endtime.id}")
+        lot_without_weight = next((lt for lots in frozen_lots.values() for lt in lots if lt.weight is None), None)
+        if lot_without_weight is not None:
+            raise LtpException(f"Lot without weight: {lot_without_weight.id}")
         start_time = self._structure.period[0]
         end_time = self._structure.period[1]
         frozen_lots = {e: [lt for lt in lots if lt.end_time > start_time] for e, lots in frozen_lots.items()}
@@ -173,6 +176,10 @@ class LtpInstance:
             limited_shifts = {shift_idx: h for shift_idx, h in enumerate(hours_by_shift) if h < hours_per_shift}
             excluded_material: Sequence[str]|None = eq.material_constraints.excluded if eq.material_constraints is not None and len(eq.material_constraints.excluded) > 0 else None
             prod_capacity = eq.throughput_capacity * hours_per_shift
+            eq_lots: Sequence[Lot]|None = self._frozen_lots.get(eq.id) if frozen_horizons is not None else None
+            # For each lot we need to determine its share per shift. Outer keys: lot ids, inner keys: shift index, value: share (0-1)
+            shift_shares_by_lot: dict[str, dict[int, float]]|None = {lot.id: LtpInstance._shift_shares_for_lot((lot.start_time, lot.end_time), shifts, hours_by_shift) for lot in eq_lots} \
+                    if eq_lots is not None else None
             # constraints for flow into and out of equipment
             in_flow = None
             if eq.storage_in is not None:
@@ -184,15 +191,34 @@ class LtpInstance:
                     for shift_idx, shift in enumerate(shifts):
                         if shift[0] >= frozen_horizon:
                             break
-                        # TODO constrain the shifts covered by lots already
-                        # TODO special case: partly covered shift
+                        # constrain the shifts covered by lots already TODO tests for this setting
                         # step 1: determine applicable lots
-                        shift_lots = [lt for lt in lots if lt.start_time < shift[1] and lt.end_time > shift[0]]
+                        shift_lots = [lt for lt in lots if lt.start_time < shift[1] and lt.end_time > shift[0] and shift_idx in shift_shares_by_lot[lt.id]]
                         if len(shift_lots) == 0:  # no production
                             flow_problem.require(u_flow[-1, shift_idx] == 0)
                             continue
-                        shift_lots_with_shares: list[tuple[Lot, float]] = [(lt, (min(lt.end_time, shift[1]) - max(lt.start_time, shift[0]))/(lt.end_time - lt.start_time)) for lt in shift_lots]
-                        # TODO build material vector
+                        # step 2: determine resulting production
+                        total_weight = sum(lt.weight * shift_shares_by_lot[lt.id][shift_idx] for lt in shift_lots)
+                        # determine if this exceeds the theoretical maximum => then need to reduce
+                        max_capacity = eq.throughput_capacity * hours_by_shift[shift_idx]  # TODO material-dependent capacity
+                        factor = 1
+                        if total_weight > max_capacity:
+                            total_weight = max_capacity
+                            factor = max_capacity / total_weight
+                        all_lots_have_mat_info = all(lt.material_weights is not None for lt in shift_lots)
+                        partly_covered_shift: bool = shift[1] > frozen_horizon
+                        # step 3: set constraints
+                        if all_lots_have_mat_info:
+                            weight_vector = np.array([sum(lt.material_weights.get(mat, 0.) * shift_shares_by_lot[lt.id][shift_idx] * factor for lt in shift_lots) for mat in material_classes] + [total_weight])
+                            if partly_covered_shift:
+                                flow_problem.require(u_flow[:, shift_idx] >= weight_vector)
+                            else:
+                                flow_problem.require(u_flow[:, shift_idx] == weight_vector)
+                        else:
+                            if partly_covered_shift:
+                                flow_problem.require(u_flow[-1, shift_idx] >= total_weight)
+                            else:
+                                flow_problem.require(u_flow[-1, shift_idx] == total_weight)
                 if eq.storage_in not in storage_to_equipment:
                     storage_to_equipment[eq.storage_in] = {}
                 storage_to_equipment[eq.storage_in][eq.id] = u_flow
@@ -308,6 +334,20 @@ class LtpInstance:
                         #objective += stg_level_class_not_none
         flow_problem.set_objective("min", objective)
         return flow_problem, storages, storage_to_equipment, equipment_to_storage, objective_components
+
+    @staticmethod
+    def _shift_shares_for_lot(lot_period: [datetime, datetime], shifts: Sequence[tuple[datetime, datetime]], working_hours_by_shift: Sequence[float]) -> dict[int, float]:
+        """Determines how a lot that spans multiple shifts must be distributed to those shifts"""
+        # the third argument is the number of hours actually applicable to the lot
+        overlapping_shifts: list[tuple[int, tuple[datetime, datetime], float]] = [(shift_idx, shift, (min(lot_period[1], shift[1]) - max(lot_period[0], shift[0]))/(shift[1] - shift[0]) * hours)
+                                                for shift_idx, (shift, hours) in enumerate(zip(shifts, working_hours_by_shift)) if shift[0] < lot_period[1] and shift[1] > lot_period[0] and hours > 0]
+        if len(overlapping_shifts) == 0:
+            return {}
+        total_hours = sum(hours for _, __, hours in overlapping_shifts)
+        share_per_shift = {idx: hours/total_hours for idx, __, hours in overlapping_shifts}
+        return share_per_shift
+
+
 
 
 

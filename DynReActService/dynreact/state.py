@@ -30,13 +30,11 @@ from dynreact.plugins import Plugins
 class DynReActSrvState:
 
     def __init__(self, config: DynReActSrvConfig, plugins: Plugins):
-        if config.time_zone == "local":
+        if config.time_zone == "local" or not config.time_zone:
             self._time_zone = None
-        elif config.time_zone:
+        else:
             from zoneinfo import ZoneInfo
             self._time_zone = ZoneInfo(config.time_zone)
-        else:
-            self._time_zone = datetime.now(tz=timezone.utc).astimezone().tzinfo
         self._config = config
         self._plugins = plugins
         self._config_provider: ConfigurationProvider|None = None

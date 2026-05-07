@@ -111,7 +111,8 @@ class ShiftAllocator:
                     # shift is frozen => keep it as it is  # TODO validate
                     for stg, flow in self._equipment_to_storages[equipment.id].items():
                         equipment_to_storages[equipment.id][stg][:, shift_idx] = flow[:, shift_idx]
-                        equipment_flows[equipment.id] += flow[:, shift_idx]   # ok?
+                        # Note: must not write += here, since this modifies the shift_zero array!
+                        equipment_flows[equipment.id] = equipment_flows[equipment.id] + flow[:, shift_idx]
                     for stg, flow_dict in self._storages_to_equipment.items():
                         if equipment.id in flow_dict:
                             storages_to_equipment[stg][equipment.id][:, shift_idx] = flow_dict[equipment.id][:, shift_idx]
@@ -240,7 +241,10 @@ class ShiftAllocator:
                 for e in applicable_equipments:
                     storages_to_equipment[stg][e][:, shift_idx] = equipment_flows[e]
                 if stg in self._input_storages:
-                    final_storage_levels[stg][:, shift_idx] = out_flow  # not shift_idx + 1 !
+                    if shift_idx > 0:
+                        total_previous_out_flow = sum((storages_to_equipment[stg][e][:, shift_idx-1] for e in applicable_equipments if e in storages_to_equipment[stg]), start=shift_zero) / storages_in[stg].capacity_weight
+                        new_level = np.array([max(flow, final_storage_levels[stg][mat_idx, shift_idx - 1] - total_previous_out_flow[mat_idx]) for mat_idx, flow in enumerate(out_flow)])
+                        final_storage_levels[stg][:, shift_idx] = new_level  # not shift_idx + 1 !
                     continue
                 if stg not in self._storages_to_equipment_final:
                     in_flow: np.ndarray = self._storage_in_flows_final[stg][:, shift_idx]
@@ -265,3 +269,4 @@ class ShiftAllocator:
                 self._storages_to_equipment_final[stg] = {}
             for eq, flow in flow_dict.items():
                 self._storages_to_equipment_final[stg][eq] = flow
+

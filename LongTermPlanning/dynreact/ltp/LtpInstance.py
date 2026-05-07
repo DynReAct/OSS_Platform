@@ -50,11 +50,7 @@ class LtpInstance:
         ## store results for later evaluation
         # LtpUtils.store_results(self._site, self._structure, self._shifts, self._availabilities,
         #                       storage_levels, storages_to_equipment_flow, equipment_to_storages_flow, "ltp_result.json")
-
-
-        #shifts_allocator = ShiftAllocator(self._site, classes_cnt, self._shifts, self._structure, storage_levels, storages_to_equipment_flow, equipment_to_storages_flow, self._availabilities)
-        #return shifts_allocator.run()
-        ## return LtpUtils.to_results(self._site, self._shifts, self._structure, storages, storages_to_equipment, equipment_to_storages)
+        # return LtpUtils.to_results(self._site, self._shifts, self._structure, storages, storages_to_equipment, equipment_to_storages)
         shifts_allocator = ShiftAllocator(self._site, self._structure, self._shifts, self._availabilities, storage_levels,
                                           equipment_to_storages_flow, storages_to_equipment_flow, frozen_horizons=frozen_horizons)
         return shifts_allocator.run()
@@ -127,6 +123,8 @@ class LtpInstance:
         hours_per_shift = (self._shifts[0][-1] - self._shifts[0][0]).total_seconds()/3600
         storage_material_constraints: dict[str, Sequence[str]] = {}
         # shifts_by_equipment: dict[int, pc.expressions.Expression] = {}  # shifts are optimized in a second step
+        # outer key: storage id, inner key: material class
+        initial_storage_levels: dict[str, dict[str, float]] = {}
         for stg in self._site.storages:
             if stg.name_short == "DONE":  # xxx
                 continue
@@ -137,6 +135,8 @@ class LtpInstance:
             # initial filling levels for storages
             initial_storage_level = 0.5
             indices_covered: set[int] = set()
+            stg_initial = {}
+            initial_storage_levels[stg.name_short] = stg_initial
             if stg.name_short in self._initial_storage_levels:
                 init: StorageLevel = self._initial_storage_levels[stg.name_short]
                 initial_storage_level = init.filling_level
@@ -144,10 +144,12 @@ class LtpInstance:
                     for mat, level in init.material_levels.items():
                         mat_idx = material_classes.index(mat)
                         flow_problem.require(x_storage[mat_idx, 0] == level)
+                        stg_initial[mat] = level
                         indices_covered.add(mat_idx)
                     for mat_idx, mat in enumerate(material_classes):
                         if mat_idx not in indices_covered:
                             flow_problem.require(x_storage[mat_idx, 0] == 0.)
+                            stg_initial[mat] = 0
             if len(indices_covered) == 0 and len(material_classes) > 0:
                 mat_start_idx = 0
                 for cat in self._site.material_categories:
@@ -155,6 +157,7 @@ class LtpInstance:
                     shares = [cl.default_share if cl.default_share is not None else 1. if cl.is_default else 0. for cl in cat.classes]
                     for idx, share in enumerate(shares):
                         flow_problem.require(x_storage[mat_start_idx + idx, 0] == share * initial_storage_level)
+                        stg_initial[cat.classes[idx].id] = share * initial_storage_level
                     mat_start_idx += cat_cl
             # Init the overall material variable to the initial storage level
             flow_problem.require(x_storage[-1, 0] == initial_storage_level)
@@ -267,17 +270,23 @@ class LtpInstance:
             out_flow = pc.sum(out_flow) if len(out_flow) > 1 else out_flow[0]
             level = storages[stg.name_short]
             capacity = stg.capacity_weight
+            flow_problem.require(out_flow <= capacity * level[:, :-1])
             if len(in_flow) == 0:
-                flow_problem.require(out_flow <= capacity * level[:, :-1])
                 input_storages.append(stg.name_short)
-                # Material that is not scheduled for the month must not enter the initial storage(s)
+                flow_problem.require(capacity * level[:, 1:] >= capacity * level[:, :-1] - out_flow)  # nothing gets lost
+                # Material that is not scheduled for the month must not enter the initial storage(s)  (??)
                 missing_material = [mat for mat, target in self._structure.production_targets.items() if target <= 0]
+                if self._frozen_lots is not None and len(missing_material) > 0:
+                    # Filter for material not scheduled in any frozen lots
+                    missing_material = [mat for mat in missing_material if all(next((lt for lt in lots if
+                            lt.material_weights is not None and lt.material_weights.get(mat, 0) > 0), None) is None for lots in self._frozen_lots.values())]
                 if len(missing_material) > 0:  # we cannot change the start constraint
-                    flow_problem.require([level[material_classes.index(mat), 1:] == 0 for mat in missing_material])
+                    flow_problem.require([out_flow[material_classes.index(mat), :] == 0 for mat in missing_material])
+                    flow_problem.require([level[material_classes.index(mat), 1:] == initial_storage_levels[stg.name_short][mat] for mat in missing_material])
             else:
                 in_flow = pc.sum(in_flow) if len(in_flow) > 1 else in_flow[0]
-                #flow_problem.require([capacity * level[cl, sh + 1] == capacity * level[cl, sh] + pc.sum([fl[cl, sh] for fl in in_flow]) - pc.sum([fl[cl, sh] for fl in out_flow]) for cl in range(classes_cnt) for sh in range(num_shifts)])
-                flow_problem.require([capacity * level[:, sh + 1] == capacity * level[:, sh] + in_flow[:, sh] - out_flow[:, sh] for sh in range(num_shifts)])
+                #flow_problem.require([capacity * level[:, sh + 1] == capacity * level[:, sh] + in_flow[:, sh] - out_flow[:, sh] for sh in range(num_shifts)])
+                flow_problem.require(capacity * level[:, 1:] == capacity * level[:, :-1] + in_flow - out_flow)
         in_flow_done = [entries["DONE"] for entries in equipment_to_storage.values() if "DONE" in entries]
         in_flow_done = pc.sum(in_flow_done) if len(in_flow_done) > 1 else in_flow_done[0]
         if len(in_flow_done) > 0:

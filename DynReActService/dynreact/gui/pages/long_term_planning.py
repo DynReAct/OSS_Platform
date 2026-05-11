@@ -55,30 +55,36 @@ def layout(*args, **kwargs):
                 html.Div([
                     html.Div("Start time", title="Specify the planning start time"),
                     html.Div([
-                        html.Div(dcc.RadioItems(id="ltp-start-time-selection", inline=True, options=[
-                                    {"value": "now", "label": "Now ", "title": "Last snapshot"}, {"value": "nextmonth", "label": "Next month "}, {"value": "other", "label": "Other "}], value="now", className="lots2-checkbox")),
+                        html.Div(dcc.RadioItems(id="ltp-start-time-selection", inline=True, value="now", className="lots2-checkbox",
+                                    options=[{"value": "now", "label": "Now ", "title": "Last snapshot"}, {"value": "nextmonth", "label": "Next month "}, {"value": "other", "label": "Other "}])),
                         dcc.Input(type="date", id="ltp-start-time", value=start_date, disabled=True)
                     ])
                     #dcc.DatePickerSingle(id="ltp-start-time", date=start_date)
                 ], className="ltp-starttime-block"),
                 html.Div([
                     html.Div("Previous solution", title="Specify the previous solution for initialization"),
-                    dcc.Dropdown(id="ltp-prev-solution", options=[], style={"width": "12em"})
+                    # XXX a select element with optgroups for the start dates would be preferable here,
+                    # but does not work in dash: https://community.plotly.com/t/how-to-access-values-from-html-select/5089/12
+                    dcc.Dropdown(id="ltp-prev-solution", options=[], style={"width": "18em"})
                 ], className="ltp-prev-sol-block", id="ltp-prev-solution-container", hidden=True),
-                # Horizon (weeks) block
+                ## Horizon (weeks) block
+                #html.Div([
+                #    html.Div("Time horizon (weeks)", title="Specify the planning horizon in weeks"),
+                #    html.Div([
+                #        dcc.Input(type="range", id="ltp-horizon-weeks", min=1, max=4, step=1, value=horizon_weeks),
+                #        html.Div(horizon_weeks, id="ltp-horizon-weeks-value")
+                #    ], className="ltp-horizon-widget", title="Specify the planning horizon in weeks")
+                #], className="control-panel-entry"),
                 html.Div([
-                    html.Div("Time horizon (weeks)", title="Specify the planning horizon in weeks"),
-                    html.Div([
-                        dcc.Input(type="range", id="ltp-horizon-weeks", min=1, max=4, step=1, value=horizon_weeks),
-                        html.Div(horizon_weeks, id="ltp-horizon-weeks-value")
-                    ], className="ltp-horizon-widget", title="Specify the planning horizon in weeks")
+                    html.Div("End time", title="Specify the planning interval end time"),
+                    dcc.Input(type="date", id="ltp-end-time", disabled=True)
                 ], className="control-panel-entry"),
                 html.Div([
                     html.Div("Shift duration (hours)", title="Specify the duration of a single shift. The planning algorithm will assign target production values per shift."),
                     html.Div([
                         dcc.Input(type="range", id="ltp-shift-hours", min=0, max=len(allowed_shift_durations)-1, step=1, value=3),
-                        html.Div(horizon_weeks, id="ltp-shift-hours-value")
-                    ], className="ltp-horizon-widget", title="Specify the planning horizon in weeks")
+                        html.Div(8, id="ltp-shift-hours-value")
+                    ], className="ltp-horizon-widget", title="Specify the duration of a single shift. The planning algorithm will assign target production values per shift.")
                 ], className="control-panel-entry"),
                 html.Div(html.Button("Structure Portfolio", className="dynreact-button", id="ltp-structure-btn")),
                 html.Div(html.Button("Storages initialization", className="dynreact-button", id="ltp-storages-btn")),
@@ -138,16 +144,16 @@ def layout(*args, **kwargs):
             html.Div("Process Panel"),
             html.Div([
                 plants_graph("ltp-plants-graph", style={"width": str(num_processes * 10) + "em", "height": "500px"},
-                             stylesheet=graph_stylesheets(start_date0.date(), (start_date0 + timedelta(weeks=horizon_weeks)).date()), *args, **kwargs)
+                             stylesheet=graph_stylesheets(start_date0.date(), (start_date0 + timedelta(days=30)).date()), *args, **kwargs)
             ], style={"display": "flex", "justify-content": "flex-start"})
         ], className="control-panel", id="ltp-process-panel"),
         # ======== Popups and hidden elements =========
         structure_portfolio_popup(total_production),
         plant_calendar_popup(),
         storage_init_popup(kwargs.get("snapshot")),   # TODO better selection of snapshot
-        # stores information about the last start time and horizon for which material properties have been set,
-        # in the format {"startTime": startTime, "horizon": horizon}
-        dcc.Store(id="ltp-material-settings"),
+        ## stores information about the last start time and horizon for which material properties have been set,
+        ## in the format {"startTime": startTime, "horizon": horizon}
+        #dcc.Store(id="ltp-material-settings", storage_type="memory"),
         dcc.Store(id="ltp-material-setpoints"),
         # Set when the user clicks on a plant node in the graph
         dcc.Store(id="ltp-selected_plant", storage_type="memory"),
@@ -162,7 +168,7 @@ def layout(*args, **kwargs):
         dcc.Store(id="ltp-storage-levels"),  # None or {storage id: StorageLevel}
         dcc.Store(id="ltp-min-capacity", storage_type="memory", data=100_000),
         dcc.Store(id="ltp-result-message", storage_type="memory"),
-        dcc.Store(id="ltp-start-end", storage_type="memory"),
+        dcc.Store(id="ltp-start-end", storage_type="memory"),   # [start date, end date], e.g. ["2026-05-01", "2026-06-01"]
         dcc.Interval(id="ltp-interval", n_intervals=3_600_000),  # for polling when optimization is running
     ], id="ltp")
 
@@ -311,21 +317,24 @@ def shift_duration_changed(duration_idx: int | str | None) -> str:
 
 @callback(Output("ltp-start-time", "value"),
           Output("ltp-start-time", "disabled"),
+          Output("ltp-end-time", "disabled"),
           Output("ltp-start-end", "data"),
+          Output("ltp-end-time", "value"),
           Output("ltp-prev-solution", "options"),
+          Output("ltp-prev-solution", "value"),
           Output("ltp-prev-solution-container", "hidden"),
           Input("ltp-start-time-selection", "value"),
           Input("ltp-start-time", "value"),
-          Input("ltp-horizon-weeks", "value"),
+          Input("ltp-end-time", "value"),
           Input("ltp-prev-solution", "value"),
           State("selected-snapshot", "data"),)
-def start_time_changed(start_time_type: Literal["now", "nextmonth", "other"]|None, start_time: datetime|str, horizon: str|int, previous_solution: str|None, snapshot: str|None):
+def start_time_changed(start_time_type: Literal["now", "nextmonth", "other"]|None, start_time: datetime|str, end_time: datetime|str, previous_solution: str|None, snapshot: str|None):
     if not start_time_type or not dash_authenticated(config):
-        return dash.no_update, True, [None, None], [], True
+        return dash.no_update, True, True, [None, None], None, [], None, True
     if previous_solution == "":
         previous_solution = None
     changed = GuiUtils.changed_ids()
-    disabled = start_time_type != "other"
+    start_disabled = start_time_type != "other"
     start_type_changed = "ltp-start-time-selection" in changed or (len(changed) <= 1 and all(c == "" for c in changed))
     results_persistence = state.get_results_persistence_aggregate()
     prev_options = dash.no_update
@@ -360,8 +369,8 @@ def start_time_changed(start_time_type: Literal["now", "nextmonth", "other"]|Non
                         break
             multiple_start_times = len(applicable_solutions) > 1
             all_solutions = ((sol_start, sol_id) for sol_start, sol_ids in applicable_solutions.items() for sol_id in sol_ids)
-            prev_options = [{"value": "", "label":""}] + [{"value": f"{sol_start}__x__{sol_id}", "title": f"Start time: {state.as_timezone(sol_start)}",
-                                                           "label": f"{state.as_timezone(sol_start)}: {sol_id}" if multiple_start_times else f"{sol_id}"} for sol_start, sol_id in all_solutions]
+            prev_options = [{"value": "", "label":""}] + [{"value": f"{sol_start}__x__{sol_id}", "label": f"{state.as_timezone(sol_start).strftime('%Y-%m-%d')}: {sol_id}",
+                                "title": f"Start time: {DatetimeUtils.format(state.as_timezone(sol_start), use_zone=False)}, solution id: {sol_id}"} for sol_start, sol_id in all_solutions]
             if previous_solution is None or not any(opt["value"] == previous_solution for opt in prev_options):
                 previous_solution = None if len(prev_options) <= 1 else prev_options[1]["value"]
         elif start_time_type == "nextmonth":
@@ -389,17 +398,34 @@ def start_time_changed(start_time_type: Literal["now", "nextmonth", "other"]|Non
         if start_end is None:
             next_month_start = (start_time.replace(day=1, minute=0, second=0, microsecond=0) + timedelta(days=32)).replace(day=1)
             start_end = (start_time.date(), next_month_start.date())
+        if "ltp_prev_solution" in changed:
+            previous_solution = dash.no_update
+    elif "ltp-end-time" in changed:
+        end_time = DatetimeUtils.parse_date(end_time)
+        if end_time is None or end_time <= start_time:
+            start_end = [None, None]
+        else:
+            start_end = [start_time.date(), end_time.date()]
+        end_time = dash.no_update
     elif start_time == "now":
         prev_options = dash.no_update
         start_end = dash.no_update
         prev_hidden = False
     else:
-        start_end = _get_start_end_time(start_time, horizon) if isinstance(start_time, datetime) else dash.no_update
+        if not isinstance(start_time, datetime):
+            start_end = dash.no_update
+        else:
+            end_time = DatetimeUtils.parse_date(end_time)
+            if end_time is None or end_time <= start_time:
+                end_time = (start_time.replace(day=1, minute=0, second=0, microsecond=0) + timedelta(days=32)).replace(day=1)
+            start_end = (start_time.date(), end_time.date())
+    end_disabled = start_time_type == "now" and previous_solution is not None
     if start_end is None or (isinstance(start_end, Sequence) and any(e is None for e in start_end)):
-        return dash.no_update, disabled, [None, None], [], True
+        return dash.no_update, start_disabled, end_disabled, [None, None], None, [], None, True
     if isinstance(start_time, datetime):
         start_time = f"{start_time.year:4d}-{start_time.month:2d}-{start_time.day:2d}".replace(" ", "0")
-    return start_time, disabled, start_end, prev_options, prev_hidden
+    end_time = dash.no_update if start_end == dash.no_update or end_time == dash.no_update else start_end[1] if start_end is not None else None
+    return start_time, start_disabled, end_disabled, start_end, end_time, prev_options, previous_solution, prev_hidden
 
 
 # TODO
@@ -435,21 +461,16 @@ def _get_total_selected_amount(setpoints: dict[str, float]) -> float|None:
     return total_amount
 
 
+"""
 @callback(Output("ltp-material-settings", "data"),
           Input("ltp-materials-accept", "n_clicks"),
-          State("ltp-start-time", "value"),
-          State("ltp-horizon-weeks", "value"),
+          State("ltp-start-end", "data"),
           config_prevent_initial_callbacks=True)
-def material_settings_accepted(_, start_time: str, horizon: str) -> str:
-    if start_time is None or horizon is None or start_time == "" or horizon == "":
-        return
-    try:
-        horizon = int(horizon)
-        if DatetimeUtils.parse_date(start_time) is None:
-            raise ValueError("Invalid start time", start_time)
-        return {"start_time": start_time, "horizon": horizon}
-    except:
-        traceback.print_exc()
+def material_settings_accepted(_, start_time: [str, str]) -> str:
+    if start_time is None or DatetimeUtils.parse_date(start_time[0]) is None:
+        return {}
+    return {"start_time": start_time[0], "end_time": start_time[1]}
+"""
 
 clientside_callback(
     ClientsideFunction(
@@ -606,6 +627,7 @@ def tap_graph_node(tapNode: dict[str, any]|None, start_time: datetime|str):
     return plant.name_short if plant.name_short is not None else str(plant.id), dt_formatted, plant.id
 
 
+"""
 def _get_start_end_time(start_time: datetime|str, horizon: str|int) -> tuple[date|None, date|None]:
     start_time = DatetimeUtils.parse_date(start_time)
     horizon = int(horizon)
@@ -615,6 +637,7 @@ def _get_start_end_time(start_time: datetime|str, horizon: str|int) -> tuple[dat
     month_info: tuple[int, int] = monthrange(start.year, start.month)  # tuple[calendar.Day, int] from Python 3.12
     end_time = start_time + (timedelta(days=month_info[1]) if horizon == 4 and start.day == 1 else timedelta(weeks=horizon))
     return start, end_time.date()
+"""
 
 
 def _date_range_to_datetime(start: date, end: date) -> tuple[datetime, datetime]:
@@ -625,16 +648,16 @@ def _date_range_to_datetime(start: date, end: date) -> tuple[datetime, datetime]
         Output("ltp-plant-shifts", "data"),
         Input("ltp-selected_plant", "data"),           # user clicked on a plant node in the graph
         Input("ltp-calendar-clear", "n_clicks"),
-        State("ltp-start-time", "value"),
-        State("ltp-horizon-weeks", "value"),
+        State("ltp-start-end", "data"),
         config_prevent_initial_callbacks=True)
-def init_calendar(selected_plant: int|None, _, start_time: datetime|str, horizon: str|int):
-    if selected_plant is None or start_time is None or horizon is None or not dash_authenticated(config):
+def init_calendar(selected_plant: int|None, _, start_time: [datetime|str|None, datetime|str, None]):
+    if selected_plant is None or start_time is None or start_time[0] is None or not dash_authenticated(config):
         return None, None
     selected_plant = int(selected_plant)
-    start, end = _get_start_end_time(start_time, horizon)
+    start, end =  [DatetimeUtils.parse_date(start_time[0]), DatetimeUtils.parse_date(start_time[1])]
     if start is None or end is None:
         return None, None
+    start, end = (start.date(), end.date())
     availabilities: PlantAvailabilityPersistence = state.get_availability_persistence()
     changed = GuiUtils.changed_ids()
     if "ltp-calendar-clear" in changed:
@@ -663,8 +686,7 @@ clientside_callback(
     Input("ltp-plant-availability", "data"),
     Input("ltp-plant-shifts", "data"),
     State("ltp-selected_plant", "data"),
-    State("ltp-start-time", "value"),
-    State("ltp-horizon-weeks", "value"),
+    State("ltp-start-end", "data"),
     State("ltp-calendar-grid", "id")
 )
 

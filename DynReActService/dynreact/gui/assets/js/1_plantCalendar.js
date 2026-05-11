@@ -50,23 +50,26 @@ class PlantCalendar extends HTMLElement {
 
     /**
     *
-    * @param {string} startTime
+    * @param {string} startTime  (alternatively: [string, string]
     * @param {(string|number)} horizonWeeks
     * @param {Object[]} availabilities
     * @param {date "2023-12-01" => planned working hours} shifts
     */
     setAvailabilities(startTime, horizonWeeks, availabilities, shifts, plant) {
-        if (!(horizonWeeks > 0))
+    const isArray = Array.isArray(startTime);
+        if (!(horizonWeeks > 0) && !isArray)
             throw new Error("horizonWeeks must be a positive number");
         JsUtils.clear(this.#grid);
         this.#availabilities = availabilities;
         this.#plant = parseInt(plant);
-        const startDate = new Date(startTime);   // or use JsUtils to parse string?
-        const endDate = new Date(startDate);
-        if (horizonWeeks % 4 === 0)
-            endDate.setMonth(endDate.getMonth() + (horizonWeeks/4));
-        else
-            endDate.setDate(endDate.getDate() + (horizonWeeks * 7));
+        const startDate = new Date(isArray ? startTime[0] : startTime);   // or use JsUtils to parse string?
+        const endDate = new Date(isArray ? startTime[1] : startDate);
+        if (!isArray) {
+            if (horizonWeeks % 4 === 0)
+                endDate.setMonth(endDate.getMonth() + (horizonWeeks/4));
+            else
+                endDate.setDate(endDate.getDate() + (horizonWeeks * 7));
+        }
         this.#startDate = startDate;
         this.#endDate = endDate;
         const startDayOfWeek = startDate.getDay(); // 0: Sunday, 6: Saturday

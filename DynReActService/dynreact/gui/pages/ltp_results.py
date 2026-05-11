@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, date, time
-from typing import Literal, Mapping
+from typing import Literal, Mapping, Sequence
 
 import dash
 from dash import html, dcc, callback, Output, Input, clientside_callback, ClientsideFunction, State
@@ -20,16 +20,16 @@ translations_key = "ltp_res"
 
 
 def layout(*args, **kwargs):
-    selected_start_date0: datetime|None = DatetimeUtils.parse_date(kwargs.get("start"))
-    selected_start_date = selected_start_date0.date() if selected_start_date0 is not None else None
-    start, end, start_time_options, selected = get_date_range(selected_start_date)
+    selected_start_time: datetime|None = DatetimeUtils.parse_date(kwargs.get("start"))
+    months, selected_month, start_times, selected_start_time = get_date_range(selected_start_time)
+    # start, end, start_time_options, selected = get_date_range(selected_start_date)
     site = state.get_site()
     num_processes = len(site.processes)
     materials = site.material_categories
     selected_material = kwargs.get("material") or kwargs.get("mat")
     selected_material = selected_material if selected_material is not None and next((m for m in materials if m.id == selected_material), None) is not None \
         else materials[0].id
-    initial_solution_id = None if selected is None else kwargs.get("solution")
+    initial_solution_id = None if selected_start_time is None else kwargs.get("solution")
     materials = [{"value": mat.id, "label": mat.name if mat.name is not None else mat.id, "selected": mat.id == selected_material} for mat in materials]
     anim_tab_active: bool = kwargs.get("tab") is not None and kwargs.get("tab").lower() in ("anim", "animation")
     tabular_tab_active = not anim_tab_active and kwargs.get("tab") is not None and kwargs.get("tab").lower() in ("tab", "table")
@@ -37,13 +37,15 @@ def layout(*args, **kwargs):
     tabular_tab_class = _tab_button_class(tabular_tab_active)
     anim_tab_class = _tab_button_class(anim_tab_active)
     overview_tab_class = _tab_button_class(overview_tab_active)
+    month_options = [m.strftime("%Y-%m") for m in months]
+    start_time_options = [DatetimeUtils.format(dt, use_zone=False) for dt in start_times]
     return html.Div([
         html.H1("Long term planning results", id="ltp_res-title"),
         html.Div([
-            html.Div([html.Div("Start date: "), dcc.Dropdown(id="ltp_res-starttime-selector",  className="ltp_res-startselect",
-                                                             options=start_time_options, value=selected.strftime("%Y-%m-%d") if selected is not None else None)]),
-            html.Div([html.Div("Selection range: ", id="ltp_res-selection-range"),
-                   dcc.DatePickerRange(id="ltp-res-date-range", display_format="YYYY-MM-DD", start_date=start, end_date=end)])
+            html.Div([html.Div("Month: "), dcc.Dropdown(id="ltp_res-month-selector", className="ltp_res-monthselect",
+                                                options=month_options, value=selected_month.strftime("%Y-%m") if selected_month is not None else None)]),
+            html.Div([html.Div("Start time: "), dcc.Dropdown(id="ltp_res-starttime-selector", className="ltp_res-startselect",
+                                                options=start_time_options, value=DatetimeUtils.format(selected_start_time, use_zone=False) if selected_start_time is not None else None)]),
         ], className="ltp_res-selector-row"),
         html.H2("Solutions"),
         html.Div(
@@ -201,34 +203,49 @@ def apply_active_tab(active_tab: Literal["tabular", "anim", "overview"]|None):
     return active_tab != "tabular", active_tab != "anim", active_tab != "overview"
 
 
-def get_date_range(start_date: date|None=None) -> tuple[date, date, list[date], date]:
+def get_date_range(start: datetime|None=None) -> tuple[Sequence[date], date|None, Sequence[datetime], datetime|None]:
     """
-    :param start_date:
-    :return: start, end, list of start times, selected start time
+    :param start:
+    :return: months, selected month, list of start times for selected month, selected start time
     """
     if not dash_authenticated(config):
-        return None, None, [], None
+        return [], None, [], None
     persistence: ResultsPersistence = state.get_results_persistence_aggregate()
-    if start_date is not None:
-        start_times: list[datetime] = persistence.start_times_ltp(start=DatetimeUtils.date_to_datetime(start_date - timedelta(days=65), utc=False),
-                        end=DatetimeUtils.date_to_datetime(start_date + timedelta(days=65), utc=False))
+    now = DatetimeUtils.now()  # or rather use currently selected snapshot?
+    end_months_ltp: date|None = None if start is None or now - start < timedelta(days=365) else (start + timedelta(days=365)).date()
+    months = persistence.start_months_ltp(end=end_months_ltp, sort="desc", limit=50)
+    selected_month = start.date().replace(day=1) if start is not None else months[-1] if len(months) > 0 else None
+    if selected_month is not None and selected_month not in months:
+        sorted_months = sorted(months, key=lambda m: abs((m-selected_month).total_seconds()))
+        selected_month = sorted_months[0] if len(sorted_months) > 0 else None
+    if selected_month is not None:
+        start_dt = DatetimeUtils.date_to_datetime(selected_month)
+        end_dt = (start_dt + timedelta(days=32)).replace(day=1)
+        start_times = persistence.start_times_ltp(start=start_dt, end=end_dt, sort="desc", limit=150)
+        cnt = len(start_times)
+        if cnt > 0 and (start is None or cnt == 1):
+            start = start_times[0]  # desc
+        elif cnt > 1:
+            start = sorted(start_times, key=lambda s: abs((s-start).total_seconds()))[0]
+        else:
+            start = None
     else:
-        start_times = persistence.start_times_ltp(sort="desc", limit=50)
-    start_dates: list[date] = _start_times_to_dates(start_times)
-    start_date = start_date if start_date is not None and start_date in start_dates else start_dates[0] if len(start_dates) > 0 else None
-    if start_date is None:
-        return None, None, [], None
-    options = [{"label": snap_id, "value": snap_id, "selected": selected} for snap_id, selected in ((d.strftime("%Y-%m-%d"), d == start_date) for d in start_dates)]
-    if len(options) == 1:
-        dt = start_dates[0]
-        return dt - timedelta(days=1), dt + timedelta(days=1), options, dt
-    return start_date - timedelta(days=150), start_date + timedelta(days=1), options, start_date
+        start_times = tuple()
+        start = None
+    return months, selected_month, start_times, start
 
-
-def _start_times_to_dates(lst: list[datetime]) -> list[date]:
-    result = list(set(state.as_timezone(l).date() for l in lst))
-    result.sort(reverse=True)
-    return result
+@callback(Output("ltp_res-starttime-selector", "options"),
+          Output("ltp_res-starttime-selector", "value"),
+          Input("ltp_res-month-selector", "value"))
+def month_changed(month: str|None):
+    month_parsed = DatetimeUtils.parse_date(month)
+    if month_parsed is None or not dash_authenticated(config):
+        return tuple(), None
+    month_dt = month_parsed.date().replace(day=1)
+    end_dt = (month_dt + timedelta(days=32)).replace(day=1)
+    persistence: ResultsPersistence = state.get_results_persistence_aggregate()
+    start_times = persistence.start_times_ltp(start=DatetimeUtils.date_to_datetime(month_dt, utc=False), end=DatetimeUtils.date_to_datetime(end_dt, utc=False), sort="desc", limit=150)
+    return [DatetimeUtils.format(s, use_zone=False) for s in start_times], DatetimeUtils.format(start_times[-1], use_zone=False) if len(start_times) > 0 else None
 
 
 @callback(Output("ltp_res-solutions", "data"),
@@ -236,13 +253,14 @@ def _start_times_to_dates(lst: list[datetime]) -> list[date]:
           # we cannot set the selectedRows programmatically here, it causes sporadic failures in later triggers => looks like a bug in the dash-aggrid component
           # Neither can we set the selection in the init/layer method => it will always lead to missing callbacks
 #          Output("ltp_res-solutions-table", "selectedRows"),
-          Input("ltp_res-starttime-selector", "value"))
+          Output("ltp_res-initial_solution_id", "data"),
+          Input("ltp_res-starttime-selector", "value"),
 #          State("ltp_res-solutions-table", "selectedRows"),
-#          State("ltp_res-initial_solution_id", "data"))
-def find_solutions(starttime: str|None): #,selected_rows: list[dict[str, any]|str]|None, initial_solution_id: str|None):
+          State("ltp_res-initial_solution_id", "data"))
+def find_solutions(starttime: str|None, selected_solution: str|None): #,selected_rows: list[dict[str, any]|str]|None, initial_solution_id: str|None):
     parsed = DatetimeUtils.parse_date(starttime)
     if parsed is None or not dash_authenticated(config):
-        return [], [], #[]
+        return [], [], None #[]
     parsed =  state.replace_timezone(parsed)
     persistence: ResultsPersistence = state.get_results_persistence_aggregate()
     solutions: list[str] = sorted(persistence.solutions_ltp(parsed), reverse=True)
@@ -258,7 +276,8 @@ def find_solutions(starttime: str|None): #,selected_rows: list[dict[str, any]|st
     table_rows = [{k: v if k != "time_horizon" else round(v/7) for k, v in r.items()} for r in rows]
     #if len(rows) > 0 and initial_solution_id is not None and (selected_rows is None or (isinstance(selected_rows, dict) and len(selected_rows["ids"]) == 0) or len(selected_rows) == 0):
     #    selected_rows = {"ids": [initial_solution_id]}
-    return rows, table_rows, #selected_rows
+    selected_solution = dash.no_update if selected_solution is not None and selected_solution in solutions else solutions[0] if len(solutions) > 0 else None
+    return rows, table_rows, selected_solution  #selected_rows
 
 
 # on table row selection change the selected solution

@@ -12,8 +12,12 @@
     align-items: center;
 }
 
+.ltp_res-monthselect {
+    min-width: 8em;
+}
+
 .ltp_res-startselect {
-    min-width: 10em;
+    min-width: 12em;
 }
 
 .ltp-res-absrel-flex {

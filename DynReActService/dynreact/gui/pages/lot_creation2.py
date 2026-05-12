@@ -2,6 +2,7 @@ import traceback
 import types
 import typing
 from datetime import datetime, timedelta, date, timezone
+from math import floor
 from typing import Literal, Any
 import json
 
@@ -22,7 +23,7 @@ from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Equipment, Order, Lot, ProductionPlanning, ProductionTargets, EquipmentProduction, \
     MidTermTargets, ObjectiveFunction, Process, TargetLotSize, ProcessLotCreationSettings, OrderAssignment, \
-    PlannedWorkingShift
+    PlannedWorkingShift, Snapshot, Site
 from pydantic.fields import FieldInfo
 
 from dynreact.app import state, config
@@ -751,17 +752,20 @@ def update_plants(snapshot: str,
     elements = [html.Div(), html.Div("Equipment"), html.Div("Production / t"), html.Div("Previous lot", title="The previous lot defines the starting point for the lot creation.")]
     if use_lot_range:
         elements.extend([html.Div("Min lot size / t"), html.Div("Max lot size / t")])
-    # TODO alternatively, we could determine targets based on the plant capacity and planning duration
     targets: ProductionTargets|None = None
     targets0 = None
     if not is_ltp_init:
         has_targets: bool = site.lot_creation is not None and process in site.lot_creation.processes and site.lot_creation.processes[process].total_size is not None
         if has_targets:
             targets0 = site.lot_creation.processes[process].total_size
-        else:
+        else:    # TODO alternatively, we should determine targets based on the plant capacities and planning duration
             _, targets = state.get_snapshot_solution(process, snapshot, timedelta(hours=horizon_hours))
     else:
-        targets = _targets_from_ltp(selected_rows[0], process, snapshot, horizon_hours)
+        # targets = _targets_from_ltp(selected_rows[0], process, snapshot, horizon_hours)
+        num_shifts: int = max(1, floor(horizon_hours / 8))
+        # XXX we determine twice the lots in this case...
+        targets = _targets_from_ltp(selected_rows[0], process, snapshot_obj, num_shifts, site, state.get_snapshot_provider(), horizon_hours)
+
     target_weights: dict[int, float] = {plant: t.total_weight for plant, t in targets.target_weight.items()} if targets is not None else \
                 targets0 if isinstance(targets0, typing.Mapping) else {plant.id: targets0 for plant in plants}
     lots: dict[int, list[Lot]] = snapshot_obj.lots
@@ -901,12 +905,15 @@ def start_time_changed(date: str|None, time: str|None):
     #return dt_time_str, DatetimeUtils.format(dt_time.astimezone(), use_zone=False).replace("T", " ")
     return dt_time_str, dt_time_str.replace("T", " ")
 
-def _targets_from_ltp(selected_row: dict[str, any], process: str, start_time: datetime, horizon_hours: int) -> ProductionTargets:
+def _targets_from_ltp(selected_row: dict[str, any], process: str, snapshot: Snapshot,
+            num_shifts: int, site: Site, snapshot_provider: SnapshotProvider, horizon_hours: int,
+            equipment_ids: typing.Sequence[int] | None=None) -> ProductionTargets:
     start_time_ltp = DatetimeUtils.parse_date(selected_row.get("start_time_full"))
     solution_ltp = selected_row.get("id")
     persistence: ResultsPersistence = state.get_results_persistence()
     mid_term, storage = persistence.load_ltp(start_time_ltp, solution_ltp)
-    targets: ProductionTargets = ModelUtils.mid_term_targets_from_ltp_result_deprecated(mid_term, process, start_time, start_time + timedelta(hours=horizon_hours))
+    targets, _, __ = ModelUtils.mid_term_targets_from_ltp_result(mid_term, process, snapshot, timedelta(hours=horizon_hours), num_shifts, site, snapshot_provider, equipment_ids=equipment_ids)
+    # targets: ProductionTargets = ModelUtils.mid_term_targets_from_ltp_result_deprecated(mid_term, process, start_time, start_time + timedelta(hours=horizon_hours))
     return targets
 
 

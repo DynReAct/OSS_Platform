@@ -787,14 +787,12 @@ def update_plants(snapshot: str,
                     max_val = 0 if settings is None else settings.max if isinstance(settings, TargetLotSize) else settings.get(plant.id, TargetLotSize(min=0, max=0)).max
                     div2 = html.Div(
                         dcc.Input(type="number", min="0", value=str(min_val), placeholder="Lot size minimum in t"),
-                        title="Lot size minimum in t", className="lot2-size-min",
-                        style={'display': 'block'},
+                        title="Lot size minimum in t", className="lot2-size-min", style={'display': 'block'},
                         **{"data-plant": str(plant.id), "data-default": str(0)})
 
                     div3 = html.Div(
                         dcc.Input(type="number", min="0", value=str(max_val), placeholder="Lot size maximum in t"),
-                        title="Lot size maximum in t", className="lot2-size-max",
-                        style={'display': 'block'},
+                        title="Lot size maximum in t", className="lot2-size-max", style={'display': 'block'},
                         **{"data-plant": str(plant.id), "data-default": str(0)})
 
                     found_in_components = False
@@ -908,7 +906,7 @@ def _targets_from_ltp(selected_row: dict[str, any], process: str, start_time: da
     solution_ltp = selected_row.get("id")
     persistence: ResultsPersistence = state.get_results_persistence()
     mid_term, storage = persistence.load_ltp(start_time_ltp, solution_ltp)
-    targets: ProductionTargets = ModelUtils.mid_term_targets_from_ltp_result(mid_term, process, start_time, start_time + timedelta(hours=horizon_hours))
+    targets: ProductionTargets = ModelUtils.mid_term_targets_from_ltp_result_deprecated(mid_term, process, start_time, start_time + timedelta(hours=horizon_hours))
     return targets
 
 

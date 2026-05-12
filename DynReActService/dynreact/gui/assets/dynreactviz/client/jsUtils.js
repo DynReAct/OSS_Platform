@@ -404,6 +404,8 @@ export class JsUtils {
         while (tickDistance > maxTickDistance) {
             cand = cand / 2;
             count = Math.max(Math.floor(diff / cand), 1);
+            if (count === 1)
+                break;
             tickDistance = width / count;
         }
         let lastTick = range[0];

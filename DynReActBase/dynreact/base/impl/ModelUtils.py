@@ -1,18 +1,21 @@
 from datetime import datetime, timedelta, date
 from typing import Mapping, Sequence
 
+from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.model import MidTermTargets, ProductionTargets, EquipmentProduction, ProductionPlanning, Site, \
-    EquipmentAvailability, MaterialCategory, SUM_MATERIAL, Lot, PlannedWorkingShift
+    EquipmentAvailability, MaterialCategory, SUM_MATERIAL, Lot, PlannedWorkingShift, Snapshot
 
 
 class ModelUtils:
 
     @staticmethod
-    def mid_term_targets_from_ltp_result(result: MidTermTargets|Sequence[MidTermTargets], process: str,
-                                         start_time: datetime, end_time: datetime,
-                                         existing_lots: Sequence[Lot]|None=None) -> ProductionTargets:
+    def mid_term_targets_from_ltp_result_deprecated(result: MidTermTargets | Sequence[MidTermTargets], process: str,
+                                                    start_time: datetime, end_time: datetime,
+                                                    existing_lots: Sequence[Lot]|None=None) -> ProductionTargets:
         # TODO consider material structure
         """
+        @deprecated
+
         Determines the actual amount of material to be produced by the equipment belonging to the considered
         process stage in the specified time interval.
         Note: equipment capacity is ignored here, it is assumed, in particular,
@@ -30,7 +33,7 @@ class ModelUtils:
         """
         if isinstance(result, Sequence):
             # existing lots must only be subtracted once, therefore we cannot pass them to all instances here
-            output = ModelUtils.merge_targets([ModelUtils.mid_term_targets_from_ltp_result(inp, process, start_time, end_time) for inp in result])
+            output = ModelUtils.merge_targets([ModelUtils.mid_term_targets_from_ltp_result_deprecated(inp, process, start_time, end_time) for inp in result])
             total_target_weights: dict[int, EquipmentProduction] = output.target_weight
             mat_target: dict[str, float]|None = output.material_weights
         else:
@@ -76,6 +79,137 @@ class ModelUtils:
                 else:
                     total_target_weights[lot.equipment] = total_target_weights[lot.equipment].model_copy(update={"total_weight": new_weight})
         return ProductionTargets(process=process, period=(start_time, end_time), target_weight=total_target_weights, material_weights=mat_target if has_material_structure else None)
+
+    @staticmethod
+    def mid_term_targets_from_ltp_result(
+            result: MidTermTargets,
+            process: str,
+            snapshot: Snapshot,
+            horizon: timedelta,
+            num_shifts: int,
+            site: Site,
+            snapshot_provider: SnapshotProvider,
+            equipment_ids: Sequence[int]|None=None,
+            max_horizon: timedelta = timedelta(days=8)) -> tuple[ProductionTargets, datetime, dict[int, datetime]]:
+        """
+        Determines the actual amount of material to be produced by the equipment belonging to the considered
+        process stage in the specified time interval, considering the targets defined by the long-term planning
+        algorithm and the existing, complete lots.
+
+        Parameters
+
+            result: long-term planning results
+            process: process stage the planning applies to
+            snapshot: determines the start time and existing lots
+            horizon: planning horizon, such as 1 day
+            num_shifts: specifies into how many shifts the planning horizon is to be divided
+            site: generic site configuration
+            snapshot_provider: the snapshot provider
+            equipment_ids: optional equipments ids to be included. If not specified, all equipment for the considered
+                process stage is included
+            max_horizon: maximum time horizon to consider (w.r.t. the snapshot timestamp)
+
+        Returns:
+            a tuple consisting of: production targets, earliest start time over all equipments, start times by equipment
+        """
+        equipment_ids = equipment_ids if equipment_ids is not None else [p.id for p in site.get_process_equipment(process)]
+        if len(equipment_ids) == 0:
+            raise Exception("No equipment specified")
+        max_planning_time = snapshot.timestamp + max_horizon
+        material_by_equipment_targets: dict[int, dict[str, float]] = {}
+        material_by_equipment_existing: dict[int, dict[str, float]] = {}
+        scale_factor_by_equipment: dict[int, float] = {}
+        total_weight_by_equipment: dict[int, float] = {}
+        min_start: datetime = max_planning_time
+        max_end: datetime = snapshot.timestamp + horizon
+        start_time_by_equipment: dict[int, datetime] = {}
+        for equipment in equipment_ids:
+            lots = [lot for lot in snapshot.lots.get(equipment, tuple()) if snapshot_provider.is_lot_complete(lot) and lot.end_time is not None]
+            eq_horizon = max(lt.end_time for lt in lots) if len(lots) > 0 else snapshot.timestamp
+            if eq_horizon >= max_planning_time:  # nothing to be planned for this equipment, lots already cover the planning horizon
+                continue
+            planning_end = min(eq_horizon + horizon, max_planning_time)
+            if eq_horizon < min_start:
+                min_start = eq_horizon
+            if planning_end > max_end:
+                max_end = planning_end
+            #applicable = ModelUtils.applicable_periods(result.sub_periods, eq_horizon, planning_end)
+            #if len(applicable) == 0:
+            #    continue
+            # need to sum up all targets from now, and then subtract the existing lots
+            equipment_horizon: timedelta = planning_end - eq_horizon
+            applicable: dict[int, float] = ModelUtils.applicable_periods(result.sub_periods, snapshot.timestamp, planning_end)
+            if len(applicable) == 0:  # nothing planned for this equipment?
+                continue
+            mats_existing: dict[str, float] = {}
+            total_existing = 0.
+            for lot in lots:
+                if lot.material_weights is None:
+                    raise Exception(f"Lot without material weights specified {lot.id}: {lot}")
+                for mat, weight in lot.material_weights.items():
+                    if mat not in mats_existing:
+                        mats_existing[mat] = 0.
+                    mats_existing[mat] = mats_existing[mat] + weight
+                total_existing += lot.weight
+            mats: dict[str, float] = {}
+            total_targets = 0.
+            for period_idx, fraction in applicable.items():
+                targets: ProductionTargets = result.production_sub_targets[process][period_idx]
+                if equipment not in targets.target_weight:
+                    continue
+                equipment_targets: EquipmentProduction = targets.target_weight[equipment]
+                if equipment_targets.material_weights is None:
+                    raise Exception(f"Equipment targets without material weights specified: {equipment_targets}")
+                for mat, weight in equipment_targets.material_weights.items():
+                    if isinstance(weight, Mapping):
+                        raise Exception(f"Cannot handle nested material structure for equipment {equipment}: {targets}")
+                    if mat not in mats:
+                        mats[mat] = 0.
+                    mats[mat] = mats[mat] + (weight * fraction)
+                total_targets += equipment_targets.total_weight * fraction
+            # TODO material class specific capacity
+            equipment_obj = site.get_equipment(equipment, do_raise=True)
+            # prod capacity in tons
+            capacity = equipment_obj.throughput_capacity * equipment_horizon.total_seconds() / 3_600
+            planned_production: float = total_targets - total_existing
+            if planned_production <= capacity * 0.05:
+                # negative or very small: already scheduled more material than what is foreseen by the long-term planning
+                continue
+            scaling = 1.
+            total_weight = planned_production
+            if planned_production >= capacity * 0.08:
+                scaling = capacity / planned_production
+                total_weight = capacity
+            else:
+                best_number_shifts: int = min((sh for sh in range(num_shifts+1)), key=lambda sh: abs(capacity/num_shifts * sh - planned_production))
+                if best_number_shifts == 0:
+                    continue
+                total_weight = capacity / num_shifts * best_number_shifts
+                scaling = total_weight / planned_production
+            scale_factor_by_equipment[equipment] = scaling
+            total_weight_by_equipment[equipment] = total_weight
+            material_by_equipment_targets[equipment] = mats
+            material_by_equipment_existing[equipment] = mats_existing
+            start_time_by_equipment[equipment] = eq_horizon
+        equipment_weights: dict[int, EquipmentProduction] = {}
+        material_targets_overall: dict[str, float] = {}
+        _empty = {}
+        total = 0.
+        for equipment, mat_targets in material_by_equipment_targets.items():
+            eq_existing = material_by_equipment_existing.get(equipment, _empty)
+            scale_factor = scale_factor_by_equipment.get(equipment, 1.)
+            final_equipment_mat_weights: dict[str, float] = {}
+            for mat, weight in mat_targets.items():
+                existing = eq_existing.get(mat, 0.)
+                delta = max(weight - existing, 0.) * scale_factor  # TODO might need to handle negative values specifically, since the material class values do not add up in this case
+                final_equipment_mat_weights[mat] = delta
+                material_targets_overall[mat] = material_targets_overall.get(mat, 0.) + delta
+            eq_total = total_weight_by_equipment.get(equipment, 0.)
+            eq_prod = EquipmentProduction(equipment=equipment, total_weight=eq_total, material_weights=final_equipment_mat_weights)
+            equipment_weights[equipment] = eq_prod
+            total += eq_total
+        prod_targets = ProductionTargets(process=process, target_weight=equipment_weights, period=(min_start, max_end), material_weights=material_targets_overall)
+        return prod_targets, min_start, start_time_by_equipment
 
     @staticmethod
     def aggregated_structure(site: Site, planning: ProductionPlanning) -> dict[str, dict[str, float]]:

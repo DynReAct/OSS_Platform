@@ -202,7 +202,7 @@ class ModelUtils:
         return result
 
     @staticmethod
-    def merge_targets(targets: Sequence[ProductionTargets]) -> ProductionTargets:
+    def merge_targets(targets: Sequence[ProductionTargets], require_same_period: bool=True) -> ProductionTargets:
         """
         Note: all input targets must have the same process and period, otherwise an exception is thrown.
         Furthermore, either all targets must support material structure or none.
@@ -213,7 +213,9 @@ class ModelUtils:
         process: str|None = None
         equipment_targets: dict[int, EquipmentProduction]|None = None
         has_mat_structure: bool|None = None
+        has_equipment_mat_structure: bool|None = None
         mat_structure: dict[str, float|dict[str, float]] | None = None
+        equipment_mat_structure: dict[int, dict[str, float]]|None = None
         for t in targets:
             if period is None:
                 period = t.period
@@ -223,19 +225,32 @@ class ModelUtils:
                 if has_mat_structure:
                     mat_structure = {cl: {cl2: w2 for cl2, w2 in weight.items()} if isinstance(weight, Mapping) else weight
                                  for cl, weight in t.material_weights.items()}
-            elif t.period[0] != period[0] or t.period[1] != period[1]:
+                has_equipment_mat_structure = all(w.material_weights is not None for w in t.target_weight.values())
+                if has_equipment_mat_structure:
+                    equipment_mat_structure = {e: dict(w.material_weights) for e, w in t.target_weight.items()}
+            elif require_same_period and (t.period[0] != period[0] or t.period[1] != period[1]):
                 raise Exception(f"Production targets have different periods: {period}: {t.period}")
             elif process != t.process:
                 raise Exception(f"Production targets have different processes: {process}: {t.process}")
             elif (t.material_weights is not None and len(t.material_weights) > 0) != has_mat_structure:
                 raise Exception(f"Trying to merge targets with and without material structure")
+            elif all(w.material_weights is not None for w in t.target_weight.values()) != has_equipment_mat_structure:
+                raise Exception(f"Trying to merge equipment targets with and without material structure")
             else:
                 for eq, eq_target in t.target_weight.items():
                     if eq not in equipment_targets:
                         equipment_targets[eq] = eq_target.model_copy()
                     else:
                         new_weight = equipment_targets[eq].total_weight + eq_target.total_weight
-                        equipment_targets[eq] = equipment_targets[eq].model_copy(update={"total_weight": new_weight})
+                        mat_by_equipment: dict[str, float]|None = None
+                        if has_equipment_mat_structure:
+                            mat_by_equipment = equipment_mat_structure[eq]
+                            for cl, weight in eq_target.material_weights.items():
+                                if cl not in mat_by_equipment:
+                                    mat_by_equipment[cl] = 0.
+                                mat_by_equipment[cl] = mat_by_equipment[cl] + weight
+                        equipment_targets[eq] = equipment_targets[eq].model_copy(update=
+                                    {"total_weight": new_weight, "material_weights": mat_by_equipment})
                 if has_mat_structure:
                     for cl, weight in t.material_weights.items():
                         if cl not in mat_structure:
@@ -248,6 +263,10 @@ class ModelUtils:
                                 mat_structure[cl] = {key: existing_mats.get(key, 0) + weight.get(key, 0) for key in all_keys}
                             else:
                                 mat_structure[cl] += weight
+        if not require_same_period:
+            min_time = min(t.period[0] for t in targets)
+            max_time = max(t.period[1] for t in targets)
+            period = (min_time, max_time)
         return ProductionTargets(process=process, target_weight=equipment_targets, period=period, material_weights=mat_structure)
 
     @staticmethod

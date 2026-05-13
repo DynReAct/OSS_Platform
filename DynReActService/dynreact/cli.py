@@ -812,6 +812,90 @@ def show_shifts():
             print(f"|  {DatetimeUtils.format(start, use_zone=False).replace('T', ' ')}  |  {DatetimeUtils.format(end, use_zone=False).replace('T', ' ')} | {hours} | {reason} | ")
 
 
+def read_history():
+    parser = argparse.ArgumentParser(description="Read production history by equipment or process stage.")
+    parser.add_argument("-p", "--process", help="Filter by process stage. Either the process or equipment need to be specified.", type=str, default=None)
+    parser.add_argument("-eq", "--equipment", help="Filter by equipment; separate multiple by commas. Either the process or equipment need to be specified.", type=str, default=None)
+    parser.add_argument("-s", "--start", help="Start time", type=str, default=None)
+    parser.add_argument("-e", "--end", help="End time", type=str, default=None)
+    parser.add_argument("-m", "--material", help="Material classes to show (either material class id or material category id", type=str, default=None)
+    parser.add_argument("-sm", "--show-material", help="Show production by material classes. Default: false if `material` is not specified, true if it is.", action="store_true")
+    parser.add_argument("-cp", "--config-provider", help="Config provider id, such as", type=str, default=None)
+    args = parser.parse_args()
+    start: datetime | None = DatetimeUtils.parse_date(args.start)
+    end: datetime | None = DatetimeUtils.parse_date(args.end)
+    if start is None and end is None:
+        # beginning of today
+        end = DatetimeUtils.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+    if start is None:
+        start = end - timedelta(days=1)
+    if end is None:
+        end = min(DatetimeUtils.now().astimezone(), start + timedelta(days=1))
+    config = DynReActSrvConfig(config_provider=args.config_provider)
+    plugins = Plugins(config)
+    site = plugins.get_config_provider().site_config()
+    reader = plugins.get_history_reader()
+    material_filters0 = args.material
+    show_materials = args.show_material or (material_filters0 is not None and len(material_filters0) > 0)
+    classes: Sequence[str] = tuple()
+    if show_materials:
+        categories = site.material_categories
+        if material_filters0:
+            material_filters = [f for f in (f.strip() for f in material_filters0.split(",")) if f != ""]
+            full_cats: list[str] = [cat.id for cat in categories if cat.id in material_filters]
+            classes = [cl.id for cat in categories for cl in cat.classes if cat.id in full_cats or cl.id in material_filters]
+        else:
+            classes = [cl.id for cat in categories for cl in cat.classes]
+    equipment: list[Equipment] | None = _plants_for_ids(args.equipment, site)
+    procs: list[Process]|None = _processes_for_ids(args.process, site)
+    proc_ids = [p.name_short for p in procs] if procs is not None else None
+    if equipment is None and procs is not None:
+        equipment = [eq for proc in proc_ids for eq in site.get_process_equipment(proc)]
+    if procs is None:
+        if equipment is None:
+            raise Exception("Neither process nor equipment specified")
+        all_proc_ids = [e.process for e in equipment]
+        proc_ids = [proc for idx, proc in enumerate(all_proc_ids) if all_proc_ids.index(proc) == idx]
+    print(f"Production history for period {DatetimeUtils.format(start, use_zone=False)} - {DatetimeUtils.format(end, use_zone=False)}:")
+    print()
+    header = "| Process | Total production/t |"
+    for clazz in classes:
+        header += f" {clazz:12s} |"  # TODO rather print class label than id
+    print(header)
+    results: dict[str, ProductionTargets] = {}
+    for proc in proc_ids:
+        targets: ProductionTargets = reader.production_aggregate(proc, start, end, [e.id for e in equipment if e.process == proc])
+        results[proc] = targets
+        total = sum(t.total_weight for t in targets.target_weight.values())
+        line = f"| {proc:7s} |       {total:6.2f}      |"
+        for clazz in classes:
+            if targets.material_weights and clazz in targets.material_weights:
+                weight = targets.material_weights[clazz]
+                line += f"    {weight:6.2f}   |"
+            else:
+                line += "              |"
+        print(line)
+    print()
+
+    header = "| Equipment | Total production/t |"
+    for clazz in classes:
+        header += f" {clazz:12s} |"  # TODO rather print class label than id
+    print(header)
+    for proc in proc_ids:
+        targets: ProductionTargets = results[proc]
+        for e, prod in targets.target_weight.items():
+            eq = site.get_equipment(e, do_raise=True)
+            name = eq.name or eq.name_short or str(eq.id)
+            line = f"| {name:9s} |       {prod.total_weight:6.2f}       |"
+            for clazz in classes:
+                if prod.material_weights and clazz in prod.material_weights:
+                    weight = prod.material_weights[clazz]
+                    line += f"    {weight:6.2f}    |"
+                else:
+                    line += "              |"
+            print(line)
+
+
 def run_ltp():
     parser = argparse.ArgumentParser(description="Run the long term planning")
     parser.add_argument("-s", "--start", help="Start time", type=str, default=None),

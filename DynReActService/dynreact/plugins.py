@@ -15,10 +15,12 @@ from dynreact.base.LotsOptimizer import LotsOptimizationAlgo
 from dynreact.base.PermissionManager import PermissionManager
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
+from dynreact.base.ProductionHistoryReader import ProductionHistoryReader
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.AggregationPersistence import AggregationPersistence
+from dynreact.base.impl.DummyHistoryReader import DummyHistoryReader
 from dynreact.base.impl.DummyShiftsProvider import DummyShiftsProvider
 from dynreact.base.impl.FileAggregationPersistence import FileAggregationPersistence
 from dynreact.base.impl.FileAvailabilityPersistence import FileAvailabilityPersistence
@@ -47,6 +49,7 @@ class Plugins:
         self._lots_optimizer: LotsOptimizationAlgo|None = None
         self._long_term_planning: LongTermPlanning|None = None
         self._shifts_provider: ShiftsProvider|None = None
+        self._history_reader: ProductionHistoryReader|None = None
         self._results_persistence: ResultsPersistence|None = None
         self._availability_persistence: PlantAvailabilityPersistence|None = None
         self._plant_performance_models: list[PlantPerformanceModel]|None = None
@@ -185,6 +188,17 @@ class Plugins:
                 self._shifts_provider = Plugins._load_module("dynreact.shifts", self._config.shifts_provider, self._profile,
                                                              ShiftsProvider, site, do_raise=True)
         return self._shifts_provider
+
+    def get_history_reader(self, if_exists: bool=False) -> ProductionHistoryReader:
+        if self._history_reader is None and not if_exists:
+            site = self.get_config_provider().site_config()
+            if isinstance(self._config.history_reader, ProductionHistoryReader):
+                self._history_reader = self._config.history_reader
+            elif (self._config.history_reader and self._config.history_reader.startswith("dummy:")) or (not self._profile and not self._config.history_reader):
+                self._history_reader = DummyHistoryReader(self._config.history_reader or "dummy:", site)
+            else:
+                self._history_reader = Plugins._load_module("dynreact.history", self._config.history_reader, self._profile, ProductionHistoryReader, site, do_raise=True)
+        return self._history_reader
 
     def get_permission_manager(self) -> PermissionManager:
         if self._permissions is None:

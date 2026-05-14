@@ -13,6 +13,7 @@ from dynreact.base.LotsOptimizer import LotsOptimizationAlgo
 from dynreact.base.PermissionManager import PermissionManager
 from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
+from dynreact.base.ProductionHistoryReader import ProductionHistoryReader
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.SnapshotProvider import SnapshotProvider
@@ -48,6 +49,7 @@ class DynReActSrvState:
         self._results_persistence_memory: MemoryResultsPersistence | None = None
         self._availability_persistence: PlantAvailabilityPersistence|None = None
         self._shifts_provider: ShiftsProvider|None = None
+        self._history_reader: ProductionHistoryReader|None = None
         self._max_snapshot_caches: int = config.max_snapshot_caches
         self._max_snapshot_solutions_cache: int = config.max_snapshot_solutions_caches
         self._snapshots_cache: dict[datetime, Snapshot] = {}
@@ -137,6 +139,11 @@ class DynReActSrvState:
         if self._shifts_provider is None:
             self._shifts_provider = self._plugins.get_shifts_provider()
         return self._shifts_provider
+
+    def get_history_reader(self) -> ProductionHistoryReader:
+        if self._history_reader is None:
+            self._history_reader = self._plugins.get_history_reader()
+        return self._history_reader
 
     def get_results_persistence(self) -> ResultsPersistence:
         if self._results_persistence is None:

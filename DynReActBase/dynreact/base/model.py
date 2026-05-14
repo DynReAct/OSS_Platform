@@ -93,7 +93,7 @@ class Equipment(LabeledItem, ProcessInformation):
 
 class MaterialConstraint(Model):
 
-    excluded: list[str]
+    excluded: Sequence[str]
     "Material class ids"
 
 

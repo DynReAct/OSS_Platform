@@ -41,8 +41,10 @@ class DynReActSrvConfig:
             
         Where lh = lots horizon, sa = snapshot age
     """
-    shifts_provider: str|None = None  # TODO
-    "If not specified and the `profile` configuration is set, an attempt will be made to load the shifts provider from teh module dynreact.shifts.<profile>. Else fallback to 'dummy:default'."
+    shifts_provider: str|None = None
+    "If not specified and the `profile` configuration is set, an attempt will be made to load the shifts provider from the module dynreact.shifts.<profile>. Else fallback to 'dummy:default'."
+    history_reader: str|None = None
+    "If not specified and the `profile` configuration is set, an attempt will be made to load the production history reader from the module dynreact.history.<profile>. Else fallback to 'dummy:default'."
     out_directory: str = "./out"
     cors: bool = False
     auth_method: Literal["dummy", "ldap", "ldap_simple"]|None = None
@@ -90,6 +92,7 @@ class DynReActSrvConfig:
                  max_snapshot_solutions_caches: int|None = None,
                  lots_batch_config: str|None = None,
                  shifts_provider: str|None = None,
+                 history_reader: str | None = None,
                  cors: bool|None = None,
                  auth_method: Literal["dummy", "ldap", "ldap_simple"]|None = None,
                  auth_max_user_length: int|None = None,
@@ -168,6 +171,9 @@ class DynReActSrvConfig:
         if shifts_provider is None:
             shifts_provider = os.getenv("SHIFTS_PROVIDER", DynReActSrvConfig.shifts_provider)
         self.shifts_provider = shifts_provider
+        if history_reader is None:
+            history_reader = os.getenv("HISTORY_READER", DynReActSrvConfig.history_reader)
+        self.history_reader = history_reader
         if out_directory is None:
             out_directory = os.getenv("OUT_DIRECTORY", DynReActSrvConfig.out_directory)
         self.out_directory: str = out_directory

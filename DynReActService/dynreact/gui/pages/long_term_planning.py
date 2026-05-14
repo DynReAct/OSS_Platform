@@ -20,7 +20,7 @@ from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import LongTermTargets, EquipmentAvailability, StorageLevel, Storage, Equipment, \
-    PlannedWorkingShift, MidTermTargets, ProductionTargets, MaterialCategory
+    PlannedWorkingShift, MidTermTargets, ProductionTargets, MaterialCategory, Lot
 from pydantic import TypeAdapter
 
 from dynreact.app import state, config
@@ -39,7 +39,6 @@ allowed_shift_durations: list[int] = [1, 2, 4, 8, 12, 24, 48, 72, 168]
 solution_separator = "__x__"
 
 
-# TODO consider existing lots as frozen from existing snapshot
 # TODO storage initialization from snapshot
 def layout(*args, **kwargs):
     horizon_weeks: int = int(kwargs.get("weeks", 4))    # planning horizon in weeks
@@ -83,6 +82,10 @@ def layout(*args, **kwargs):
                     html.Div("End time", title="Specify the planning interval end time"),
                     dcc.Input(type="date", id="ltp-end-time", disabled=True)
                 ], className="control-panel-entry"),
+                html.Div([
+                    html.Div("Frozen lots", title="Respect lots already defined in the current snapshot?"),
+                    html.Div(dcc.Checklist(options=[{"value": "", "label": "Respect lots"}], value=[""], id="ltp-frozen-lots"), title="Respect lots already defined in the current snapshot?"),
+                ], id="ltp-frozen-lots-container", className="hidden"),  # toggle between hidden and  control-panel-entry
                 html.Div([
                     html.Div("Shift duration (hours)", title="Specify the duration of a single shift. The planning algorithm will assign target production values per shift."),
                     html.Div([
@@ -162,6 +165,21 @@ def layout(*args, **kwargs):
                 ])
             ], style={"display": "flex", "justify-content": "flex-start", "padding-top": "0.5em", "padding-bottom": "0.5em"})
         ], className="hidden", id="ltp-history-panel"),  # class toggles between hidden and control-panel
+        # ======== Frozen lots panel ============
+        html.Div([
+            html.Div("Frozen lots"),
+            html.Div([
+                html.Div([
+                    html.Div([
+                        html.Span("Total material planned in frozen lots: "),
+                        html.Span(id="ltp-frozen-lot-total"),
+                        html.Span("t. Material structure: "),
+                    ]),
+                    html.Br(),
+                    html.Div(id="ltp-frozen-lots-structure-widget")
+                ])
+            ], style={"display": "flex", "justify-content": "flex-start", "padding-top": "0.5em", "padding-bottom": "0.5em"})
+        ], className="hidden", id="ltp-frozen-lots-panel"),  # class toggles between hidden and control-panel
         # ======== Process panel ============
         html.Div([
             html.Div("Process Panel"),
@@ -185,6 +203,7 @@ def layout(*args, **kwargs):
         dcc.Store(id="ltp-prev-solution-store", storage_type="memory"),  # selected previous solution
         dcc.Store(id="ltp-historic-prod", storage_type="memory"),   #  Record<{name: string; classes: Record<{string: {name: string; weight: number;}}> }>
         dcc.Store(id="ltp-dummy-undefined", storage_type="memory"),
+        dcc.Store(id="ltp-frozen-lot-structure", storage_type="memory"), #  Record<{name: string; classes: Record<{string: {name: string; weight: number;}}> }>
         # Set when the user clicks on a plant node in the graph
         dcc.Store(id="ltp-selected_plant", storage_type="memory"),
         # contains a list of json serialized PlantAvailability objects for the currently selected plant, or None,
@@ -602,6 +621,15 @@ clientside_callback(
     Input("ltp-dummy-undefined", "data"),
     State("ltp-material-history-widget", "id"),
 )
+
+@callback(
+        Output("ltp-frozen-lots-container", "className"),
+        Output("ltp-frozen-lots-panel", "className"),
+        Input("ltp-start-time-selection", "value"))
+def toggle_frozen_lots(start_time_type: Literal["now", "nextmonth", "other"]|None):
+    if start_time_type == "now":
+        return "control-panel-entry", "control-panel"
+    return "hidden", "hidden"
 
 
 """
@@ -1072,6 +1100,54 @@ clientside_callback(
 )
 
 
+@callback(
+          Output("ltp-frozen-lot-total", "children"),
+          Output("ltp-frozen-lot-structure", "data"),
+          #Input("ltp-start-time-selection", "value"),
+          Input("selected-snapshot", "data"),
+          Input("ltp-start-time-selection", "value"),
+          Input("ltp-start-end", "data"))  # State or Input?
+def frozen_lot_structure(snapshot: str|None, start_time_type: Literal["now", "nextmonth", "other"]|None, start_end: tuple[str|None, str|None]|None):
+    if not dash_authenticated(config) or start_time_type != "now" or not start_end:
+        return None
+    start = state.as_timezone(DatetimeUtils.parse_date(start_end[0]))
+    end = state.as_timezone(DatetimeUtils.parse_date(start_end[1]))
+    snapshot = DatetimeUtils.parse_date(snapshot)
+    snap_obj = state.get_snapshot(time=snapshot)
+    if snap_obj is None:
+        return None
+    snap_provider = state.get_snapshot_provider()
+    # TODO missing lots from earlier process stages with shortcuts
+    frozen_lots = {eq: [lot for lot in lots if snap_provider.is_lot_complete(lot) and
+                        lot.start_time is not None and lot.end_time is not None and lot.start_time < end and lot.end_time > start] for eq, lots in snap_obj.lots.items()}
+    final_processes = [proc for proc in state.get_site().processes if proc.next_steps is None or len(proc.next_steps) == 0]
+    final_process_ids = [p.name_short for p in final_processes]
+    equipments = [eq.id for eq in state.get_site().equipment if eq.process in final_process_ids]
+    final_lots: list[Lot] = [lot for eq, lots in frozen_lots.items() if eq in equipments for lot in lots]
+    total_weight = sum(lot.weight or 0. for lot in final_lots)
+    material_weights = {}
+    for lot in (lt for lt in final_lots if lt.material_weights is not None):
+        share = 1 if lot.end_time <= end and lot.start_time >= start else (min(lot.end_time, end) - max(lot.start_time, start))/(lot.end_time - lot.start_time)
+        for mat, weight in lot.material_weights.items():
+            material_weights[mat] = material_weights.get(mat, 0.) + weight*share
+    final_mat_structure = {}
+    for cat in state.get_site().material_categories:
+        classes = {cl.id: {"name": cl.name or cl.id, "weight": material_weights.get(cl.id, 0)} for cl in cat.classes}
+        final_mat_structure[cat.id] = {"name": cat.name or cat.id, "classes": classes}
+    return f"{total_weight:.2f}", final_mat_structure
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="lots2",
+        function_name="setBacklogStructureOverview"
+    ),
+    Output("ltp-frozen-lots-structure-widget", "title"),
+    Input("ltp-frozen-lot-structure", "data"),   # dict[str, dict[str, float]]
+    Input("ltp-dummy-undefined", "data"),
+    State("ltp-frozen-lots-structure-widget", "id"),
+)
+
+
 @callback(Output("ltp-start", "disabled"),
           Output("ltp-start", "title"),
           Output("ltp-stop", "disabled"),
@@ -1093,9 +1169,12 @@ clientside_callback(
           State("ltp-shift-hours", "value"),
           State("ltp-production-total", "value"),
           State("ltp-results-store", "value"),
+          State("ltp-start-time-selection", "value"),
+          State("selected-snapshot", "data"),
+          State("ltp-frozen-lots", "value"),
           config_prevent_initial_callbacks=True)
 def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: str|None, storage_children, start_end: tuple[str|None, str|None]|None, shift_duration_hours: str|int,
-                     total_production: float|str|None, do_store0: Sequence[Literal[""]]):
+                     total_production: float|str|None, do_store0: Sequence[Literal[""]], start_time_type: Literal["now", "nextmonth", "other"]|None, snapshot: str|None, frozen_lots0: Sequence[Literal[""]]):
     if not dash_authenticated(config):
         return None, None, None, None, None, None, None, None
     do_store: bool = do_store0 is not None and len(do_store0) > 0
@@ -1154,7 +1233,15 @@ def check_start_stop(_, __, ___, setpoints: dict[str, float], storage_levels: st
                         new_shifts = [new_first] + list(eq_shifts)[1:-1] + [new_last]
                         shifts[eq] = new_shifts
                 availabilities_aggregated = PlantAvailabilityPersistence.aggregate([p.id for p in state.get_site().equipment], start, end, availabilities, shifts=shifts)
-                run(start_dt, end_dt, shift_duration_hours, setpoints, total_production, adapted_storage_levels, availabilities_aggregated, do_store)
+                frozen_lots = None
+                if start_time_type == "now" and snapshot is not None and len(frozen_lots0) > 0:
+                    snapshot_dt = DatetimeUtils.parse_date(snapshot)
+                    snap_obj = state.get_snapshot(time=snapshot_dt)
+                    snap_provider = state.get_snapshot_provider()
+                    frozen_lots = {eq: sorted([lot for lot in lots if snap_provider.is_lot_complete(lot) and lot.start_time is not None and lot.end_time is not None],
+                                              key=lambda l: l.end_time) for eq, lots in snap_obj.lots.items()}
+                    frozen_lots = {eq: lots for eq, lots in frozen_lots.items() if len(lots) > 0}
+                run(start_dt, end_dt, shift_duration_hours, setpoints, total_production, adapted_storage_levels, availabilities_aggregated, frozen_lots, do_store)
                 message = {"msg": "Long term planning started", "type": "info", "options": {"timeout": 4_000}}
             except Exception as e:
                 traceback.print_exc()
@@ -1245,7 +1332,8 @@ def _get_storage_levels(children: list[Component]|None, start_date: datetime) ->
 
 
 def run(start_time: datetime, end_time: datetime, shift_duration_hours: int, setpoints: dict[str, float],
-          total_production: float, storage_levels: dict[str, StorageLevel], availabilities: dict[int, EquipmentAvailability], do_store: bool):
+          total_production: float, storage_levels: dict[str, StorageLevel], availabilities: dict[int, EquipmentAvailability],
+          frozen_lots: dict[int, Sequence[Lot]]|None, do_store: bool):
     global ltp_thread
     shift_duration = timedelta(hours=shift_duration_hours)
     shifts: list[tuple[datetime, datetime]] = []
@@ -1306,6 +1394,7 @@ class LTPKillableOptimizationThread(threading.Thread):
                  availabilities: dict[int, EquipmentAvailability],
                  initial_storage_levels: dict[str, StorageLevel],
                  shifts: list[tuple[datetime, datetime]],
+                 frozen_lots: dict[int, Sequence[Lot]]|None=None,
                  persistence: ResultsPersistence|None = None,
                  ):
         super().__init__(name=ltp_thread_name)
@@ -1319,6 +1408,7 @@ class LTPKillableOptimizationThread(threading.Thread):
         self._shifts = shifts
         self._persistence = persistence
         self._start_date: date|None = None
+        self._frozen_lots = frozen_lots
         self._error = None
 
     def id(self):
@@ -1338,7 +1428,7 @@ class LTPKillableOptimizationThread(threading.Thread):
         solution_id = self._id
         try:
             results, storage_levels = self._optimization.run(solution_id, self._structure, initial_storage_levels=self._initial_storage_levels,
-                                          shifts=self._shifts, plant_availabilities=self._availabilities)
+                                          shifts=self._shifts, plant_availabilities=self._availabilities, frozen_lots=self._frozen_lots)
             if self._kill.is_set():
                 raise InterruptedException()
             self._start_date = results.period[0].date()

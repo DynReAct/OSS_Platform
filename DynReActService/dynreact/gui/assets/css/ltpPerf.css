@@ -1,0 +1,15 @@
+.ltp-perf-menu {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    row-gap: 1em;
+    column-gap: 1em;
+}
+
+.ltp-perf-equipments {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    column-gap: 1em;
+    row-gap: 0.5em;
+    padding-top: 1em;
+    padding-left: 1em;
+}

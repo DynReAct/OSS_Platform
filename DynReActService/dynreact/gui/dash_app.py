@@ -85,7 +85,8 @@ def layout(*args, **kwargs):
                     html.Div("Long term planning", id="menu-ltp_header"),
                     html.Div([
                         dcc.Link("Results", id="menu-ltp-planned_header", className="menu-link", href="/dash/ltp/planned", title="Long term planning results"),
-                        dcc.Link("Long term planning", id="menu-ltp-new_header", className="menu-link", href="/dash/ltp", title="Open long term planning tab")
+                        dcc.Link("Long term planning", id="menu-ltp-new_header", className="menu-link", href="/dash/ltp", title="Open long term planning tab"),
+                        dcc.Link("Equipment performance", id="menu-ltp-perf_header", className="menu-link", href="/dash/ltp/performance", title="Open equipment performance tab")
                     ], className="submenu-content")
                 ]),
             ], className="menu-link login-required", title="Open long term planning tab"),

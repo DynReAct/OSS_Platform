@@ -720,6 +720,53 @@ def planned_shifts(
         equipment = equipment_p
     return state.get_shifts_provider().load_all(start, end=end, limit=limit, equipments=equipment)
 
+@fastapi_app.get("/production-history",
+                tags=["dynreact"],
+                summary="Get production history by equipment id")
+def historic_production(
+        process: str|None = Query(None, description="Process steps to be included. Equipment for all processes will be included if not specified."),
+        equipment: list[int|str]|None = Query(None, description="Equipment ids to be included. All equipments will be included in the response if not specified (unless the process filter is set)"),
+        start: str|datetime|None = Query(None, description="Start time.",  examples=[None, "now-1d", "2023-04-25T00:00Z"], openapi_examples={
+                "now-1d": {"description": "One day ago", "value": "now-1d"},
+                "2023-04-25T00:00Z": {"description": "A specific timestamp", "value": "2023-04-25T00:00Z"},
+            }),
+        end: str|datetime|None = Query(None, description="End time, optional.", examples=[None, "now", "2023-04-27T00:00Z"], openapi_examples={
+                "now": {"description": "Now", "value": "now"},
+                "2023-04-27T00:00Z": {"description": "A specific timestamp", "value": "2023-04-27T00:00Z"},
+            }),
+        material: list[str]|None = Query(None, description="Filter for specific material classes"),
+        username = username) -> ProductionTargets:
+    if isinstance(start, str):
+        start = parse_datetime_str(start)
+    if isinstance(end, str):
+        end = parse_datetime_str(end)
+    if end is None:
+        if start is None:
+            end = state.as_timezone(state.get_snapshot_provider().current_snapshot_id()).replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            end = start + timedelta(days=1)
+    if start is None:
+        start = end - timedelta(days=1)
+    if equipment is not None:
+        equipment = [_get_equipment_id(e) for e in equipment]
+    if process:
+        plants = state.get_site().get_process_equipment(process)
+        if len(plants) == 0:
+            raise HTTPException(404, f"No equipment found for process {process}")
+        equipment_p = [p.id for p in plants if equipment is None or p.id in equipment]
+        equipment = equipment_p
+    equipment_objects = [state.get_site().get_equipment(e, do_raise=True) for e in equipment]
+    first_proc = equipment_objects[0].process
+    if any(e.process != first_proc for e in equipment_objects):
+        raise HTTPException(400, f"Equipment for multiple processes specified: {[e.process for e in equipment_objects]}")
+    if process is not None and first_proc != process:
+        raise HTTPException(400, f"Specified process does not match equipment process: {process} - {first_proc}")
+    if material is not None and len(material) > 0:
+        unknown_mat = [mat for mat in material if not any(cl.id == mat for cat in state.get_site().material_categories for cl in cat.classes)]
+        if len(unknown_mat) > 0:
+            raise HTTPException(400, f"Unknown material {unknown_mat}")
+    return state.get_history_reader().production_aggregate(first_proc, start, end, equipment=equipment, material_filter=material)
+
 
 @fastapi_app.get("/metrics",
                 tags=["dynreact"],

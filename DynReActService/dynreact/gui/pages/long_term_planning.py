@@ -1,10 +1,12 @@
+from itertools import groupby
+
 import numpy as np
 
 import threading
 import traceback
 from calendar import monthrange  # , Day  # Python 3.12
 from datetime import datetime, timedelta, date, tzinfo, timezone
-from typing import Any, Sequence, Literal
+from typing import Any, Sequence, Literal, Mapping
 
 import dash
 from dash import html, dcc, callback, Output, Input, clientside_callback, ClientsideFunction, State
@@ -18,7 +20,7 @@ from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import LongTermTargets, EquipmentAvailability, StorageLevel, Storage, Equipment, \
-    PlannedWorkingShift
+    PlannedWorkingShift, MidTermTargets, ProductionTargets, MaterialCategory
 from pydantic import TypeAdapter
 
 from dynreact.app import state, config
@@ -34,8 +36,10 @@ ltp_thread_name = "long-term-planning"
 ltp_thread: threading.Thread|None = None
 
 allowed_shift_durations: list[int] = [1, 2, 4, 8, 12, 24, 48, 72, 168]
+solution_separator = "__x__"
 
 
+# TODO consider existing lots as frozen from existing snapshot
 # TODO storage initialization from snapshot
 def layout(*args, **kwargs):
     horizon_weeks: int = int(kwargs.get("weeks", 4))    # planning horizon in weeks
@@ -139,6 +143,25 @@ def layout(*args, **kwargs):
                 ], className="ltp-init-panel2")
             ])
         ], className="control-panel", id="ltp-initialization"),
+        # ======== Historic production panel ============
+        html.Div([
+            html.Div("Past production"),
+            html.Div([
+                html.Div([
+                    html.Div([
+                        html.Span("Finished material in time interval "),
+                        html.Span(id="ltp-history-start"),
+                        html.Span(" - "),
+                        html.Span(id="ltp-history-end"),
+                        html.Span(": "),
+                        html.Span(id="ltp-history-total"),
+                        html.Span("t. Material structure: "),
+                    ]),
+                    html.Br(),
+                    html.Div(id="ltp-material-history-widget")
+                ])
+            ], style={"display": "flex", "justify-content": "flex-start", "padding-top": "0.5em", "padding-bottom": "0.5em"})
+        ], className="hidden", id="ltp-history-panel"),  # class toggles between hidden and control-panel
         # ======== Process panel ============
         html.Div([
             html.Div("Process Panel"),
@@ -154,7 +177,14 @@ def layout(*args, **kwargs):
         ## stores information about the last start time and horizon for which material properties have been set,
         ## in the format {"startTime": startTime, "horizon": horizon}
         #dcc.Store(id="ltp-material-settings", storage_type="memory"),
-        dcc.Store(id="ltp-material-setpoints"),
+
+        dcc.Store(id="ltp-material-setpoints-user", storage_type="memory"),      # material structure configured explicitly by user
+        dcc.Store(id="ltp-material-setpoints-prev", storage_type="memory"),  # material structure from selected previous solution
+        dcc.Store(id="ltp-material-setpoints", storage_type="memory"),       # consolidated material structure
+
+        dcc.Store(id="ltp-prev-solution-store", storage_type="memory"),  # selected previous solution
+        dcc.Store(id="ltp-historic-prod", storage_type="memory"),   #  Record<{name: string; classes: Record<{string: {name: string; weight: number;}}> }>
+        dcc.Store(id="ltp-dummy-undefined", storage_type="memory"),
         # Set when the user clicks on a plant node in the graph
         dcc.Store(id="ltp-selected_plant", storage_type="memory"),
         # contains a list of json serialized PlantAvailability objects for the currently selected plant, or None,
@@ -369,7 +399,7 @@ def start_time_changed(start_time_type: Literal["now", "nextmonth", "other"]|Non
                         break
             multiple_start_times = len(applicable_solutions) > 1
             all_solutions = ((sol_start, sol_id) for sol_start, sol_ids in applicable_solutions.items() for sol_id in sol_ids)
-            prev_options = [{"value": "", "label":""}] + [{"value": f"{sol_start}__x__{sol_id}", "label": f"{state.as_timezone(sol_start).strftime('%Y-%m-%d')}: {sol_id}",
+            prev_options = [{"value": "", "label":""}] + [{"value": f"{DatetimeUtils.format(sol_start)}{solution_separator}{sol_id}", "label": f"{state.as_timezone(sol_start).strftime('%Y-%m-%d')}: {sol_id}",
                                 "title": f"Start time: {DatetimeUtils.format(state.as_timezone(sol_start), use_zone=False)}, solution id: {sol_id}"} for sol_start, sol_id in all_solutions]
             if previous_solution is None or not any(opt["value"] == previous_solution for opt in prev_options):
                 previous_solution = None if len(prev_options) <= 1 else prev_options[1]["value"]
@@ -382,7 +412,7 @@ def start_time_changed(start_time_type: Literal["now", "nextmonth", "other"]|Non
     if "ltp-prev-solution" in changed or (start_type_changed and start_time_type == "now"):
         start_end = None
         if previous_solution is not None:
-            separator_index = previous_solution.index("__x__")
+            separator_index = previous_solution.index(solution_separator)
             prev_start = DatetimeUtils.parse_date(previous_solution[:separator_index])
             prev_sol_id = previous_solution[separator_index + 5:]
             # determine time range from previous solution
@@ -461,6 +491,119 @@ def _get_total_selected_amount(setpoints: dict[str, float]) -> float|None:
     return total_amount
 
 
+@callback(
+    Output("ltp-prev-solution-store", "data"),
+          Input("ltp-prev-solution", "value"),
+          Input("ltp-start-time-selection", "value"))
+def prev_solution_changed(prev_solution: str|None, start_time_type: Literal["now", "nextmonth", "other"]|None) -> dict[str, Any]|None:
+    if not dash_authenticated(config) or start_time_type != "now" or not prev_solution or solution_separator not in prev_solution:
+        return None
+    sep = prev_solution.index(solution_separator)
+    start_time = DatetimeUtils.parse_date(prev_solution[:sep])
+    if start_time is None:
+        return None
+    sol_id = prev_solution[sep + len(solution_separator):]
+    result, _ = state.get_results_persistence_aggregate().load_ltp(start_time, sol_id)
+    json = result.model_dump(exclude_unset=True, exclude_none=True)
+    return json
+
+@callback(
+        Output("ltp-historic-prod", "data"),
+        Output("ltp-material-setpoints-prev", "data"),
+        Input("ltp-prev-solution-store", "data"),
+        State("ltp-start-end", "data"))
+def prev_solution_changed(prev_solution: dict[str, Any]|None, start_end: tuple[str, str]|None):
+    if not prev_solution or not start_end:
+        return None, None
+    targets = MidTermTargets.model_validate(prev_solution)
+    previous_start = targets.period[0]
+    new_start = DatetimeUtils.parse_date(start_end[0])
+    material_targets: dict[str, float] = targets.production_targets
+    history_reader = state.get_history_reader()
+    final_processes = [proc for proc in state.get_site().processes if proc.next_steps is None or len(proc.next_steps) == 0]
+    final_process_ids = [p.name_short for p in final_processes]
+    finished_materials: list[ProductionTargets] = [history_reader.production_aggregate(
+            proc, previous_start, new_start, equipment=[e.id for e in state.get_site().get_process_equipment(proc, do_raise=True)]) for proc in final_process_ids]
+
+    conditional_final_equipment = [e for e in state.get_site().equipment if e.process not in final_process_ids and any(isinstance(stg, Mapping) and "DONE" in stg for stg in e.storages_out)]
+    # group conditional equipments first by process then by material classes
+    cond_eq_by_proc: dict[str, Sequence[Equipment]] = {proc: tuple(proc_eq) for proc, proc_eq in groupby(conditional_final_equipment, lambda e: e.process)}
+    group_by_out_mat = lambda e: next(stg for stg in e.storages_out if isinstance(stg, Mapping) and "DONE" in stg)["DONE"]
+    for proc, proc_eq in cond_eq_by_proc.items():
+        eq_by_mat: dict[tuple[str], list[Equipment]] = {mat: list(mat_eq) for mat, mat_eq in groupby(proc_eq, group_by_out_mat)}
+        for mat_group, mat_eq in eq_by_mat.items():
+            cond_prod = history_reader.production_aggregate(proc, previous_start, new_start, equipment=[e.id for e in mat_eq], material_filter=mat_group)
+            finished_materials.append(cond_prod)
+    finished_material = ModelUtils.merge_targets(finished_materials, require_same_process=False, require_same_period=False)
+
+    target_structure: dict[str, float] = dict(material_targets)
+    historic_prod = None
+    mat_cats = state.get_site().material_categories
+    if finished_material.material_weights and len(mat_cats) > 0:
+        mat_done = finished_material.material_weights
+        first_cat_sum_done = sum(mat_done.get(cl.id, 0) for cl in mat_cats[0].classes)
+        first_cat_sum_planned = sum(target_structure.get(cl.id, 0) for cl in mat_cats[0].classes)
+        mat_missing = first_cat_sum_done < first_cat_sum_planned
+        if not mat_missing:
+            target_structure = {mat: 0 for mat in target_structure.keys()}
+        else:
+            # step 1: find individual classes where more has been produced than required already
+            surpassed_mat: list[str] = [mat for mat, value_done in mat_done.items() if value_done > target_structure.get(mat, 0)]
+            surpassed_cats: list[MaterialCategory] = [cat for cat in mat_cats if any(cl.id in surpassed_mat for cl in cat.classes)]
+            surplus_by_cat: dict[str, float] = {cat.id: sum(mat_done[cl.id] - target_structure.get(cl.id) for cl in cat.classes if cl.id in surpassed_mat) for cat in surpassed_cats}
+            for mat, weight in mat_done.items():
+                if mat in target_structure:
+                    target_structure[mat] = max(target_structure[mat] - weight, 0.)
+            # step 2: reduce target amount for remaining material classes of the category by existing surplus
+            for cat, surplus in surplus_by_cat.items():
+                remaining_mat: list[str] = [cl.id for cl in next(ct for ct in mat_cats if ct.id == cat).classes if cl.id not in surpassed_mat]
+                sum_remaining = sum(target_structure.get(mat, 0.) for mat in remaining_mat)
+                for mat in remaining_mat:
+                    share = target_structure.get(mat, 0.) / sum_remaining
+                    reduction = surplus * share
+                    target_structure[mat] = target_structure[mat] - reduction
+        historic_prod = {}
+        for cat in state.get_site().material_categories:
+            classes = {cl.id: {"name": cl.name or cl.id, "weight": mat_done[cl.id]} for cl in cat.classes if cl.id in mat_done}
+            if len(classes) == 0:
+                continue
+            cat_entry = {"name": cat.name or cat.id, "classes": classes}
+            historic_prod[cat.id] = cat_entry
+    return historic_prod, target_structure
+
+@callback(
+        Output("ltp-history-panel", "className"),
+        Output("ltp-history-start", "children"),
+        Output("ltp-history-end", "children"),
+        Output("ltp-history-total", "children"),
+        Input("ltp-historic-prod", "data"),
+        State("ltp-prev-solution", "value"),
+        State("ltp-start-end", "data"))
+def historic_production_changed(production: dict[str, Any]|None, prev_solution: str|None, start_end: tuple[str, str]|None):
+    prev_start_time = None
+    if prev_solution is not None:
+        sep = prev_solution.index(solution_separator)
+        prev_start_time = state.as_timezone(DatetimeUtils.parse_date(prev_solution[:sep]))
+    if production is None or len(production) == 0 or prev_solution is None or prev_start_time is None:
+        return "hidden", None, None, None
+    start = DatetimeUtils.parse_date(start_end[0])
+    first_cat = next(iter(production.keys()))
+    total_production = sum(cl["weight"] for cl in production[first_cat]["classes"].values())
+    total_format = f"{total_production:.2f}" if total_production is not None else ""
+    return "control-panel", DatetimeUtils.format(prev_start_time, use_zone=False), DatetimeUtils.format(start, use_zone=False), total_format
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="lots2",
+        function_name="setBacklogStructureOverview"
+    ),
+    Output("ltp-material-history-widget", "title"),
+    Input("ltp-historic-prod", "data"),   # dict[str, dict[str, float]]
+    Input("ltp-dummy-undefined", "data"),
+    State("ltp-material-history-widget", "id"),
+)
+
+
 """
 @callback(Output("ltp-material-settings", "data"),
           Input("ltp-materials-accept", "n_clicks"),
@@ -485,12 +628,25 @@ clientside_callback(
     State("ltp-materials-grid", "id"),
 )
 
+@callback(
+        Output("ltp-material-setpoints", "data"),
+        Input("ltp-material-setpoints-user", "data"),
+        Input("ltp-material-setpoints-prev", "data"))
+def material_setpoints_changed(setpoints_user: dict[str, float]|None, setpoints_prev: dict[str, float]|None):
+    prev_changed = "ltp-material-setpoints-prev" in GuiUtils.changed_ids()
+    if prev_changed:
+        if not setpoints_prev:
+            return dash.no_update
+        return setpoints_prev
+    return setpoints_user
+
+
 clientside_callback(
     ClientsideFunction(
         namespace="ltp",
         function_name="getMaterialSetpoints"
     ),
-    Output("ltp-material-setpoints", "data"),
+    Output("ltp-material-setpoints-user", "data"),
     Input("ltp-materials-accept", "n_clicks"),
     State("ltp-materials-grid", "id"),
     #config_prevent_initial_callbacks=True
@@ -850,8 +1006,7 @@ def set_structure_targets_overview(structure: dict[str, float]|None):
     if not structure or not dash_authenticated(config):
         return "To be defined", title, None, None
     categories = state.get_site().material_categories
-    structure_by_category: dict[str, dict[str, float]] = \
-        {c.id: {cl.id: structure[cl.id] for cl in c.classes if cl.id in structure} for c in categories}
+    structure_by_category: dict[str, dict[str, float]] =  {c.id: {cl.id: structure[cl.id] for cl in c.classes if cl.id in structure} for c in categories}
     total_value_by_cat: dict[str, float] = {cat: sum(dct.values()) for cat, dct in structure_by_category.items()}
     epsilon = 1e-5
     total_value_by_cat = {cat: val for cat, val in total_value_by_cat.items() if val > epsilon}

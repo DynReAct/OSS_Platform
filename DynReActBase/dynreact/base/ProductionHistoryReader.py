@@ -13,6 +13,10 @@ class ProductionHistoryReader:
         self._site = site
         self._uri = uri
 
-    def production_aggregate(self, process: str, start: datetime, end: datetime, equipment: Sequence[int]|None=None) -> ProductionTargets:
+    def production_aggregate(self,
+                             process: str,
+                             start: datetime, end: datetime,
+                             equipment: Sequence[int]|None=None,
+                             material_filter: Sequence[str]|None=None) -> ProductionTargets:
         raise Exception("not implemented")
 

@@ -336,13 +336,17 @@ class ModelUtils:
         return result
 
     @staticmethod
-    def merge_targets(targets: Sequence[ProductionTargets], require_same_period: bool=True) -> ProductionTargets:
+    def merge_targets(targets: Sequence[ProductionTargets], require_same_period: bool=True, require_same_process: bool=True) -> ProductionTargets:
         """
         Note: all input targets must have the same process and period, otherwise an exception is thrown.
         Furthermore, either all targets must support material structure or none.
         :param targets:
         :return:
         """
+        if len(targets) == 0:
+            raise Exception("No targets specified")
+        if len(targets) == 1:
+            return targets[0]
         period: tuple[datetime, datetime]|None = None
         process: str|None = None
         equipment_targets: dict[int, EquipmentProduction]|None = None
@@ -364,7 +368,7 @@ class ModelUtils:
                     equipment_mat_structure = {e: dict(w.material_weights) for e, w in t.target_weight.items()}
             elif require_same_period and (t.period[0] != period[0] or t.period[1] != period[1]):
                 raise Exception(f"Production targets have different periods: {period}: {t.period}")
-            elif process != t.process:
+            elif require_same_process and process != t.process:
                 raise Exception(f"Production targets have different processes: {process}: {t.process}")
             elif (t.material_weights is not None and len(t.material_weights) > 0) != has_mat_structure:
                 raise Exception(f"Trying to merge targets with and without material structure")

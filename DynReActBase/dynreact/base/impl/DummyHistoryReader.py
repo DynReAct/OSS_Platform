@@ -25,7 +25,7 @@ class DummyHistoryReader(ProductionHistoryReader):
             return max(1. - others, 0.)
         return 0.
 
-    def production_aggregate(self, process: str, start: datetime, end: datetime, equipment: Sequence[int]|None=None) -> ProductionTargets:
+    def production_aggregate(self, process: str, start: datetime, end: datetime, equipment: Sequence[int]|None=None, material_filter: Sequence[str]|None=None) -> ProductionTargets:
         equipment = equipment if equipment is not None else [e.id for e in self._site.get_process_equipment(process, do_raise=True)]
         duration_hours = (end-start).total_seconds()/3_600 if end > start else 0.
         default_capacity = 1.
@@ -38,6 +38,19 @@ class DummyHistoryReader(ProductionHistoryReader):
         for e_idx, e in enumerate(equipment_objects):
             excluded_materials: Sequence[str] = e.material_constraints.excluded if e.material_constraints is not None else empty
             capacity = capacities[e_idx]
+            if material_filter is not None:
+                if all(mat in excluded_materials for mat in material_filter):
+                    continue
+                material_allowed = [mat for mat in material_filter if mat not in excluded_materials]
+                filter_cat = next(cat for cat in mat_cats if any(cl.id == material_allowed[0] for cl in cat.classes))
+                filter_shares = min(1, sum(DummyHistoryReader._share_for_material_class(cl, filter_cat) for cl in filter_cat.classes if cl.id in material_allowed))
+                filter_missing = sum(DummyHistoryReader._share_for_material_class(cl, filter_cat) for cl in filter_cat.classes if cl.id in excluded_materials)
+                if filter_missing > 0:
+                    filter_shares = min(1., filter_shares / (1-filter_missing)) if filter_missing < 1-1e-4 else 0
+                if filter_shares <= 0:
+                    continue
+                capacity = capacity * filter_shares   # This capacity reduction will also apply to other categories
+                excluded_materials = list(excluded_materials) + [cl.id for cl in filter_cat.classes if cl.id not in material_filter and cl.id not in excluded_materials]
             all_materials: dict[str, float] = {}
             for cat in mat_cats:
                 mat_excluded = [cl.id for cl in cat.classes if cl.id in excluded_materials]

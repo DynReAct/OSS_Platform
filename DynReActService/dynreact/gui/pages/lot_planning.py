@@ -1,14 +1,14 @@
 import logging
 import threading
 import traceback
-from datetime import datetime, date, timezone
-from typing import Iterable, Any, Literal
+from datetime import datetime, date, timezone, timedelta
+from typing import Iterable, Any, Literal, Sequence
 import uuid
 
 import dash
 from dash import html, callback, Input, Output, dcc, State, clientside_callback, ClientsideFunction
 import dash_ag_grid as dash_ag
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 from pydantic.fields import FieldInfo
 
 from dynreact.base.LotSink import LotSink
@@ -17,7 +17,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.impl.Scenarios import MidTermScenario
 from dynreact.base.model import ProductionPlanning, EquipmentStatus, Lot, Order, Material, Snapshot, Equipment, \
-    ObjectiveFunction, MaterialCategory, ProductionTargets
+    ObjectiveFunction, MaterialCategory, ProductionTargets, PlannedWorkingShift
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated, get_current_user
@@ -176,6 +176,8 @@ def layout(*args, **kwargs):
         dcc.Store(id="lotplanning-material-targets", storage_type="memory"),     # dict[str, float]
         dcc.Store(id="lotplanning-scenario-json", storage_type="memory"),        # for scenario download
 
+        dcc.Store(id="lotplanning-shifts", storage_type="memory"),
+
         dcc.Interval(id="planning-interval", n_intervals=3_600_000),  # for polling when lot transfer is running
         dcc.Interval(id="lotplanning-process-init", interval=100),
     ], id="lotsplanned")
@@ -240,13 +242,16 @@ def proc_changed2(process: str|None) -> str:
 def snapshot_changed(snapshot: datetime|str|None) -> str:  #, tz: str|None
     return GuiUtils.format_snapshot(snapshot, None, state=state)
 
+
+# TODO not running initially => ?
 @callback(
     Output("plan-link-create", "href"),
+    Output("lotplanning-shifts", "data"),
     State("selected-snapshot", "data"),
     Input("process-selector-lotplanning", "value"),
     #Input("create-existing-sols", "value"),
 )
-def update_link(snapshot: str|datetime|None, process: str|None) -> str:
+def update_link(snapshot: str|datetime|None, process: str|None):
     url = "/dash/lots/create2"
     if not dash_authenticated(config):
         return url
@@ -257,7 +262,10 @@ def update_link(snapshot: str|datetime|None, process: str|None) -> str:
         added = True
     if process is not None:
         url += ("?" if not added else "&") + "process=" + process
-    return url
+    shifts: dict[int, Sequence[PlannedWorkingShift]] = \
+        state.get_shifts_provider().load_all(snapshot, end=snapshot + timedelta(days=8), equipments=[e.id for e in state.get_site().get_process_equipment(process, do_raise=True)])
+    shifts_serialized = {e: TypeAdapter(Sequence[PlannedWorkingShift]).dump_python(eq_shifts, exclude_unset=True, exclude_none=True, mode="json") for e, eq_shifts in shifts.items()}
+    return url, shifts_serialized
 
 
 @callback(
@@ -612,7 +620,8 @@ clientside_callback(
     Input("planning-solution-data", "data"),
     State("planning-lots-swimlane", "id"),
     State("process-selector-lotplanning", "value"),
-    State("planning-swimlane-mode", "value")
+    State("planning-swimlane-mode", "value"),
+    State("lotplanning-shifts", "data")
 )
 
 clientside_callback(

@@ -1106,9 +1106,11 @@ def update_backlog_state(snapshot: str, process: str, rows: list[dict[str, any]]
         weight = sum(row.get("actual_weight", 0) for row in rows)
     else:
         weight = 0
-        for o in state.get_snapshot(snapshot).orders:
-            if o.id in rows:
-                weight += o.actual_weight
+        snap_obj = state.get_snapshot(snapshot)
+        for row in rows:
+            order_obj = snap_obj.get_order(row)
+            if order_obj is not None:
+                weight += order_obj.actual_weight
     orders_data["orders_selected_weight"] = weight
     return orders_data
 
@@ -1605,17 +1607,17 @@ def update_solution_state(snapshot: str|datetime|None, process: str|None, _, sel
     solution: ProductionPlanning | None = None
     opti_state = state.get_lot_creator()
     is_snap_solution: bool = False
+    snapshot = DatetimeUtils.parse_date(snapshot)
+    lot_creation_listener = opti_state.listener()
+    is_listener_solution: bool = lot_creation_listener is not None and process == opti_state.listener().process()
     if solution_selected and snapshot is not None and process is not None and selected_solution is not None:
-        snapshot = DatetimeUtils.parse_date(snapshot)
         optimization_state: LotsOptimizationState|None = state.get_results_persistence().load(snapshot, process, selected_solution)
         history = [h.total_value for h in optimization_state.history]
         solution = optimization_state.current_solution
-    elif opti_state.listener() is not None: # lot_creation_listener is not None :
-        lot_creation_listener = opti_state.listener()
+    elif is_listener_solution:  # lot_creation_listener is not None :
         history = lot_creation_listener.history()
         solution, _ = lot_creation_listener.solution()
     else:
-        snapshot = DatetimeUtils.parse_date(snapshot)
         lots_hidden = snapshot is None or process is None  #  or selected_init_method is None or (selected_init_method == "result" and selected_solution is None)
         if lots_hidden:
             return None, None, True
@@ -1628,7 +1630,7 @@ def update_solution_state(snapshot: str|datetime|None, process: str|None, _, sel
         obj = state.get_cost_provider().process_objective_function(solution).total_value
         history = [obj]
         is_snap_solution = True
-    lots_data = prepare_lots_for_lot_view(snapshot, process, solution, is_snap_solution=is_snap_solution)
+    lots_data = prepare_lots_for_lot_view(snapshot, process, solution, is_snap_solution=is_snap_solution, preprend_snapshot=is_listener_solution)
     return history, lots_data, False
 
 

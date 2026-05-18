@@ -22,7 +22,8 @@ from dynreact.base.model import ProductionPlanning, EquipmentStatus, Lot, Order,
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated, get_current_user
 from dynreact.gui.gui_utils import GuiUtils
-from dynreact.gui.pages.components import lots_view
+from dynreact.gui.pages.components import lots_view, prepare_lots_for_lot_view
+
 #from dynreact.gui.pages.session_state import selected_process, selected_snapshot
 
 dash.register_page(__name__, path="/lots/planned")
@@ -163,17 +164,17 @@ def layout(*args, **kwargs):
             )
         ], id="planning-lots-table-wrapper", hidden=True),
         transfer_popup(),
-        dcc.Store(id="planning-initial_solution", data=initial_solution),  # str|None
-        dcc.Store(id="planning-selected-solution"),  # str
-        dcc.Store(id="planning-solution-data"),      # rowData, list of dicts, one row per lot
-        dcc.Store(id="planning-selected-lot"),       # lot id; selected by clicking a row in the lots table
+        dcc.Store(id="planning-initial_solution", data=initial_solution, storage_type="memory"),  # str|None
+        dcc.Store(id="planning-selected-solution", storage_type="memory"),  # str
+        dcc.Store(id="planning-solution-data", storage_type="memory"),      # rowData, list of dicts, one row per lot
+        dcc.Store(id="planning-selected-lot", storage_type="memory"),       # lot id; selected by clicking a row in the lots table
         # opaque lot identifier
-        dcc.Store(id="lotplanning-transferred-lot"),
-        dcc.Store(id="lotplanning-transfer-message"),
-        dcc.Store(id="lotplanning-transfer-type"),
-        dcc.Store(id="lotplanning-material-structure"),   # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
-        dcc.Store(id="lotplanning-material-targets"),     # dict[str, float]
-        dcc.Store(id="lotplanning-scenario-json"),        # for scenario download
+        dcc.Store(id="lotplanning-transferred-lot", storage_type="memory"),
+        dcc.Store(id="lotplanning-transfer-message", storage_type="memory"),
+        dcc.Store(id="lotplanning-transfer-type", storage_type="memory"),
+        dcc.Store(id="lotplanning-material-structure", storage_type="memory"),   # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
+        dcc.Store(id="lotplanning-material-targets", storage_type="memory"),     # dict[str, float]
+        dcc.Store(id="lotplanning-scenario-json", storage_type="memory"),        # for scenario download
 
         dcc.Interval(id="planning-interval", n_intervals=3_600_000),  # for polling when lot transfer is running
         dcc.Interval(id="lotplanning-process-init", interval=100),
@@ -376,21 +377,24 @@ def solution_selected(selected_rows: list[dict[str, any]]|None) -> str|None:
     Output("lotplanning-material-targets", "data"),
     Output("lotplanning-structure-container", "hidden"),
     State("selected-snapshot", "data"),
-    State("process-selector-lotplanning", "value"),
+    Input("process-selector-lotplanning", "value"),
     Input("planning-selected-solution", "data"),
     Input("lotplanning-relevant-fields-check", "value")
 )
 def solution_changed(snapshot: str|datetime|None, process: str|None, solution: str|None, relevant_fields_only0: list[Literal[""]]):
     snapshot = DatetimeUtils.parse_date(snapshot)
-    if not dash_authenticated(config) or process is None or snapshot is None or solution is None:
+    if not dash_authenticated(config) or process is None or snapshot is None:
         return True, None, None, True, None, None, None, None, True
     relevant_fields_only: bool = len(relevant_fields_only0) > 0
     best_result: ProductionPlanning
-    if solution == "_SNAPSHOT_":
+    is_snap_solution: bool = solution == "_SNAPSHOT_" or solution is None
+    is_optimized_solution: bool = False
+    if is_snap_solution:
         best_result = state.get_snapshot_solution(process, snapshot)[0]
     elif solution == "_DUE_DATE_":
         best_result = state.get_due_date_solution(process, snapshot)[0]
     else:
+        is_optimized_solution = True
         result: LotsOptimizationState = state.get_results_persistence_aggregate().load(snapshot, process, solution)
         if result is None or result.best_solution is None:
             return True, None, None, True, None, None, None, None, True
@@ -398,29 +402,21 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
     site = state.get_site()
     sp = state.get_snapshot_provider()
     plants = {p.id: p for p in site.equipment}
-    process_plants = [p.id for p in site.get_process_equipment(process)]
+    process_plants = [p.id for p in site.get_process_equipment(process) if p.id in best_result.equipment_status]
     previous_processes: list[str] = [proc.name_short for proc in site.processes if proc.next_steps is not None and process in proc.next_steps]
     prev_proc_plants = [p.id for p in site.equipment if p.process in previous_processes]
-
-    lots: list[Lot] = sorted([lot for plant_lots in best_result.get_lots().values() for lot in plant_lots],
+    # these lots lost time information
+    lots: list[Lot] = sorted([lot for eq, plant_lots in best_result.get_lots().items() if eq in process_plants for lot in plant_lots],
                              key=lambda lot: (plants.get(lot.equipment).name_short if lot.equipment in plants else "ZZ", lot.id))
+    lots_dict = prepare_lots_for_lot_view(snapshot, process, best_result, is_snap_solution or solution == "_DUE_DATE_", is_optimized_solution)
+
     unassigned_order_ids: list[str] = [ass.order for ass in best_result.order_assignments.values() if ass.lot == ""]
     snap_obj = state.get_snapshot(snapshot)
     orders_by_lot: dict[str, list[Order|None]] = {}
     predecessor_orders: dict[int, str]|None = best_result.previous_orders
     last_plant: int | None = None
     for lot in lots:
-        lot_orders = [None for order in lot.orders]
-        for order in snap_obj.orders:
-            try:
-                idx = lot.orders.index(order.id)
-                lot_orders[idx] = order
-                try:
-                    lot_orders.index(None)
-                except ValueError:
-                    break
-            except ValueError:
-                continue
+        lot_orders = [snap_obj.get_order(order) for order in lot.orders]
         if lot.equipment != last_plant:   # if known, prepend the start order for the lot
             last_plant = lot.equipment
             if predecessor_orders is not None and last_plant in predecessor_orders:
@@ -435,27 +431,10 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
             unassigned_orders[order.id] = order
             if len(unassigned_orders) == len(unassigned_order_ids):
                 break
-    all_due_dates = {lot: [o.due_date for o in orders if o is not None] for lot, orders in orders_by_lot.items()}
-    first_due_dates = {lot: min((o.due_date for o in orders if o is not None and o.due_date is not None), default=DatetimeUtils.to_datetime(0)) for lot, orders in orders_by_lot.items()}
-    total_weights = {lot: sum(o.actual_weight if o.actual_weight is not None else (o.target_weight if o.target_weight is not None else 0)
-                for o in orders if o is not None) for lot, orders in orders_by_lot.items()}
-    all_coils_by_orders: dict[str, list[Material]] = state.get_coils_by_order(snapshot)
-    num_coils = {lot: sum(len(all_coils_by_orders[o.id]) if o.id in all_coils_by_orders else 0 for o in orders if o is not None) for lot, orders in orders_by_lot.items()}
 
-    def row_for_lot(lot: Lot) -> dict[str, any]:
-        return {
-            "id": lot.id,
-            "plant_id": lot.equipment,
-            "plant": plants[lot.equipment].name_short if lot.equipment in plants and plants[lot.equipment].name_short is not None else str(lot.equipment),
-            "active": lot.active,
-            "num_orders": len(lot.orders),
-            "num_coils": num_coils[lot.id],
-            "order_ids": lot.orders, #", ".join(lot.orders),
-            "first_due_date": first_due_dates[lot.id],
-            "all_due_dates": all_due_dates[lot.id],
-            "total_weight": total_weights[lot.id]
-        }
-    data = sorted([row_for_lot(lot) for lot in lots], key=lambda lot: lot["id"])
+    data = lots_dict
+    table_data = [dt for dt in data if dt["equipment"] not in snap_obj.lots or all(lt.id != dt["id"] for lt in snap_obj.lots[dt["equipment"]])]
+    table_data = sorted(table_data, key=lambda dt: (dt["equipment"], dt["id"]))
 
     def column_def_for_field(field: str, info: FieldInfo):
         if isinstance(info, FieldInfo):
@@ -468,8 +447,8 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         return col_def
 
     props = snap_obj.orders[0].material_properties
-    if props is None:
-        return False, data, data, False, None, None, None, None, True
+    if props is None or solution is None:
+        return False, table_data, data, False, None, None, None, None, True
 
     costs = state.get_cost_provider()
     relevant_fields = costs.relevant_fields(plants[lots[0].equipment]) if len(lots) > 0 else None
@@ -578,7 +557,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         structure = {cat.id: {"name": cat.name or cat.id, "classes": {cl.id: {"name": cl.name or cl.id, "weight": structure0[cat.id][cl.id]} for cl in cat.classes if cl.id in structure0[cat.id] }}
                                                         for cat in all_cats if cat.id in structure0}
         structure_targets = best_result.target_structure  # dict[str, float]
-    return False, data, data, False, fields, order_rows, structure, structure_targets, not show_structure
+    return False, table_data, data, False, fields, order_rows, structure, structure_targets, not show_structure
 
 
 # Lots export

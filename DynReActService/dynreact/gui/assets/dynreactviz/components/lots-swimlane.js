@@ -24,7 +24,7 @@ export class LotsSwimlane extends HTMLElement {
         return LotsSwimlane.#tag;
     }
     static get observedAttributes() {
-        return ["auto-fetch", "row-size", "lot-height", "lot-color", "lot-sizing", "process", "server", "skip-shifts", "complete-lots-only", "min-status", "shift-horizon"];
+        return ["auto-fetch", "row-size", "lot-height", "lot-color", "lot-sizing", "new-lot-color", "process", "server", "skip-shifts", "complete-lots-only", "min-status", "shift-horizon"];
     }
     #lanesContainer;
     #tooltipContainer;
@@ -34,6 +34,7 @@ export class LotsSwimlane extends HTMLElement {
     #lotHeight = 20;
     #missingShiftHeight = 30;
     #lotColor = "rgba(139,0,0,0.9)";
+    #newLotColor = "darkgreen"; // TODO configurable
     #lotSizing = "constant";
     #site = undefined;
     #snapshot = undefined;
@@ -82,6 +83,15 @@ export class LotsSwimlane extends HTMLElement {
     }
     get lotColor() {
         return this.#lotColor;
+    }
+    set newLotColor(color) {
+        if (color) {
+            this.#newLotColor = color;
+            this.#init();
+        }
+    }
+    get newLotColor() {
+        return this.#newLotColor;
     }
     set lotSizing(value) {
         const previous = this.#lotSizing;
@@ -313,10 +323,15 @@ export class LotsSwimlane extends HTMLElement {
         // console.log("New planning", lots);
         const snapshot = snapshot0 instanceof SnapshotImpl ? snapshot0 : new SnapshotImpl(snapshot0);
         const lotsByPlant = {};
-        this.#lotsSetExplicitly = !!lots;
+        const lotsSetExplicitly = !!lots;
+        const snapLots = snapshot.snapshot.lots;
+        this.#lotsSetExplicitly = lotsSetExplicitly;
         if (!lots)
-            lots = Object.values(snapshot.snapshot.lots).flatMap(lotsArr => lotsArr);
+            lots = Object.values(snapLots).flatMap(lotsArr => lotsArr);
         lots = lots.map(lot => {
+            // @ts-ignore
+            const equipment = lot.equipment ?? lot.plant_id;
+            lot.isSnapshotLot = equipment in snapLots && snapLots[equipment].find(lt => lt.id === lot.id) !== undefined;
             if (lot.equipment && lot.orders)
                 return lot;
             // legacy: support table dict lot entries
@@ -466,6 +481,7 @@ export class LotsSwimlane extends HTMLElement {
         const lotHeight = this.#lotHeight;
         const missingShiftHeight = this.#missingShiftHeight;
         const lotColor = this.#lotColor;
+        const newLotColor = this.#newLotColor;
         const width = Math.max(document.body.clientWidth - 100, 200);
         const svgParent = LotsSwimlane.#create("svg", { attributes: {
                 viewbox: "0 0 " + width + " " + (rowSize * this.#plants.length + 1),
@@ -542,7 +558,7 @@ export class LotsSwimlane extends HTMLElement {
             const line2 = LotsSwimlane.#create("line", { parent: pattern, attributes: { x1: "0", y1: shiftH, x2: shiftH, y2: "0", stroke: shiftColor, "stroke-width": "2" } });
         }
         // draw lots
-        this.#lanes = this.#plants.map((plant, idx) => this.#createPlantLane(idx, plant, svgParent, rowSize, width, lotHeight, missingShiftHeight, lotColor, sizing, sizeFactor, xStartGantt, [startTime, endTime]));
+        this.#lanes = this.#plants.map((plant, idx) => this.#createPlantLane(idx, plant, svgParent, rowSize, width, lotHeight, missingShiftHeight, lotColor, newLotColor, sizing, sizeFactor, xStartGantt, [startTime, endTime]));
         this.#lanesContainer.appendChild(svgParent);
         // @ts-ignore
         svgParent.addEventListener("mousemove", this.#hover.bind(this));
@@ -570,7 +586,7 @@ export class LotsSwimlane extends HTMLElement {
     /**
     * before calling this function, we need to determine the available space and the algorithm used to calculate the item length
     */
-    #createPlantLane(idx, plant, svg, rowSize, rowWidth, lotHeight, missingShiftHeight, lotColor, sizing, sizeFactor, start0, startEndTime) {
+    #createPlantLane(idx, plant, svg, rowSize, rowWidth, lotHeight, missingShiftHeight, lotColor, newLotColor, sizing, sizeFactor, start0, startEndTime) {
         const title = LotsSwimlane.#create("text", { attributes: { x: "15", y: ((idx + 0.5) * rowSize) + "" }, dataset: { plant: plant.id + "" }, classes: "plant-header", parent: svg });
         title.textContent = LotsSwimlane.#plantName(plant);
         const yFieldStart = idx * rowSize;
@@ -627,7 +643,7 @@ export class LotsSwimlane extends HTMLElement {
             const width = Math.max(effectiveRowWidth * (size / sizeFactor) - 10, 3);
             const lotYStart = (idx + 0.5) * rowSize - (lotHeight / 2);
             const rect = LotsSwimlane.#create("rect", { attributes: { x: xStart + "", width: width + "",
-                    y: lotYStart + "", height: lotHeight + "", rx: "3", fill: lotColor }, dataset: { lot: lot.id, plant: plant.id + "" },
+                    y: lotYStart + "", height: lotHeight + "", rx: "3", fill: lot.isSnapshotLot ? lotColor : newLotColor }, dataset: { lot: lot.id, plant: plant.id + "" },
                 classes: "lot-rect", parent: svg });
             xStart += width + 10;
             const field = new DOMRect(xStart, lotYStart, width, lotHeight);
@@ -663,6 +679,9 @@ export class LotsSwimlane extends HTMLElement {
                 break;
             case "lot-color":
                 this.lotColor = newValue;
+                break;
+            case "new-lot-color":
+                this.newLotColor = newValue;
                 break;
             case "lot-sizing":
                 this.lotSizing = newValue;

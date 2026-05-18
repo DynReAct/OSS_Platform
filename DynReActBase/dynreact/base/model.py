@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone, date
 from numbers import Number
 from typing import Any, TypeVar, Generic, Literal, Sequence, Mapping
 
-from pydantic import BaseModel, Field, ConfigDict, model_validator
+from pydantic import BaseModel, Field, ConfigDict, model_validator, PrivateAttr
 
 
 class Model(BaseModel):
@@ -666,18 +666,22 @@ class Snapshot(Model, Generic[MATERIAL_PROPERTIES]):
     "Material ids currently being processed. Keys: plant ids, values: list of materials references."
     lots: dict[int, list[Lot]] = Field(..., examples=[{1: [{"id": "PLANT1.01", "equipment": 1, "active": True, "status": 1, "orders": ["1", "2", "3"]}]}])
     "Lots by plant ids. Keys: plant id, values: Lots"
+    _orders_by_id: dict[str, Order]|None = PrivateAttr(None)
+    _mat_by_id: dict[str, Material] | None = PrivateAttr(None)
 
     def get_order(self, order_id: str, do_raise: bool=False) -> Order[MATERIAL_PROPERTIES]|None:
-        order = next((o for o in self.orders if o.id == order_id), None)
-        if order is None and do_raise:
-            raise Exception("Order " + str(order_id) + " not found")
-        return order
+        if self._orders_by_id is None:
+            self._orders_by_id = {o.id: o for o in self.orders}
+        if order_id not in self._orders_by_id and do_raise:
+            raise Exception(f"Order {order_id} not found")
+        return self._orders_by_id.get(order_id)
 
     def get_material(self, material_id: str, do_raise: bool=False) -> Material | None:
-        material = next((c for c in self.material if c.id == material_id), None)
-        if material is None and do_raise:
-            raise Exception("Material " + str(material_id) + " not found")
-        return material
+        if self._mat_by_id is None:
+            self._mat_by_id = {m.id: m for m in self.material}
+        if material_id not in self._mat_by_id and do_raise:
+            raise Exception(f"Material {material_id} not found")
+        return self._mat_by_id.get(material_id)
 
     def get_order_lot(self, site: Site, order_id: str, process: str) -> Lot|None:
         if self.lots is None:

@@ -124,6 +124,17 @@ def layout(*args, **kwargs):
         dcc.Store(id="lots2-target-weight", data=0, storage_type="memory"),  # number in tons; updated only on tab change and process change
         dcc.Store(id="lots2-dummy-undefined", storage_type="memory"),
         dcc.Store(id="lots2-shifts", storage_type="memory"),
+        #     result_data = {
+        #         "ltp_start_time": datetime,
+        #         "ltp_solution_id": str,
+        #         "planning_start_time": datetime,
+        #         "planning_start_by_equipment": dict[int, datetime],
+        #         "targets": ProductionTargets,
+        #         "ltp_solution": MidTermTargets
+        #     }
+        dcc.Store(id="lots2-ltp-selected-solution", storage_type="memory"),  # serialized solution + some metadata tbd
+
+
         dcc.Interval(id="lots2-interval", interval=3_600_000),  # for polling when optimization is running
         dcc.Interval(id="lots2-process-init", interval=100),
         # ======== Popups  =========
@@ -458,8 +469,9 @@ def ltp_dialog():
                 )
             ]),
             html.Div([
-                html.Button("Cancel", id="lots2-ltp-cancel", className="dynreact-button lots2-ltp-cancel")
-            ]) #, className="ltp-materials-buttons")
+                html.Button("Cancel", id="lots2-ltp-cancel", className="dynreact-button"),
+                html.Button("Apply", id="lots2-ltp-submit", className="dynreact-button")
+            ], className="lots2-materials-buttons")
         ]),
         id="lots2-ltp-dialog", className="dialog-filled lots2-ltp-dialog", open=False)
 
@@ -683,7 +695,8 @@ def ltp_table_opened(_, snapshot: str, process: str, horizon_hours: int):
                 continue
             columns.append({
                 "id": solution_id,
-                "start_time_full": sol.period[0],
+                "start_time_full": DatetimeUtils.format(state.as_timezone(sol.period[0])),
+                "end_time_full": DatetimeUtils.format(state.as_timezone(sol.period[1])),
                 "start_time": sol.period[0].date(),
                 "end_time": sol.period[1].date(),
                 "shift_duration": (sol.sub_periods[0][1] - sol.sub_periods[0][0]) / timedelta(hours=1),
@@ -707,6 +720,44 @@ def clear_setpoints(n_click_clear, process: str|None) -> bool:
     return False
 
 @callback(
+    Output("lots2-ltp-selected-solution", "data"),
+    Output("lots2-ltp-submit", "disabled"),
+    Input("lots2-ltp-table", "selectedRows"),
+    State("selected-snapshot", "data"), # TODO
+    State("lots2-process-selector", "value"),
+    State("lots2-horizon-hours", "value"),
+    State("lots2-planning-itv-start", "data"),
+)
+def ltp_row_selected(selected_rows: list[dict[str, any]]|None, snapshot: datetime|str|None, process: str|None,
+                     horizon_hours: int, plant_components: list[Component]|None):
+    snapshot = DatetimeUtils.parse_date(snapshot)
+    if not dash_authenticated(config) or not selected_rows or len(selected_rows) == 0 or snapshot is None or process is None:
+        return None, True
+    row = selected_rows[0]
+    start_time = DatetimeUtils.parse_date(row.get("start_time_full"))
+    solution_id = row.get("id")
+    solution = state.get_results_persistence_aggregate().load_ltp(start_time, solution_id) if start_time is not None and solution_id is not None else None
+    if solution is None:
+        return None, True
+    snap_obj = state.get_snapshot(time=snapshot)
+    snap_provider = state.get_snapshot_provider()
+    horizon = timedelta(hours=horizon_hours)
+    num_shifts: int = max(1, floor(horizon_hours / 8))
+    targets, overall_start, start_by_equipment = ModelUtils.mid_term_targets_from_ltp_result(solution[0], process, snap_obj, horizon, num_shifts, state.get_site(), snap_provider)
+    overall_start = state.as_timezone(overall_start)
+    ltp_solution_serialized = solution[0].model_dump(exclude_unset=True, exclude_none=True, mode="json")
+    result_data = {
+        "ltp_start_time": row.get("start_time_full"),
+        "ltp_solution_id": solution_id,
+        "planning_start_time": DatetimeUtils.format(overall_start),
+        "planning_start_by_equipment": {e: DatetimeUtils.format(state.as_timezone(start)) for e, start in start_by_equipment.items()},
+        "targets": targets.model_dump(exclude_unset=True, exclude_none=True, mode="json"),
+        "ltp_solution": ltp_solution_serialized
+    }
+    return result_data, False
+
+
+@callback(
     Output("lots2-details-plants", "children"),
     Output("lots2-details-plants", "className"),
     Output("lots2-check-use-lot-range", "value"),
@@ -716,21 +767,21 @@ def clear_setpoints(n_click_clear, process: str|None) -> bool:
     State("lots2-horizon-hours", "value"),
     State("lots2-details-plants", "children"),
     State("lots2-planning-itv-start", "data"),
+    State("lots2-ltp-selected-solution", "data"),
     Input("lots2-process-selector", "value"),
     Input("lots2-active-tab", "data"),
     Input("lots2-targets-init-lots", "n_clicks"),
-    Input("lots2-ltp-table", "selectedRows"),
+    Input("lots2-ltp-submit", "n_clicks"),
     Input("lots2-check-use-lot-range", "value")
 )
 def update_plants(snapshot: str,
                   horizon_hours: int,
                   components: list[Component]|None,
                   current_start: datetime|None,
+                  ltp_solution: dict[str, any]|None,
                   process: str,
                   active_tab: Literal["targets", "orders", "settings"]|None,
-                  _,
-                  # TODO row in ltp popup selected
-                  selected_rows: list[dict[str, any]]|None,
+                  _, __,
                   use_lot_range0: list[Literal[""]]
                   ) -> tuple[list[Component], list[any], list[Literal[""]], str, str]:
     changed = GuiUtils.changed_ids()
@@ -749,7 +800,7 @@ def update_plants(snapshot: str,
     snapshot_obj = state.get_snapshot(snapshot)
     if not dash_authenticated(config) or process is None or snapshot_obj is None or active_tab != "targets":
         return no_update, my_parent_classname, no_update, no_update, no_update
-    is_ltp_init = "lots2-ltp-table" in changed and len(selected_rows) > 0
+    is_ltp_init = "lots2-ltp-submit" in changed and ltp_solution is not None   # TODO already contains all the relevant data
     re_init: bool = "lots2-targets-init-lots" in changed or is_ltp_init
     init_dates = current_start is None or re_init or "lots2-process-selector" in changed
     toggle_lot_range: bool = "lots2-check-use-lot-range" in changed
@@ -768,10 +819,8 @@ def update_plants(snapshot: str,
             _, targets = state.get_snapshot_solution(process, snapshot, timedelta(hours=horizon_hours))
     else:
         # targets = _targets_from_ltp(selected_rows[0], process, snapshot, horizon_hours)
-        num_shifts: int = max(1, floor(horizon_hours / 8))
-        # XXX we determine twice the lots in this case...
-        targets = _targets_from_ltp(selected_rows[0], process, snapshot_obj, num_shifts, site, state.get_snapshot_provider(), horizon_hours)
-
+        # targets = _targets_from_ltp(selected_rows[0], process, snapshot_obj, num_shifts, site, state.get_snapshot_provider(), horizon_hours)
+        targets = ProductionTargets.model_validate(ltp_solution["targets"])
     target_weights: dict[int, float] = {plant: t.total_weight for plant, t in targets.target_weight.items()} if targets is not None else \
                 targets0 if isinstance(targets0, typing.Mapping) else {plant.id: targets0 for plant in plants}
     lots: dict[int, list[Lot]] = snapshot_obj.lots
@@ -837,13 +886,11 @@ def update_plants(snapshot: str,
             # "label": html.Span([lot[0].id], title=_lot_info(lot[0]), className="lots2-option-grey" if not lot[1] else "")
             prev_lot = html.Div(
                 dcc.Dropdown(placeholder="Select a lot",
-                             options=[{"value": "", "label": "", "title": "No predecessor defined."}]+
+                             options=[{"value": "", "label": "", "title": "No predecessor defined."}] +
                                      [{"value": lot[0].id, "label": [lot[0].id], "title": _lot_info(lot[0])} for lot in lot_entries],
                              value=value
                 ),
-                title="The previous lot defines the starting point for the lot creation.",
-                className="lots2-order-lots-prevlot",
-                **{"data-plant": str(plant.id)}
+                title="The previous lot defines the starting point for the lot creation.", className="lots2-order-lots-prevlot", **{"data-plant": str(plant.id)}
                 #  => Select does not even support value retrieval, and does not preserve selection upon re-attachement
                 #html.Select(className="lots2-order-lots-prevlot",
                 #    children=[html.Option(value="", label="", title="No predecessor defined.")]+[html.Option(value=lot.id, label=lot.id, title=lot.id) for lot in current_lots],
@@ -890,11 +937,13 @@ def update_plants(snapshot: str,
     # my_parent_classname for formatting purpose
     # todo if input-selector HAS CHANGED ??
     checked_use_lot_range = ([""] if use_lot_range else []) if process_changed else no_update
-    if not init_dates:
+    if is_ltp_init:
+        start_date, start_time = DatetimeUtils.format(state.as_timezone(DatetimeUtils.parse_date(ltp_solution["planning_start_time"])), use_zone=False).split("T")
+    elif not init_dates:
         start_date = no_update
         start_time = no_update
     else:
-        start_date, start_time = DatetimeUtils.format(earliest_start.astimezone(), use_zone=False).split("T")
+        start_date, start_time = DatetimeUtils.format(state.as_timezone(earliest_start), use_zone=False).split("T")
     return elements, my_parent_classname, checked_use_lot_range, start_date, start_time
 
 @callback(
@@ -1608,7 +1657,8 @@ clientside_callback(
         function_name="closeModal"
     ),
     Output("lots2-ltp-table", "title"),
-    Input("lots2-ltp-table", "selectedRows"),
+    #Input("lots2-ltp-table", "selectedRows"),
+    Input("lots2-ltp-submit", "n_clicks"),
     State("lots2-ltp-dialog", "id")
 )
 

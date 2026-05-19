@@ -670,28 +670,28 @@ def ltp_table_opened(_, snapshot: str, process: str, horizon_hours: int):
     snapshot = DatetimeUtils.parse_date(snapshot)
     if snapshot is None or horizon_hours is None:
         return []
-    persistence: ResultsPersistence = state.get_results_persistence()
-    all_start_times: list[datetime] = persistence.start_times_ltp(snapshot - timedelta(days=32), snapshot + timedelta(minutes=1) )
-    starttimes_solutions: dict[datetime, list[str]] = {starttime: persistence.solutions_ltp(starttime) for starttime in all_start_times}
-    solutions: list[MidTermTargets] = []
-    solution_ids: list[str] = []
+    persistence: ResultsPersistence = state.get_results_persistence_aggregate()
+    all_start_times: Sequence[datetime] = persistence.start_times_ltp(start=snapshot - timedelta(days=32), end=snapshot + timedelta(minutes=1), sort="desc")
+    starttimes_solutions: dict[datetime, Sequence[str]] = {starttime: persistence.solutions_ltp(starttime) for starttime in all_start_times}
+    columns = []
+    idx = 0
+    # XXX loading all solutions into memory! => very inefficient
     for start, solution_ids0 in starttimes_solutions.items():
         for solution_id in solution_ids0:
             sol, storages = persistence.load_ltp(start, solution_id)
             if sol.period[1] <= snapshot:
                 continue
-            solutions.append(sol)
-            solution_ids.append(solution_id)
-    columns = [{
-            "id": solution_ids[idx],
-            "start_time_full": t.period[0],
-            "start_time": t.period[0].date(),
-            "end_time": t.period[1].date(),
-            "shift_duration": (t.sub_periods[0][1] - t.sub_periods[0][0]) / timedelta(hours=1),
-            "total_production": t.total_production,
-            "production_per_shift": t.total_production / len(t.sub_periods)   # TODO rounded representation?
-            #"delete": ""   # not possible
-        } for idx, t in enumerate(solutions)]
+            columns.append({
+                "id": solution_id,
+                "start_time_full": sol.period[0],
+                "start_time": sol.period[0].date(),
+                "end_time": sol.period[1].date(),
+                "shift_duration": (sol.sub_periods[0][1] - sol.sub_periods[0][0]) / timedelta(hours=1),
+                "total_production": sol.total_production,
+                "production_per_shift": sol.total_production / len(sol.sub_periods)   # TODO rounded representation?
+                #"delete": ""   # not possible
+            })
+            idx += 1
     return columns
 
 @callback(
@@ -1236,41 +1236,22 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     fields.append({"field": "prev_lot_info", "headerName": "Lot: previous", "tooltipField": "prev_lot_info", "headerTooltip": "Lot of the previous processing stage", "filter": "agTextColumnFilter"})
     fields.append({"field": "availability", "headerTooltip": "Order availability", "filter": "agDateColumnFilter"})
 
-    def order_to_json(o: Order):
-        as_dict = o.model_dump(exclude_none=True, exclude_unset=True)
-        for key in ["lots", "lot_positions"]:
-            if key in as_dict:
-                as_dict[key] = json.dumps(as_dict[key])
-        if o.allowed_equipment is not None:
-            as_dict["allowed_equipment"] = [plants[p].name_short if p in plants else str(p) for p in o.allowed_equipment]
-        if o.current_equipment is not None:
-            as_dict["current_equipment"] = [plants[p].name_short if p in plants else str(p) for p in o.current_equipment]
-        if isinstance(o.material_properties, BaseModel):
-            as_dict.update(o.material_properties.model_dump(exclude_none=True, exclude_unset=True))
-        elif isinstance(o.material_properties, dict):
-            as_dict.update(o.material_properties)
-        if o.lots is not None:
-            lot = snapshot_obj.get_order_lot(site, o.id, process)
-            if lot is not None:
-                as_dict["lot_info"] = _lot_info(lot)
-            prev_lot_proc = next((p for p in previous_processes if p in o.lots), None)
-            prev_lot_id = o.lots.get(prev_lot_proc)
-            prev_lot = all_lots.get(prev_lot_id)
-            if prev_lot is not None:
-                as_dict["prev_lot_info"] = _lot_info(prev_lot)
-                prev_proc_obj = processes_by_ids[prev_lot_proc]
-                if prev_proc_obj.next_steps is not None and process in prev_proc_obj.next_steps and snapshot_provider.is_lot_complete(prev_lot):
-                    lt_times = snapshot_provider.get_order_lot_times(snapshot_obj.timestamp, o.id)
-                    if lt_times is not None and o.id in lt_times:
-                        if prev_lot_proc in lt_times[o.id]:
-                            av = DatetimeUtils.format(lt_times[o.id][prev_lot_proc].end.astimezone(), use_zone=False).replace("T", " ")
-                            as_dict["availability"] = av
-        return as_dict
-
     current_process_index = next((idx for idx, proc in enumerate(site.processes) if proc.name_short == process), None)
 
     processes: list[list[int]] = [p.process_ids for p in site.processes]
     num_processes = len(processes)
+    all_procs = site.processes
+    procs_by_id: dict[int, Process] = {}
+    for proc in all_procs:
+        for p_id in proc.process_ids:
+            procs_by_id[p_id] = proc
+    proc_obj = site.get_process(process, do_raise=True)
+    # current_process_idx: int = all_procs.index(proc_obj)
+    prev_processes = [p.name_short for p in site.processes if p.next_steps is not None and process in p.next_steps]
+    prev_process_ids = [pid for p in prev_procs for pid in p.process_ids]
+    follow_up_process_ids = [pid for p in next_procs for pid in p.process_ids]
+    current_process_ids = proc_obj.process_ids
+
     #current_process_index = processes.index(site.get_process(process, do_raise=True).process_ids)
     process_plants: list[list[int]] = [sorted([plant.id for plant in site.get_process_equipment(proc.name_short)]) for proc in site.processes]
 
@@ -1307,8 +1288,9 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
 
     orders_filtered = [order for order in snapshot_obj.orders if any(plant in current_process_plants for plant in order.allowed_equipment)]
     orders_sorted = sorted(orders_filtered, key=process_index_for_order)
-    order_ids = [o.id for o in orders_sorted]
+    order_ids = {o.id: o for o in orders_sorted}
     new_selected_rows = {"ids": []}
+    transport_times = site.transport_times.transport_times if site.transport_times is not None else None
     #plant_start_times: dict[int, datetime] = {plant: snapshot for plant in current_process_plants}
     #if previous_lot_by_plant is not None and len(previous_lot_by_plant) > 0:
     #    for plant, lot in previous_lot_by_plant.items():
@@ -1348,9 +1330,8 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
         new_selected_rows = {"ids": eligible_orders}
     elif is_init_command2:
         # adapt planning start time according to frozen lots
-        # TODO transport times
         eligible_orders = state.get_snapshot_provider().eligible_orders2(snapshot_obj, process, (actual_start_time, end_time),
-                                            equipment=current_process_plants, transport_times=None)
+                                            equipment=current_process_plants, transport_times=transport_times)
         if not update_selection and selected_rows is not None:
             eligible_orders = eligible_orders + [row for row in (row0["id"] if isinstance(row0, dict) else row0 for row0 in selected_rows) if row not in eligible_orders]
         # filter orders matching for selected process
@@ -1378,19 +1359,37 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     #if is_init_command:
     #    # TODO1
     selected_ids: list[str] = new_selected_rows["ids"]
+    _availability_by_order: dict[str, datetime|None] = {}
+
+    def availability_for_order(order: str) -> datetime|None:
+        if order in _availability_by_order:
+            return _availability_by_order[order]
+        o = order_ids[order]
+        if o.lots is None:
+            return None
+        prev_lot_proc = next((p for p in prev_processes if p in o.lots), None)
+        prev_lot_id = o.lots.get(prev_lot_proc)
+        prev_lot = all_lots.get(prev_lot_id)
+        if prev_lot is None or not snapshot_provider.is_lot_complete(prev_lot):
+            _availability_by_order[order] = None
+            return None
+        lt_times = snapshot_provider.get_order_lot_times(snapshot_obj.timestamp, o.id)
+        end_time = None
+        if lt_times is not None and len(lt_times) > 0 and prev_lot_proc in lt_times[o.id]:
+            end_time = lt_times[o.id][prev_lot_proc].end
+            if transport_times is not None:
+                previous_lot = o.lots[prev_lot_proc]
+                start_equipment = next((e for e in site.equipment if e.process == prev_lot_proc and e.id in snapshot_obj.lots and
+                                                    any(lt.id == previous_lot for lt in snapshot_obj.lots[e.id])), None)
+                if start_equipment is not None:
+                    t_times = [t for t in (transport_times(start_equipment.id, eq) for eq in current_process_plants if eq in o.allowed_equipment) if t is not None]
+                    max_transport: timedelta = max(t_times) if len(t_times) > 0 else timedelta()
+                    end_time = end_time + max_transport
+        _availability_by_order[order] = end_time
+        return end_time
+
     #orders_data["orders"] = selected_ids
     if hide_next_procs or hide_released_lots or hide_unavailable:
-        all_procs = site.processes
-        procs_by_id: dict[int, Process] = {}
-        for proc in all_procs:
-            for p_id in proc.process_ids:
-                procs_by_id[p_id] = proc
-        proc_obj = site.get_process(process, do_raise=True)
-        #current_process_idx: int = all_procs.index(proc_obj)
-        prev_processes = [p.name_short for p in site.processes if p.next_steps is not None and process in p.next_steps]
-        prev_process_ids = [pid for p in prev_procs for pid in p.process_ids]
-        follow_up_process_ids = [pid for p in next_procs for pid in p.process_ids]
-        current_process_ids = proc_obj.process_ids
 
         def _filter_order(o: Order) -> bool:
             if hide_next_procs:
@@ -1406,24 +1405,42 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
                     return False
             if hide_unavailable:
                 if not all(p in current_process_ids or p in follow_up_process_ids for p in o.current_processes):
-                    has_lot_in_time = False
-                    prev_proc = next((p for p in prev_processes if p in o.lots), None) if o.lots is not None else None
-                    if prev_proc is not None:
-                        lt_times = snapshot_provider.get_order_lot_times(snapshot_obj.timestamp, o.id)
-                        if lt_times is not None and len(lt_times) > 0 and prev_proc in lt_times[o.id]:
-                            end_time = lt_times[o.id][prev_proc].end
-                            if end_time < actual_start_time:
-                                p_lot = all_lots.get(o.lots[prev_proc])
-                                if p_lot is not None and snapshot_provider.is_lot_complete(p_lot):
-                                    has_lot_in_time = True
-                    if not has_lot_in_time:
-                        return False
+                    end_time = availability_for_order(o.id)
+                    has_lot_in_time = end_time is not None and end_time <= actual_start_time
+                    return has_lot_in_time
             return True
         orders_sorted = [o for o in orders_sorted if _filter_order(o)]
+
+    def order_to_json(o: Order):
+        as_dict = o.model_dump(exclude_none=True, exclude_unset=True)
+        for key in ["lots", "lot_positions"]:
+            if key in as_dict:
+                as_dict[key] = json.dumps(as_dict[key])
+        if o.allowed_equipment is not None:
+            as_dict["allowed_equipment"] = [plants[p].name_short if p in plants else str(p) for p in o.allowed_equipment]
+        if o.current_equipment is not None:
+            as_dict["current_equipment"] = [plants[p].name_short if p in plants else str(p) for p in o.current_equipment]
+        if isinstance(o.material_properties, BaseModel):
+            as_dict.update(o.material_properties.model_dump(exclude_none=True, exclude_unset=True))
+        elif isinstance(o.material_properties, dict):
+            as_dict.update(o.material_properties)
+        if o.lots is not None:
+            lot = snapshot_obj.get_order_lot(site, o.id, process)
+            if lot is not None:
+                as_dict["lot_info"] = _lot_info(lot)
+            prev_lot_proc = next((p for p in previous_processes if p in o.lots), None)
+            prev_lot_id = o.lots.get(prev_lot_proc)
+            prev_lot = all_lots.get(prev_lot_id)
+            if prev_lot is not None:
+                as_dict["prev_lot_info"] = _lot_info(prev_lot)
+                availability = availability_for_order(o.id)
+                if availability is not None:
+                    as_dict["availability"] = DatetimeUtils.format(state.as_timezone(availability), use_zone=False).replace("T", " ")
+        return as_dict
     sorted_orders = [order_to_json(order) for order in orders_sorted]
-    order_ids = [o.id for o in orders_sorted]
+    order_ids2 = [o.id for o in orders_sorted]
     weight = sum(o.actual_weight for o in orders_sorted if o.id in selected_ids)
-    orders_data["orders_selected_cnt"] = len([o for o in selected_ids if o in order_ids])
+    orders_data["orders_selected_cnt"] = len([o for o in selected_ids if o in order_ids2])
     orders_data["orders_selected_weight"] = weight
     first_orders = sorted_orders[0:min(5, len(sorted_orders))]
     try:

@@ -3,7 +3,7 @@ import types
 import typing
 from datetime import datetime, timedelta, date, timezone
 from math import floor
-from typing import Literal, Any
+from typing import Literal, Any, Sequence
 import json
 
 import dash
@@ -12,7 +12,7 @@ from dash import html, callback, Input, Output, dcc, State, ctx, no_update, clie
 import plotly.express as px
 import dash_ag_grid as dash_ag
 from dash.development.base_component import Component
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 from dynreact.base.LotsOptimizer import LotsOptimizer, LotsOptimizationAlgo, LotsOptimizationState
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
@@ -123,6 +123,7 @@ def layout(*args, **kwargs):
         dcc.Store(id="lots2-objectives-history", storage_type="memory"),     # optimization results, objective function
         dcc.Store(id="lots2-target-weight", data=0, storage_type="memory"),  # number in tons; updated only on tab change and process change
         dcc.Store(id="lots2-dummy-undefined", storage_type="memory"),
+        dcc.Store(id="lots2-shifts", storage_type="memory"),
         dcc.Interval(id="lots2-interval", interval=3_600_000),  # for polling when optimization is running
         dcc.Interval(id="lots2-process-init", interval=100),
         # ======== Popups  =========
@@ -516,16 +517,20 @@ def snapshot_changed(snapshot: datetime|None) -> str:  # , tz: str|None
 
 @callback(
           Output("lots2-settings-tabs", "hidden"),
+          Output("lots2-shifts", "data"),
           Input("selected-snapshot", "data"),
           Input("lots2-process-selector", "value")
 )
-def toggle_settings_tabs_visibility(snapshot: str|datetime|None, process: str|None) -> bool:
+def toggle_settings_tabs_visibility(snapshot: str|datetime|None, process: str|None):
     if not dash_authenticated(config):
-        return True
+        return True, None
     snapshot = DatetimeUtils.parse_date(snapshot)
     if snapshot is None or process is None:
-        return True
-    return False
+        return True, None
+    shifts: dict[int, Sequence[PlannedWorkingShift]] = \
+        state.get_shifts_provider().load_all(snapshot, end=snapshot + timedelta(days=8), equipments=[e.id for e in state.get_site().get_process_equipment(process, do_raise=True)])
+    shifts_serialized = {e: TypeAdapter(Sequence[PlannedWorkingShift]).dump_python(eq_shifts, exclude_unset=True, exclude_none=True, mode="json") for e, eq_shifts in shifts.items()}
+    return False, shifts_serialized
 
 
 # Change the active tab in the settings menu by clicking one of the selection buttons in the header
@@ -2078,7 +2083,7 @@ clientside_callback(
     ),
     Output("lots2-lots-swimlane", "title"),
     Input("lots2-lots-data", "data"),
-    State("lots2-dummy-undefined", "data"),
+    State("lots2-shifts", "data"),
     State("lots2-lots-swimlane", "id"),
     State("lots2-process-selector", "value"),
     State("lots2-swimlane-mode", "value")

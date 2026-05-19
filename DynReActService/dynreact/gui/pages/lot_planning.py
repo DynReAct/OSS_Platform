@@ -54,10 +54,8 @@ def layout(*args, **kwargs):
         html.Div([
             html.Div([html.Div("Snapshot: "), html.Div(snap, id="current_snapshot_lotplanning")]),
             html.Div([html.Div("Process: "), dcc.Dropdown(id="process-selector-lotplanning",
-                                                          options=[{"value": p.name_short, "label": p.name_short,
-                                                                    "title": p.name if p.name is not None else p.name_short}
-                                                                   for p in site.processes],
-                                                          value=process, className="process-selector", persistence=True)]),
+                            options=[{"value": p.name_short, "label": p.name_short, "title": p.name if p.name is not None else p.name_short} for p in site.processes],
+                            value=process, className="process-selector", persistence=True)]),
             html.Div([
                 dcc.Link(html.Button("Open lot creation", className="dynreact-button"), id="plan-link-create",
                          href="/dash/lots/create2", target="_blank")
@@ -243,15 +241,14 @@ def snapshot_changed(snapshot: datetime|str|None) -> str:  #, tz: str|None
     return GuiUtils.format_snapshot(snapshot, None, state=state)
 
 
-# TODO not running initially => ?
 @callback(
     Output("plan-link-create", "href"),
     Output("lotplanning-shifts", "data"),
-    State("selected-snapshot", "data"),
     Input("process-selector-lotplanning", "value"),
+    Input("selected-snapshot", "data"),
     #Input("create-existing-sols", "value"),
 )
-def update_link(snapshot: str|datetime|None, process: str|None):
+def update_link(process: str|None, snapshot: str|datetime|None):
     url = "/dash/lots/create2"
     if not dash_authenticated(config):
         return url
@@ -618,10 +615,10 @@ clientside_callback(
     ),
     Output("planning-lots-swimlane", "title"),
     Input("planning-solution-data", "data"),
+    Input("lotplanning-shifts", "data"),
     State("planning-lots-swimlane", "id"),
     State("process-selector-lotplanning", "value"),
     State("planning-swimlane-mode", "value"),
-    State("lotplanning-shifts", "data")
 )
 
 clientside_callback(

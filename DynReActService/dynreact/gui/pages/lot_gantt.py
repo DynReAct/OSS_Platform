@@ -55,10 +55,10 @@ clientside_callback(
     ),
     Output("lots-gantt-lots-swimlane", "title"),
     Input("lots-gantt-undefined", "data"),
+    Input("lots-gantt-shifts", "data"),
     Input("lots-gantt-lots-swimlane", "id"),
     Input("lots-gantt-undefined2", "data"),
     Input("lots-gantt-swimlane-mode", "value"),
-    Input("lots-gantt-shifts", "data"),
 )
 
 clientside_callback(

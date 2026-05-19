@@ -115,13 +115,14 @@ def layout(*args, **kwargs):
         ltp_dialog(),
         # ========= Stores ================
         dcc.Store(id="lots2-active-tab", data=tab),  # Literal["targets", "orders", "settings"]
-        dcc.Store(id="lots2-iterations", data=str(iterations)),  # Literal["targets", "orders", "settings"]
+        dcc.Store(id="lots2-iterations", data=str(iterations), storage_type="memory"),  # Literal["targets", "orders", "settings"]
         dcc.Store(id="lots2-planning-itv-start", storage_type="memory"),  # datetime
-        dcc.Store(id="lots2-orders-data"),  # a dict with keys "snapshot", "process", "orders_selected_cnt", "orders_selected_weight"
-        dcc.Store(id="lots2-orders-backlog-structure-data"),  # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
-        dcc.Store(id="lots2-lots-data"),    # rowData, list of dicts, one row per lot; input for swim lane
-        dcc.Store(id="lots2-objectives-history"),     # optimization results, objective function
-        dcc.Store(id="lots2-target-weight", data=0),  # number in tons; updated only on tab change and process change
+        dcc.Store(id="lots2-orders-data", storage_type="memory"),  # a dict with keys "snapshot", "process", "orders_selected_cnt", "orders_selected_weight"
+        dcc.Store(id="lots2-orders-backlog-structure-data", storage_type="memory"),  # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
+        dcc.Store(id="lots2-lots-data", storage_type="memory"),    # rowData, list of dicts, one row per lot; input for swim lane
+        dcc.Store(id="lots2-objectives-history", storage_type="memory"),     # optimization results, objective function
+        dcc.Store(id="lots2-target-weight", data=0, storage_type="memory"),  # number in tons; updated only on tab change and process change
+        dcc.Store(id="lots2-dummy-undefined", storage_type="memory"),
         dcc.Interval(id="lots2-interval", interval=3_600_000),  # for polling when optimization is running
         dcc.Interval(id="lots2-process-init", interval=100),
         # ======== Popups  =========
@@ -2077,6 +2078,7 @@ clientside_callback(
     ),
     Output("lots2-lots-swimlane", "title"),
     Input("lots2-lots-data", "data"),
+    State("lots2-dummy-undefined", "data"),
     State("lots2-lots-swimlane", "id"),
     State("lots2-process-selector", "value"),
     State("lots2-swimlane-mode", "value")

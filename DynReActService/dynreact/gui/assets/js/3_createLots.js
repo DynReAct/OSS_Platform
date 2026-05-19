@@ -165,7 +165,7 @@
         if (!swimlane) {
             swimlane = document.createElement("lots-swimlane");
             if (snapLots) {
-                swimlane.setAttribute("complete-lots-only", "true");
+                //swimlane.setAttribute("complete-lots-only", "true");
                 swimlane.setAttribute("shift-horizon", "P1D");
             }
             const element = document.querySelector("div#" + elementId);
@@ -181,7 +181,6 @@
                 Object.freeze(shifts2);
                 return shifts2;
             };
-            // TODO fix date fields
             shifts = Object.fromEntries(Object.entries(shifts).map(([eq, eqShifts]) => [eq, _fixShifts(eqShifts)]));
         }
         /*
@@ -194,7 +193,7 @@
     };
 
     globalThis.dash_clientside.createlots.setLotsSwimlaneMode = function(mode, elementId) {
-         const el = document.querySelector("lots-swimlane#" + elementId);
+         const el = document.querySelector("#" + elementId + " > lots-swimlane");
          if (el)
             el.lotSizing = mode;
     }

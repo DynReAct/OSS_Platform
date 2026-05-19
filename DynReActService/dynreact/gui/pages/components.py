@@ -136,6 +136,7 @@ def prepare_lots_for_lot_view(snapshot: str|datetime|None, process: str|None, re
                 lot.equipment].name_short is not None else str(lot.equipment),
             "active": lot.active,
             "status": lot.status,
+            "lot_complete": snap_provider.is_lot_complete(lot),
             "num_orders": len(lot.orders),
             "num_coils": num_coils[lot.id],
             "order_ids": lot.orders,  # ", ".join(lot.orders),

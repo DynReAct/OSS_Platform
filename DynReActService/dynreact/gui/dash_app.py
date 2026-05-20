@@ -130,7 +130,7 @@ def layout(*args, **kwargs):
     className="menu-container", id="menu")  # id should match outer key in translation file
     # see https://dash.plotly.com/urls#query-strings
     page_container = dash.page_container
-    layout_menu = html.Div([menu_container, page_container], className="main-container"),
+    layout_menu = html.Div([menu_container, page_container], className="main-container")
     return layout_menu
 
 

@@ -1838,8 +1838,9 @@ def process_changed(snapshot: datetime|None,
         return total_weight
     details_sum = _structure_calc_sum(components, process)
     if structure_sum is not None and structure_sum > 0 and details_sum > 0:
-        if structure_sum != details_sum:
-            warning_message = "Warning : Weight sum has changed, please open StructurePlanning again and select \"Accept\""
+        diff = 2 * abs(structure_sum - details_sum) / (structure_sum + details_sum)
+        if diff > 0.01:
+            warning_message = f"Warning : Weight sum has changed, please open StructurePlanning again and select \"Accept\""
 
     # prepare using primary_category
     site = state.get_site()

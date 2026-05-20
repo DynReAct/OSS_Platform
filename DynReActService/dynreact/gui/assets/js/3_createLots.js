@@ -164,10 +164,6 @@
         }
         if (!swimlane) {
             swimlane = document.createElement("lots-swimlane");
-            if (snapLots) {
-                //swimlane.setAttribute("complete-lots-only", "true");
-                swimlane.setAttribute("shift-horizon", "P1D");
-            }
             const element = document.querySelector("div#" + elementId);
             element.appendChild(swimlane);
         }
@@ -175,6 +171,9 @@
             swimlane?.setPlanning(undefined, undefined, undefined, undefined);
             return "";
         }
+        const completeLotsOnly = snapLots && data.find(lot => lot.lot_complete) !== undefined;
+        swimlane.completeLotsOnly = completeLotsOnly;
+        swimlane.shiftHorizon = snapLots ? "P1D" : undefined;
         if (shifts) {  // XXX copied from DynReActViz
             const _fixShifts = (shifts) => {
                 const shifts2 = shifts.map(shift => {return {...shift, period: shift.period.map(p => new Date(p)), worktime: JsUtils.toMillis(shift.worktime)}});

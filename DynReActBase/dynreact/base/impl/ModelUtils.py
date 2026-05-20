@@ -169,7 +169,7 @@ class ModelUtils:
                 total_targets += equipment_targets.total_weight * fraction
             # TODO material class specific capacity
             equipment_obj = site.get_equipment(equipment, do_raise=True)
-            # prod capacity in tons
+            # prod capacity in tons  # TODO consider shifts here?
             capacity = equipment_obj.throughput_capacity * equipment_horizon.total_seconds() / 3_600
             planned_production: float = total_targets - total_existing
             if planned_production <= capacity * 0.05:
@@ -199,9 +199,21 @@ class ModelUtils:
             eq_existing = material_by_equipment_existing.get(equipment, _empty)
             scale_factor = scale_factor_by_equipment.get(equipment, 1.)
             final_equipment_mat_weights: dict[str, float] = {}
+            # step 1: correction for cases where the frozen material already exceeds the planned material
+            surpluses_by_mat: dict[str, float] = {mat: eq_existing.get(mat, 0) - weight for mat, weight in mat_targets.items() if eq_existing.get(mat, 0) > weight}
+            surpluses_by_cat: dict[str, float] = {cat.id: sum(surpluses_by_mat[cl.id] for cl in cat.classes if cl.id in surpluses_by_mat) for cat in site.material_categories if any(cl.id in surpluses_by_mat for cl in cat.classes)}
+            for cat_id, surplus in surpluses_by_cat.items():
+                cat = next(c for c in site.material_categories if c.id == cat_id)
+                available_classes: dict[str, float] = {cl.id: mat_targets[cl.id] for cl in cat.classes if cl.id in mat_targets and cl.id not in surpluses_by_mat}
+                total_available = sum(available_classes.values())
+                for mat, weight in available_classes.items():
+                    fraction = weight / total_available
+                    new_weight = max(weight - fraction * surplus, 0.)
+                    mat_targets[mat] = new_weight
             for mat, weight in mat_targets.items():
                 existing = eq_existing.get(mat, 0.)
-                delta = max(weight - existing, 0.) * scale_factor  # TODO might need to handle negative values specifically, since the material class values do not add up in this case
+                # corrections for negative values already applied above
+                delta = max(weight - existing, 0.) * scale_factor
                 final_equipment_mat_weights[mat] = delta
                 material_targets_overall[mat] = material_targets_overall.get(mat, 0.) + delta
             eq_total = total_weight_by_equipment.get(equipment, 0.)

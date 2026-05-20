@@ -139,8 +139,10 @@ def layout(*args, **kwargs):
         dcc.Interval(id="lots2-process-init", interval=100),
         # ======== Popups  =========
         structure_portfolio_popup(111222),
-        dcc.Store(id="lots2-material-setpoints", data=None),  # dictionary
-        dcc.Store(id="lots2-custom-priority-store", data=None),
+        dcc.Store(id="lots2-material-setpoints", data=None, storage_type="memory"),  # dictionary
+        dcc.Store(id="lots2-material-setpoints-user", data=None, storage_type="memory"),  # dictionary
+        dcc.Store(id="lots2-material-setpoints-ltp", data=None, storage_type="memory"),  # dictionary
+        dcc.Store(id="lots2-custom-priority-store", data=None, storage_type="memory"),
     ], id="lots2")
     return layout
 
@@ -180,7 +182,7 @@ def targets_tab(horizon: int):
                 ], className="lots2-use-range-checkbox"),
                 html.Div(id="lots2-details-plants", className="lots2-plants-targets grid-items-4"),
                 html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
-                html.Div(dcc.Textarea(id='lots2-structure-logging', value='', className="lots2-textarea")),
+                html.Div(dcc.Textarea(id="lots2-structure-logging", value="", className="lots2-textarea")),
                 # html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "hidden"}))
                 html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "visible"}))
             ]), html.Div([
@@ -763,6 +765,7 @@ def ltp_row_selected(selected_rows: list[dict[str, any]]|None, snapshot: datetim
     Output("lots2-check-use-lot-range", "value"),
     Output("lots2-planning-itv-start-date", "value"),
     Output("lots2-planning-itv-start-time", "value"),
+    Output("lots2-material-setpoints-ltp", "data"),
     State("selected-snapshot", "data"),
     State("lots2-horizon-hours", "value"),
     State("lots2-details-plants", "children"),
@@ -783,7 +786,7 @@ def update_plants(snapshot: str,
                   active_tab: Literal["targets", "orders", "settings"]|None,
                   _, __,
                   use_lot_range0: list[Literal[""]]
-                  ) -> tuple[list[Component], list[any], list[Literal[""]], str, str]:
+                  ) -> tuple[list[Component], list[any], list[Literal[""]], str, str, dict|None]:
     changed = GuiUtils.changed_ids()
     process_changed = "lots2-process-selector" in changed
     use_lot_range: bool = len(use_lot_range0) > 0 and not process_changed
@@ -798,8 +801,9 @@ def update_plants(snapshot: str,
         my_parent_classname = "lots2-plants-targets grid-items-4"
     snapshot = DatetimeUtils.parse_date(snapshot)
     snapshot_obj = state.get_snapshot(snapshot)
+    ltp_structure = dash.no_update
     if not dash_authenticated(config) or process is None or snapshot_obj is None or active_tab != "targets":
-        return no_update, my_parent_classname, no_update, no_update, no_update
+        return no_update, my_parent_classname, no_update, no_update, no_update, ltp_structure
     is_ltp_init = "lots2-ltp-submit" in changed and ltp_solution is not None   # TODO already contains all the relevant data
     re_init: bool = "lots2-targets-init-lots" in changed or is_ltp_init
     init_dates = current_start is None or re_init or "lots2-process-selector" in changed
@@ -821,6 +825,11 @@ def update_plants(snapshot: str,
         # targets = _targets_from_ltp(selected_rows[0], process, snapshot, horizon_hours)
         # targets = _targets_from_ltp(selected_rows[0], process, snapshot_obj, num_shifts, site, state.get_snapshot_provider(), horizon_hours)
         targets = ProductionTargets.model_validate(ltp_solution["targets"])
+        ltp_structure = targets.material_weights
+        if ltp_structure:
+            ltp_structure = {key: 0 if isinstance(val, float|int) and val < 1e-4 else val for key, val in ltp_structure.items()}
+            ltp_structure["_sum"] = sum(t.total_weight for t in targets.target_weight.values())
+
     target_weights: dict[int, float] = {plant: t.total_weight for plant, t in targets.target_weight.items()} if targets is not None else \
                 targets0 if isinstance(targets0, typing.Mapping) else {plant.id: targets0 for plant in plants}
     lots: dict[int, list[Lot]] = snapshot_obj.lots
@@ -944,7 +953,7 @@ def update_plants(snapshot: str,
         start_time = no_update
     else:
         start_date, start_time = DatetimeUtils.format(state.as_timezone(earliest_start), use_zone=False).split("T")
-    return elements, my_parent_classname, checked_use_lot_range, start_date, start_time
+    return elements, my_parent_classname, checked_use_lot_range, start_date, start_time, ltp_structure
 
 @callback(
          Output("lots2-planning-itv-start", "data"),
@@ -2173,11 +2182,22 @@ clientside_callback(
         namespace="lots2",
         function_name="setMaterialSetpoints"
     ),
-    Output("lots2-material-setpoints", "data"),
+    Output("lots2-material-setpoints-user", "data"),
     Input("lots2-materials-accept", "n_clicks"),
     State("lots2-materials-grid", "id"),
     #config_prevent_initial_callbacks=True
 )
+
+
+@callback(
+    Output("lots2-material-setpoints", "data"),
+    Input("lots2-material-setpoints-user", "data"),
+    Input("lots2-material-setpoints-ltp", "data")
+)
+def merge_material_setpoints(mat_user: dict[str, float]|None, mat_ltp: dict[str, float]|None):
+    is_ltp_triggered = "lots2-material-setpoints-ltp" in GuiUtils.changed_ids()
+    return mat_ltp if is_ltp_triggered else mat_user
+
 
 # reset material grid set default
 clientside_callback(

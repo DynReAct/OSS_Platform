@@ -861,8 +861,11 @@ def start_transfer0(lot_id: str, new_lotname: str, orders: list[str], snapshot: 
     if snapshot_obj is None:
         print("Snapshot object not found for lot transfer", snapshot)
         return None
+    # active True means the lot will not be considered as reschedulable
+    lot_update = {"status": 1, "active": True}
     if len(orders) != len(lot_obj.orders):
-        lot_obj = lot_obj.copy(update={"orders": orders})
+        lot_update["orders"] = orders
+    lot_obj = lot_obj.copy(update=lot_update)
     return transfer_internal(lot_obj, snapshot_obj, new_lotname, sink, update_snap, user)
 
 

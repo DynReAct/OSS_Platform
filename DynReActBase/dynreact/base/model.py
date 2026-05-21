@@ -194,28 +194,28 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
     "Sum of individual material weights in t"
     material_count: int = 0
     "Number of units in this order"
-    material_classes: dict[str, str] = {}
+    material_classes: Mapping[str, str] = {}
     "Keys: material category id, values: material class ids"
-    allowed_equipment: list[int]   # TODO dict[process, list[int]]?
-    current_equipment: list[int] | None = None
+    allowed_equipment: Sequence[int]   # TODO dict[process, list[int]]?
+    current_equipment: Sequence[int] | None = None
     # @deprecated
-    current_processes: list[int]
-    active_processes: dict[int, Literal["PENDING", "STARTED", "FINISHED"]]
+    current_processes: Sequence[int]
+    active_processes: Mapping[int, Literal["PENDING", "STARTED", "FINISHED"]]
     # FIXME a single order can be assigned to multiple orders at different process steps!
     # @deprecated
     lot: str|None = Field(None, deprecated=True)
     "DEPRECATED, use lots field instead"
-    lots: dict[str, str]|None = None
+    lots: Mapping[str, str]|None = None
     "Lot ids by process steps"
     # @deprecated
     lot_position: int|None = Field(None, deprecated=True)
     "DEPRECATED: use lot_positions instead. (1-based index of order in lot)"
-    lot_positions: dict[str, int]|None = None
+    lot_positions: Mapping[str, int]|None = None
     "1-based index of order in lots, by process step"
-    lot_start_end_times: dict[str, tuple[datetime, datetime]]|None=None
+    lot_start_end_times: Mapping[str, tuple[datetime, datetime]]|None=None
     "Scheduled start and end times by process step; typically, these will only be present if there is a corresponding entry in the lots field."
     # FIXME this dict type with arbitrary_types_allowed is just a temporary workaround, need to find a better solution...
-    material_properties: dict[str, Any] | MATERIAL_PROPERTIES
+    material_properties: Mapping[str, Any] | MATERIAL_PROPERTIES
     "Use-case specific material characteristics."
     priority: int = 0
     "Order priority"

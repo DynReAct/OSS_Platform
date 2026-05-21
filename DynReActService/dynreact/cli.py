@@ -1,3 +1,5 @@
+import logging
+
 import argparse
 import glob
 import json
@@ -29,6 +31,9 @@ from dynreact.base.model import Snapshot, Material, OrderAssignment, Order, Equi
     LongTermTargets, MaterialCategory, StorageLevel, LotTimes, ProcessLotCreationSettings, TargetLotSize
 from dynreact.plugins import Plugins
 from dynreact.auth.authentication import authenticate
+
+
+logging.basicConfig(level=logging.DEBUG)
 
 
 class Boolean(str, Enum):

@@ -8,7 +8,7 @@ import json
 
 import dash
 import pandas as pd
-from dash import html, callback, Input, Output, dcc, State, ctx, no_update, clientside_callback, ClientsideFunction
+from dash import html, callback, Input, Output, dcc, State, ctx, no_update, clientside_callback, ClientsideFunction, ALL
 import plotly.express as px
 import dash_ag_grid as dash_ag
 from dash.development.base_component import Component
@@ -133,7 +133,14 @@ def layout(*args, **kwargs):
         #         "ltp_solution": MidTermTargets
         #     }
         dcc.Store(id="lots2-ltp-selected-solution", storage_type="memory"),  # serialized solution + some metadata tbd
-
+        #     settings = {
+        #         plant_id: {
+        #             total_value: float|int,
+        #             predecessor_lot: str|None,
+        #             lot_range: tuple[float, float]|None
+        #         }
+        #     }
+        dcc.Store(id="lots2-plant-settings", storage_type="memory"),  # dictionary
 
         dcc.Interval(id="lots2-interval", interval=3_600_000),  # for polling when optimization is running
         dcc.Interval(id="lots2-process-init", interval=100),
@@ -181,6 +188,11 @@ def targets_tab(horizon: int):
                     html.Div("Append to existing lots?", title="Instead of creating new lots, add orders to an existing lot (select via \"Previous lot\" column)"),
                 ], className="lots2-use-range-checkbox"),
                 html.Div(id="lots2-details-plants", className="lots2-plants-targets grid-items-4"),
+                html.Div([
+                    html.Span("Total production: "),
+                    html.Span(id="lots2-plant-targets-sum"),
+                    html.Span("t"),
+                ]),  #
                 html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
                 html.Div(dcc.Textarea(id="lots2-structure-logging", value="", className="lots2-textarea")),
                 # html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "hidden"}))
@@ -188,7 +200,7 @@ def targets_tab(horizon: int):
             ]), html.Div([
                 html.H4("Plant performance models"),
                 html.Div(id="lots2-details-performance-models", className="lots2-performance-models")
-            ], id="lots2-details-performance-wrapper", hidden=True)
+            ], id="lots2-details-performance-wrapper", hidden=True),
         ], className="lots2-production-performance-split"),
     ]
 
@@ -854,12 +866,14 @@ def update_plants(snapshot: str,
                     min_val = 0 if settings is None else settings.min if isinstance(settings, TargetLotSize) else settings.get(plant.id, TargetLotSize(min=0, max=0)).min
                     max_val = 0 if settings is None else settings.max if isinstance(settings, TargetLotSize) else settings.get(plant.id, TargetLotSize(min=0, max=0)).max
                     div2 = html.Div(
-                        dcc.Input(type="number", min="0", value=str(min_val), placeholder="Lot size minimum in t"),
+                        dcc.Input(id={"role": "plant-lotmin", "id": plant.id},
+                        type="number", min="0", value=str(min_val), placeholder="Lot size minimum in t"),
                         title="Lot size minimum in t", className="lot2-size-min", style={'display': 'block'},
                         **{"data-plant": str(plant.id), "data-default": str(0)})
 
                     div3 = html.Div(
-                        dcc.Input(type="number", min="0", value=str(max_val), placeholder="Lot size maximum in t"),
+                        dcc.Input(id={"role": "plant-lotmax", "id": plant.id},
+                        type="number", min="0", value=str(max_val), placeholder="Lot size maximum in t"),
                         title="Lot size maximum in t", className="lot2-size-max", style={'display': 'block'},
                         **{"data-plant": str(plant.id), "data-default": str(0)})
 
@@ -877,11 +891,11 @@ def update_plants(snapshot: str,
                 continue
         # set start vals
         target = round(target_weights.get(plant.id, 0.))
-        checkbox = html.Div(dcc.Checklist(options=[""], value=[""] if target > 0 else []),
+        checkbox = html.Div(dcc.Checklist(id={"role": "plant-checked", "id": plant.id}, options=[""], value=[""] if target > 0 else []),
                             title="Include plant " + str(plant.name_short if plant.name_short is not None else plant.id) + " in planning?")
         elements.append(checkbox)
         elements.append(GuiUtils.plant_element(plant))
-        target_div = html.Div(dcc.Input(type="number", min="0", value=str(target), placeholder="Target production in t"),
+        target_div = html.Div(dcc.Input(type="number", min="0", value=str(target), id={"role": "plant-input", "id": plant.id}, placeholder="Target production in t"),
                        title="Target production in t", className="create-plant-input", **{"data-plant": str(plant.id), "data-default": str(target) })
         elements.append(target_div)
         current_lots: list[Lot] = lots.get(plant.id)
@@ -895,7 +909,8 @@ def update_plants(snapshot: str,
             # This should also work, but it does not => leads to an infinite loop => WHY? => this would allow us to style options differently depending on whether the lot is complete or not
             # "label": html.Span([lot[0].id], title=_lot_info(lot[0]), className="lots2-option-grey" if not lot[1] else "")
             prev_lot = html.Div(
-                dcc.Dropdown(placeholder="Select a lot",
+                dcc.Dropdown(id={"role": "plant-lot", "id": plant.id},
+                             placeholder="Select a lot",
                              options=[{"value": "", "label": "", "title": "No predecessor defined."}] +
                                      [{"value": lot[0].id, "label": [lot[0].id], "title": _lot_info(lot[0])} for lot in lot_entries],
                              value=value
@@ -931,12 +946,14 @@ def update_plants(snapshot: str,
             settings = site.lot_creation.processes[process].lot_sizes if site.lot_creation is not None and process in site.lot_creation.processes else None
             min_val = 0 if settings is None else settings.min if isinstance(settings, TargetLotSize) else settings.get(plant.id, TargetLotSize(min=0, max=0)).min
             max_val = 0 if settings is None else settings.max if isinstance(settings, TargetLotSize) else settings.get(plant.id, TargetLotSize(min=0, max=0)).max
-            div2 = html.Div(dcc.Input(type="number", min="0", value=str(min_val), placeholder="Lot size minimum in t"),
+            div2 = html.Div(dcc.Input(id={"role": "plant-lotmin", "id": plant.id},
+                            type="number", min="0", value=str(min_val), placeholder="Lot size minimum in t"),
                             title="Lot size minimum in t", className="lot2-size-min",
                             style={'display': 'block'},
                             **{"data-plant": str(plant.id), "data-default": str(target)})
 
-            div3 = html.Div(dcc.Input(type="number", min="0", value=str(max_val), placeholder="Lot size maximum in t"),
+            div3 = html.Div(dcc.Input(id={"role": "plant-lotmax", "id": plant.id},
+                            type="number", min="0", value=str(max_val), placeholder="Lot size maximum in t"),
                             title="Lot size maximum in t", className="lot2-size-max",
                             style={'display': 'block'},
                             **{"data-plant": str(plant.id), "data-default": str(target)})
@@ -2152,6 +2169,37 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
     return state.get_lot_creator().is_running()[0], None, None
 
 
+@callback(Output("lots2-target-weight", "data"),
+         Output("lots2-plant-settings", "data"),
+         Input({"role": "plant-checked", "id": ALL}, "id"),
+         Input({"role": "plant-checked", "id": ALL}, "value"),
+         Input({"role": "plant-input", "id": ALL}, "value"),
+         Input({"role": "plant-lot", "id": ALL}, "value"),
+         Input({"role": "plant-lotmin", "id": ALL}, "value"),
+         Input({"role": "plant-lotmax", "id": ALL}, "value"))
+def test_test(plants, checked: Sequence[Sequence[Literal[""]]], inputs: Sequence[str|float], selected_lots: Sequence[str|None],
+              lots_min: Sequence[float|None]|None, lots_max: Sequence[float|None]|None):
+    plants_checked = [len(c) > 0 for c in checked]
+    total_values = [0 if not plants_checked[idx] or not GuiUtils.is_numeric(inp) else float(inp) for idx, inp in enumerate(inputs)]
+    lots_range = None
+    if len(lots_min) == len(lots_max) and len(lots_min) == len(plants_checked):
+        lots_range = ((float(mn), float(mx)) if checked and GuiUtils.is_numeric(mn) and GuiUtils.is_numeric(mx) else None
+                                                                for checked, mn, mx in zip(plants_checked, lots_min, lots_max))
+        lots_range = [min_max if min_max is None or min_max[0] <= min_max[1] else None for min_max in lots_range]
+    plant_settings = {}
+    for idx, p_id_dict in enumerate(plants):
+        if not plants_checked[idx] or total_values[idx] <= 0:
+            continue
+        total = total_values[idx]
+        predecessor = selected_lots[idx]
+        p_lot_range = lots_range[idx] if lots_range is not None else None
+        plant_settings[p_id_dict["id"]] = {"total_value": total, "predecessor_lot": predecessor, "lot_range": p_lot_range}
+    # FIXME
+    print(" NEW plant settings", plant_settings)
+    return sum(total_values), plant_settings
+
+
+
 # Swimlane related callbacks
 
 clientside_callback(
@@ -2237,6 +2285,7 @@ clientside_callback(
     State("lots2-process-selector", "value"),
     State("lots2-material-setpoints", "data"),
     State("lots2-materials-grid", "id"),
+    prevent_initial_call=True,
 )
 
 clientside_callback(
@@ -2286,26 +2335,29 @@ def structure_update(_, components: list[Component]|None, process: str|None, set
     total_weight, message = target_values_sum(process=process, plants=[p.id for p in plants], components=components)
     return total_weight  #f"{total_weight:.2f}"
 
-@callback(
-    Output("lots2-target-weight", "data"),
-    Input("lots2-active-tab", "data"),
-    State("lots2-process-selector", "value"),
-    State("lots2-details-plants", "children"),
-)
-def target_value_update(active_tab: Literal["targets", "orders", "settings"]|None, process: str|None, components: list[Component]|None):
-    plants = state.get_site().get_process_equipment(process)
-    total_weight, message = target_values_sum(process=process, plants=[p.id for p in plants], components=components)
-    return total_weight
+#@callback(
+#    Output("lots2-target-weight", "data"),
+#    Input("lots2-active-tab", "data"),
+#    State("lots2-process-selector", "value"),
+#    State("lots2-details-plants", "children"),
+#)
+#def target_value_update(active_tab: Literal["targets", "orders", "settings"]|None, process: str|None, components: list[Component]|None):
+#    plants = state.get_site().get_process_equipment(process)
+#    total_weight, message = target_values_sum(process=process, plants=[p.id for p in plants], components=components)
+#    return total_weight
+
 
 
 @callback(
     Output("lots2-orders-backlog-target-weight", "children"),
+    Output("lots2-plant-targets-sum", "children"),
     Input("lots2-target-weight", "data")  # updated on tab changes and when the process changes
 )
 def target_value_update_backlog(target_value: float):
     if not isinstance(target_value, float|int):
         target_value = 0
-    return f"{target_value:.2f}" if int(target_value) != target_value else str(target_value)
+    formatted_sum = f"{target_value:.2f}" if int(target_value) != target_value else str(target_value)
+    return formatted_sum, formatted_sum
 
 
 def target_values_from_settings(process: str, period: tuple[datetime, datetime], plants: list[int], use_lot_range: bool, components: list[Component]|None) -> tuple[ProductionTargets|None, bool, dict[int, str], str|None]:

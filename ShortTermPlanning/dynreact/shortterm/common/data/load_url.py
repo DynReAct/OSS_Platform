@@ -9,6 +9,7 @@ import requests
 
 URL_SNAPSHOTS = '/snapshots'
 URL_SNAPSHOT_DATA = '/snapshots/{snapshot_timestamp}'
+URL_SITE = '/site'
 URL_INITIAL_STATE = '/costs/status/{equipment_id}/{snapshot_timestamp}?unit=material'
 URL_UPDATE_STATUS = '/costs/transitions-stateful'
 

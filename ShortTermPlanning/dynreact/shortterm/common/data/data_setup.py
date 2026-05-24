@@ -32,53 +32,9 @@ class DataSetup:
         self.last_snapshot = snapshot_time or self.get_last_snapshot_timestamp()
         self.last_snapshot_data = self.get_snapshot_data()
 
-        # RAS only populate current_equipment_name, the auction agents
-        # require the numeric current_equipment.
-        self._equipment_id_by_name = self._build_equipment_id_by_name()
-        self._fill_current_equipment_ids()
         self.all_materials_params = self.get_all_materials_params()
         self.all_equipment_params = self.get_all_equipments_materials()
 
-
-    def _build_equipment_id_by_name(self) -> dict[str, int]:
-        """Build an uppercase name_short -> id mapping."""
-        try:
-            site = load_url_json_get(URL_SITE)
-
-        except Exception as exc:
-            if self.verbose > 0:
-                print(f"ERROR: Couldn't load site. {exc}")
-            return {}
-
-        mapping: dict[str, int] = {}
-
-        for equipment in site.get('equipment', []) or []:
-            name = equipment.get('name_short')
-            equipment_id = equipment.get('id')
-            if name and equipment_id is not None:
-                mapping[str(name).upper()] = int(equipment_id)
-
-        return mapping
-
-
-    def _fill_current_equipment_ids(self) -> None:
-        """Fill current_equipment in the material list."""
-        if not self._equipment_id_by_name:
-            return
-
-        for material in self.last_snapshot_data.get('material', []) or []:
-            if material.get('current_equipment') is not None:
-                continue
-
-            name = material.get('current_equipment_name')
-
-            if not name:
-                continue
-
-            equipment_id = self._equipment_id_by_name.get(str(name).upper())
-
-            if equipment_id is not None:
-                material['current_equipment'] = equipment_id
 
     def get_last_snapshot_timestamp(self) -> str:
         """

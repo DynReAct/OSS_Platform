@@ -23,7 +23,7 @@ from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Equipment, Order, Lot, ProductionPlanning, ProductionTargets, EquipmentProduction, \
     MidTermTargets, ObjectiveFunction, Process, TargetLotSize, ProcessLotCreationSettings, OrderAssignment, \
-    PlannedWorkingShift, Snapshot, Site
+    PlannedWorkingShift, Snapshot, Site, MaterialClass
 from pydantic.fields import FieldInfo
 
 from dynreact.app import state, config
@@ -141,14 +141,20 @@ def layout(*args, **kwargs):
         #         }
         #     }
         dcc.Store(id="lots2-plant-settings", storage_type="memory"),  # dictionary
+        dcc.Store(id="lots2-active-plants", storage_type="memory", data=tuple()),    # Sequence[int], never None
 
         dcc.Interval(id="lots2-interval", interval=3_600_000),  # for polling when optimization is running
         dcc.Interval(id="lots2-process-init", interval=100),
-        # ======== Popups  =========
+
+        # Material structure setpoints
+        ####################
         structure_portfolio_popup(111222),
-        dcc.Store(id="lots2-material-setpoints", data=None, storage_type="memory"),  # dictionary
         dcc.Store(id="lots2-material-setpoints-user", data=None, storage_type="memory"),  # dictionary
         dcc.Store(id="lots2-material-setpoints-ltp", data=None, storage_type="memory"),  # dictionary
+        dcc.Store(id="lots2-material-setpoints-memory", storage_type="memory"),  # dictionary; seldom None; consolidated from user and ltp version
+        dcc.Store(id="lots2-material-setpoints", data=None, storage_type="memory"), # dictionary; the final material structure selected
+        ####################
+
         dcc.Store(id="lots2-custom-priority-store", data=None, storage_type="memory"),
     ], id="lots2")
     return layout
@@ -196,7 +202,7 @@ def targets_tab(horizon: int):
                 html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
                 html.Div(dcc.Textarea(id="lots2-structure-logging", value="", className="lots2-textarea")),
                 # html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "hidden"}))
-                html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "visible"}))
+                #html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "visible"}))
             ]), html.Div([
                 html.H4("Plant performance models"),
                 html.Div(id="lots2-details-performance-models", className="lots2-performance-models")
@@ -1000,6 +1006,79 @@ def _targets_from_ltp(selected_row: dict[str, any], process: str, snapshot: Snap
 
 
 @callback(
+          Output("lots2-material-setpoints-memory", "data"),
+          Input("lots2-material-setpoints-ltp", "data"),
+          Input("lots2-target-weight", "data"),
+          Input("lots2-process-selector", "value"),
+          Input("lots2-active-plants", "data"),
+          Input("lots2-material-setpoints-user", "data"),
+          State("lots2-material-setpoints-memory", "data"),
+)
+def ltp_submit(ltp_structure: dict[str, float]|None, target_weight: float|None, process: str|None, active_plants: Sequence[int],
+                                                user_structure: dict[str, float]|None, old_structure: dict[str, float]|None):
+    if not target_weight or not process or not dash_authenticated(config):
+        return None
+    changed = GuiUtils.changed_ids()
+    process_changed = "lots2-process-selector" in changed
+    plants_changed = "lots2-active-plants" in changed
+    ltp_structure_set: bool = ltp_structure is not None and "lots2-material-setpoints-ltp" in changed and not process_changed
+    user_structure_set: bool = not ltp_structure_set and user_structure is not None and "lots2-material-setpoints-user" in changed and not process_changed
+    cats = [cat for cat in state.get_site().material_categories if cat.process_steps is None or process in cat.process_steps]
+    site = state.get_site()
+    equipment = [site.get_equipment(e, do_raise=True) for e in active_plants]
+    mat_by_cats: dict[str, Sequence[MaterialClass]] = {cat.id: [mat for mat in cat.classes if any(e.material_constraints is None or e.material_constraints.excluded is None \
+                                                                or mat.id not in e.material_constraints.excluded for e in equipment)] for cat in cats}
+    all_mats: Sequence[str] = [mat.id for mats in mat_by_cats.values() for mat in mats]
+    old_sum = old_structure.get("_sum", 0) if old_structure is not None else 0
+    new_sum = target_weight
+    if new_sum < 0.1:
+        return None
+    new_structure = old_structure
+    if ltp_structure_set:
+        new_structure = dict(ltp_structure)
+    elif user_structure_set:
+        new_structure = dict(user_structure)
+    elif not process_changed and not plants_changed and old_structure is not None and old_sum > 0:
+        if abs(new_sum - old_sum) < 0.1:
+            return dash.no_update
+        factor = new_sum / old_sum
+        new_structure = {key: val * factor for key, val in old_structure.items()}
+    if new_structure is None:
+        return new_structure
+    # adapt to selected process and plants: not all material classes may be present
+    for cat, mats in mat_by_cats.items():
+        cat_obj = next(c for c in cats if c.id == cat)
+        all_cat_mats = [cl.id for cl in cat_obj.classes]
+        reported_mats = [mat for mat in new_structure.keys() if mat in all_cat_mats]
+        if len(all_cat_mats) == len(mats) or len(reported_mats) == 0:
+            continue
+        reported_mats_matching = [mat for mat in reported_mats if mat in all_mats]
+        for mat in (m for m in reported_mats if m not in reported_mats_matching):
+            new_structure.pop(mat, None)
+        if len(reported_mats_matching) == 0:
+            continue
+        sum_matching_mats = sum(new_structure.get(mat) for mat in reported_mats_matching)
+        missing = target_weight - sum_matching_mats
+        if sum_matching_mats > target_weight/2 and missing / sum_matching_mats < 0.01:
+            continue
+        factors = {mat: new_structure[mat]/sum_matching_mats for mat in reported_mats_matching}
+        for mat in reported_mats_matching:
+            new_structure[mat] = new_structure[mat] + factors[mat] * missing
+    for cat in (c for c in state.get_site().material_categories if c.id not in mat_by_cats):
+        for cl in cat.classes:
+            new_structure.pop(cl.id, None)
+    return new_structure
+
+@callback(
+          Output("lots2-material-setpoints", "data"),
+          # TODO check if structure active
+          Input("lots2-material-setpoints-memory", "data"),
+)
+def final_structure_changed(structure: dict[str, float]|None):
+    return structure
+
+
+@callback(
           Output("lots2-orders-backlog-init", "disabled"),
           Output("lots2-orders-backlog-init", "title"),
           Output("lots2-orders-init-submenu", "hidden"),
@@ -1578,7 +1657,7 @@ def update_table_filters(_, selected_lots: list[str]|None, old_filter):
 
 @callback(
     Output("lots2-structure-logging", "value"),
-    Output("lots2-structure-sum", "value"),
+    # Output("lots2-structure-sum", "value"),
     Input("lots2-material-setpoints", "data")
 )
 def show_userinput_structure_planning( json_data):
@@ -1596,7 +1675,7 @@ def show_userinput_structure_planning( json_data):
         return colsum
 
     sum_setpoints = get_sum_from_setpoints()
-    return result_structure_planning, sum_setpoints
+    return result_structure_planning   # , sum_setpoints
 
 @callback(
     Output("lots2-orders-custom-priority-table", "rowData"),
@@ -1801,7 +1880,7 @@ def update_figure(history: list[float]|None):
 
           State("lots2-orders-data", "data"),  # we'd like to make this an Input, but it leads to circular dependencies with process_selector
           State("lots2-store-results", "value"),
-          State("lots2-structure-sum", "value"),
+          #State("lots2-structure-sum", "value"),
           State("lots2-material-setpoints", "data"),
           State("lots2-custom-priority-store", "data"),
           State("lots2-details-plants", "children"),
@@ -1830,7 +1909,7 @@ def process_changed(snapshot: datetime|None,
                     create_comment: str|None,
                     order_data: dict[str, Any] | None, # keys "snapshot", "process", "orders_selected_cnt", "orders_selected_weight"
                     store_results0: list[Literal[""]],
-                    structure_sum: int|None,
+                    #structure_sum: int|None,
                     material_structure: dict[str, any]|None,
                     orders_custom_priority_json: str|None,
                     components: list[Component]|None,
@@ -1855,6 +1934,7 @@ def process_changed(snapshot: datetime|None,
         total_weight, message = target_values_sum(process=process, plants=[p.id for p in plants], components=components)
         return total_weight
     details_sum = _structure_calc_sum(components, process)
+    structure_sum = None if material_structure is None else material_structure.get("_sum")
     if structure_sum is not None and structure_sum > 0 and details_sum > 0:
         diff = 2 * abs(structure_sum - details_sum) / (structure_sum + details_sum)
         if diff > 0.01:
@@ -2194,10 +2274,21 @@ def test_test(plants, checked: Sequence[Sequence[Literal[""]]], inputs: Sequence
         predecessor = selected_lots[idx]
         p_lot_range = lots_range[idx] if lots_range is not None else None
         plant_settings[p_id_dict["id"]] = {"total_value": total, "predecessor_lot": predecessor, "lot_range": p_lot_range}
-    # FIXME
-    print(" NEW plant settings", plant_settings)
     return sum(total_values), plant_settings
 
+@callback(
+          Output("lots2-active-plants", "data"),
+          Input("lots2-plant-settings", "data"),
+          State("lots2-active-plants", "data"),
+)
+def plant_settings_changed(settings: dict[int, Any]|None, active_plants: Sequence[str]) -> Sequence[int]:
+    if settings is None or len(settings) == 0:
+        return tuple()
+    num_current = len(active_plants)
+    num_new = len(settings) if settings is not None else 0
+    if num_current == num_new and all(p in settings for p in active_plants):
+        return dash.no_update
+    return tuple(int(p) for p in settings.keys())
 
 
 # Swimlane related callbacks
@@ -2238,17 +2329,6 @@ clientside_callback(
     #config_prevent_initial_callbacks=True
 )
 
-
-@callback(
-    Output("lots2-material-setpoints", "data"),
-    Input("lots2-material-setpoints-user", "data"),
-    Input("lots2-material-setpoints-ltp", "data")
-)
-def merge_material_setpoints(mat_user: dict[str, float]|None, mat_ltp: dict[str, float]|None):
-    is_ltp_triggered = "lots2-material-setpoints-ltp" in GuiUtils.changed_ids()
-    return mat_ltp if is_ltp_triggered else mat_user
-
-
 # reset material grid set default
 clientside_callback(
     ClientsideFunction(
@@ -2278,12 +2358,13 @@ clientside_callback(
 clientside_callback(
     ClientsideFunction(
         namespace="lots2",
-        function_name="initMaterialGrid"
+        function_name="initMaterialGrid2"
     ),
     Output("lots2-materials-grid", "title"),
-    Input("lots2-weight-total", "value"),
+    Input("lots2-structure-btn", "n_clicks"),
     State("lots2-process-selector", "value"),
-    State("lots2-material-setpoints", "data"),
+    State("lots2-target-weight", "data"),
+    State("lots2-material-setpoints-memory", "data"),
     State("lots2-materials-grid", "id"),
     prevent_initial_call=True,
 )
@@ -2323,17 +2404,10 @@ clientside_callback(
 @callback(
     Output("lots2-weight-total", "value"),
     Input("lots2-structure-btn", "n_clicks"),
-    State("lots2-details-plants", "children"),
-    State("lots2-process-selector", "value"),
-    State("lots2-material-setpoints", "data"),
-
+    State("lots2-target-weight", "data")
 )
-def structure_update(_, components: list[Component]|None, process: str|None, setpoints):
-    #first OUT is sum in grid, lots2-weight-total used as IN for other fcts
-    #second OUT is sum hidden
-    plants = state.get_site().get_process_equipment(process)
-    total_weight, message = target_values_sum(process=process, plants=[p.id for p in plants], components=components)
-    return total_weight  #f"{total_weight:.2f}"
+def structure_update(_, target: float|None):
+    return target
 
 #@callback(
 #    Output("lots2-target-weight", "data"),

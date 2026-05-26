@@ -119,12 +119,8 @@ class KeySearch:
         update = {}
 
         for field_name in dump_model.__class__.model_fields.keys():
-
-            current_val = cls._get_value(field_name)
-
-            if current_val is None and field_name in os.environ:
-                raw_val = os.environ[field_name]
-                update[field_name] = raw_val
+            if field_name in os.environ:
+                update[field_name] = os.environ[field_name]
 
         return dump_model.model_copy(update=update).model_dump()
 

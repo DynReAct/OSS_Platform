@@ -34,7 +34,7 @@ from confluent_kafka.admin import AdminClient
 import configparser
 
 from dynreact.shortterm.common.functions import get_transport_times
-from dynreact.shortterm.common import VAction, sendmsgtopic, KeySearch
+from dynreact.shortterm.common import VAction, sendmsgtopic, KeySearch, initialize_keysearch_from_runtime
 from dynreact.shortterm.common.data.data_functions import end_auction
 from dynreact.shortterm.common.data.data_setup import DataSetup
 import os, re, json
@@ -739,10 +739,7 @@ def execute_short_term_planning(args: dict) -> Any:
                            EXIT_WAIT=exit_wait, CLONING_WAIT=cloning_wait, RUNNING_WAIT=running_wait, SMALL_WAIT=small_wait)
 
     # Other arguments will be retrieved from env variables
-    short_term_config = cast(ShortTermTargets, ShortTermTargets().model_copy(update={"VB": verbose, "TimeDelays": time_delay}))  # type: ignore
-
-    # Class method
-    KeySearch.set_global(config_provider=short_term_config)
+    initialize_keysearch_from_runtime(overrides={"VB": verbose, "TimeDelays": time_delay})
 
     if os.environ.get('SPHINX_BUILD'):
         # Mock REST_URL for Sphinx Documentation

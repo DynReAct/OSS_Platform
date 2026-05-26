@@ -14,13 +14,11 @@ import pytest
 from confluent_kafka import Producer
 
 from datetime import datetime, timedelta
-from dynreact.shortterm.common import purge_topics, KeySearch
+from dynreact.shortterm.common import purge_topics, KeySearch, initialize_keysearch_from_runtime
 from dynreact.shortterm.common.handler import DockerManager
 from dynreact.shortterm.common.data.data_setup import DataSetup
 from dynreact.shortterm.short_term_planning import execute_short_term_planning, run_general_agents, clean_agents
-from dynreact.shortterm.shorttermtargets import ShortTermTargets
-
-KeySearch.set_global(config_provider=ShortTermTargets())
+initialize_keysearch_from_runtime()
 topic_gen = KeySearch.search_for_value("TOPIC_GEN")
 topic_callback = KeySearch.search_for_value("TOPIC_CALLBACK")
 

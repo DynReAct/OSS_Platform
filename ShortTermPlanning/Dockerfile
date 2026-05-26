@@ -70,7 +70,9 @@ ENV PYTHONUNBUFFERED=1 \
     LOCAL_REGISTRY=$DOCKER_REGISTRY \
     PATH="/app/.venv/bin:$PATH" \
     KAFKA_TOPIC_PREFIX="Dynreact_OSS" \
-    TOPIC_GEN="Dynreact-OSS-Gen"
+    TOPIC_GEN="Dynreact-OSS-Gen" \
+    TOPIC_CALLBACK="Dynreact-OSS-Callback" \
+    SHORT_TERM_PLANNING_PARAMS="default+file:./data/stp_context.json"
 
 COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 
@@ -87,6 +89,7 @@ COPY dynreact/shortterm/short_term_planning.py ./shortterm/dynreact/shortterm/
 COPY dynreact/shortterm/replace_base.py ./shortterm/dynreact/shortterm/
 COPY dynreact/shortterm/shorttermtargets.py ./shortterm/dynreact/shortterm/
 COPY dynreact/shortterm/timedelay.py ./shortterm/dynreact/shortterm/
+COPY data/stp_context.json /app/data/stp_context.json
 
 RUN groupadd -r appgroup && useradd -r -u 1050 -g appgroup appuser
 RUN groupadd docker

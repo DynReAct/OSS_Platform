@@ -62,6 +62,20 @@ def _key_float(key: str, default: float = 0.0) -> float:
         return default
 
 
+def _ux_group_id() -> str:
+    """Build one UX consumer group id scoped to the active runtime context."""
+    raw_context = (
+        os.environ.get("CONTAINER_NAME_PREFIX")
+        or _key_str("TOPIC_CALLBACK")
+        or _key_str("KAFKA_TOPIC_PREFIX")
+        or "default"
+    )
+    normalized_context = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(raw_context)).strip("-")
+    if normalized_context == "":
+        normalized_context = "default"
+    return f"UX-{normalized_context}"
+
+
 def list_all_topics(admin_client: AdminClient, verbose: int) -> Any:
     """
     List all topics in the Kafka broker.
@@ -761,7 +775,7 @@ def execute_short_term_planning(args: dict) -> Any:
     producer = Producer(producer_config)
     consumer_config = {
         "bootstrap.servers": ip,
-        "group.id": "UX",
+        "group.id": _ux_group_id(),
         "auto.offset.reset": "earliest",
         'enable.auto.commit': False
     }

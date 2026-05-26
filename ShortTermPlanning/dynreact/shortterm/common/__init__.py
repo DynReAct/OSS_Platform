@@ -213,6 +213,43 @@ class KeySearch:
 
         return default_value
 
+
+def initialize_keysearch_from_runtime(
+    *,
+    default_uri: str = "default+file:./data/stp_context.json",
+    overrides: dict[str, Any] | None = None,
+) -> ShortTermTargets:
+    """
+    Initialize ``KeySearch`` from the runtime STP context when available.
+
+    The short-term agents and helper scripts are often started directly from a
+    container entrypoint, without going through the UI path that loads
+    ``stp_context.json``. In that case, relying on ``ShortTermTargets()``
+    alone silently falls back to OSS defaults. This helper keeps the existing
+    environment precedence but first loads the configured STP JSON when it is
+    present in the container.
+    """
+
+    config: ShortTermTargets | None = None
+    uri = os.getenv("SHORT_TERM_PLANNING_PARAMS", default_uri)
+
+    if isinstance(uri, str) and uri.startswith("default+file:"):
+        file_path = uri[len("default+file:"):]
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as file:
+                config = ShortTermTargets.model_validate_json(file.read())
+
+    if config is None:
+        config = ShortTermTargets()
+
+    if overrides:
+        normalized_overrides = {key: value for key, value in overrides.items() if value is not None}
+        if normalized_overrides:
+            config = config.model_copy(update=normalized_overrides)
+
+    KeySearch.set_global(config_provider=config)
+    return config
+
 class VAction(argparse.Action):
     """
     Custom action for argparse to handle verbosity levels.

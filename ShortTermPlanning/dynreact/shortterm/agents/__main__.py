@@ -16,10 +16,7 @@ import os
 
 from dynreact.shortterm.agents.equipment import Equipment
 from dynreact.shortterm.agents.material import Material
-from dynreact.shortterm.common import VAction, KeySearch
-from dynreact.shortterm.shorttermtargets import ShortTermTargets
-
-
+from dynreact.shortterm.common import VAction, KeySearch, initialize_keysearch_from_runtime
 def log_base(verbose: int, kafka_ip: str) -> Any:
 
     """Log base.
@@ -38,7 +35,7 @@ def log_base(verbose: int, kafka_ip: str) -> Any:
         print(f"Running log agent with {verbose=}")
 
     # Global configuration - assign the values to the global variables using the information above
-    KeySearch.set_global(config_provider=ShortTermTargets(VB=verbose, KAFKA_IP=kafka_ip))
+    initialize_keysearch_from_runtime(overrides={"VB": verbose, "KAFKA_IP": kafka_ip})
 
     left_path = KeySearch.search_for_value('LOG_FILE_PATH')
     topic_gen = KeySearch.search_for_value('TOPIC_GEN')
@@ -83,7 +80,7 @@ def equipment_base(verbose: int, kafka_ip: str) -> Any:
         print(f"Running equipment agent with {verbose=}")
 
     # Global configuration - assign the values to the global variables using the information above
-    KeySearch.set_global(config_provider=ShortTermTargets(VB=verbose, KAFKA_IP=kafka_ip))
+    initialize_keysearch_from_runtime(overrides={"VB": verbose, "KAFKA_IP": kafka_ip})
 
     topic_gen = KeySearch.search_for_value('TOPIC_GEN')
 
@@ -110,7 +107,7 @@ def material_base(verbose: int, kafka_ip: str) -> Any:
         print(f"Running material agent with {verbose=}")
 
     # Global configuration - assign the values to the global variables using the information above
-    KeySearch.set_global(config_provider=ShortTermTargets(VB=verbose, KAFKA_IP=kafka_ip))
+    initialize_keysearch_from_runtime(overrides={"VB": verbose, "KAFKA_IP": kafka_ip})
 
     topic_gen = KeySearch.search_for_value('TOPIC_GEN')
 

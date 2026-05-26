@@ -67,6 +67,7 @@ class DockerManager:
 
                 environment_variables = {
                   "IS_DOCKER": "true",
+                  "KAFKA_TOPIC_PREFIX": KeySearch.search_for_value("KAFKA_TOPIC_PREFIX"),
                   "TOPIC_GEN": KeySearch.search_for_value("TOPIC_GEN"),
                   "TOPIC_CALLBACK": KeySearch.search_for_value("TOPIC_CALLBACK")
                 }
@@ -77,10 +78,12 @@ class DockerManager:
                     "IMAGE_NAME",
                     "IMAGE_TAG",
                     "KAFKA_IP",
+                    "KAFKA_TOPIC_PREFIX",
                     "LOCAL_REGISTRY",
                     "LOG_FILE_PATH",
                     "PERF_URL",
                     "REST_URL",
+                    "SHORT_TERM_PLANNING_PARAMS",
                     "SNAPSHOT_VERSION",
                     "TRANSPORT_TIMES_URL",
                 )

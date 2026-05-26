@@ -153,6 +153,9 @@ def layout(*args, **kwargs):
         dcc.Store(id="lots2-material-setpoints-ltp", data=None, storage_type="memory"),  # dictionary
         dcc.Store(id="lots2-material-setpoints-memory", storage_type="memory"),  # dictionary; seldom None; consolidated from user and ltp version
         dcc.Store(id="lots2-material-setpoints", data=None, storage_type="memory"), # dictionary; the final material structure selected
+        # Same as above, but intended for display to the user
+        #  { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
+        dcc.Store(id="lots2-material-setpoints-repr", data=None, storage_type="memory"),
         ####################
 
         dcc.Store(id="lots2-custom-priority-store", data=None, storage_type="memory"),
@@ -198,9 +201,17 @@ def targets_tab(horizon: int):
                     html.Span("Total production: "),
                     html.Span(id="lots2-plant-targets-sum"),
                     html.Span("t"),
-                ]),  #
-                html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
-                html.Div(dcc.Textarea(id="lots2-structure-logging", value="", className="lots2-textarea")),
+                ]),
+                html.Div([
+                    html.Div("Structure planning: "),
+                    dcc.Checklist(id="lots2-check-material-planning", options=checklist_dict, value=[])
+                ], className="lots2-structure-toggle"), #
+                html.Div([
+                    html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
+                    #html.Div(dcc.Textarea(id="lots2-structure-logging", value="", className="lots2-textarea")),
+                    html.Div(id="lots2-materials-state"),
+                ], id="lots2-materials-panel"),
+
                 # html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "hidden"}))
                 #html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "visible"}))
             ]), html.Div([
@@ -728,7 +739,7 @@ def ltp_table_opened(_, snapshot: str, process: str, horizon_hours: int):
     return columns
 
 @callback(
-    Output("lots2-material-setpoints", "clear_data"),
+    Output("lots2-material-setpoints-memory", "clear_data"),
     Input("lots2-materials-clear", "n_clicks"),
     Input("lots2-process-selector", "value")
 )
@@ -1071,11 +1082,19 @@ def ltp_submit(ltp_structure: dict[str, float]|None, target_weight: float|None, 
 
 @callback(
           Output("lots2-material-setpoints", "data"),
-          # TODO check if structure active
           Input("lots2-material-setpoints-memory", "data"),
+          Input("lots2-check-material-planning", "value"),
 )
-def final_structure_changed(structure: dict[str, float]|None):
-    return structure
+def final_structure_changed(structure: dict[str, float]|None, structure_checked: Sequence[Literal[""]]|None):
+    return structure if structure_checked and len(structure_checked) > 0 else None
+
+
+@callback(
+          Output("lots2-materials-panel", "hidden"),
+          Input("lots2-check-material-planning", "value"),
+)
+def structure_visibility_changed(structure_checked: Sequence[Literal[""]]|None):
+    return not structure_checked or len(structure_checked) == 0
 
 
 @callback(
@@ -1655,27 +1674,27 @@ def update_table_filters(_, selected_lots: list[str]|None, old_filter):
     return dash.no_update, dash.no_update, len(old_filter) == 0
 
 
-@callback(
-    Output("lots2-structure-logging", "value"),
-    # Output("lots2-structure-sum", "value"),
-    Input("lots2-material-setpoints", "data")
-)
-def show_userinput_structure_planning( json_data):
-    result_structure_planning = str(json_data)
-    def get_sum_from_setpoints():
-        # calc sum for one column
-        colsum = 0
-        if json_data is not None:
-            site = state.get_site()
-            material_categories = site.material_categories
-            cat0 = material_categories[0]
-            for myclass in cat0.classes:
-                if myclass.id in json_data.keys():
-                    colsum = colsum + json_data.get(myclass.id)
-        return colsum
-
-    sum_setpoints = get_sum_from_setpoints()
-    return result_structure_planning   # , sum_setpoints
+#@callback(
+#    Output("lots2-structure-logging", "value"),
+#    # Output("lots2-structure-sum", "value"),
+#    Input("lots2-material-setpoints", "data")
+#)
+#def show_userinput_structure_planning( json_data):
+#    result_structure_planning = str(json_data)
+#    def get_sum_from_setpoints():
+#        # calc sum for one column
+#        colsum = 0
+#        if json_data is not None:
+#            site = state.get_site()
+#            material_categories = site.material_categories
+#            cat0 = material_categories[0]
+#            for myclass in cat0.classes:
+#                if myclass.id in json_data.keys():
+#                    colsum = colsum + json_data.get(myclass.id)
+#        return colsum
+#
+#    sum_setpoints = get_sum_from_setpoints()
+#    return result_structure_planning   # , sum_setpoints
 
 @callback(
     Output("lots2-orders-custom-priority-table", "rowData"),
@@ -2368,6 +2387,35 @@ clientside_callback(
     State("lots2-materials-grid", "id"),
     prevent_initial_call=True,
 )
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="lots2",
+        function_name="setBacklogStructureOverview"
+    ),
+    Output("lots2-materials-state", "title"),
+    Input("lots2-material-setpoints-repr", "data"),
+    State("lots2-dummy-undefined", "data"),
+    State("lots2-materials-state", "id"),
+)
+
+#  { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
+@callback(
+          Output("lots2-material-setpoints-repr", "data"),
+          Input("lots2-material-setpoints", "data")
+)
+def structure_settings_changed(structure: dict[str, float]|None) -> dict[str, Any]|None:
+    if structure is None:
+        return None
+    result = {}
+    for cat in state.get_site().material_categories:
+        class_dict = {}
+        for clzz in (c for c in cat.classes if c.id in structure):
+            class_dict[clzz.id] = {"name": clzz.name or clzz.id, "weight": structure.get(clzz.id, 0.)}
+        if len(class_dict) > 0:
+            result[cat.id] = {"name": cat.name or cat.id, "classes": class_dict}
+    return result if len(result) > 0 else None
+
 
 clientside_callback(
     ClientsideFunction(

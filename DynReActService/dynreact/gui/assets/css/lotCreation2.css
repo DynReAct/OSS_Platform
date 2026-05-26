@@ -404,3 +404,8 @@
     margin-top: 0.5em;
 }
 
+.lots2-structure-toggle {
+    display: flex;
+    column-gap: 1em;
+    padding-top: 1em;
+}

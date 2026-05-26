@@ -32,6 +32,8 @@
     }
 
     globalThis.dash_clientside.lots2.initMaterialGrid2 = function(_, process, totalProduction, setpoints, gridId) {
+        if (!process)
+            return;
         if (!globalThis.customElements.get(materialsTag))
             globalThis.customElements.define(materialsTag, MaterialsGrid2);     //use class MaterialGrid
         const gridContainer = document.querySelector("#" + gridId);             //object MaterialGrid

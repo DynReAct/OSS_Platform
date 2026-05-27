@@ -189,6 +189,49 @@ def run_general_agents(producer: Producer, gagents: str, verbose: int) -> Any:
     return log_handler, equipment_handler, material_handler
 
 
+def _select_materials_for_equipment(
+        data_setup: DataSetup, equipment: str | int, nmaterials: int | None
+) -> list[str]:
+    """
+    Select the materials to clone for one equipment.
+
+    When results are later normalized by order, cloning multiple materials from
+    the same order adds noise and can make multi-equipment scenarios unstable.
+    Prefer one material per distinct order, prioritizing orders exclusive to the
+    equipment, and only then fall back to the remaining materials.
+    """
+    equipment_key = str(equipment)
+    equipment_id = int(equipment_key)
+    material_ids = data_setup.get_equipment_materials(equipment_id)
+
+    if not nmaterials:
+        return material_ids
+
+    exclusive_unique: list[str] = []
+    shared_unique: list[str] = []
+    fallback: list[str] = []
+    seen_orders: set[str] = set()
+
+    for material_id in material_ids:
+        material_params = data_setup.get_material_params(material_id)
+        order = material_params["order"]
+        order_id = str(order["id"])
+        allowed_equipment = {str(equipment_id) for equipment_id in order.get("allowed_equipment", [])}
+
+        if order_id in seen_orders:
+            fallback.append(material_id)
+            continue
+
+        seen_orders.add(order_id)
+        if allowed_equipment == {equipment_key}:
+            exclusive_unique.append(material_id)
+        else:
+            shared_unique.append(material_id)
+
+    selected_materials = (exclusive_unique + shared_unique + fallback)[:nmaterials]
+    return selected_materials
+
+
 def create_auction(
         equipments: list[str], producer: Producer, verbose: int,
         snapshot: str | None = None, act: str | None = None, nmaterials: int | None = None,
@@ -295,11 +338,14 @@ def create_auction(
 
     if materials is None:
         for equipment in equipments:
-            # Get the list of materials of the equipment
             equipment_ids = re.findall(r'\d+', str(equipment))
 
             if len(equipment_ids) == 1:
-                equipment_materials = data_setup.get_equipment_materials(int(equipment_ids[0]))
+                equipment_materials = _select_materials_for_equipment(
+                    data_setup=data_setup,
+                    equipment=equipment_ids[0],
+                    nmaterials=nmaterials,
+                )
                 if verbose > 1:
                     msg = f"Obtained list of materials from equipment {equipment}: {equipment_materials}"
                     print(msg)
@@ -311,11 +357,7 @@ def create_auction(
                 dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
                 raise Exception(f"{dt} | ERROR: No equipment ID found in equipment {equipment}")
 
-            if materials is None and nmaterials is not None:
-                all_materials.extend(equipment_materials[:nmaterials])
-            else:
-                all_materials.extend(equipment_materials)
-
+            all_materials.extend(equipment_materials)
             print("Current material list size is {}".format(len(all_materials)))
     else:
         all_materials = materials
@@ -570,9 +612,11 @@ def _equipment_order_scope(equipments: list[str], snapshot: str, nmaterials: int
 
     for equipment in equipments:
         equipment_key = str(equipment)
-        equipment_id = int(equipment_key)
-        material_ids = data_setup.get_equipment_materials(equipment_id)
-        selected_materials = material_ids[:nmaterials] if nmaterials else material_ids
+        selected_materials = _select_materials_for_equipment(
+            data_setup=data_setup,
+            equipment=equipment_key,
+            nmaterials=nmaterials,
+        )
         scope[equipment_key] = {
             data_setup.get_material_params(material_id)["order"]["id"]
             for material_id in selected_materials

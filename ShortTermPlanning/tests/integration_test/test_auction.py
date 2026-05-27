@@ -17,7 +17,12 @@ from datetime import datetime, timedelta
 from dynreact.shortterm.common import purge_topics, KeySearch, initialize_keysearch_from_runtime
 from dynreact.shortterm.common.handler import DockerManager
 from dynreact.shortterm.common.data.data_setup import DataSetup
-from dynreact.shortterm.short_term_planning import execute_short_term_planning, run_general_agents, clean_agents
+from dynreact.shortterm.short_term_planning import (
+    execute_short_term_planning,
+    run_general_agents,
+    clean_agents,
+    _select_materials_for_equipment,
+)
 initialize_keysearch_from_runtime()
 topic_gen = KeySearch.search_for_value("TOPIC_GEN")
 topic_callback = KeySearch.search_for_value("TOPIC_CALLBACK")
@@ -404,9 +409,11 @@ def expected_unique_orders_for_equipment(equipment: str, snapshot: str, nmateria
     expected result size must be computed from distinct order ids.
     """
     data_setup = DataSetup(verbose=0, snapshot_time=snapshot)
-    equipment_id = int(equipment)
-    material_ids = data_setup.get_equipment_materials(equipment_id)
-    selected_materials = material_ids[:nmaterials] if nmaterials else material_ids
+    selected_materials = _select_materials_for_equipment(
+        data_setup=data_setup,
+        equipment=equipment,
+        nmaterials=nmaterials,
+    )
     selected_orders = {
         data_setup.get_material_params(material_id)["order"]["id"]
         for material_id in selected_materials

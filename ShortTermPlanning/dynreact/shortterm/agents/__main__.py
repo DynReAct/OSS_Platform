@@ -17,6 +17,7 @@ import os
 from dynreact.shortterm.agents.equipment import Equipment
 from dynreact.shortterm.agents.material import Material
 from dynreact.shortterm.common import VAction, KeySearch, initialize_keysearch_from_runtime
+from dynreact.shortterm.shorttermtargets import ShortTermTargets
 def log_base(verbose: int, kafka_ip: str) -> Any:
 
     """Log base.

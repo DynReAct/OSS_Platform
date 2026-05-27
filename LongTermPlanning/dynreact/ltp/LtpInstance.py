@@ -49,8 +49,8 @@ class LtpInstance:
         equipment_to_storages_flow = {e: {key: val.np2d for key, val in dct.items()} for e, dct in equipment_to_storages.items()}
         ## store results for later evaluation
         # LtpUtils.store_results(self._site, self._structure, self._shifts, self._availabilities,
-        #                       storage_levels, storages_to_equipment_flow, equipment_to_storages_flow, "ltp_result.json")
-        # return LtpUtils.to_results(self._site, self._shifts, self._structure, storages, storages_to_equipment, equipment_to_storages)
+        #                       storage_levels, storages_to_equipment_flow, equipment_to_storages_flow, "ltp_result.json", frozen_horizons=frozen_horizons)
+        # return LtpUtils.to_results(self._site, self._shifts, self._structure, storage_levels, storages_to_equipment_flow, equipment_to_storages_flow)
         shifts_allocator = ShiftAllocator(self._site, self._structure, self._shifts, self._availabilities, storage_levels,
                                           equipment_to_storages_flow, storages_to_equipment_flow, frozen_horizons=frozen_horizons)
         return shifts_allocator.run()

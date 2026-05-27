@@ -47,7 +47,12 @@ class ShiftAllocator:
         self._frozen_horizons = frozen_horizons
         self._random = random.Random(x=rand_seed)
 
-    def run(self):
+    def run(self, debug: bool=False, fail_on_validation_error: bool=False):
+        if fail_on_validation_error:
+            debug = True
+        if debug:
+            LtpUtils.analyze_flows(self._equipment_to_storages, self._storages_to_equipment, self._site, len(self._shifts),
+                                   fail_on_error=fail_on_validation_error, prefix="::ShiftAllocator input validation::")
         processes = self._site.processes
         procs_done = set()
         procs_open = [p for p in processes]
@@ -59,10 +64,10 @@ class ShiftAllocator:
             procs_done.add(next_proc.name_short)
             # FIXME
             print(f" PROCESS allocation starting {next_proc.name_short}")
-            self._allocate_process(next_proc)
+            self._allocate_process(next_proc, debug=debug)
         return LtpUtils.to_results(self._site, self._shifts, self._targets, self._storage_levels_final, self._storages_to_equipment_final, self._equipment_to_storages_final)
 
-    def _allocate_process(self, process: Process):
+    def _allocate_process(self, process: Process, debug: bool=False, fail_on_validation_error: bool=False):
         proc = process.name_short
         shifts = self._shifts
         material_classes = self._material_classes
@@ -123,8 +128,10 @@ class ShiftAllocator:
                 prod_capacity = equipment.throughput_capacity * hours_per_shift
                 target_prod: np.ndarray = self._equipment_targets[equipment.id][:, shift_idx]
                 shift_targets = equipment_production_delta[equipment.id] + target_prod
-                equipment_production_delta[equipment.id] += target_prod
+                equipment_production_delta[equipment.id] = equipment_production_delta[equipment.id] + target_prod
                 # the target production may become negative due to greater previous production for some materials
+                if shift_targets[-1] <= 0:
+                    continue
                 if any(t < 0 for t in shift_targets):
                     problem_materials = [mat for idx, mat in enumerate(material_classes) if shift_targets[idx] < 0]
                     problem_cats = [cat for cat in self._site.material_categories if
@@ -269,4 +276,12 @@ class ShiftAllocator:
                 self._storages_to_equipment_final[stg] = {}
             for eq, flow in flow_dict.items():
                 self._storages_to_equipment_final[stg][eq] = flow
+        if debug:
+            LtpUtils.analyze_flows(equipment_to_storages, storages_to_equipment, self._site, num_shifts, process=process.name_short,
+                                   fail_on_error=fail_on_validation_error, prefix="::ShiftAllocator result validation::")
+
+
+
+
+
 

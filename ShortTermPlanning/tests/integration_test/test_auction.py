@@ -250,6 +250,7 @@ def test_scenario_04() -> None:
             equipment=equipment,
             snapshot=args["snapshot"],
             nmaterials=args["nmaterials"],
+            participating_equipments=args["equipments"],
         )
 
     print(result)
@@ -316,6 +317,7 @@ def test_scenario_06() -> None:
             equipment=equipment,
             snapshot=args["snapshot"],
             nmaterials=args["nmaterials"],
+            participating_equipments=args["equipments"],
         )
 
     print(result)
@@ -352,6 +354,7 @@ def test_scenario_07() -> None:
             equipment=equipment,
             snapshot=args["snapshot"],
             nmaterials=args["nmaterials"],
+            participating_equipments=args["equipments"],
         )
 
     print(result)
@@ -388,6 +391,7 @@ def test_scenario_08() -> None:
             equipment=equipment,
             snapshot=args["snapshot"],
             nmaterials=args["nmaterials"],
+            participating_equipments=args["equipments"],
         )
 
     orders_ids = []
@@ -402,7 +406,12 @@ def test_scenario_08() -> None:
     print(result)
 
 
-def expected_unique_orders_for_equipment(equipment: str, snapshot: str, nmaterials: int) -> int:
+def expected_unique_orders_for_equipment(
+        equipment: str,
+        snapshot: str,
+        nmaterials: int,
+        participating_equipments: list[str] | None = None,
+) -> int:
     """
     The auction result is grouped by order, not by raw material count.
     Multiple selected materials can belong to the same order, so the
@@ -413,6 +422,7 @@ def expected_unique_orders_for_equipment(equipment: str, snapshot: str, nmateria
         data_setup=data_setup,
         equipment=equipment,
         nmaterials=nmaterials,
+        participating_equipments=participating_equipments,
     )
     selected_orders = {
         data_setup.get_material_params(material_id)["order"]["id"]

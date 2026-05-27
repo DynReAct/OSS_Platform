@@ -125,6 +125,11 @@ class LtpUtils:
     @staticmethod
     def analyze_flows(equipment_to_storages: dict[int, dict[str, np.ndarray]], storages_to_equipment: dict[str, dict[int, np.ndarray]], site: Site, num_shifts: int, process: str|None=None,
                       fail_on_error: bool = False, error_threshold: float = 1., prefix: str=""):
+        """
+        Validates that for every shift the following constraint is satisfied:
+            material flow into equipment = material flow out of equipment,
+        both globally and per material category.
+        """
         all_mats = [clzz.id for cat in site.material_categories for clzz in cat.classes]
         cat_indices: dict[str, Sequence[int]] = {cat.id: [all_mats.index(cl.id) for cl in cat.classes] for cat in site.material_categories}
         cats = {cat.id: cat for cat in site.material_categories}
@@ -160,6 +165,75 @@ class LtpUtils:
                     if not cat_out_dev[cat] and abs(cat_sum_out - total_flow_out) > error_threshold:
                         cat_out_dev[cat] = True
                         msg = f"{prefix}   Category out flow != total out flow for equipment {equipment}, category {cat}, in shift {shift}: Total: {total_flow_out:.2f}, catgory flow: {cat_sum_out}"
+                        if fail_on_error:
+                            raise Exception(msg)
+                        print(msg)
+
+    @staticmethod
+    def analyze_storages(equipment_to_storages: dict[int, dict[str, np.ndarray]], storages_to_equipment: dict[str, dict[int, np.ndarray]],
+                      storage_levels: dict[str, np.ndarray],
+                      site: Site, num_shifts: int, process: str|None=None,
+                      fail_on_error: bool = False, error_threshold: float = 0.025, prefix: str=""):
+        """
+        Validates that for every shift the following constraint is satisfied:
+            new storage level = old storage level + material flow into storage - material flow out of storage
+        both globally and per material category. Furthermore, it validates that forbidden material does not enter a storage.
+        """
+        all_mats = [clzz.id for cat in site.material_categories for clzz in cat.classes]
+        cat_indices: dict[str, Sequence[int]] = {cat.id: [all_mats.index(cl.id) for cl in cat.classes] for cat in site.material_categories}
+        cats = {cat.id: cat for cat in site.material_categories}
+        classes_cnt = len(all_mats)
+        storages = list(storage_levels.keys())
+        # equipments = list(equipment_to_storages.keys())
+        zero_flow = np.zeros(shape=(classes_cnt + 1, num_shifts))
+        if not fail_on_error:
+            print(f"{prefix} Storages to be analyzed", f"for process {process}" if process else "", f": {storages}")
+        for storage in storages:
+            if not any(storage in dct for dct in equipment_to_storages.values()) or storage not in storages_to_equipment:  # Input or output storage
+                continue
+            stg = site.get_storage(storage, do_raise=True)
+            level = storage_levels[storage]
+            if stg.material_constraints is not None and len(stg.material_constraints.excluded) > 0:
+                forbidden_indices = [all_mats.index(mat) for mat in stg.material_constraints.excluded]
+                # mat -> shift index
+                violated_indices: dict[int, int] = {idx: next((shift for shift in range(num_shifts) if level[idx, shift] > 0.01), -1) for idx in forbidden_indices}
+                violated_indices = {mat_idx: shift_idx for mat_idx, shift_idx in violated_indices.items() if shift_idx >= 0}
+                if len(violated_indices) > 0:
+                    msg = f"Forbidden material in storage {storage}: "
+                    msg += ", ".join([f"material {all_mats[mat_idx]}: shift {shift_idx}" for mat_idx, shift_idx in violated_indices.items()])
+                    if fail_on_error:
+                        raise Exception(msg)
+                    print(msg)
+            capacity = stg.capacity_weight
+            flow_in = sum((dct[storage] for dct in equipment_to_storages.values() if storage in dct), start=zero_flow) / capacity
+            flow_out = sum(storages_to_equipment[storage].values(), start=zero_flow) / capacity if storage in storages_to_equipment else zero_flow
+            previous_level = level[:, :-1]
+            new_level = level[:, 1:]
+            new_level_calc = previous_level + flow_in - flow_out
+            total_level_dev: bool = False
+            cat_is_dev: dict[str, bool] = {cat: False for cat in cats.keys()}
+            cat_calc_dev: dict[str, bool] = {cat: False for cat in cats.keys()}
+            for shift in range(num_shifts):
+                total_new_level_is = new_level[-1, shift]
+                total_new_level_calc = new_level_calc[-1, shift]
+                if not total_level_dev and abs(total_new_level_calc - total_new_level_is) > error_threshold:
+                    total_level_dev = True
+                    msg = f"{prefix}  Total storage level != previous level + flow diff for storage {storage} in shift {shift}. New level is: {total_new_level_is:.2f}, expected: {total_new_level_calc:.2f}"
+                    if fail_on_error:
+                        raise Exception(msg)
+                    print(msg)
+                for cat, indices in cat_indices.items():
+                    cat_level_is = sum(new_level[indices, shift])
+                    cat_level_calc = sum(new_level_calc[indices, shift])
+                    if not cat_is_dev[cat] and abs(cat_level_is - total_new_level_is) > error_threshold:
+                        cat_is_dev[cat] = True
+                        msg = f"{prefix}   Category storage level != total level for storage {storage}, category {cat}, in shift {shift}: Total: {total_new_level_is:.2f}, catgory level: {cat_level_is}"
+                        if fail_on_error:
+                            raise Exception(msg)
+                        print(msg)
+                    if not cat_calc_dev[cat] and abs(cat_level_calc - total_new_level_calc) > error_threshold:
+                        cat_calc_dev[cat] = True
+                        msg = f"{prefix}   Calculated category storage level != calculated total level for storage {storage}, category {cat}, in shift {shift}: Total: {total_new_level_calc:.2f}, catgory level: {cat_level_calc}"
                         if fail_on_error:
                             raise Exception(msg)
                         print(msg)

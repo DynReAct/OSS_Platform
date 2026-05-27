@@ -52,7 +52,9 @@ class ShiftAllocator:
             debug = True
         if debug:
             LtpUtils.analyze_flows(self._equipment_to_storages, self._storages_to_equipment, self._site, len(self._shifts),
-                                   fail_on_error=fail_on_validation_error, prefix="::ShiftAllocator input validation::")
+                                   fail_on_error=fail_on_validation_error, prefix="::ShiftAllocator equipment input validation::")
+            LtpUtils.analyze_storages(self._equipment_to_storages, self._storages_to_equipment, self._storage_levels, self._site, len(self._shifts),
+                                   fail_on_error=fail_on_validation_error, prefix="::ShiftAllocator storage input validation::")
         processes = self._site.processes
         procs_done = set()
         procs_open = [p for p in processes]
@@ -73,6 +75,7 @@ class ShiftAllocator:
         material_classes = self._material_classes
         frozen_horizons = self._frozen_horizons or {}
         classes_cnt = len(material_classes)
+        mat_index_by_class: dict[str, int] = {mat: idx for idx, mat in enumerate(material_classes)}
         num_shifts = len(shifts)
         hours_per_shift = (shifts[0][-1] - shifts[0][0]).total_seconds() / 3600
         equipment_targets: dict[int, np.ndarray] = self._equipment_targets
@@ -222,13 +225,79 @@ class ShiftAllocator:
                     equipment_production_delta[equipment.id] = equipment_production_delta[equipment.id] - final_shift_targets
                     if len(initial_out_flows) == 1:
                         equipment_to_storages[equipment.id][next(iter(initial_out_flows.keys()))][:, shift_idx] = final_shift_targets
-                    else:  # distribute to storages
-                        for mat_idx in range(classes_cnt+1):
-                            initial_mat_flows: dict[str, float] = {stg: flow[mat_idx] for stg, flow in initial_out_flows.items()}
-                            total_initial_flow = sum(initial_mat_flows.values())
-                            shares: dict[str, float] = {stg: flow/total_initial_flow if flow > total_initial_flow/1e4 else 0 for stg, flow in initial_mat_flows.items()}
-                            for stg, share in shares.items():
-                                equipment_to_storages[equipment.id][stg][mat_idx, shift_idx] = share * final_shift_targets[mat_idx]
+                    # TODO this might best be formulated as a simple optimization problem
+                    else:  # distribute to multiple out storages => FIXME must use consistent shares between material classes
+                        # TODO evaluate max flow per storage by means of excluded material => sum over material classes per cat
+                        max_flow_per_storage = {stg: final_shift_targets[-1] for stg in initial_out_flows.keys()}
+                        exclusions: dict[str, list[str]] = {}
+                        for stg in initial_out_flows.keys():
+                            storage = storages_out[stg]
+                            if storage.material_constraints is not None and len(storage.material_constraints.excluded) > 0:
+                                excluded = storage.material_constraints.excluded
+                                for mat in excluded:
+                                    if mat not in exclusions:
+                                        exclusions[mat] = []
+                                    exclusions[mat].append(stg)
+                                affected_cats = [cat for cat in self._site.material_categories if any(cl.id in excluded for cl in cat.classes)]
+                                min_allowed = max_flow_per_storage[stg]
+                                for cat in affected_cats:
+                                    allowed_mats = [mat_index_by_class[mat.id] for mat in cat.classes if mat.id not in excluded]
+                                    cat_sum = sum(final_shift_targets[allowed_mats])
+                                    if cat_sum < min_allowed:
+                                        min_allowed = cat_sum
+                                        max_flow_per_storage[stg] = cat_sum
+                        total_initial = sum(flow[-1] for flow in initial_out_flows.values())
+                        target_share_per_storage = {stg: flow[-1]/total_initial for stg, flow in initial_out_flows.items()}
+                        violated_targets = [stg for stg, share in target_share_per_storage.items() if share * final_shift_targets[-1] > max_flow_per_storage[stg]]
+                        for violated_target in violated_targets:
+                            amount_for_distribution = target_share_per_storage[violated_target] * final_shift_targets[-1] - max_flow_per_storage[violated_target]
+                            target_share_per_storage[violated_target] = max_flow_per_storage[violated_target]/final_shift_targets[-1]
+                            for stg in (stg for stg in initial_out_flows.keys() if stg not in violated_targets):
+                                capacity = max_flow_per_storage[stg] - target_share_per_storage[stg] * final_shift_targets[-1]
+                                target_share_per_storage[stg] = target_share_per_storage[stg] + min(amount_for_distribution, capacity) / final_shift_targets[-1]
+                                if capacity >= amount_for_distribution:
+                                    break
+                                amount_for_distribution = amount_for_distribution -  capacity
+                        # ensure material is fairly distributed
+                        for cat in self._site.material_categories:
+                            constraint = [cl.id for cl in cat.classes if cl.id in exclusions]
+                            if len(constraint) == 0:
+                                for stg in initial_out_flows.keys():
+                                    share = target_share_per_storage[stg]
+                                    for mat in cat.classes:
+                                        mat_idx = mat_index_by_class[mat.id]
+                                        equipment_to_storages[equipment.id][stg][mat_idx, shift_idx] = share * final_shift_targets[mat_idx]
+                            else:
+                                # sorted by number of excluded storages
+                                constraint = sorted([c for c in constraint], key=lambda c: -len(exclusions[c]))
+                                done_by_storage: dict[str, float] = {stg: 0. for stg in initial_out_flows.keys()}
+                                for c in constraint:
+                                    allowed_storages = [stg for stg in initial_out_flows.keys() if stg not in exclusions[c]]
+                                    mat_idx = mat_index_by_class[c]
+                                    if len(allowed_storages) == 1:
+                                        stg = allowed_storages[0]
+                                        new_amount = final_shift_targets[mat_idx]
+                                        equipment_to_storages[equipment.id][stg][mat_idx, shift_idx] = new_amount
+                                        done_by_storage[stg] = done_by_storage[stg] + new_amount / final_shift_targets[ -1]
+                                    else:
+                                        available_by_stg = {stg: target_share_per_storage[stg] - done_by_storage[stg] for stg in allowed_storages}
+                                        total_available = sum(av for av in available_by_stg.values())
+                                        amount = final_shift_targets[mat_idx]
+                                        for stg, avl in available_by_stg.items():
+                                            new_amount = amount * avl/total_available
+                                            equipment_to_storages[equipment.id][stg][mat_idx, shift_idx] = new_amount
+                                            done_by_storage[stg] = done_by_storage[stg] + new_amount/final_shift_targets[-1]
+                                for c in (cl for cl in cat.classes if cl.id not in constraint):
+                                    mat_idx = mat_index_by_class[c.id]
+                                    amount = final_shift_targets[mat_idx]
+                                    available_by_stg = {stg: target_share_per_storage[stg] - done_by_storage[stg] for stg in initial_out_flows.keys() if done_by_storage[stg] < target_share_per_storage[stg]}
+                                    total_available = sum(av for av in available_by_stg.values())
+                                    for stg, avl in available_by_stg.items():
+                                        new_amount = amount * avl / total_available
+                                        equipment_to_storages[equipment.id][stg][mat_idx, shift_idx] = new_amount
+                                        done_by_storage[stg] = done_by_storage[stg] + new_amount / final_shift_targets[-1]
+                        for stg in initial_out_flows.keys():
+                            equipment_to_storages[equipment.id][stg][-1, shift_idx] = target_share_per_storage[stg] * final_shift_targets[-1]
             for stg in storages_out_ids:  # set outgoing storage levels
                 in_flow = sum((equipment_to_storages[eq][stg][:, shift_idx] for eq in equipment_ids), start=shift_zero)
                 if stg != "DONE":
@@ -254,7 +323,8 @@ class ShiftAllocator:
                         final_storage_levels[stg][:, shift_idx] = new_level  # not shift_idx + 1 !
                     continue
                 if stg not in self._storages_to_equipment_final:
-                    in_flow: np.ndarray = self._storage_in_flows_final[stg][:, shift_idx]
+                    in_flow: np.ndarray = self._storage_in_flows_final[stg][:, shift_idx]   # wrong
+
                     # anticipate other outgoing storage connections already
                     other_equipments = {eq: flow[:, shift_idx] for eq, flow in self._storages_to_equipment[stg].items() if eq not in equipment_ids} if stg in self._storages_to_equipment else {}
                     additional_out_flow = sum(other_equipments.values(), start=shift_zero) if len(other_equipments) > 1 else \
@@ -278,7 +348,20 @@ class ShiftAllocator:
                 self._storages_to_equipment_final[stg][eq] = flow
         if debug:
             LtpUtils.analyze_flows(equipment_to_storages, storages_to_equipment, self._site, num_shifts, process=process.name_short,
-                                   fail_on_error=fail_on_validation_error, prefix="::ShiftAllocator result validation::")
+                                   fail_on_error=fail_on_validation_error, prefix="::ShiftAllocator equipment result validation::")
+            storage_to_equipment_consolidated = {stg: dict(dct) for stg, dct in self._storages_to_equipment_final.items()}
+            for stg, dct in self._storages_to_equipment.items():
+                if stg not in final_storage_levels:
+                    continue
+                if stg not in storage_to_equipment_consolidated:
+                    storage_to_equipment_consolidated[stg] = dct
+                else:
+                    for e, arr in dct.items():
+                        if e not in storage_to_equipment_consolidated[stg]:
+                            storage_to_equipment_consolidated[stg][e] = arr
+            LtpUtils.analyze_storages(self._equipment_to_storages_final, storage_to_equipment_consolidated,
+                                    final_storage_levels, self._site, num_shifts, process=process.name_short,
+                                   fail_on_error=fail_on_validation_error, prefix="::ShiftAllocator storage result validation::")
 
 
 

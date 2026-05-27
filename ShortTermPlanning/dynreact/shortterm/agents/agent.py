@@ -11,7 +11,7 @@ import time
 import sys
 
 from confluent_kafka import Producer, Consumer, KafkaError
-from dynreact.shortterm.common import sendmsgtopic, KeySearch
+from dynreact.shortterm.common import sendmsgtopic, KeySearch, purge_topics
 import traceback
 
 current_partitions = 0
@@ -152,7 +152,24 @@ class Agent:
         :returns: Status of the handling
         :rtype:  str
         """
+        self.purge_exit_history_if_needed()
         return 'END'
+
+    def should_purge_exit_history(self) -> bool:
+        """
+        Return whether processing ``EXIT`` should purge stale messages.
+
+        Purging too early from EQUIPMENT or MATERIAL can delete the pending
+        ``EXIT`` intended for sibling base agents. The safe point is the
+        general LOG shutdown, which clean_agents() already sends last.
+        """
+        return self.topic == self.topic_gen and str(self.agent).startswith("LOG:")
+
+    def purge_exit_history_if_needed(self) -> None:
+        """Purge stale general and callback messages when the shutdown point is safe."""
+        if not self.should_purge_exit_history():
+            return
+        purge_topics(topics=[self.topic, self.topic_callback])
 
     def process_message(self, action: str, dctmsg: dict) -> str:
         """

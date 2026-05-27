@@ -287,6 +287,7 @@ class Log(Agent):
             payload=dict(msg=f"Requested Exit")
         )
         self.handle_write_action(full_msg)
+        self.purge_exit_history_if_needed()
         return 'END'
 
     def handle_receive_error_action(self, dctmsg: dict) -> str:

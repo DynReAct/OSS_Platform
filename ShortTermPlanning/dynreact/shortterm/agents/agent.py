@@ -152,7 +152,6 @@ class Agent:
         :returns: Status of the handling
         :rtype:  str
         """
-        self.purge_exit_history_if_needed()
         return 'END'
 
     def should_purge_exit_history(self) -> bool:
@@ -358,3 +357,6 @@ class Agent:
         self.consumer.close()
         if self.verbose > 1:
             self.write_log(f"Ending spawned process for agent {self.agent} in topic {self.topic}.", "8dc03f6b-dce4-4a52-a427-900547dd7a5a")
+        # Purge only after the general LOG has fully shut down so late EXIT
+        # traces from sibling base agents do not survive into the next startup.
+        self.purge_exit_history_if_needed()

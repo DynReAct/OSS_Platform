@@ -14,6 +14,16 @@ from datetime import datetime
 from dynreact.shortterm.common import KeySearch
 
 
+def _namespaced_tag(tag: str | None) -> str | None:
+    """Scope Docker owner labels to the active Jenkins/runtime context when available."""
+    if not tag:
+        return tag
+    context_prefix = (os.environ.get("CONTAINER_NAME_PREFIX") or "").strip()
+    if not context_prefix:
+        return tag
+    return f"{context_prefix}:{tag}"
+
+
 class DockerManager:
     """Docker manager.
     
@@ -28,7 +38,7 @@ class DockerManager:
         :param tag: Unique tag to identify containers launched by this instance.
         """
         self.client = docker.from_env()
-        self.tag = tag
+        self.tag = _namespaced_tag(tag)
         self.max_allowed = max_allowed
         self.tracked_containers = []
 
@@ -67,6 +77,7 @@ class DockerManager:
 
                 environment_variables = {
                   "IS_DOCKER": "true",
+                  "KAFKA_TOPIC_PREFIX": KeySearch.search_for_value("KAFKA_TOPIC_PREFIX"),
                   "TOPIC_GEN": KeySearch.search_for_value("TOPIC_GEN"),
                   "TOPIC_CALLBACK": KeySearch.search_for_value("TOPIC_CALLBACK")
                 }
@@ -77,10 +88,12 @@ class DockerManager:
                     "IMAGE_NAME",
                     "IMAGE_TAG",
                     "KAFKA_IP",
+                    "KAFKA_TOPIC_PREFIX",
                     "LOCAL_REGISTRY",
                     "LOG_FILE_PATH",
                     "PERF_URL",
                     "REST_URL",
+                    "SHORT_TERM_PLANNING_PARAMS",
                     "SNAPSHOT_VERSION",
                     "TRANSPORT_TIMES_URL",
                 )

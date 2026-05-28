@@ -6,8 +6,7 @@ node {
     env.IMAGE_NAME = IMAGE_NAME
     env.LOCAL_REGISTRY = LOCAL_REGISTRY
     env.IMAGE_TAG = IMAGE_TAG
-    env.TOPIC_CALLBACK = "DynReact-OSS-TEST-Callback"
-    env.TOPIC_GEN = "DynReact-OSS-TEST-Gen"
+    env.SHORT_TERM_PLANNING_PARAMS = "default+file:/repo/ShortTermPlanning/tests/stp_context_oss_test.json"
     env.CONTAINER_NAME_PREFIX = "JENKINS_OSS_TEST"
     env.DOCKER_NETWORK = "host"
     env.PERF_URL = "http://192.168.111.11:5027"
@@ -78,6 +77,7 @@ node {
         docker run --rm \\
           --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v ${WORKSPACE}:/repo:ro \\
           -v /var/log/dynreact-logs:/var/log/dynreact-logs:rw,rshared \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
@@ -86,8 +86,7 @@ node {
           -e REST_URL="$REST_URL" \\
           -e PERF_URL="$PERF_URL" \\
           -e TRANSPORT_TIMES_URL="$TRANSPORT_TIMES_URL" \\
-          -e TOPIC_CALLBACK="$TOPIC_CALLBACK" \\
-          -e TOPIC_GEN="$TOPIC_GEN" \\
+          -e SHORT_TERM_PLANNING_PARAMS="$SHORT_TERM_PLANNING_PARAMS" \\
           -e CONTAINER_NAME_PREFIX="$CONTAINER_NAME_PREFIX" \\
           -e LOCAL_REGISTRY="$LOCAL_REGISTRY" \\
           -e IMAGE_NAME="$IMAGE_NAME" \\
@@ -100,7 +99,7 @@ node {
     }
 
 runStageWithCleanup('Run Scenario 0') {
-    def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+    def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
     def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
 
     sh """
@@ -139,7 +138,7 @@ runStageWithCleanup('Run Scenario 0') {
 
 
     runStageWithCleanup('Run Scenario 1') {
-        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -171,7 +170,7 @@ runStageWithCleanup('Run Scenario 0') {
     }
 
     runStageWithCleanup('Run Scenario 2') {
-        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -202,7 +201,7 @@ runStageWithCleanup('Run Scenario 0') {
     }
 
     runStageWithCleanup('Run Scenario 3') {
-        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -234,7 +233,7 @@ runStageWithCleanup('Run Scenario 0') {
     }
 
     runStageWithCleanup('Run Scenario 4') {
-        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX', 'SCENARIO_4_5_EQUIPMENT']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX', 'SCENARIO_4_5_EQUIPMENT']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -267,7 +266,7 @@ runStageWithCleanup('Run Scenario 0') {
     }
 
     runStageWithCleanup('Run Scenario 5') {
-        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -300,7 +299,7 @@ runStageWithCleanup('Run Scenario 0') {
     }
 
     runStageWithCleanup('Run Scenario 6') {
-        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -333,7 +332,7 @@ runStageWithCleanup('Run Scenario 0') {
     }
 
     runStageWithCleanup('Run Scenario 7') {
-        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -366,7 +365,7 @@ runStageWithCleanup('Run Scenario 0') {
     }
 
     runStageWithCleanup('Run Scenario 8') {
-        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -399,3 +398,4 @@ runStageWithCleanup('Run Scenario 0') {
     }
   }
 }
+

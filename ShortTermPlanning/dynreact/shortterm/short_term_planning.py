@@ -34,7 +34,7 @@ from confluent_kafka.admin import AdminClient
 import configparser
 
 from dynreact.shortterm.common.functions import get_transport_times
-from dynreact.shortterm.common import VAction, sendmsgtopic, KeySearch
+from dynreact.shortterm.common import VAction, sendmsgtopic, KeySearch, initialize_keysearch_from_runtime
 from dynreact.shortterm.common.data.data_functions import end_auction
 from dynreact.shortterm.common.data.data_setup import DataSetup
 import os, re, json
@@ -60,6 +60,20 @@ def _key_float(key: str, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _ux_group_id() -> str:
+    """Build one UX consumer group id scoped to the active runtime context."""
+    raw_context = (
+        os.environ.get("CONTAINER_NAME_PREFIX")
+        or _key_str("TOPIC_CALLBACK")
+        or _key_str("KAFKA_TOPIC_PREFIX")
+        or "default"
+    )
+    normalized_context = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(raw_context)).strip("-")
+    if normalized_context == "":
+        normalized_context = "default"
+    return f"UX-{normalized_context}"
 
 
 def list_all_topics(admin_client: AdminClient, verbose: int) -> Any:
@@ -127,7 +141,7 @@ def genauction(act: str | None = None) -> str:
     if act is None:
         act = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
 
-    topic_prefix = os.environ.get("KAFKA_TOPIC_PREFIX", "Dynreact_OSS")
+    topic_prefix = _key_str("KAFKA_TOPIC_PREFIX", "Dynreact_OSS")
 
     return f"{topic_prefix}-" + act
 
@@ -173,6 +187,85 @@ def run_general_agents(producer: Producer, gagents: str, verbose: int) -> Any:
         sleep(small_wait, producer=producer, verbose=verbose)
 
     return log_handler, equipment_handler, material_handler
+
+
+def _select_materials_for_equipment(
+        data_setup: DataSetup,
+        equipment: str | int,
+        nmaterials: int | None,
+        participating_equipments: list[str] | None = None,
+) -> list[str]:
+    """
+    Select the materials to clone for one equipment.
+
+    When results are later normalized by order, cloning multiple materials from
+    the same order adds noise and can make multi-equipment scenarios unstable.
+    Prefer one material per distinct order, prioritizing orders that are exclusive
+    to the equipment within the current auction. In multi-equipment auctions,
+    orders that can be processed by multiple participating equipments are unstable:
+    the auction may legitimately assign them elsewhere, so we avoid counting them
+    towards the expected scope for one specific equipment.
+    """
+    equipment_key = str(equipment)
+    equipment_id = int(equipment_key)
+    material_ids = data_setup.get_equipment_materials(equipment_id)
+    participating_set = (
+        {str(participating_equipment) for participating_equipment in participating_equipments}
+        if participating_equipments is not None
+        else {equipment_key}
+    )
+    has_competing_equipments = len(participating_set) > 1
+
+    if not nmaterials:
+        return material_ids
+
+    stable_unique: list[str] = []
+    shared_unique: list[str] = []
+    seen_orders: set[str] = set()
+
+    for material_id in material_ids:
+        material_params = data_setup.get_material_params(material_id)
+        order = material_params["order"]
+        order_id = str(order["id"])
+        allowed_equipment = {str(equipment_id) for equipment_id in order.get("allowed_equipment", [])}
+        participating_candidates = allowed_equipment & participating_set
+
+        if order_id in seen_orders:
+            continue
+
+        seen_orders.add(order_id)
+        if participating_candidates == {equipment_key}:
+            stable_unique.append(material_id)
+        else:
+            shared_unique.append(material_id)
+
+    selected_materials = stable_unique[:nmaterials]
+    if not has_competing_equipments and len(selected_materials) < nmaterials:
+        remaining = nmaterials - len(selected_materials)
+        selected_materials.extend(shared_unique[:remaining])
+    return selected_materials
+
+
+def _select_materials_by_equipment(
+        data_setup: DataSetup,
+        equipments: list[str],
+        nmaterials: int | None,
+) -> dict[str, list[str]]:
+    """
+    Build a stable material selection for the whole auction.
+
+    Using a shared participating-equipment scope keeps the auction input and the
+    expected post-auction normalization aligned.
+    """
+    return {
+        str(equipment): _select_materials_for_equipment(
+            data_setup=data_setup,
+            equipment=equipment,
+            nmaterials=nmaterials,
+            participating_equipments=equipments,
+        )
+        for equipment in equipments
+    }
 
 
 def create_auction(
@@ -280,12 +373,17 @@ def create_auction(
     all_materials: list[Any] = []
 
     if materials is None:
+        selected_materials_by_equipment = _select_materials_by_equipment(
+            data_setup=data_setup,
+            equipments=equipments,
+            nmaterials=nmaterials,
+        )
+
         for equipment in equipments:
-            # Get the list of materials of the equipment
             equipment_ids = re.findall(r'\d+', str(equipment))
 
             if len(equipment_ids) == 1:
-                equipment_materials = data_setup.get_equipment_materials(int(equipment_ids[0]))
+                equipment_materials = selected_materials_by_equipment.get(str(equipment), [])
                 if verbose > 1:
                     msg = f"Obtained list of materials from equipment {equipment}: {equipment_materials}"
                     print(msg)
@@ -297,11 +395,7 @@ def create_auction(
                 dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
                 raise Exception(f"{dt} | ERROR: No equipment ID found in equipment {equipment}")
 
-            if materials is None and nmaterials is not None:
-                all_materials.extend(equipment_materials[:nmaterials])
-            else:
-                all_materials.extend(equipment_materials)
-
+            all_materials.extend(equipment_materials)
             print("Current material list size is {}".format(len(all_materials)))
     else:
         all_materials = materials
@@ -554,11 +648,15 @@ def _equipment_order_scope(equipments: list[str], snapshot: str, nmaterials: int
                     scope[equipment].add(order_id)
         return scope
 
+    selected_materials_by_equipment = _select_materials_by_equipment(
+        data_setup=data_setup,
+        equipments=equipments,
+        nmaterials=nmaterials,
+    )
+
     for equipment in equipments:
         equipment_key = str(equipment)
-        equipment_id = int(equipment_key)
-        material_ids = data_setup.get_equipment_materials(equipment_id)
-        selected_materials = material_ids[:nmaterials] if nmaterials else material_ids
+        selected_materials = selected_materials_by_equipment.get(equipment_key, [])
         scope[equipment_key] = {
             data_setup.get_material_params(material_id)["order"]["id"]
             for material_id in selected_materials
@@ -739,10 +837,7 @@ def execute_short_term_planning(args: dict) -> Any:
                            EXIT_WAIT=exit_wait, CLONING_WAIT=cloning_wait, RUNNING_WAIT=running_wait, SMALL_WAIT=small_wait)
 
     # Other arguments will be retrieved from env variables
-    short_term_config = cast(ShortTermTargets, ShortTermTargets().model_copy(update={"VB": verbose, "TimeDelays": time_delay}))  # type: ignore
-
-    # Class method
-    KeySearch.set_global(config_provider=short_term_config)
+    initialize_keysearch_from_runtime(overrides={"VB": verbose, "TimeDelays": time_delay})
 
     if os.environ.get('SPHINX_BUILD'):
         # Mock REST_URL for Sphinx Documentation
@@ -764,7 +859,7 @@ def execute_short_term_planning(args: dict) -> Any:
     producer = Producer(producer_config)
     consumer_config = {
         "bootstrap.servers": ip,
-        "group.id": "UX",
+        "group.id": _ux_group_id(),
         "auto.offset.reset": "earliest",
         'enable.auto.commit': False
     }

@@ -25,11 +25,8 @@ import argparse
 import time
 
 from confluent_kafka import Producer
-from dynreact.shortterm.common import VAction, KeySearch, purge_topics
+from dynreact.shortterm.common import VAction, KeySearch, initialize_keysearch_from_runtime, purge_topics
 from dynreact.shortterm.short_term_planning import clean_agents, run_general_agents
-from dynreact.shortterm.shorttermtargets import ShortTermTargets
-
-
 def main() -> Any:
     """
     Main module focused on cleaning the kafka queue.
@@ -54,7 +51,7 @@ def main() -> Any:
     rungagnts = str(args['rungagents'])
 
     # Class method
-    KeySearch.set_global(config_provider=ShortTermTargets(VB=verbose))
+    initialize_keysearch_from_runtime(overrides={"VB": verbose})
 
     kafka_ip = KeySearch.search_for_value("KAFKA_IP")
 

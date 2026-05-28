@@ -194,6 +194,8 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
     "Sum of individual material weights in t"
     material_count: int = 0
     "Number of units in this order"
+    quality_locks: int = 0
+    "Number of units with quality locks in this order"
     material_classes: Mapping[str, str] = {}
     "Keys: material category id, values: material class ids"
     allowed_equipment: Sequence[int]   # TODO dict[process, list[int]]?

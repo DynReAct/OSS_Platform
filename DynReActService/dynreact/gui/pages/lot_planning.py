@@ -13,18 +13,18 @@ from pydantic.fields import FieldInfo
 
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationState
+from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.impl.Scenarios import MidTermScenario
 from dynreact.base.model import ProductionPlanning, EquipmentStatus, Lot, Order, Material, Snapshot, Equipment, \
-    ObjectiveFunction, MaterialCategory, ProductionTargets, PlannedWorkingShift
+    ObjectiveFunction, MaterialCategory, ProductionTargets, PlannedWorkingShift, Site
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated, get_current_user
 from dynreact.gui.gui_utils import GuiUtils
 from dynreact.gui.pages.components import lots_view, prepare_lots_for_lot_view
 
-#from dynreact.gui.pages.session_state import selected_process, selected_snapshot
 
 dash.register_page(__name__, path="/lots/planned")
 translations_key = "lotsplanning"
@@ -202,12 +202,32 @@ def transfer_popup():
                 html.Div("Update snapshot:", title="Update the current snapshot (in memory only/until software restart)?"),
                 html.Div(dcc.Checklist(id="lotplanning-transfer-snapupdate", options= [{"value": ""}], value=[""], className="lots2-checkbox"), title="Update the current snapshot (in memory only/until software restart)?"),
             ], className="lotplanning-transfer-grid", id="lotplanning-transfer-grid"),
-
+            html.H3("Orders overview"),
+            dash_ag.AgGrid(
+                id="lotplanning-transfer-orders-table",
+                columnDefs=[{"field": "order", "pinned": True},
+                            {"field": "quality_locks", "filter": "agNumberColumnFilter", "headerName": "Quality locks"},
+                            {"field": "material_units", "filter": "agNumberColumnFilter", "headerName": "Material units"},
+                            {"field": "equipment", "headerTooltip": "Current equipment location of the order"},
+                            {"field": "previous_lot", "headerTooltip": "The lot at the previous process stage, if any.", "headerName": "Previous lot"},
+                            {"field": "availability", "headerTooltip": "Order availability, determined by the lot at the previous process stage."},
+                            {"field": "existing_lot", "headerTooltip": "The existing lot at the planned process stage, if any.", "headerName": "Existing lot"},
+                            {"field": "due_date", "headerTooltip": "Order due date.", "headerName": "Due date"}],
+                defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
+                rowData=[],
+                getRowId="params.data.id",
+                className="ag-theme-alpine",  # ag-theme-alpine-dark
+                # style={"height": "70vh", "width": "100%", "margin-bottom": "5em"},
+                columnSizeOptions={"defaultMinWidth": 125},
+                columnSize="responsiveSizeToFit",
+                dashGridOptions={"rowSelection": "single", "domLayout": "autoHeight"},
+                style={"height": None},
+            ),
             html.Div([
                 html.Button("Transfer", id="lotplanning-transfer-start", className="dynreact-button"),
                 html.Button("Cancel", id="lotplanning-transfer-cancel", className="dynreact-button")
             ], className="lotplanning-transfer-buttons")
-        ]),
+        ], title=""),
         id="lotplanning-transfer-dialog", className="dialog-filled lotplanning-transfer-dialog", open=False)
 
 
@@ -406,10 +426,10 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         best_result = result.best_solution
     site = state.get_site()
     sp = state.get_snapshot_provider()
-    plants = {p.id: p for p in site.equipment}
-    process_plants = [p.id for p in site.get_process_equipment(process) if p.id in best_result.equipment_status]
+    plants: dict[int, Equipment] = {p.id: p for p in site.equipment}
+    process_plants: list[int] = [p.id for p in site.get_process_equipment(process) if p.id in best_result.equipment_status]
     previous_processes: list[str] = [proc.name_short for proc in site.processes if proc.next_steps is not None and process in proc.next_steps]
-    prev_proc_plants = [p.id for p in site.equipment if p.process in previous_processes]
+    prev_proc_plants: list[int] = [p.id for p in site.equipment if p.process in previous_processes]
     # these lots lost time information
     lots: list[Lot] = sorted([lot for eq, plant_lots in best_result.get_lots().items() if eq in process_plants for lot in plant_lots],
                              key=lambda lot: (plants.get(lot.equipment).name_short if lot.equipment in plants else "ZZ", lot.id))
@@ -498,33 +518,13 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         as_dict["order"] = o.id
         as_dict["lot"] = lot or ""
         as_dict["weight"] = o.actual_weight
-        as_dict["due_date"] = o.due_date
         as_dict["priority"] = o.priority
-        if o.current_equipment is not None:
-            as_dict["equipment"] = ", ".join([plants[p].name_short or str(plants[p]) for p in o.current_equipment])
-        if o.lots is not None:
-            all_lots = snap_obj.lots
-            if process in o.lots:
-                lt = o.lots[process]
-                existing_lt_obj = next((lt_obj for plant in process_plants if plant in all_lots for lt_obj in all_lots[plant] if lt_obj.id == lt), None)
-                as_dict["existing_lot"] = _lot_info(existing_lt_obj) if existing_lt_obj is not None else lt
-            all_prev_lots: list[str] = [o.lots[proc] for proc in previous_processes if proc in o.lots]
-            all_prev_lot_objs: list[Lot] = [lt_obj for plant in prev_proc_plants if plant in all_lots for lt_obj in all_lots[plant] if lt_obj.id in all_prev_lots]
-            now = DatetimeUtils.now()
-            lot_entries: list[tuple[Lot, bool, datetime|None]] = sorted([(lot, sp.is_lot_complete(lot), lot.end_time) for lot in all_prev_lot_objs],
-                                                                        key=lambda tp: (-1 if tp[1] else 0, now - tp[2] if tp[2] is not None else datetime(year=3000,month=1,day=1, tzinfo=timezone.utc)))
-            last_lot = lot_entries[0][0] if len(lot_entries) > 0 and lot_entries[0][1] else None  # preselect the last complete lot
-            if last_lot is not None:
-                prev_proc = site.get_equipment(last_lot.equipment, do_raise=True).process
-                as_dict["previous_lot"] = _lot_info(last_lot)
-                timings = sp.get_order_lot_times(snap_obj.timestamp, o.id)
-                if timings is not None and len(timings) > 0 and prev_proc in timings.get(o.id, {}):
-                    as_dict["availability"] = DatetimeUtils.format(timings.get(o.id).get(prev_proc).end.astimezone(), use_zone=False).replace("T", " ")
 
         if lot is None:
             as_dict["unassigned"] = True
             return as_dict
         lot_obj = next((l for l in lots if l.id == lot), None)
+        target_plant = None
         if lot_obj is not None:  # none for predecessor orders added above
             plant: int = lot_obj.equipment
             if plant == last_plant:
@@ -543,8 +543,10 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
                         as_dict["costs"] = tr_costs
             last_plant = plant
             last_lot_obj = lot_obj
+            target_plant = plant
         else:
             as_dict["predecessorLot"] = True
+        _append_lot_info_for_order(as_dict, o, process, snap_obj, sp, site, process_plants, previous_processes, prev_proc_plants, target_plant=target_plant)
         last_order = o
         return as_dict
 
@@ -563,6 +565,39 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
                                                         for cat in all_cats if cat.id in structure0}
         structure_targets = best_result.target_structure  # dict[str, float]
     return False, table_data, data, False, fields, order_rows, structure, structure_targets, not show_structure
+
+
+def _append_lot_info_for_order(row: dict[str, Any], o: Order, process: str, snap_obj: Snapshot, sp: SnapshotProvider, site: Site, process_plants: list[int],
+                               previous_processes: list[str], prev_proc_plants: list[int], target_plant: int|None=None):
+    plants = [p for p in (site.get_equipment(e) for e in o.current_equipment) if p is not None] if o.current_equipment is not None else []
+    if len(plants) > 0:
+        row["equipment"] = ", ".join([p.name_short or p.name or str(p.id) for p in plants])
+    if o.due_date:
+        row["due_date"] = DatetimeUtils.format(state.as_timezone(o.due_date), use_zone=False).replace("T", " ")
+    if o.lots is None:
+        return
+    all_lots = snap_obj.lots
+    if process in o.lots:
+        lt = o.lots[process]
+        existing_lt_obj = next((lt_obj for plant in process_plants if plant in all_lots for lt_obj in all_lots[plant] if lt_obj.id == lt), None)
+        row["existing_lot"] = _lot_info(existing_lt_obj) if existing_lt_obj is not None else lt
+    all_prev_lots: list[str] = [o.lots[proc] for proc in previous_processes if proc in o.lots]
+    all_prev_lot_objs: list[Lot] = [lt_obj for plant in prev_proc_plants if plant in all_lots for lt_obj in all_lots[plant] if lt_obj.id in all_prev_lots]
+    now = DatetimeUtils.now()
+    lot_entries: list[tuple[Lot, bool, datetime | None]] = sorted([(lot, sp.is_lot_complete(lot), lot.end_time) for lot in all_prev_lot_objs],
+                        key=lambda tp: (-1 if tp[1] else 0, now - tp[2] if tp[2] is not None else datetime(year=3000, month=1, day=1, tzinfo=timezone.utc)))
+    last_lot = lot_entries[0][0] if len(lot_entries) > 0 and lot_entries[0][1] else None  # preselect the last complete lot
+    if last_lot is not None:
+        prev_proc = site.get_equipment(last_lot.equipment, do_raise=True).process
+        row["previous_lot"] = _lot_info(last_lot)
+        timings = sp.get_order_lot_times(snap_obj.timestamp, o.id)
+        if timings is not None and len(timings) > 0 and prev_proc in timings.get(o.id, {}):
+            end_prev_lot = state.as_timezone(timings.get(o.id).get(prev_proc).end)
+            if site.transport_times is not None and target_plant is not None:
+                transport: timedelta|None = site.transport_times.transport_times(last_lot.equipment, target_plant)
+                if transport is not None:
+                    end_prev_lot = end_prev_lot + transport
+            row["availability"] = DatetimeUtils.format(end_prev_lot, use_zone=False).replace("T", " ")
 
 
 # Lots export
@@ -650,30 +685,57 @@ clientside_callback(
     Output("lotplanning-transfer-lotname", "value"),
     Output("lotplanning-transfer-oders", "options"),
     Output("lotplanning-transfer-oders", "value"),
+    Output("lotplanning-transfer-orders-table", "rowData"),
     Input("planning-lots-table", "selectedRows"),
     State("planning-selected-solution", "data"),
     State("lotplanning-transferred-lot", "data"),
+    State("selected-snapshot", "data"),
+    State("process-selector-lotplanning", "value"),
     prevent_initial_call=True,
 )
-def lot_row_selected(rows, solution_id: str, last_transferred_solution: str|None):
+def lot_row_selected(rows, solution_id: str, last_transferred_solution: str|None, snapshot: str|None, process: str|None):
     global lottransfer_results
+    snapshot = DatetimeUtils.parse_date(snapshot)
     # clear last transfer result so the alert does not show up immediately
     if last_transferred_solution is not None and last_transferred_solution in lottransfer_results:
         lottransfer_results.pop(last_transferred_solution)
     if rows is None or len(rows) == 0 or solution_id == "_SNAPSHOT_":
-        return dash.no_update, "", "", [], []
+        return dash.no_update, "", "", [], [], []
     sinks = state.get_lot_sinks()
     if len(sinks) == 0:
-        return dash.no_update, "", "", [], []
+        return dash.no_update, "", "", [], [], []
     lot = rows[0].get("id")
     orders = rows[0].get("order_ids")
+    target_plant = rows[0].get("equipment")
     if isinstance(orders, str):
         orders = [o for o in (o.strip() for o in orders.split(",")) if o != ""]
     options = []
     if isinstance(orders, Iterable):
         options = [{"value": o, "label": o} for o in orders]
-    return lot if lot is not None else dash.no_update, lot if lot is not None else "", lot, options, orders
-
+    orders_table: list[dict[str, Any]] = []
+    if isinstance(orders, Iterable) and len(orders) > 0 and snapshot is not None:
+        snap_obj = state.get_snapshot(time=snapshot)
+        sp = state.get_snapshot_provider()
+        site = state.get_site()
+        process_plants = None
+        previous_processes = None
+        prev_proc_plants = None
+        if process is not None:
+            process_plants = [p.id for p in site.get_process_equipment(process)]
+            previous_processes = [proc.name_short for proc in site.processes if proc.next_steps is not None and process in proc.next_steps]
+            prev_proc_plants = [p.id for p in site.equipment if p.process in previous_processes]
+        for order in orders:
+            order_obj = snap_obj.get_order(order)
+            if order_obj is not None:
+                row = {
+                    "order": order,
+                    "quality_locks": order_obj.quality_locks,
+                    "material_units": order_obj.material_count
+                }
+                if process is not None:
+                    _append_lot_info_for_order(row, order_obj, process, snap_obj, sp, site, process_plants, previous_processes, prev_proc_plants, target_plant=target_plant)
+                orders_table.append(row)
+    return lot if lot is not None else dash.no_update, lot if lot is not None else "", lot, options, orders, orders_table
 
 clientside_callback(
     ClientsideFunction(

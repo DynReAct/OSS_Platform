@@ -134,7 +134,7 @@
     * Section 4: lots swimlane
     *=================================
     */
-    globalThis.dash_clientside.createlots.showLotsSwimlane = async function(data, shifts, elementId, process, mode) {
+    globalThis.dash_clientside.createlots.showLotsSwimlane = async function(data, shifts, elementId, process, mode, showIds) {
         const site = globalThis.dynreact?.getSite();
         let snap = globalThis.dynreact?.getSnapshot();
         if (!site || !snap || !elementId)
@@ -167,6 +167,8 @@
             const element = document.querySelector("div#" + elementId);
             element.appendChild(swimlane);
         }
+        if (showIds?.length > 0)
+            swimlane.showLotLabels = true;
         if (!data) {
             swimlane?.setPlanning(undefined, undefined, undefined, undefined);
             return "";
@@ -195,6 +197,13 @@
          const el = document.querySelector("#" + elementId + " > lots-swimlane");
          if (el)
             el.lotSizing = mode;
+    }
+
+    globalThis.dash_clientside.createlots.showLotsSwimlaneIds = function(active, elementId) {
+         const isActive = active && active.length > 0;
+         const el = document.querySelector("#" + elementId + " > lots-swimlane");
+         if (el)
+            el.showLotLabels = isActive;
     }
 
 })();

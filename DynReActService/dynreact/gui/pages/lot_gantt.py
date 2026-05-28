@@ -20,7 +20,7 @@ cnt = 0
 def layout(*args, **kwargs):
     return html.Div([
         html.H1("Lots", id="lots-gantt-title"),
-        lots_view("lots-gantt", initial_hidden=False),
+        lots_view("lots-gantt", initial_hidden=False, ids_toggle=True),
         dcc.Store(id="lots-gantt-undefined", storage_type="memory"),
         dcc.Store(id="lots-gantt-undefined2", storage_type="memory"),
         dcc.Store(id="lots-gantt-shifts", storage_type="memory"),
@@ -59,6 +59,7 @@ clientside_callback(
     Input("lots-gantt-lots-swimlane", "id"),
     Input("lots-gantt-undefined2", "data"),
     Input("lots-gantt-swimlane-mode", "value"),
+    Input("lots-gantt-lotid-toggle", "value"),
 )
 
 clientside_callback(
@@ -70,3 +71,14 @@ clientside_callback(
     Input("lots-gantt-swimlane-mode", "value"),
     State("lots-gantt-lots-swimlane", "id")
 )
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="createlots",
+        function_name="showLotsSwimlaneIds"
+    ),
+    Output("lots-gantt-lotid-toggle", "title"),
+    Input("lots-gantt-lotid-toggle", "value"),
+    State("lots-gantt-lots-swimlane", "id")
+)
+

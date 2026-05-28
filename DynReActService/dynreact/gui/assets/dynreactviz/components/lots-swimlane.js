@@ -4,6 +4,7 @@ import { initDynreactState, JsUtils, SnapshotImpl } from "@dynreact/client";
  */
 export class LotsSwimlane extends HTMLElement {
     static #DEFAULT_TAG = "lots-swimlane";
+    static #DEFAULT_LOT_LABEL_MIN_WIDTH = 75;
     static #tag;
     /**
      * Call once to register the new tag type <lots-swimlane></lots-swimlane>
@@ -24,7 +25,8 @@ export class LotsSwimlane extends HTMLElement {
         return LotsSwimlane.#tag;
     }
     static get observedAttributes() {
-        return ["auto-fetch", "row-size", "lot-height", "lot-color", "lot-sizing", "new-lot-color", "process", "server", "skip-shifts", "complete-lots-only", "min-status", "shift-horizon"];
+        return ["auto-fetch", "row-size", "lot-height", "lot-color", "lot-sizing", "show-lot-labels", "lot-label-min-width", "new-lot-color", "process", "server",
+            "skip-shifts", "complete-lots-only", "min-status", "shift-horizon"];
     }
     #lanesContainer;
     #tooltipContainer;
@@ -109,6 +111,25 @@ export class LotsSwimlane extends HTMLElement {
     }
     get lotSizing() {
         return this.#lotSizing;
+    }
+    get showLotLabels() {
+        return !!this.getAttribute("show-lot-labels");
+    }
+    set showLotLabels(doShow) {
+        if (!doShow)
+            this.removeAttribute("show-lot-labels");
+        else
+            this.setAttribute("show-lot-labels", "true");
+    }
+    get lotLabelMinWidth() {
+        const width = Number.parseInt(this.getAttribute("lot-label-min-width"));
+        return width > 0 ? width : LotsSwimlane.#DEFAULT_LOT_LABEL_MIN_WIDTH;
+    }
+    set lotLabelMinWidth(width) {
+        if (!(width > 0))
+            this.removeAttribute("lot-label-min-width");
+        else
+            this.setAttribute("lot-label-min-width", width.toString());
     }
     get lots() {
         return this.#lots ? { ...this.#lots } : undefined;
@@ -235,7 +256,8 @@ export class LotsSwimlane extends HTMLElement {
             ".tooltip-container { position: absolute; pointer-events: none; background: white; padding: 0.5em; z-index: 5; border-radius: 2px; } " +
             ".tooltip-container[hidden] { display: none; } " +
             ".plant-header:hover { cursor: pointer;} " +
-            ".lot-rect:hover { cursor: pointer;} ";
+            ".lot-rect:hover { cursor: pointer;} " +
+            ".lot-label:hover { cursor: pointer;} ";
         /*
         ".lanes-container {display: grid; grid-template-columns: auto 1fr; } " +
         ".plant-title {padding: 1em; border: 2px solid darkgreen;} " +
@@ -559,6 +581,8 @@ export class LotsSwimlane extends HTMLElement {
         }
         // draw lots
         this.#lanes = this.#plants.map((plant, idx) => this.#createPlantLane(idx, plant, svgParent, rowSize, width, lotHeight, missingShiftHeight, lotColor, newLotColor, sizing, sizeFactor, xStartGantt, [startTime, endTime]));
+        if (this.showLotLabels)
+            this.#displayLotLabels();
         this.#lanesContainer.appendChild(svgParent);
         // @ts-ignore
         svgParent.addEventListener("mousemove", this.#hover.bind(this));
@@ -616,6 +640,9 @@ export class LotsSwimlane extends HTMLElement {
                         const gap = [gapStart !== undefined ? gapStart : lastShiftEnd, shift.period[0]]; // TODO what if the current shift has only partial worktime?
                         const xStart = Math.round(start0 + (Math.max(gap[0].getTime(), startEndTime[0].getTime()) - startEndTime[0].getTime()) / sizeFactor * effectiveRowWidth);
                         const width = Math.round(Math.max(effectiveRowWidth * (gap[1].getTime() - gap[0].getTime()) / sizeFactor - 10, 3));
+                        // FIXME
+                        if (plant.id === 5) // HGL01
+                            console.log("  NEW gap ", gap, " width ", width);
                         const lotYStart = (idx + 0.5) * rowSize - (missingShiftHeight / 2);
                         // TODO fill color
                         const rect = LotsSwimlane.#create("rect", { attributes: { x: xStart + "", width: width + "", y: lotYStart + "", height: missingShiftHeight + "",
@@ -640,17 +667,23 @@ export class LotsSwimlane extends HTMLElement {
             if (isTime && lot.start_time) {
                 xStart = start0 + (Math.max(lot.start_time.getTime(), startEndTime[0].getTime()) - startEndTime[0].getTime()) / sizeFactor * effectiveRowWidth;
             }
-            const width = Math.max(effectiveRowWidth * (size / sizeFactor) - 10, 3);
+            const width = Math.max(effectiveRowWidth * (size / sizeFactor) - 10, 6);
             const lotYStart = (idx + 0.5) * rowSize - (lotHeight / 2);
+            const ltColor = lot.isSnapshotLot ? lotColor : newLotColor;
             const rect = LotsSwimlane.#create("rect", { attributes: { x: xStart + "", width: width + "",
-                    y: lotYStart + "", height: lotHeight + "", rx: "3", fill: lot.isSnapshotLot ? lotColor : newLotColor }, dataset: { lot: lot.id, plant: plant.id + "" },
+                    y: lotYStart + "", height: lotHeight + "", /* rx: "3",*/ fill: ltColor }, dataset: { lot: lot.id, plant: plant.id + "" },
                 classes: "lot-rect", parent: svg });
-            xStart += width + 10;
+            const hookRadius = 10;
+            if (width >= 20)
+                LotsSwimlane.#attachArcsToRect({ x: xStart, y: lotYStart, width: width, height: lotHeight }, { parent: svg, fill: ltColor, radius: hookRadius });
+            else
+                LotsSwimlane.#attachTriangleToRect({ x: xStart, y: lotYStart, width: width, height: lotHeight }, { parent: svg, fill: ltColor, height: hookRadius, width: Math.ceil(width / 2) });
             const field = new DOMRect(xStart, lotYStart, width, lotHeight);
             lotFields.push({
                 lot: lot.id,
                 field: field
             });
+            xStart += width + 10;
         }
         const y = (idx * rowSize) + "";
         LotsSwimlane.#create("line", { parent: svg, attributes: {
@@ -661,6 +694,29 @@ export class LotsSwimlane extends HTMLElement {
             title: titleField,
             lots: lotFields
         };
+    }
+    #clearLotLabels() {
+        this.#svgParent?.querySelectorAll(".lot-label")?.forEach(label => label.remove());
+    }
+    #displayLotLabels() {
+        const svg = this.#svgParent;
+        const minWidth = this.lotLabelMinWidth;
+        const lots = this.#lanes?.flatMap(lane => lane.lots.map(lot => [lane.plant, lot]));
+        lots?.forEach(([plant, lot]) => {
+            const rect = lot.field;
+            if (rect.width < minWidth)
+                return;
+            const node = LotsSwimlane.#create("text", { parent: svg, attributes: { "text-anchor": "middle", "alignment-baseline": "central",
+                    x: (Math.floor(rect.x + rect.width / 2)).toString(), y: (Math.floor(rect.y + rect.height / 2)).toString(), fill: "white" },
+                dataset: { lot: lot.lot, plant: plant + "" }, classes: "lot-label" });
+            node.textContent = lot.lot;
+        });
+    }
+    #updateLotLabels() {
+        if (!this.showLotLabels)
+            this.#clearLotLabels();
+        else
+            this.#displayLotLabels();
     }
     clear() {
         while (this.#lanesContainer.firstChild)
@@ -697,6 +753,10 @@ export class LotsSwimlane extends HTMLElement {
                     this.#init();
                 }
                 break;
+            case "show-lot-labels":
+            case "lot-label-min-width":
+                this.#updateLotLabels();
+                break;
             case "server":
             case "auto-fetch":
                 this.#initState();
@@ -724,6 +784,46 @@ export class LotsSwimlane extends HTMLElement {
         if (options?.parent)
             options?.parent.appendChild(el);
         return el;
+    }
+    static #attachArcsToRect(rect, options) {
+        const radius = options?.radius || 10;
+        const fill = options?.fill || "rgba(139,0,0,0.9)";
+        const svg = options?.parent;
+        LotsSwimlane.#outerArc([rect.x, rect.y + rect.height], false, true, { parent: svg, fill: fill, radius: radius });
+        LotsSwimlane.#outerArc([rect.x, rect.y], true, true, { parent: svg, fill: fill, radius: radius });
+        LotsSwimlane.#outerArc([rect.x + rect.width, rect.y], true, false, { parent: svg, fill: fill, radius: radius });
+        LotsSwimlane.#outerArc([rect.x + rect.width, rect.y + rect.height], false, false, { parent: svg, fill: fill, radius: radius });
+    }
+    static #attachTriangleToRect(rect, options) {
+        const fill = options?.fill || "rgba(139,0,0,0.9)";
+        const svg = options?.parent;
+        const h = options?.height;
+        const w = options?.width;
+        LotsSwimlane.#triangle([rect.x, rect.y + rect.height], false, true, { parent: svg, fill: fill, height: h, width: w });
+        LotsSwimlane.#triangle([rect.x, rect.y], true, true, { parent: svg, fill: fill, height: h, width: w });
+        LotsSwimlane.#triangle([rect.x + rect.width, rect.y], true, false, { parent: svg, fill: fill, height: h, width: w });
+        LotsSwimlane.#triangle([rect.x + rect.width, rect.y + rect.height], false, false, { parent: svg, fill: fill, height: h, width: w });
+    }
+    static #outerArc(startPoint, upOrDown, leftOrRight, options) {
+        const radius = options?.radius || 10;
+        const fill = options?.fill || "rgba(139,0,0,0.9)";
+        const point2Y = upOrDown ? startPoint[1] - radius : startPoint[1] + radius;
+        const clockwiseFlag = (upOrDown != leftOrRight) ? 1 : 0; // exclusive or
+        const arcEndX = leftOrRight ? startPoint[0] + radius : startPoint[0] - radius;
+        //const arcCenter = [leftOrRight ? startPoint[0] + radius : startPoint[0] - radius, upOrDown ? startPoint[1] - radius : startPoint[1] + radius];
+        const pathAttr = `M ${startPoint[0]} ${startPoint[1]} L ${startPoint[0]} ${point2Y} A ${radius} ${radius} 0 0 ${clockwiseFlag} ${arcEndX} ${startPoint[1]} Z`;
+        const path = LotsSwimlane.#create("path", { parent: options?.parent, attributes: { d: pathAttr, fill: fill } });
+        return path;
+    }
+    static #triangle(startPoint, upOrDown, leftOrRight, options) {
+        const height = options?.height || 10;
+        const width = options?.width || 10;
+        const fill = options?.fill || "rgba(139,0,0,0.9)";
+        const point2Y = upOrDown ? startPoint[1] - height : startPoint[1] + height;
+        const arcEndX = leftOrRight ? startPoint[0] + width : startPoint[0] - width;
+        const pathAttr = `M ${startPoint[0]} ${startPoint[1]} L ${startPoint[0]} ${point2Y} L ${arcEndX} ${startPoint[1]} Z`;
+        const path = LotsSwimlane.#create("path", { parent: options?.parent, attributes: { d: pathAttr, fill: fill } });
+        return path;
     }
 }
 //globalThis.customElements.define("lots-swimlane", LotsSwimlane);

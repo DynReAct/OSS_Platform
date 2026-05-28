@@ -1,14 +1,12 @@
-import random
-from datetime import timedelta
-from typing import Sequence
+from datetime import timedelta, datetime
+import dash_ag_grid as dash_ag
 
 import dash
 from dash import html, clientside_callback, ClientsideFunction, Output, Input, State, dcc, callback
-from pydantic import TypeAdapter
 
-from dynreact.app import state
+from dynreact.app import state, config
+from dynreact.auth.authentication import dash_authenticated
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import PlannedWorkingShift
 from dynreact.gui.pages.components import lots_view
 
 
@@ -18,6 +16,7 @@ cnt = 0
 
 
 def layout(*args, **kwargs):
+    value_formatter_object = {"function": "formatCell(params.value, 4, 4)"}
     return html.Div([
         html.H1("Lots", id="lots-gantt-title"),
         lots_view("lots-gantt", initial_hidden=False, ids_toggle=True),
@@ -25,6 +24,45 @@ def layout(*args, **kwargs):
         dcc.Store(id="lots-gantt-undefined2", storage_type="memory"),
         dcc.Store(id="lots-gantt-shifts", storage_type="memory"),
         html.Br(),html.Br(),html.Br(),
+        html.H2("Table view"),
+        html.Div([
+            html.Span("Select equipment: "),
+            dcc.Dropdown(id="lots-gantt-equipment-select",
+                         options=[{"value": e.id, "label": e.name_short or str(e.id), "title": e.name or e.name_short or str(e.id)} for e in state.get_site().equipment],
+                         multi=True),
+            html.Span(),
+            html.Span("Select material type: "),
+            dcc.Dropdown(id="lots-gantt-material-select",
+                         options=[{"value": cat.id, "label": cat.name or str(cat.id),
+                                   "title": cat.description or cat.name or str(cat.id)} for cat in state.get_site().material_categories]),
+            html.Span()
+        ], className="lots-gantt-equipment"),
+        dash_ag.AgGrid(
+            id="lots-gantt-lots-table",
+            columnDefs=[{"field": "lot", "pinned": True},
+                        {"field": "equipment", "headerTooltip": "Equipment this lot applies to."},
+                        {"field": "priority", "headerTooltip": "Lot priority"},
+                        {"field": "start", "filter": "agDateColumnFilter", "headerTooltip": "Lot start time"},
+                        {"field": "end", "filter": "agDateColumnFilter", "headerTooltip": "Lot end time"},
+                        {"field": "status", "filter": "agNumberColumnFilter", "headerTooltip": "Lot status", },
+                        {"field": "active", "headerTooltip": "Lot active?"},
+                        {"field": "weight", "filter": "agNumberColumnFilter", "headerTooltip": "Total lot weight in tons", "headerName": "Weight / t" , "valueFormatter": value_formatter_object},
+                        {"field": "orders_cnt", "headerTooltip": "Number of orders included in the lot", "headerName": "Orders"},
+                        {"field": "material", "headerTooltip": "Number of material units included in the lot", "headerName": "Material",
+                                "cellDataType": False, "cellRenderer": "RenderMaterialClasses" },
+                        {"field": "comment", "headerTooltip": "Lot comment"},
+                        {"field": "orders", "headerTooltip": "Order ids included in the lot", "headerName": "Order ids"},],
+            defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
+            rowData=[],
+            getRowId="params.data.lot",
+            className="ag-theme-alpine",  # ag-theme-alpine-dark
+            # style={"height": "70vh", "width": "100%", "margin-bottom": "5em"},
+            columnSizeOptions={"defaultMinWidth": 125},
+            columnSize="responsiveSizeToFit",
+            dashGridOptions={"rowSelection": "single", "domLayout": "autoHeight", "rowHeight": 60},
+            style={"height": None},
+        ),
+        html.Br(),html.Br(),
     ])
 
 @callback(
@@ -36,7 +74,7 @@ def layout(*args, **kwargs):
 def _snapshot_updated(snap: str|None):
     global cnt
     snap = DatetimeUtils.parse_date(snap)
-    if snap is None:
+    if snap is None or not dash_authenticated(config):
         return None, None, None
     cnt = cnt+1
     if cnt > 1e9:
@@ -82,3 +120,42 @@ clientside_callback(
     State("lots-gantt-lots-swimlane", "id")
 )
 
+@callback(
+    Output("lots-gantt-lots-table", "rowData"),
+    Input("lots-gantt-equipment-select", "value"),
+    Input("lots-gantt-material-select", "value"),
+    State("selected-snapshot", "data"),
+)
+def show_lots(equipments, material_cat: str|None, snapshot: str|datetime|None):
+    snapshot = DatetimeUtils.parse_date(snapshot)
+    if not snapshot or not equipments or not dash_authenticated(config):
+        return None
+    snap_obj = state.get_snapshot(time=snapshot)
+    rows = []
+    empty = tuple()
+    mat_cat = None
+    mat_classes = None
+    if material_cat is not None and material_cat != "":
+        mat_cat = next(cat for cat in state.get_site().material_categories if cat.id == material_cat)
+        mat_classes = [cl.id for cl in mat_cat.classes]
+    for eq in equipments:
+        eq_obj = state.get_site().get_equipment(eq, do_raise=True)
+        for lot in snap_obj.lots.get(eq, empty):
+            classes = {mat: weight for mat, weight in lot.material_weights.items() if mat in mat_classes} \
+                            if mat_classes is not None and lot.material_weights is not None else None
+            row = {
+                "lot": lot.id,
+                "equipment": eq_obj.name_short or str(eq_obj.id),
+                "priority": getattr(lot, "priority", None),
+                "start": DatetimeUtils.format(state.as_timezone(lot.start_time), use_zone=False).replace("T", " ") if lot.start_time else None,
+                "end": DatetimeUtils.format(state.as_timezone(lot.end_time), use_zone=False).replace("T", " ") if lot.end_time else None,
+                "status": lot.status,
+                "active": lot.active,
+                "orders_cnt": len(lot.orders),
+                "weight": lot.weight,
+                "material": classes,
+                "comment": lot.comment,
+                "orders": ", ".join(lot.orders)
+            }
+            rows.append(row)
+    return rows

@@ -88,3 +88,16 @@
 .snapimp-close:hover {
     cursor: pointer;
 }
+
+.lots-gantt-equipment {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: center;
+    column-gap: 1em;
+    row-gap: 0.5em;
+    padding-bottom: 1em;
+}
+
+.lots-gantt-equipment>.dash-dropdown {
+    min-width: 12em;
+}

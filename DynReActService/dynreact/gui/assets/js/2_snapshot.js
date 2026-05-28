@@ -2,10 +2,59 @@
     const aggrid_functions = globalThis.dashAgGridFunctions || {};
     if (!globalThis.dashAgGridFunctions)
         globalThis.dashAgGridFunctions = aggrid_functions
+    const aggrid_cmp_functions = (globalThis.dashAgGridComponentFunctions = globalThis.dashAgGridComponentFunctions || {});
 
     aggrid_functions.formatCell = function(obj, numDigits, expThreshold) {
         return JsUtils.format(obj, numDigits, expThreshold);
-    }
+    };
+
+    aggrid_functions.renderMaterialShare = function(params) {
+        console.log("   RENDER MATERIAL SHARE 1", params);
+    };
+
+    const drawWedge = (startFraction, endFraction, color, options) => {
+        const radius = options?.radius || 50;
+        if (endFraction >= 1 && startFraction <= 0) {
+            // https://developer.mozilla.org/en-US/docs/Web/SVG/Reference/Element/circle
+            const circle = React.createElement("circle", {fill: color, cx: radius, cy: radius, r: radius});
+            return circle;
+        }
+        const largeArcFlag = endFraction - startFraction > 0.5 ? 1 : 0;
+        const angleStart = startFraction * 2 * Math.PI;
+        const angleEnd = endFraction * 2 * Math.PI;
+        const xStart = (1 + Math.sin(angleStart)) * radius;
+        const yStart = (1 - Math.cos(angleStart)) * radius;
+        const xEnd   = (1 + Math.sin(angleEnd)) * radius;
+        const yEnd   = (1 - Math.cos(angleEnd)) * radius;
+        // https://developer.mozilla.org/en-US/docs/Web/SVG/Tutorials/SVG_from_scratch/Paths#arcs
+        // Arc format: A rx ry x-axis-rotation large-arc-flag sweep-flag x y
+        const d = `M ${radius} ${radius} L ${xStart} ${yStart} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${xEnd} ${yEnd} Z`;
+        const path = React.createElement("path", {fill: color, d: d});
+        return path;
+    };
+
+    aggrid_cmp_functions.RenderMaterialClasses = function(params) {
+        const material = params.value;
+        const sum = material ? Object.values(material).reduce((a,b) => a+b, 0) : undefined;
+        if (!(sum > 0))
+            return;
+        const colors = ["red", "green", "blue", "yellow"];
+        let currentFraction = 0;
+        const radius = 45;
+        const children = Object.entries(material).map(([material, value], idx) => {
+            if (value <= 0)
+                return undefined;
+            const endFraction = currentFraction + value / sum;
+            const color = colors[idx % 4];
+            const arc = drawWedge(currentFraction, endFraction, color, {radius: radius});
+            currentFraction = endFraction;
+            return arc;
+        }).filter(arc => arc);
+        const size = 50;
+        const svg = React.createElement("svg", { viewBox: "0 0 100 100", width: size, height: size, style: {"padding": "5px 0"} }, children);
+        // TODO like this we cannot attach event listeners to svg (React problem) => need to go via the parent id
+        return svg;
+    };
 
     globalThis.dynreact = Object.assign({}, globalThis.dynreact, {_site: undefined, _snapshot: undefined, _ltp: undefined});
     // implements DashClientAccess from DynReActViz project

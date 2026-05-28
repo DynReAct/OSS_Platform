@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import Mapping
 
@@ -75,7 +76,10 @@ class SnapshotUpdate(Mapping):
         for lot_idx, order_id in enumerate(orders):
             order = order_objects[order_id]
             o_lots = dict(order.lots) if order.lots is not None else {}
-            o_lot_positions = dict(order.lot_positions) if order.lot_positions is not None else {}
+            o_lot_positions = dict(order.lot_positions) if isinstance(order.lot_positions, Mapping) else {}
+            # FIXME
+            if o_lots is not None and not isinstance(order.lot_positions, Mapping):
+                logging.getLogger("dynreact.service.SnapshotUpdate").warning(f"Order {order_id} in snapshot {snapshot.timestamp} has lot entries but invalid lot positions {type(order.lot_positions)}: {order.lot_positions}")
             o_lots[process] = lot.id
             o_lot_positions[process] = lot_idx + 1
             o_idx = all_orders.index(order)

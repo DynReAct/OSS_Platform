@@ -28,6 +28,7 @@ class ShortTermTargets(BaseModel):
     Attributes:
         KAFKA_IP: Kafka broker address.
         TimeDelays: Delay values used by the auction lifecycle.
+        KAFKA_TOPIC_PREFIX: Prefix for auction topic names.
         TOPIC_GEN: Main Kafka topic for general communication.
         TOPIC_CALLBACK: Main Kafka topic for callbacks.
         LOG_FILE_PATH: Folder where agent logs are stored.
@@ -46,6 +47,7 @@ class ShortTermTargets(BaseModel):
 
     KAFKA_IP: str | None = Field(default=None, description="Kafka broker address.")
     TimeDelays: TimeDelay = Field(default_factory=TimeDelay, description="Delay recordset for auctions.")
+    KAFKA_TOPIC_PREFIX: str | None = Field(default="Dynreact_OSS", description="Prefix for auction topic names.")
     TOPIC_GEN: str | None = Field(default="DynReact-OSS-Gen", description="General Kafka topic for communication.")
     TOPIC_CALLBACK: str | None = Field(default="DynReact-OSS-Callback", description="General Kafka topic for callbacks.")
     LOG_FILE_PATH: str | None = Field(default="/var/log/dynreact-logs/", description="Log file path.")

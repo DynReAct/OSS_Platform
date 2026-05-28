@@ -1,0 +1,19 @@
+{
+  "KAFKA_IP": "127.0.0.1:9092",
+  "LOG_FILE_PATH": "/var/log/dynreact-logs/",
+  "REST_URL": "http://127.0.0.1:5026",
+  "PERF_URL": "http://127.0.0.1:5027",
+  "TRANSPORT_TIMES_URL": "default+file:/repo/DynReActService/data/site.json",
+  "KAFKA_TOPIC_PREFIX": "Dynreact_OSS",
+  "TOPIC_GEN": "DynReact-OSS-TEST-Gen",
+  "TOPIC_CALLBACK": "DynReact-OSS-TEST-Callback",
+  "VB": 3,
+  "TimeDelays": {
+    "AUCTION_WAIT": 50,
+    "COUNTERBID_WAIT": 15,
+    "CLONING_WAIT": 30,
+    "EXIT_WAIT": 10,
+    "RUNNING_WAIT": 10,
+    "SMALL_WAIT": 5
+  }
+}

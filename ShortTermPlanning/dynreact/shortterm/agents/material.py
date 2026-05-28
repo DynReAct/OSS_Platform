@@ -112,6 +112,21 @@ class Material(Agent):
                            identifier="ddea8374-6149-41e1-b86f-4cc147580d13",
                            to_stdout=True)
 
+    def _notify_already_assigned(self, equipment: str) -> None:
+        """
+        Inform one equipment that this material is no longer available.
+        """
+        sendmsgtopic(
+            producer=self.producer,
+            tsend=self.topic,
+            topic=self.topic,
+            source=self.agent,
+            dest=equipment,
+            action="ASSIGNED",
+            payload=dict(id=self.agent),
+            vb=self.verbose
+        )
+
     def handle_create_action(self, dctmsg: dict) -> str:
         """
         Handles the CREATE action. It clones the master MATERIAL for one auction.
@@ -173,6 +188,16 @@ class Material(Agent):
         destination = str(equipment_id.split(":")[2])
         print(f"Origin: {origin} Destination: {destination}")
 
+        if self.assigned_equipment:
+            if self.verbose > 1:
+                self.write_log(
+                    f"Rejected offer from {equipment_id}. "
+                    f"Material already committed to {self.assigned_equipment}.",
+                    "e9fcb243-2a64-440a-946f-dfd1cb753d59"
+                )
+            self._notify_already_assigned(equipment_id)
+            return 'CONTINUE'
+
         if auction_start_time is not None and self.transport_times:
             transfer_seconds = _transfer_seconds(self.transport_times, origin, destination)
             if transfer_seconds is None:
@@ -231,6 +256,18 @@ class Material(Agent):
         topic = dctmsg['topic']
         equipment = dctmsg['payload']['id']
         costs = dctmsg['payload']['costs']
+
+        if self.assigned_equipment and self.assigned_equipment != equipment:
+            if self.verbose > 1:
+                self.write_log(
+                    f"Rejected confirmation request from {equipment}. "
+                    f"Material already committed to {self.assigned_equipment}.",
+                    "2400d190-842f-4842-9875-40f6b29625e2"
+                )
+            self._notify_already_assigned(equipment)
+            return 'CONTINUE'
+
+        self.assigned_equipment = equipment
         sendmsgtopic(
             producer=self.producer,
             tsend=topic,
@@ -242,7 +279,6 @@ class Material(Agent):
             vb=self.verbose
         )
 
-        self.assigned_equipment = equipment
         if self.verbose > 1:
             self.write_log(
                 f"Assigned material to equipment {self.assigned_equipment}. Sending ASSIGNED message...",

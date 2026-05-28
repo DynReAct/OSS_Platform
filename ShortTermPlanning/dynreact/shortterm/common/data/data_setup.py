@@ -7,7 +7,7 @@ Note:
     These variables should be computed only once.
 """
 from typing import Any
-from dynreact.shortterm.common.data.load_url import load_url_json_get, URL_SNAPSHOTS, URL_SNAPSHOT_DATA
+from dynreact.shortterm.common.data.load_url import load_url_json_get, URL_SNAPSHOTS, URL_SNAPSHOT_DATA, URL_SITE
 
 class DataSetup:
     """

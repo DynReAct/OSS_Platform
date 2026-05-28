@@ -1,0 +1,34 @@
+{
+  "KAFKA_IP": "192.168.110.173:9092",
+  "LOG_FILE_PATH": "/var/log/dynreact-logs/",
+  "REST_URL": "http://192.168.111.11:5026",
+  "PERF_URL": "http://192.168.111.11:5027",
+  "TRANSPORT_TIMES_URL": "http://192.168.111.11:5026",
+  "KAFKA_TOPIC_PREFIX": "Dynreact_OSS",
+  "TOPIC_GEN": "DynReact-OSS-Gen",
+  "TOPIC_CALLBACK": "DynReact-OSS-Callback",
+  "VB": 3,
+  "TimeDelays": {
+    "AUCTION_WAIT": 50,
+    "COUNTERBID_WAIT": 15,
+    "CLONING_WAIT": 30,
+    "EXIT_WAIT": 10,
+    "RUNNING_WAIT": 10,
+    "SMALL_WAIT": 5
+  },
+  "TableMappings": [
+    {"headerName": "Job ID", "path": "job_id", "pinned": true},
+    {"headerName": "Round", "path": "round"},
+    {"headerName": "Due Date", "path": "due_date"},
+    {"headerName": "Target Weight", "path": "target_weight"},
+    {"headerName": "Actual Weight", "path": "actual_weight"},
+    {"headerName": "Active Processes", "path": "current_processes"},
+    {"headerName": "Steel Grade", "path": "material_properties.steelgrade"},
+    {"headerName": "Temper", "path": "material_properties.temper"},
+    {"headerName": "Final Thickness", "path": "material_properties.final_thickness"},
+    {"headerName": "Final Width", "path": "material_properties.final_width"},
+    {"headerName": "Target FCT", "path": "costs.target_fct"},
+    {"headerName": "Transition Cost", "path": "costs.transition_costs"},
+    {"headerName": "Logistic Cost", "path": "costs.logistic_costs"}
+  ]
+}

@@ -215,7 +215,7 @@ def transfer_popup():
                             {"field": "due_date", "headerTooltip": "Order due date.", "headerName": "Due date"}],
                 defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
                 rowData=[],
-                getRowId="params.data.id",
+                getRowId="params.data.order",
                 className="ag-theme-alpine",  # ag-theme-alpine-dark
                 # style={"height": "70vh", "width": "100%", "margin-bottom": "5em"},
                 columnSizeOptions={"defaultMinWidth": 125},

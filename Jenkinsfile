@@ -39,7 +39,7 @@ node {
                 echo "[PRE] Cleaning up $IMAGE_NAME containers..."
                 docker ps -a --filter "ancestor=$IMAGE_NAME" -q | xargs -r docker stop
                 docker ps -a --filter "ancestor=$IMAGE_NAME" -q | xargs -r docker rm
-                docker system prune -f
+                docker system prune -f || echo "[WARN] docker system prune failed; continuing because cleanup is non-blocking."
             '''
             body()
         }

@@ -204,7 +204,10 @@ class Material(Agent):
             self._notify_already_assigned(equipment_id)
             return 'CONTINUE'
 
-        if auction_start_time is not None and self.transport_times:
+        transfer_seconds = None
+        material_start_time = None
+        lateness_seconds = 0.0
+        if self.transport_times:
             transfer_seconds = _transfer_seconds(self.transport_times, origin, destination)
             if transfer_seconds is None:
                 if self.verbose > 1:
@@ -215,18 +218,27 @@ class Material(Agent):
                     )
                 return 'CONTINUE'
             material_start_time = datetime.now(timezone.utc) + timedelta(seconds=transfer_seconds)
-            if material_start_time > auction_start_time:
-                if self.verbose > 1:
-                    self.write_log(
-                        f"Rejected offer from {equipment_id}. "
-                        f"Material arrival {material_start_time.isoformat()} is after equipment start "
-                        f"{auction_start_time.isoformat()}.",
-                        "4a2e5658-3f55-4f2d-9b47-7737cc4f9517"
-                    )
-                return 'CONTINUE'
+            if auction_start_time is not None and material_start_time > auction_start_time and self.verbose > 1:
+                self.write_log(
+                    f"Offer from {equipment_id} arrives after equipment start "
+                    f"({material_start_time.isoformat()} > {auction_start_time.isoformat()}). "
+                    "Sending the bid anyway so the equipment can rank time and cost trade-offs.",
+                    "4a2e5658-3f55-4f2d-9b47-7737cc4f9517"
+                )
+        if auction_start_time is not None and material_start_time is not None:
+            lateness_seconds = max((material_start_time - auction_start_time).total_seconds(), 0.0)
 
         bidding_price = self.calculate_bidding_price(material_params=self.params, equipment_status=equipment_status, previous_price=previous_price)
         if bidding_price is not None: #TODO: reindent when de-comment
+            counterbid_payload = dict(
+                id=self.agent,
+                material_params=self.params,
+                price=bidding_price,
+                transfer_seconds=transfer_seconds,
+                lateness_seconds=lateness_seconds,
+            )
+            if material_start_time is not None:
+                counterbid_payload['arrival_time'] = material_start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
             sendmsgtopic(
                 producer=self.producer,
                 tsend=topic,
@@ -234,7 +246,7 @@ class Material(Agent):
                 source=self.agent,
                 dest=equipment_id,
                 action="COUNTERBID",
-                payload=dict(id=self.agent, material_params=self.params, price=bidding_price),
+                payload=counterbid_payload,
                 vb=self.verbose
             )
             if self.verbose > 2:
@@ -360,21 +372,24 @@ class Material(Agent):
 
         # For now, the bidding price is greater when the delivery date is sooner. If due_date is not present simulate a value
         if material_params['order'].get("due_date"):
-            delivery_date = material_params['order']['due_date']
-            delivery_date = datetime.strptime(delivery_date, '%Y-%m-%dT%H:%M:%SZ')
+            delivery_date = _parse_utc_datetime(material_params['order']['due_date'])
+            if delivery_date is None:
+                raise ValueError(f"Unsupported due_date format: {material_params['order']['due_date']}")
         else:
-            # Calculate today's date
-            today = datetime.now()
+            # Calculate today's date in UTC to keep all bidding timestamps comparable.
+            today = datetime.now(timezone.utc)
             # Calculate the date 10 days ago
             ten_days_ago = today - timedelta(days=10)
             # Generate a random date between today and 10 days ago
             delivery_date = ten_days_ago + timedelta(days=random.randint(0, 10))
 
-        #a = 150 / (delivery_date - datetime(2020, 1, 1)).days
-        #b = 90000 / (auction_start_time - datetime(2020, 1, 1)).seconds
+        base_date = datetime(2020, 1, 1, tzinfo=timezone.utc)
+
+        #a = 150 / (delivery_date - base_date).days
+        #b = 90000 / (auction_start_time - base_date).seconds
 
         #bidding_price = a / b
-        bidding_price = 150 / (delivery_date - datetime(2020, 1, 1)).days
+        bidding_price = 150 / (delivery_date - base_date).days
 
         # For now, the bidding price is simply increased by the previous bidding price
         if previous_price is not None:

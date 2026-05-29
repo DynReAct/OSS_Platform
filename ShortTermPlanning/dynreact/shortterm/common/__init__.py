@@ -122,7 +122,9 @@ class KeySearch:
             if field_name in os.environ:
                 update[field_name] = os.environ[field_name]
 
-        return dump_model.model_copy(update=update).model_dump()
+        merged = dump_model.model_dump()
+        merged.update(update)
+        return dump_model.__class__.model_validate(merged).model_dump()
 
     @classmethod
     def assign_value(cls, key: str, value: str) -> None:
@@ -137,7 +139,9 @@ class KeySearch:
         if cls._global_config is None:
             raise RuntimeError("KeySearch global config has not been set. Call KeySearch.set_global() first.")
 
-        cls._global_config = cls._global_config.model_copy(update={key: value})
+        merged = cls._global_config.model_dump()
+        merged[key] = value
+        cls._global_config = cls._global_config.__class__.model_validate(merged)
 
     @classmethod
     def assign_values(cls, new_values: dict) -> None:
@@ -150,7 +154,9 @@ class KeySearch:
         if cls._global_config is None:
             raise RuntimeError("KeySearch global config has not been set. Call KeySearch.set_global() first.")
 
-        cls._global_config = cls._global_config.model_copy(update=new_values)
+        merged = cls._global_config.model_dump()
+        merged.update(new_values)
+        cls._global_config = cls._global_config.__class__.model_validate(merged)
 
     @classmethod
     def set_global(cls, config_provider: ShortTermTargets) -> None:
@@ -241,7 +247,9 @@ def initialize_keysearch_from_runtime(
     if overrides:
         normalized_overrides = {key: value for key, value in overrides.items() if value is not None}
         if normalized_overrides:
-            config = config.model_copy(update=normalized_overrides)
+            merged = config.model_dump()
+            merged.update(normalized_overrides)
+            config = config.__class__.model_validate(merged)
 
     KeySearch.set_global(config_provider=config)
     return config

@@ -217,7 +217,7 @@ def main() -> None:
         elif args.type == "replica":
 
             variables = json.loads(args.variables)
-            short_term_targets = ShortTermTargets().model_copy(update=variables)
+            short_term_targets = ShortTermTargets.model_validate(variables)
             KeySearch.set_global(config_provider=short_term_targets)
 
             agent = Log(
@@ -233,7 +233,7 @@ def main() -> None:
         elif args.type == "replica":
 
             variables = json.loads(args.variables)
-            short_term_targets = ShortTermTargets().model_copy(update=variables)
+            short_term_targets = ShortTermTargets.model_validate(variables)
             KeySearch.set_global(config_provider=short_term_targets)
 
             agent = Equipment(
@@ -252,7 +252,7 @@ def main() -> None:
         elif args.type == "replica":
 
             variables = json.loads(args.variables)
-            short_term_targets = ShortTermTargets().model_copy(update=variables)
+            short_term_targets = ShortTermTargets.model_validate(variables)
             KeySearch.set_global(config_provider=short_term_targets)
 
             agent = Material(

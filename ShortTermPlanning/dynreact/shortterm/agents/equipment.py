@@ -341,6 +341,9 @@ class Equipment(Agent):
         payload = dctmsg['payload']
         material_params = payload['material_params']
         bidding_price = payload['price']
+        arrival_time = parse_start_time(payload.get('arrival_time'))
+        transfer_seconds = _coerce_optional_float(payload.get('transfer_seconds'))
+        lateness_seconds = _coerce_float(payload.get('lateness_seconds'), 0.0)
 
         prod_cost = calculate_production_cost(material_params=material_params, equipment_status=self.status, verbose=self.verbose)
 
@@ -354,7 +357,16 @@ class Equipment(Agent):
             return 'CONTINUE'
 
         profit = bidding_price - prod_cost
-        bid = dict(material=payload['id'], profit=profit, price=bidding_price)
+        is_tardy = arrival_time is not None and arrival_time > self.start_time
+        bid = dict(
+            material=payload['id'],
+            profit=profit,
+            price=bidding_price,
+            arrival_time=arrival_time.strftime('%Y-%m-%dT%H:%M:%SZ') if arrival_time is not None else None,
+            transfer_seconds=transfer_seconds,
+            lateness_seconds=lateness_seconds,
+            is_tardy=is_tardy,
+        )
 
         # Reset bidding status
         self.iter_post_bid = 0
@@ -363,7 +375,16 @@ class Equipment(Agent):
         # Add the bid to the list
         self.bids.append(bid)
         if self.verbose > 1:
-            self.write_log(f"Added {bid} to the list of bids, {self.bids}", "245bb0ae-d579-4fef-a6a1-6625c97afbe1")
+            timing_msg = ""
+            if bid['arrival_time'] is not None:
+                timing_msg = (
+                    f" Arrival={bid['arrival_time']}, tardy={bid['is_tardy']}, "
+                    f"lateness={bid['lateness_seconds']:.0f}s."
+                )
+            self.write_log(
+                f"Added {bid} to the list of bids, {self.bids}.{timing_msg}",
+                "245bb0ae-d579-4fef-a6a1-6625c97afbe1"
+            )
 
         return 'CONTINUE'
 
@@ -502,4 +523,10 @@ class Equipment(Agent):
         Sorts the bids based on their profit in ascending order.
         """
 
-        self.bids.sort(key=lambda item: item['profit'])
+        self.bids.sort(
+            key=lambda item: (
+                1 if not item.get('is_tardy', False) else 0,
+                -float(item.get('lateness_seconds', 0.0)),
+                float(item.get('profit', 0.0)),
+            )
+        )

@@ -79,7 +79,11 @@ class Agent:
         self.agent = agent
         self.topic_callback = KeySearch.search_for_value("TOPIC_CALLBACK")
         self.topic_gen = KeySearch.search_for_value("TOPIC_GEN")
-        self.verbose = KeySearch.search_for_value("VB", 1)
+        raw_verbose = KeySearch.search_for_value("VB", 1)
+        try:
+            self.verbose = int(raw_verbose)
+        except (TypeError, ValueError):
+            self.verbose = 1
         self.kafka_ip = KeySearch.search_for_value("KAFKA_IP")
         if not isinstance(self.topic_callback, str) or not isinstance(self.topic_gen, str) or not isinstance(self.kafka_ip, str):
             raise RuntimeError("Kafka configuration is incomplete. Expected TOPIC_CALLBACK, TOPIC_GEN, and KAFKA_IP.")

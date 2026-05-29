@@ -7,7 +7,7 @@ node {
     env.LOCAL_REGISTRY = LOCAL_REGISTRY
     env.IMAGE_TAG = IMAGE_TAG
     env.SHORT_TERM_PLANNING_PARAMS = "default+file:/repo/ShortTermPlanning/tests/stp_context_oss_test.json"
-    env.CONTAINER_NAME_PREFIX = "JENKINS_OSS_TEST"
+    env.CONTAINER_NAME_PREFIX = "JENKINS_OSS_TEST_${env.BUILD_ID}"
     env.DOCKER_NETWORK = "host"
     env.PERF_URL = "http://192.168.111.11:5027"
     env.TRANSPORT_TIMES_URL = "default+file:/repo/DynReActService/data/site.json"
@@ -36,9 +36,9 @@ node {
     def runStageWithCleanup = { stageName, body ->
         stage(stageName) {
             sh '''
-                echo "[PRE] Cleaning up $IMAGE_NAME containers..."
-                docker ps -a --filter "ancestor=$IMAGE_NAME" -q | xargs -r docker stop
-                docker ps -a --filter "ancestor=$IMAGE_NAME" -q | xargs -r docker rm
+                echo "[PRE] Cleaning up containers with prefix $CONTAINER_NAME_PREFIX..."
+                docker ps -a --filter "name=$CONTAINER_NAME_PREFIX_" -q | xargs -r docker stop
+                docker ps -a --filter "name=$CONTAINER_NAME_PREFIX_" -q | xargs -r docker rm
                 docker system prune -f || echo "[WARN] docker system prune failed; continuing because cleanup is non-blocking."
             '''
             body()

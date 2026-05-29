@@ -157,7 +157,13 @@ class Material(Agent):
                 "variables": KeySearch.dump_model()
             }
 
-            self.handler.launch_container(name=f"{topic}_{material}", agent="material", mode="replica", params=init_kwargs, auto_remove=True)
+            self.handler.launch_container(
+                name=f"{topic}_{material}",
+                agent="material",
+                mode="replica",
+                params=init_kwargs,
+                auto_remove=False
+            )
 
             if self.verbose > 1:
                 self.write_log(f"Creating material with configuration {init_kwargs}...", "ffac4444-ec23-4f00-af6a-f4300e3af7a7")

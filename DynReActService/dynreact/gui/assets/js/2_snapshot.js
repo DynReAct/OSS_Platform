@@ -14,9 +14,10 @@
 
     const drawWedge = (startFraction, endFraction, color, options) => {
         const radius = options?.radius || 50;
+        const attributes = options?.attributes || {};
         if (endFraction >= 1 && startFraction <= 0) {
             // https://developer.mozilla.org/en-US/docs/Web/SVG/Reference/Element/circle
-            const circle = React.createElement("circle", {fill: color, cx: radius, cy: radius, r: radius});
+            const circle = React.createElement("circle", {fill: color, cx: radius, cy: radius, r: radius, ...attributes});
             return circle;
         }
         const largeArcFlag = endFraction - startFraction > 0.5 ? 1 : 0;
@@ -29,24 +30,28 @@
         // https://developer.mozilla.org/en-US/docs/Web/SVG/Tutorials/SVG_from_scratch/Paths#arcs
         // Arc format: A rx ry x-axis-rotation large-arc-flag sweep-flag x y
         const d = `M ${radius} ${radius} L ${xStart} ${yStart} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${xEnd} ${yEnd} Z`;
-        const path = React.createElement("path", {fill: color, d: d});
+        const path = React.createElement("path", {fill: color, d: d, ...attributes});
         return path;
     };
 
     aggrid_cmp_functions.RenderMaterialClasses = function(params) {
-        const material = params.value;
+        const value = params?.value;
+        const material = value?.material;
+        const labels = value?.labels;
+        const colors = value?.colors;
         const sum = material ? Object.values(material).reduce((a,b) => a+b, 0) : undefined;
-        if (!(sum > 0))
+        if (!(sum > 0) || !colors)
             return;
-        const colors = ["red", "green", "blue", "yellow"];
         let currentFraction = 0;
         const radius = 45;
         const children = Object.entries(material).map(([material, value], idx) => {
             if (value <= 0)
                 return undefined;
             const endFraction = currentFraction + value / sum;
-            const color = colors[idx % 4];
-            const arc = drawWedge(currentFraction, endFraction, color, {radius: radius});
+            const color = colors[material] || "grey";   // colors[idx % 4];
+            const label = labels && material in labels ? labels[material] : material;
+            const arc = drawWedge(currentFraction, endFraction, color, {radius: radius,
+                    attributes: {"data-material": material, "data-mat-label": label, "data-weight": value, "data-fraction": value/sum}});
             currentFraction = endFraction;
             return arc;
         }).filter(arc => arc);

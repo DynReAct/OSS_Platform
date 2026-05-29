@@ -34,34 +34,36 @@ def layout(*args, **kwargs):
             html.Span("Select material type: "),
             dcc.Dropdown(id="lots-gantt-material-select",
                          options=[{"value": cat.id, "label": cat.name or str(cat.id),
-                                   "title": cat.description or cat.name or str(cat.id)} for cat in state.get_site().material_categories]),
+                                   "title": cat.description or cat.name or str(cat.id)} for cat in state.get_site().material_categories],
+                         value=next((cat.id for cat in state.get_site().material_categories), None)),
             html.Span()
         ], className="lots-gantt-equipment"),
-        dash_ag.AgGrid(
-            id="lots-gantt-lots-table",
-            columnDefs=[{"field": "lot", "pinned": True},
-                        {"field": "equipment", "headerTooltip": "Equipment this lot applies to."},
-                        {"field": "priority", "headerTooltip": "Lot priority"},
-                        {"field": "start", "filter": "agDateColumnFilter", "headerTooltip": "Lot start time"},
-                        {"field": "end", "filter": "agDateColumnFilter", "headerTooltip": "Lot end time"},
-                        {"field": "status", "filter": "agNumberColumnFilter", "headerTooltip": "Lot status", },
-                        {"field": "active", "headerTooltip": "Lot active?"},
-                        {"field": "weight", "filter": "agNumberColumnFilter", "headerTooltip": "Total lot weight in tons", "headerName": "Weight / t" , "valueFormatter": value_formatter_object},
-                        {"field": "orders_cnt", "headerTooltip": "Number of orders included in the lot", "headerName": "Orders"},
-                        {"field": "material", "headerTooltip": "Number of material units included in the lot", "headerName": "Material",
-                                "cellDataType": False, "cellRenderer": "RenderMaterialClasses" },
-                        {"field": "comment", "headerTooltip": "Lot comment"},
-                        {"field": "orders", "headerTooltip": "Order ids included in the lot", "headerName": "Order ids"},],
-            defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
-            rowData=[],
-            getRowId="params.data.lot",
-            className="ag-theme-alpine",  # ag-theme-alpine-dark
-            # style={"height": "70vh", "width": "100%", "margin-bottom": "5em"},
-            columnSizeOptions={"defaultMinWidth": 125},
-            columnSize="responsiveSizeToFit",
-            dashGridOptions={"rowSelection": "single", "domLayout": "autoHeight", "rowHeight": 60},
-            style={"height": None},
-        ),
+        html.Div([
+            dash_ag.AgGrid(
+                id="lots-gantt-lots-table",
+                columnDefs=[{"field": "lot", "pinned": True},
+                            {"field": "equipment", "headerTooltip": "Equipment this lot applies to."},
+                            {"field": "priority", "headerTooltip": "Lot priority"},
+                            {"field": "start", "filter": "agDateColumnFilter", "headerTooltip": "Lot start time"},
+                            {"field": "end", "filter": "agDateColumnFilter", "headerTooltip": "Lot end time"},
+                            {"field": "status", "filter": "agNumberColumnFilter", "headerTooltip": "Lot status", },
+                            {"field": "active", "headerTooltip": "Lot active?"},
+                            {"field": "weight", "filter": "agNumberColumnFilter", "headerTooltip": "Total lot weight in tons", "headerName": "Weight / t" , "valueFormatter": value_formatter_object},
+                            {"field": "orders_cnt", "headerTooltip": "Number of orders included in the lot", "headerName": "Orders"},
+                            {"field": "material", "headerTooltip": "Number of material units included in the lot", "headerName": "Material",
+                                    "cellDataType": False, "cellRenderer": "RenderMaterialClasses" },
+                            {"field": "comment", "headerTooltip": "Lot comment"},
+                            {"field": "orders", "headerTooltip": "Order ids included in the lot", "headerName": "Order ids"},],
+                defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
+                rowData=[],
+                getRowId="params.data.lot",
+                className="ag-theme-alpine",  # ag-theme-alpine-dark
+                # style={"height": "70vh", "width": "100%", "margin-bottom": "5em"},
+                columnSizeOptions={"defaultMinWidth": 125},
+                columnSize="responsiveSizeToFit",
+                dashGridOptions={"rowSelection": "single", "domLayout": "autoHeight", "rowHeight": 60},
+                style={"height": None},
+        )], className="lots-gantt-table-parent"),  # relative positioning
         html.Br(),html.Br(),
     ])
 
@@ -135,14 +137,19 @@ def show_lots(equipments, material_cat: str|None, snapshot: str|datetime|None):
     empty = tuple()
     mat_cat = None
     mat_classes = None
+    mat_labels = None
     if material_cat is not None and material_cat != "":
         mat_cat = next(cat for cat in state.get_site().material_categories if cat.id == material_cat)
         mat_classes = [cl.id for cl in mat_cat.classes]
+        mat_labels = {cl.id: cl.name or cl.id for cl in mat_cat.classes}
+    all_colors = ["red", "green", "blue", "yellow"]  # TODO
+    num_colors = len(all_colors)
+    colors = {mat: all_colors[idx % num_colors] for idx, mat in enumerate(mat_classes)}
     for eq in equipments:
         eq_obj = state.get_site().get_equipment(eq, do_raise=True)
         for lot in snap_obj.lots.get(eq, empty):
-            classes = {mat: weight for mat, weight in lot.material_weights.items() if mat in mat_classes} \
-                            if mat_classes is not None and lot.material_weights is not None else None
+            classes = {"material": {mat: weight for mat, weight in lot.material_weights.items() if mat in mat_classes}, "colors": colors,
+                       "labels": mat_labels } if mat_classes is not None and lot.material_weights is not None else None
             row = {
                 "lot": lot.id,
                 "equipment": eq_obj.name_short or str(eq_obj.id),
@@ -159,3 +166,14 @@ def show_lots(equipments, material_cat: str|None, snapshot: str|datetime|None):
             }
             rows.append(row)
     return rows
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="createlots",
+        function_name="attachPieChartEventListener"
+    ),
+    Output("lots-gantt-lots-table", "title"),
+    Input("lots-gantt-lots-table", "rowData"),
+    State("lots-gantt-lots-table", "id")
+)
+

@@ -142,6 +142,10 @@ def genauction(act: str | None = None) -> str:
         act = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
 
     topic_prefix = _key_str("KAFKA_TOPIC_PREFIX", "Dynreact_OSS")
+    print(
+        "[TRACE] genauction resolved KAFKA_TOPIC_PREFIX="
+        f"{topic_prefix!r} for act={act!r}"
+    )
 
     return f"{topic_prefix}-" + act
 
@@ -306,6 +310,14 @@ def create_auction(
 
     # Instruct the general LOG to clone itself to create a new auction
     act = genauction(act)
+    dumped_model = KeySearch.dump_model()
+    print(
+        "[TRACE] create_auction resolved topic_gen="
+        f"{topic_gen!r}, auction_topic={act!r}, "
+        f"model.KAFKA_TOPIC_PREFIX={getattr(dumped_model, 'KAFKA_TOPIC_PREFIX', None)!r}, "
+        f"model.TOPIC_GEN={getattr(dumped_model, 'TOPIC_GEN', None)!r}, "
+        f"model.TOPIC_CALLBACK={getattr(dumped_model, 'TOPIC_CALLBACK', None)!r}"
+    )
 
     if admin_client and topic_exist(admin_client=admin_client, topic_name=act, verbose=verbose):
         raise Exception(f"Topic {act} already exists. Try with another name")
@@ -317,7 +329,7 @@ def create_auction(
         source="UX",
         dest="LOG:" + topic_gen,
         action="CREATE",
-        payload=dict(msg=f"Created Topic {act}", variables=KeySearch.dump_model()),
+        payload=dict(msg=f"Created Topic {act}", variables=dumped_model),
         vb=verbose
     )
     num_agents += 1

@@ -59,6 +59,30 @@ def _transfer_seconds(transport_times: dict[str, dict[str, int]], origin: str, d
     return int(default_value) if default_value is not None else None
 
 
+def _resolve_material_origin(material_params: dict[str, object], destination: str) -> str:
+    """
+    Resolve the material origin equipment id as robustly as possible.
+
+    Some RAS payloads omit ``current_equipment`` at the top level. In that
+    case we try order-level data first and, as a last resort, assume the
+    material is already colocated with the destination equipment so the
+    auction can continue instead of failing hard.
+    """
+    current_equipment = material_params.get("current_equipment")
+    if current_equipment not in (None, ""):
+        return str(current_equipment)
+
+    order = material_params.get("order", {})
+    if isinstance(order, dict):
+        order_current_equipment = order.get("current_equipment")
+        if isinstance(order_current_equipment, list) and len(order_current_equipment) > 0:
+            return str(order_current_equipment[0])
+        if order_current_equipment not in (None, ""):
+            return str(order_current_equipment)
+
+    return str(destination)
+
+
 class Material(Agent):
     """
     Class Material supporting the material agents.
@@ -190,8 +214,8 @@ class Material(Agent):
         equipment_status = payload['status']
         previous_price = payload.get('previous_price')
         auction_start_time = _parse_utc_datetime(payload.get('start_time'))
-        origin = str(self.params['current_equipment'])
         destination = str(equipment_id.split(":")[2])
+        origin = _resolve_material_origin(self.params, destination)
         print(f"Origin: {origin} Destination: {destination}")
 
         if self.assigned_equipment:
@@ -371,11 +395,10 @@ class Material(Agent):
             return None
 
         # For now, the bidding price is greater when the delivery date is sooner. If due_date is not present simulate a value
+        delivery_date = None
         if material_params['order'].get("due_date"):
             delivery_date = _parse_utc_datetime(material_params['order']['due_date'])
-            if delivery_date is None:
-                raise ValueError(f"Unsupported due_date format: {material_params['order']['due_date']}")
-        else:
+        if delivery_date is None:
             # Calculate today's date in UTC to keep all bidding timestamps comparable.
             today = datetime.now(timezone.utc)
             # Calculate the date 10 days ago

@@ -37,8 +37,7 @@ node {
         stage(stageName) {
             sh '''
                 echo "[PRE] Cleaning up containers with prefix $CONTAINER_NAME_PREFIX..."
-                docker ps -a --filter "name=$CONTAINER_NAME_PREFIX_" -q | xargs -r docker stop
-                docker ps -a --filter "name=$CONTAINER_NAME_PREFIX_" -q | xargs -r docker rm
+                docker ps -a --filter "name=$CONTAINER_NAME_PREFIX_" -q | xargs -r docker rm -f
                 docker system prune -f || echo "[WARN] docker system prune failed; continuing because cleanup is non-blocking."
             '''
             body()

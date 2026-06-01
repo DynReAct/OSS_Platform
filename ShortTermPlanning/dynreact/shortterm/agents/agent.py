@@ -152,6 +152,21 @@ class Agent:
         :returns: Status of the handling
         :rtype:  str
         """
+        payload = dctmsg or {}
+        exit_source = payload.get("source", self.agent)
+        exit_dest = payload.get("dest", self.agent)
+        exit_topic = payload.get("topic", self.topic)
+        exit_msg = (
+            f"Received EXIT from {exit_source} to {exit_dest} on topic {exit_topic}. "
+            "Ending agent loop."
+        )
+        print(exit_msg)
+        if self.verbose > 0:
+            self.write_log(
+                exit_msg,
+                "2eea5d7b-2539-4c3b-8dfb-d4ed8ece26b0",
+                to_stdout=True
+            )
         return 'END'
 
     def should_purge_exit_history(self) -> bool:

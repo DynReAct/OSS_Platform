@@ -134,7 +134,7 @@
     * Section 4: lots swimlane
     *=================================
     */
-    globalThis.dash_clientside.createlots.showLotsSwimlane = async function(data, shifts, elementId, process, mode) {
+    globalThis.dash_clientside.createlots.showLotsSwimlane = async function(data, shifts, elementId, process, mode, showIds) {
         const site = globalThis.dynreact?.getSite();
         let snap = globalThis.dynreact?.getSnapshot();
         if (!site || !snap || !elementId)
@@ -167,6 +167,8 @@
             const element = document.querySelector("div#" + elementId);
             element.appendChild(swimlane);
         }
+        if (showIds?.length > 0)
+            swimlane.showLotLabels = true;
         if (!data) {
             swimlane?.setPlanning(undefined, undefined, undefined, undefined);
             return "";
@@ -197,6 +199,93 @@
             el.lotSizing = mode;
     }
 
+    globalThis.dash_clientside.createlots.showLotsSwimlaneIds = function(active, elementId) {
+         const isActive = active && active.length > 0;
+         const el = document.querySelector("#" + elementId + " > lots-swimlane");
+         if (el)
+            el.showLotLabels = isActive;
+    }
+
+    let tableParent = undefined;
+    const pieChartTooltip = document.createElement("div");
+    pieChartTooltip.classList.add("lots-gantt-pie-tooltip");
+    pieChartTooltip.classList.add("hidden");
+    let ttHideTimer = undefined;
+    let targetHighlighted = undefined;
+
+    const clearHideTimer = () => {
+        if (ttHideTimer !== undefined)
+            globalThis.clearTimeout(ttHideTimer);
+        ttHideTimer = undefined;
+    };
+
+    const startHideTimer = (timeout=1000) => {
+        clearHideTimer();
+        ttHideTimer = globalThis.setTimeout(() => {
+            pieChartTooltip.classList.add("hidden");
+            targetHighlighted?.classList?.remove("lots-gantt-pie-highlighted");
+            ttHideTimer = undefined;
+            targetHighlighted = undefined;
+        }, timeout);
+    };
+
+    const pointerLeave = () => startHideTimer();
+
+    const pieChartLotsTableListener = (event) => {
+        const target = event.target;
+        const data = target?.dataset;
+        const material = data?.material;
+        const matLabel = data?.matLabel || material;
+        if (!material || (targetHighlighted && targetHighlighted !== target)) {
+            targetHighlighted?.classList?.remove("lots-gantt-pie-highlighted");
+            targetHighlighted = undefined;
+        }
+        if (!material) {
+            pieChartTooltip.classList.add("hidden");
+            clearHideTimer();
+            return;
+        }
+        const weight = JsUtils.formatNumber(data.weight, 4, 4);
+        const fraction = JsUtils.formatNumber(data.fraction, 2, 3);
+        pieChartTooltip.classList.remove("hidden");
+        const textContent = `${matLabel}: ${weight}t (${fraction*100}%).`;
+        pieChartTooltip.textContent = textContent;
+        let x = event.clientX;
+        let y = event.clientY;
+        let parentRect = undefined;
+        if (tableParent)
+            parentRect = tableParent.getClientRects()[0];
+        y = y - (parentRect?.y || 0);
+        const clientWidth = document.body.clientWidth;
+        pieChartTooltip.style.top = Math.round(y) + "px";
+        if (x > 2 * clientWidth/3) {
+            x = parentRect.x + parentRect.width - x + 25;
+            pieChartTooltip.style.removeProperty("left");
+            pieChartTooltip.style.right = Math.round(x) + "px";
+        } else {
+            x = x - (parentRect?.x || 0) + 25;
+            pieChartTooltip.style.removeProperty("right");
+            pieChartTooltip.style.left = Math.round(x) + "px";
+        }
+        if (target !== targetHighlighted)
+            target.classList.add("lots-gantt-pie-highlighted");
+        targetHighlighted = target;
+        startHideTimer(30_000);  // as long as we do not move out, use a large timeout
+        //console.log(" HOVERED ", x, y, material, weight, fraction);
+    };
+
+    globalThis.dash_clientside.createlots.attachPieChartEventListener = function(rows, elementId) {
+        if (!(rows?.length > 0))
+            return;
+        const el = document.querySelector("#" + elementId);
+        if (!el)
+            return;
+        tableParent = document.querySelector(".lots-gantt-table-parent"); // relative positioned
+        tableParent?.appendChild(pieChartTooltip);
+        el.querySelectorAll("svg").forEach(svg => svg.addEventListener("pointermove", pieChartLotsTableListener));
+        el.querySelectorAll("svg").forEach(svg => svg.addEventListener("pointerleave", pointerLeave));
+    }
 })();
+
 
 

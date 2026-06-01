@@ -1,5 +1,13 @@
-.lotplanning-transfer-dialog {
-    max-width: 50vw;
+@media (min-width: 1200px) {
+    .lotplanning-transfer-dialog {
+        min-width: 80em;
+    }
+}
+
+@media (max-width: 1200px) {
+    .lotplanning-transfer-dialog {
+        width: 100vw;
+    }
 }
 
 .lotplanning-transfer-grid {
@@ -15,6 +23,7 @@
     display: flex;
     justify-content: flex-end;
     column-gap: 0.5em;
+    padding-top: 1em;
 }
 
 .lotplanning-structure-container {

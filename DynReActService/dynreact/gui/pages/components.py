@@ -9,27 +9,30 @@ from dynreact.base.model import Lot, ProductionPlanning, Order, Material, Equipm
 from dynreact.app import state
 
 
-# TODO
-def lots_view(id_prefix: str, initial_hidden: bool=True, *args, **kwargs):
+def lots_view(id_prefix: str, initial_hidden: bool=True, ids_toggle: bool=False, *args, **kwargs):
     lot_size: str | None = kwargs.get("lotsize", "time")
+    controls = [
+        html.Span("Display mode: "),
+        dcc.Dropdown(id=id_prefix + "-swimlane-mode", options=[
+            {"value": "time", "label": "Time",
+             "title": "Show a gantt chart of lots."},
+            {"value": "constant", "label": "Lots",
+             "title": "All lots are shown with the same width, depending on the available screen space."},
+            {"value": "weight", "label": "Weight",
+             "title": "The width of a lot is proportional to the total weight of its coils."},
+            {"value": "orders", "label": "Orders",
+             "title": "The width of a lot is proportional to the number of orders it contains."},
+            {"value": "coils", "label": "Coils",
+             "title": "The width of a lot is proportional to the number of coils it contains."},
+        ], value=lot_size)
+    ]
+    if ids_toggle:
+        controls.append(html.Span("Show lot ids: "))
+        controls.append(dcc.Checklist(id=id_prefix + "-lotid-toggle", options= [{"value": ""}] , value=[""]))
     return html.Div([
         html.Div([
             html.H2("Lots view"),
-            html.Div([
-                html.Div("Display mode: "),
-                dcc.Dropdown(id=id_prefix + "-swimlane-mode", options=[
-                    {"value": "time", "label": "Time",
-                     "title": "Show a gantt chart of lots."},
-                    {"value": "constant", "label": "Lots",
-                     "title": "All lots are shown with the same width, depending on the available screen space."},
-                    {"value": "weight", "label": "Weight",
-                     "title": "The width of a lot is proportional to the total weight of its coils."},
-                    {"value": "orders", "label": "Orders",
-                     "title": "The width of a lot is proportional to the number of orders it contains."},
-                    {"value": "coils", "label": "Coils",
-                     "title": "The width of a lot is proportional to the number of coils it contains."},
-                ], value=lot_size)
-            ], className="planning-swimlane-mode")
+            html.Div(controls, className="planning-swimlane-mode")
         ], id=id_prefix + "-lotsview-header", hidden=initial_hidden),
         html.Div(id=id_prefix + "-lots-swimlane")
     ])

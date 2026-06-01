@@ -297,7 +297,7 @@ class ShiftAllocator:
                         for stg in initial_out_flows.keys():
                             equipment_to_storages[equipment.id][stg][-1, shift_idx] = target_share_per_storage[stg] * final_shift_targets[-1]
             for stg in storages_out_ids:  # set outgoing storage levels
-                in_flow = sum((equipment_to_storages[eq][stg][:, shift_idx] for eq in equipment_ids), start=shift_zero)
+                in_flow = sum((equipment_to_storages[eq][stg][:, shift_idx] for eq in equipment_ids if stg in equipment_to_storages[eq]), start=shift_zero)
                 if stg != "DONE":
                     out_flow_continuous = sum((flow[:, shift_idx] for flow in self._storages_to_equipment[stg].values()), start=shift_zero)
                     in_flow = in_flow/storages_out[stg].capacity_weight

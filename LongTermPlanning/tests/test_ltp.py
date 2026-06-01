@@ -244,6 +244,109 @@ class LtpTest(unittest.TestCase):
         assert mat2_level is not None and mat2_level >= 18, f"Unexpected low level of material 2 produced, got {mat2_level}t, wanted 24t according to frozen lots."
         assert mat1_level is not None and mat1_level >= 18, f"Unexpected low level of material 1 produced, got {mat1_level}t, wanted 48t (realistically only 24t possible)."
 
+    def test_ltp_works_with_equipment_branches(self):
+        """
+        Two processes, the first one with a single equipment, the next one with two, each with its own storage, one of the large, one small.
+        The two alternative equipments are part of a single process.
+        """
+        processes = ("test_proc0","test_proc1")
+        mat1 = "matclass1"
+        mat2 = "matclass2"
+        storages = [Storage(name_short="A", equipment=[0], capacity_weight=100),
+                    Storage(name_short="B", equipment=[1], capacity_weight=100),
+                    Storage(name_short="C", equipment=[2], capacity_weight=10, material_constraints=MaterialConstraint(excluded=(mat2,))),  #
+                    Storage(name_short="DONE", equipment=[])]
+        # capacity: 24t/day or 8t/shift
+        plants = [Equipment(id=0, name_short="P0", process=processes[0], storage_in="A", storages_out=["B", "C"], throughput_capacity=2),
+                  Equipment(id=1, name_short="P1", process=processes[1], storage_in="B", storages_out=["DONE"], throughput_capacity=1),
+                  Equipment(id=2, name_short="P2", process=processes[1], storage_in="C", storages_out=["DONE"], throughput_capacity=1, material_constraints=MaterialConstraint(excluded=(mat2,)))]
+        mat_cats = [MaterialCategory(id="cat1", name="Material Category 1", classes=[
+            MaterialClass(id=mat1, name="Class 1", category="cat1"),
+            MaterialClass(id=mat2, name="Class 2", category="cat1"),
+        ])]
+        process_objects = [Process(name_short=processes[0], process_ids=[0]), Process(name_short=processes[1], process_ids=[1])]
+        site = Site(
+            processes=process_objects, equipment=plants, storages=storages, material_categories=mat_cats
+        )
+        start = datetime(year=2026, month=5, day=1, tzinfo=timezone.utc)
+        end = datetime(year=2026, month=5, day=2, tzinfo=timezone.utc)
+        period = (start, end)
+        total_prod_expected = 48
+        targets_expected = {mat1: 36, mat2: 12}
+        structure = LongTermTargets(period=period, production_targets=targets_expected, total_production=total_prod_expected)
+        initial_storage_levels: dict[str, StorageLevel] = {
+            "A": StorageLevel(storage="A", filling_level=0.5, timestamp=start, material_levels={mat1: 0.25, mat2: 0.25}),
+            "B": StorageLevel(storage="B", filling_level=0.5, timestamp=start, material_levels={mat1: 0.25, mat2: 0.25}),
+            "C": StorageLevel(storage="C", filling_level=1, timestamp=start, material_levels={mat1: 1})
+        }
+        shifts: list[tuple[datetime, datetime]] = [(start+timedelta(hours=8*idx), start+timedelta(hours=8*(idx+1))) for idx in range(3)]
+        plant_availabilities: dict[int, EquipmentAvailability] = {p: EquipmentAvailability(equipment=p, period=period,
+                                                        daily_baseline=timedelta(days=1)) for p in range(3)}
+        instance = LtpInstance("test_branch", site, structure, initial_storage_levels, shifts, plant_availabilities)
+        targets, storage_levels = instance.start(fail_on_validation_error=True)
+        LtpTest._ensure_initial_storage_levels_match(initial_storage_levels, storage_levels)
+
+        sub_targets0: dict[str, list[ProductionTargets]] = targets.production_sub_targets
+        assert all(process in sub_targets0 for process in processes), f"Process not scheduled: {next(process for process in processes if process not in sub_targets0)}"
+        final_level = storage_levels[-1]["DONE"]
+        assert abs(final_level.filling_level - total_prod_expected)/total_prod_expected < 0.1, f"Total production deviates from target. Wanted: {total_prod_expected:.2f}, got {final_level.filling_level:.2f}"
+        mat_levels = final_level.material_levels
+        assert all(abs(level - mat_levels.get(mat))/total_prod_expected < 0.1 for mat, level in targets_expected.items()), \
+                f"Unexpected production for materials: expected {targets_expected}, got {mat_levels}"
+
+    def test_ltp_works_with_process_branches(self):
+        """
+        Material from the first storage is diverted into two alternative production routes, only to be joined later.
+        The two alternative routes consist of different processes
+        """
+        processes = ("proc0", "proc_A1", "proc_A2", "proc_B", "proc1")
+        mat1 = "matclass1"
+        mat2 = "matclass2"  # only via route A
+        storages = [Storage(name_short="A", equipment=[0], capacity_weight=100),  # input
+                    Storage(name_short="B", equipment=[1, 3], capacity_weight=100),  # common storage
+                    Storage(name_short="C", equipment=[2], capacity_weight=100),  # part of route A
+                    Storage(name_short="D", equipment=[4], capacity_weight=100),  # common storage
+                    Storage(name_short="DONE", equipment=[])]
+        # capacity: 24t/day or 8t/shift
+        plants = [Equipment(id=0, name_short="P0", process=processes[0], storage_in="A", storages_out=["B"], throughput_capacity=2),
+                  Equipment(id=1, name_short="P1", process=processes[1], storage_in="B", storages_out=["C"], throughput_capacity=1),  # route A
+                  Equipment(id=2, name_short="P2", process=processes[2], storage_in="C", storages_out=["D"], throughput_capacity=1),  # route A
+                  Equipment(id=3, name_short="P3", process=processes[3], storage_in="B", storages_out=["D"], throughput_capacity=1, material_constraints=MaterialConstraint(excluded=(mat2,))),  # route B
+                  Equipment(id=4, name_short="P4", process=processes[4], storage_in="D", storages_out=["DONE"], throughput_capacity=2)]
+        mat_cats = [MaterialCategory(id="cat1", name="Material Category 1", classes=[
+            MaterialClass(id=mat1, name="Class 1", category="cat1"),
+            MaterialClass(id=mat2, name="Class 2", category="cat1"),
+        ])]
+        process_objects = [Process(name_short=proc, process_ids=[idx]) for idx, proc in enumerate(processes)]
+        site = Site(
+            processes=process_objects, equipment=plants, storages=storages, material_categories=mat_cats
+        )
+        start = datetime(year=2026, month=5, day=1, tzinfo=timezone.utc)
+        end = datetime(year=2026, month=5, day=2, tzinfo=timezone.utc)
+        period = (start, end)
+        total_prod_expected = 48
+        targets_expected = {mat1: 36, mat2: 12}
+        structure = LongTermTargets(period=period, production_targets=targets_expected, total_production=total_prod_expected)
+        initial_storage_levels: dict[str, StorageLevel] = {
+            "A": StorageLevel(storage="A", filling_level=0.5, timestamp=start, material_levels={mat1: 0.25, mat2: 0.25}),
+            "B": StorageLevel(storage="B", filling_level=0.5, timestamp=start, material_levels={mat1: 0.25, mat2: 0.25}),
+            "C": StorageLevel(storage="C", filling_level=0.5, timestamp=start, material_levels={mat1: 0.25, mat2: 0.25}),
+            "D": StorageLevel(storage="D", filling_level=0.5, timestamp=start, material_levels={mat1: 0.25, mat2: 0.25}),
+        }
+        shifts: list[tuple[datetime, datetime]] = [(start+timedelta(hours=8*idx), start+timedelta(hours=8*(idx+1))) for idx in range(3)]
+        plant_availabilities: dict[int, EquipmentAvailability] = {p: EquipmentAvailability(equipment=p, period=period,
+                                                        daily_baseline=timedelta(days=1)) for p in range(len(plants))}
+        instance = LtpInstance("test_branch_proc", site, structure, initial_storage_levels, shifts, plant_availabilities)
+        targets, storage_levels = instance.start(fail_on_validation_error=True)
+        LtpTest._ensure_initial_storage_levels_match(initial_storage_levels, storage_levels)
+
+        sub_targets0: dict[str, list[ProductionTargets]] = targets.production_sub_targets
+        assert all(process in sub_targets0 for process in processes), f"Process not scheduled: {next(process for process in processes if process not in sub_targets0)}"
+        final_level = storage_levels[-1]["DONE"]
+        assert abs(final_level.filling_level - total_prod_expected)/total_prod_expected < 0.1, f"Total production deviates from target. Wanted: {total_prod_expected:.2f}, got {final_level.filling_level:.2f}"
+        mat_levels = final_level.material_levels
+        assert all(abs(level - mat_levels.get(mat))/total_prod_expected < 0.1 for mat, level in targets_expected.items()), \
+                f"Unexpected production for materials: expected {targets_expected}, got {mat_levels}"
 
 
 

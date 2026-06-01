@@ -47,10 +47,8 @@ class ShiftAllocator:
         self._frozen_horizons = frozen_horizons
         self._random = random.Random(x=rand_seed)
 
-    def run(self, debug: bool=False, fail_on_validation_error: bool=False):
-        if fail_on_validation_error:
-            debug = True
-        if debug:
+    def run(self, debug: bool=False, fail_on_validation_error: bool=False, skip_init_check: bool=False):
+        if (debug or fail_on_validation_error) and not skip_init_check:
             LtpUtils.analyze_flows(self._equipment_to_storages, self._storages_to_equipment, self._site, len(self._shifts),
                                    fail_on_error=fail_on_validation_error, prefix="::ShiftAllocator equipment input validation::")
             LtpUtils.analyze_storages(self._equipment_to_storages, self._storages_to_equipment, self._storage_levels, self._site, len(self._shifts),
@@ -64,9 +62,9 @@ class ShiftAllocator:
                 raise Exception(f"Failed to find next connected process step among {[p.name_short for p in procs_open]}")
             procs_open.remove(next_proc)
             procs_done.add(next_proc.name_short)
-            # FIXME
-            print(f" PROCESS allocation starting {next_proc.name_short}")
-            self._allocate_process(next_proc, debug=debug)
+            if debug:
+                print(f" PROCESS allocation starting {next_proc.name_short}")
+            self._allocate_process(next_proc, debug=debug, fail_on_validation_error=fail_on_validation_error)
         return LtpUtils.to_results(self._site, self._shifts, self._targets, self._storage_levels_final, self._storages_to_equipment_final, self._equipment_to_storages_final)
 
     def _allocate_process(self, process: Process, debug: bool=False, fail_on_validation_error: bool=False):
@@ -323,18 +321,19 @@ class ShiftAllocator:
                         final_storage_levels[stg][:, shift_idx] = new_level  # not shift_idx + 1 !
                     continue
                 if stg not in self._storages_to_equipment_final:
-                    in_flow: np.ndarray = self._storage_in_flows_final[stg][:, shift_idx]   # wrong
-
+                    in_flow: np.ndarray = self._storage_in_flows_final[stg][:, shift_idx]
                     # anticipate other outgoing storage connections already
                     other_equipments = {eq: flow[:, shift_idx] for eq, flow in self._storages_to_equipment[stg].items() if eq not in equipment_ids} if stg in self._storages_to_equipment else {}
                     additional_out_flow = sum(other_equipments.values(), start=shift_zero) if len(other_equipments) > 1 else \
                                 next(iter(other_equipments.values())) if len(other_equipments) == 1 else shift_zero
                     storage_in_levels[stg] += in_flow - out_flow - additional_out_flow/storages_in[stg].capacity_weight
-                else:  # initial flow already anticipated, now consider only diff
-                    initial = {eq: flow[:, shift_idx] for eq, flow in self._storages_to_equipment[stg].items() if eq in equipment_ids} if stg in self._storages_to_equipment else {}
-                    initial_flow = sum(initial.values(), start=shift_zero) if len(initial) > 1 else next(iter(initial.values())) if len(initial) == 1 else shift_zero
-                    diff = initial_flow/storages_in[stg].capacity_weight - out_flow
-                    storage_in_levels[stg] += diff
+                else:
+                    in_flow: np.ndarray = self._storage_in_flows_final[stg][:, shift_idx]
+                    other_out_flows = {e: value[:, shift_idx] for e, value in self._storages_to_equipment_final[stg].items()}
+                    unchanged_out_flows = {e: value[:, shift_idx] for e,value in self._storages_to_equipment[stg].items() if e not in other_out_flows and e not in applicable_equipments}
+                    other_out_flows = other_out_flows | unchanged_out_flows
+                    additional_out_flow = sum(other_out_flows.values(), start=shift_zero)
+                    storage_in_levels[stg] += in_flow - out_flow - additional_out_flow / storages_in[stg].capacity_weight
                 if stg in final_storage_levels:
                     final_storage_levels[stg][:, shift_idx+1] = storage_in_levels[stg]
         for eq, flow_dict in equipment_to_storages.items():
@@ -346,7 +345,7 @@ class ShiftAllocator:
                 self._storages_to_equipment_final[stg] = {}
             for eq, flow in flow_dict.items():
                 self._storages_to_equipment_final[stg][eq] = flow
-        if debug:
+        if debug or fail_on_validation_error:
             LtpUtils.analyze_flows(equipment_to_storages, storages_to_equipment, self._site, num_shifts, process=process.name_short,
                                    fail_on_error=fail_on_validation_error, prefix="::ShiftAllocator equipment result validation::")
             storage_to_equipment_consolidated = {stg: dict(dct) for stg, dct in self._storages_to_equipment_final.items()}

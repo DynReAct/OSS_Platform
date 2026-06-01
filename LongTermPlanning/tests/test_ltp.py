@@ -64,7 +64,7 @@ class LtpTest(unittest.TestCase):
                                                         daily_baseline=timedelta(days=1)) for p in range(num_plants)}
         instance = LtpInstance("test0", site, structure, initial_storage_levels, shifts, plant_availabilities)
         # TODO return structure
-        targets, storage_levels = instance.start()
+        targets, storage_levels = instance.start(fail_on_validation_error=True)
         LtpTest._ensure_initial_storage_levels_match(initial_storage_levels, storage_levels)
 
         sub_targets0: dict[str, list[ProductionTargets]] = targets.production_sub_targets
@@ -109,8 +109,7 @@ class LtpTest(unittest.TestCase):
             1: EquipmentAvailability(equipment=1, period=period, daily_baseline=timedelta(days=1))
         }
         instance = LtpInstance("test1", site, structure, initial_storage_levels, shifts, plant_availabilities)
-        # TODO return structure
-        targets, storage_levels = instance.start()
+        targets, storage_levels = instance.start(fail_on_validation_error=True)
         LtpTest._ensure_initial_storage_levels_match(initial_storage_levels, storage_levels)
         sub_targets0: dict[str, list[ProductionTargets]] = targets.production_sub_targets
         assert all(process in sub_targets0 for process in process_ids), \
@@ -172,7 +171,7 @@ class LtpTest(unittest.TestCase):
             1: EquipmentAvailability(equipment=1, period=period, daily_baseline=timedelta(days=1))
         }
         instance = LtpInstance("test2", site, structure, initial_storage_levels, shifts, plant_availabilities)
-        targets, storage_levels = instance.start()
+        targets, storage_levels = instance.start(fail_on_validation_error=True)
         LtpTest._ensure_initial_storage_levels_match(initial_storage_levels, storage_levels)
         sub_targets0: dict[str, list[ProductionTargets]] = targets.production_sub_targets
         assert process in sub_targets0, f"Process not scheduled: {process}"
@@ -234,7 +233,7 @@ class LtpTest(unittest.TestCase):
         lots1 = [Lot(id=f"Lot_{eq1}.{idx}", equipment=eq1, active=True, status=4, orders=[f"order_{idx*3 + oidx}" for oidx in range(3)], processing_status="PENDING",
                      weight=8, material_weights={mat2: 8}, start_time=start + timedelta(hours=idx*8), end_time=start + timedelta(hours=(idx+1)*8)) for idx in range(3)]
         instance = LtpInstance("test3", site, structure, initial_storage_levels, shifts, plant_availabilities, frozen_lots={1: lots1})
-        targets, storage_levels = instance.start()
+        targets, storage_levels = instance.start(fail_on_validation_error=True)
         LtpTest._ensure_initial_storage_levels_match(initial_storage_levels, storage_levels)
         sub_targets0: dict[str, list[ProductionTargets]] = targets.production_sub_targets
         assert all(process in sub_targets0 for process in processes), f"Process not scheduled: {next(process for process in processes if process not in sub_targets0)}"

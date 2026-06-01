@@ -254,7 +254,7 @@ class ShiftAllocationTest(unittest.TestCase):
         storage_levels["A"][3, :] = 0.05
         storage_levels["A"][4, :] = 0.45
         storage_levels["B"][0:2, :] = 0.05
-        storage_levels["B"][3, :] = 0.4
+        storage_levels["B"][2, :] = 0.4
         storage_levels["B"][3, :] = 0.05
         storage_levels["B"][4, :] = 0.45
         allocator = ShiftAllocator(site, structure, shifts, plant_availabilities, storage_levels, equipment_to_storages, storages_to_equipment, rand_seed=42)
@@ -343,8 +343,8 @@ class ShiftAllocationTest(unittest.TestCase):
         storages_to_equipment["A"][0][0, 1] = 0.
         storages_to_equipment["A"][0][1:3, 1] = 0.5 / 2 * hours_per_shift
         # shift 2
-        storages_to_equipment["A"][0][0, 1] = 0.5 * 2/3 * hours_per_shift
-        storages_to_equipment["A"][0][1:3, 1] = 0.5 / 6 * hours_per_shift
+        storages_to_equipment["A"][0][0, 2] = 0.5 * 2/3 * hours_per_shift
+        storages_to_equipment["A"][0][1:3, 2] = 0.5 / 6 * hours_per_shift
         done_level = np.zeros(shape=(mat_shape, num_shifts + 1), dtype=np.float64)
         done_level[0, :] = (0., 0.5 / 3 * hours_per_shift, 0.5 / 3 * hours_per_shift, 0.5 * hours_per_shift)
         done_level[1, :] = (0., 0.5 / 3 * hours_per_shift, 0.5 * 5/6 * hours_per_shift, 0.5 * hours_per_shift)
@@ -439,10 +439,10 @@ class ShiftAllocationTest(unittest.TestCase):
         storages_to_equipment["A"][0][3:5, 1] = 1 / 2 * hours_per_shift
         storages_to_equipment["A"][0][5, 1] = hours_per_shift
         # shift 2
-        storages_to_equipment["A"][0][0, 1] = 2/3 * hours_per_shift
-        storages_to_equipment["A"][0][1:3, 1] = 1/6 * hours_per_shift
-        storages_to_equipment["A"][0][3:5, 1] = 1/2 * hours_per_shift
-        storages_to_equipment["A"][0][5, 1] = hours_per_shift
+        storages_to_equipment["A"][0][0, 2] = 2/3 * hours_per_shift
+        storages_to_equipment["A"][0][1:3, 2] = 1/6 * hours_per_shift
+        storages_to_equipment["A"][0][3:5, 2] = 1/2 * hours_per_shift
+        storages_to_equipment["A"][0][5, 2] = hours_per_shift
 
         done_level = np.zeros(shape=(mat_shape, num_shifts + 1), dtype=np.float64)
         done_level[0, :] = (0., 1/6 * hours_per_shift, 1/6 * hours_per_shift, 5/6 * hours_per_shift)

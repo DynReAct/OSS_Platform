@@ -320,20 +320,12 @@ class ShiftAllocator:
                         new_level = np.array([max(flow, final_storage_levels[stg][mat_idx, shift_idx - 1] - total_previous_out_flow[mat_idx]) for mat_idx, flow in enumerate(out_flow)])
                         final_storage_levels[stg][:, shift_idx] = new_level  # not shift_idx + 1 !
                     continue
-                if stg not in self._storages_to_equipment_final:
-                    in_flow: np.ndarray = self._storage_in_flows_final[stg][:, shift_idx]
-                    # anticipate other outgoing storage connections already
-                    other_equipments = {eq: flow[:, shift_idx] for eq, flow in self._storages_to_equipment[stg].items() if eq not in equipment_ids} if stg in self._storages_to_equipment else {}
-                    additional_out_flow = sum(other_equipments.values(), start=shift_zero) if len(other_equipments) > 1 else \
-                                next(iter(other_equipments.values())) if len(other_equipments) == 1 else shift_zero
-                    storage_in_levels[stg] += in_flow - out_flow - additional_out_flow/storages_in[stg].capacity_weight
-                else:
-                    in_flow: np.ndarray = self._storage_in_flows_final[stg][:, shift_idx]
-                    other_out_flows = {e: value[:, shift_idx] for e, value in self._storages_to_equipment_final[stg].items()}
-                    unchanged_out_flows = {e: value[:, shift_idx] for e,value in self._storages_to_equipment[stg].items() if e not in other_out_flows and e not in applicable_equipments}
-                    other_out_flows = other_out_flows | unchanged_out_flows
-                    additional_out_flow = sum(other_out_flows.values(), start=shift_zero)
-                    storage_in_levels[stg] += in_flow - out_flow - additional_out_flow / storages_in[stg].capacity_weight
+                in_flow: np.ndarray = self._storage_in_flows_final[stg][:, shift_idx]
+                other_out_flows = {e: value[:, shift_idx] for e, value in self._storages_to_equipment_final[stg].items()} if stg in self._storages_to_equipment_final else {}
+                unchanged_out_flows = {e: value[:, shift_idx] for e,value in self._storages_to_equipment[stg].items() if e not in other_out_flows and e not in applicable_equipments}
+                other_out_flows = other_out_flows | unchanged_out_flows
+                additional_out_flow = sum(other_out_flows.values(), start=shift_zero)
+                storage_in_levels[stg] += in_flow - out_flow - additional_out_flow / storages_in[stg].capacity_weight
                 if stg in final_storage_levels:
                     final_storage_levels[stg][:, shift_idx+1] = storage_in_levels[stg]
         for eq, flow_dict in equipment_to_storages.items():

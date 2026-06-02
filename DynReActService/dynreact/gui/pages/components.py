@@ -63,6 +63,7 @@ def prepare_lots_for_lot_view(snapshot: str|datetime|None, process: str|None, re
                 if match:  # only necessary because we go through the get_snapshot_solution() method
                     match.start_time = lt.start_time
                     match.end_time = lt.end_time
+                    match.status = lt.status
                 if preprend_snapshot and eq in previous_lots:  # TODO also show plants without lots but in targets
                     prev_complete = previous_complete[lt.equipment]
                     current_complete = snap_provider.is_lot_complete(lt)

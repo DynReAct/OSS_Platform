@@ -39,13 +39,14 @@ def layout(*args, **kwargs):
     overview_tab_class = _tab_button_class(overview_tab_active)
     month_options = [m.strftime("%Y-%m") for m in months]
     start_time_options = [DatetimeUtils.format(dt, use_zone=False) for dt in start_times]
+    selected_start_str = DatetimeUtils.format(selected_start_time, use_zone=False) if selected_start_time is not None else None
     return html.Div([
         html.H1("Long term planning results", id="ltp_res-title"),
         html.Div([
             html.Div([html.Div("Month: "), dcc.Dropdown(id="ltp_res-month-selector", className="ltp_res-monthselect",
                                                 options=month_options, value=selected_month.strftime("%Y-%m") if selected_month is not None else None)]),
             html.Div([html.Div("Start time: "), dcc.Dropdown(id="ltp_res-starttime-selector", className="ltp_res-startselect",
-                                                options=start_time_options, value=DatetimeUtils.format(selected_start_time, use_zone=False) if selected_start_time is not None else None)]),
+                                                options=start_time_options, value=selected_start_str)]),
         ], className="ltp_res-selector-row"),
         html.H2("Solutions"),
         html.Div(
@@ -89,9 +90,10 @@ def layout(*args, **kwargs):
             ], className="ltp_res-tabs-container"),
         ], id="ltp_res-tabs-hider", hidden=True),
         dcc.Store(id="ltp_res-active-tab", data="tabular" if tabular_tab_active else "anim" if anim_tab_active else "overview", storage_type="memory"),  # either tabular or anim or overview
-        dcc.Store(id="ltp_res-solutions"),              # array of json docs
-        dcc.Store(id="ltp_res-selected-solution-id"),   # string
-        dcc.Store(id="ltp_res-selected-solution"),      # json doc
+        dcc.Store(id="ltp_res-solutions", storage_type="memory"),              # array of json docs
+        dcc.Store(id="ltp_res-selected-solution-id", storage_type="memory"),   # string
+        dcc.Store(id="ltp_res-selected-solution", storage_type="memory"),      # json doc
+        dcc.Store(id="ltp_res-initial_start", data=selected_start_str, storage_type="memory"),
         dcc.Store(id="ltp_res-initial_solution_id", data=initial_solution_id, storage_type="memory"),
         dcc.Store(id="ltp_res_material_structure", storage_type="memory"),  #  # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
         dcc.Store(id="ltp_res_material-setpoints", storage_type="memory"),  # dict[str, float]
@@ -219,7 +221,7 @@ def get_date_range(start: datetime|None=None) -> tuple[Sequence[date], date|None
         sorted_months = sorted(months, key=lambda m: abs((m-selected_month).total_seconds()))
         selected_month = sorted_months[0] if len(sorted_months) > 0 else None
     if selected_month is not None:
-        start_dt = DatetimeUtils.date_to_datetime(selected_month)
+        start_dt = state.as_timezone(DatetimeUtils.date_to_datetime(selected_month, utc=False))
         end_dt = (start_dt + timedelta(days=32)).replace(day=1)
         start_times = persistence.start_times_ltp(start=start_dt, end=end_dt, sort="desc", limit=150)
         cnt = len(start_times)
@@ -236,8 +238,9 @@ def get_date_range(start: datetime|None=None) -> tuple[Sequence[date], date|None
 
 @callback(Output("ltp_res-starttime-selector", "options"),
           Output("ltp_res-starttime-selector", "value"),
-          Input("ltp_res-month-selector", "value"))
-def month_changed(month: str|None):
+          Input("ltp_res-month-selector", "value"),
+          State("ltp_res-initial_start", "data"),)
+def month_changed(month: str|None, initial_start: str|None):
     month_parsed = DatetimeUtils.parse_date(month)
     if month_parsed is None or not dash_authenticated(config):
         return tuple(), None
@@ -245,7 +248,9 @@ def month_changed(month: str|None):
     end_dt = (month_dt + timedelta(days=32)).replace(day=1)
     persistence: ResultsPersistence = state.get_results_persistence_aggregate()
     start_times = persistence.start_times_ltp(start=DatetimeUtils.date_to_datetime(month_dt, utc=False), end=DatetimeUtils.date_to_datetime(end_dt, utc=False), sort="desc", limit=150)
-    return [DatetimeUtils.format(s, use_zone=False) for s in start_times], DatetimeUtils.format(start_times[-1], use_zone=False) if len(start_times) > 0 else None
+    options = [DatetimeUtils.format(s, use_zone=False) for s in start_times]
+    selected = initial_start if initial_start in options else options[0] if len(options) > 0 else None
+    return options, selected
 
 
 @callback(Output("ltp_res-solutions", "data"),

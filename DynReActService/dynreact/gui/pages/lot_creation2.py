@@ -150,12 +150,14 @@ def layout(*args, **kwargs):
         ####################
         structure_portfolio_popup(111222),
         dcc.Store(id="lots2-material-setpoints-user", data=None, storage_type="memory"),  # dictionary
-        dcc.Store(id="lots2-material-setpoints-ltp", data=None, storage_type="memory"),  # dictionary
+        dcc.Store(id="lots2-material-setpoints-ltp-row", data=None, storage_type="memory"),  # dictionary; changes upon row selection in ltp-popup
+        dcc.Store(id="lots2-material-setpoints-ltp", data=None, storage_type="memory"),  # dictionary; changes upon clicking Accept in ltp-popup
         dcc.Store(id="lots2-material-setpoints-memory", storage_type="memory"),  # dictionary; seldom None; consolidated from user and ltp version
         dcc.Store(id="lots2-material-setpoints", data=None, storage_type="memory"), # dictionary; the final material structure selected
         # Same as above, but intended for display to the user
         #  { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
-        dcc.Store(id="lots2-material-setpoints-repr", data=None, storage_type="memory"),
+        dcc.Store(id="lots2-material-setpoints-repr", data=None, storage_type="memory"), # version for display
+        dcc.Store(id="lots2-material-setpoints-ltp-repr", storage_type="memory"),  # version for display
         ####################
 
         dcc.Store(id="lots2-custom-priority-store", data=None, storage_type="memory"),
@@ -186,7 +188,7 @@ def targets_tab(horizon: int):
                 html.H4("Target production / t"),
                 html.Div([
                     html.Button("Initialize: LTP", id="lots2-targets-init-ltp", className="dynreact-button dynreact-button-small", title="Derive from long term planning."),
-                    html.Button("Initialize: lots", id="lots2-targets-init-lots", className="dynreact-button dynreact-button-small", title="Derive from currently planned lots."),
+                    # html.Button("Initialize: lots", id="lots2-targets-init-lots", className="dynreact-button dynreact-button-small", title="Derive from currently planned lots."),
                 ], className="lots2-target-buttons"),
                 html.Div([
                     html.Div(dcc.Checklist(id="lots2-check-use-lot-range", options=checklist_dict, value=[], className="lots2-checkbox")),
@@ -204,10 +206,10 @@ def targets_tab(horizon: int):
                 ]),
                 html.Div([
                     html.Div("Structure planning: "),
-                    dcc.Checklist(id="lots2-check-material-planning", options=checklist_dict, value=[])
+                    dcc.Checklist(id="lots2-check-material-planning", options=checklist_dict, value=[""])
                 ], className="lots2-structure-toggle"), #
                 html.Div([
-                    html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
+                    html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="dynreact-button"), className="lots2-target-buttons2"),
                     #html.Div(dcc.Textarea(id="lots2-structure-logging", value="", className="lots2-textarea")),
                     html.Div(id="lots2-materials-state"),
                 ], id="lots2-materials-panel"),
@@ -491,13 +493,21 @@ def ltp_dialog():
                                 # {"field": "delete"} # not possible
                                 ],
                     defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
+                    style={"height": "20em"},
                     rowData=[],
                     getRowId="params.data.id",
                     className="ag-theme-alpine",  # ag-theme-alpine-dark
                     columnSizeOptions={"defaultMinWidth": 125},
                     columnSize="responsiveSizeToFit",
                     dashGridOptions={"rowSelection": "single"}
-                )
+                ),
+                html.Br(),
+                html.Div([
+                    html.H3("Selected long-term planning"),
+                    html.Div([html.Span("Total production: "), html.Span(id="lots2-ltp-popup-total"), html.Span("t")], className="lots2-ltp-summary-item"),
+                    html.Div("Material structure for selected planning interval:", className="lots2-ltp-summary-item"),
+                    html.Div(id="lots2-ltp-popup-structure")
+                ], id="lots2-ltp-popup-summary", hidden=True)
             ]),
             html.Div([
                 html.Button("Cancel", id="lots2-ltp-cancel", className="dynreact-button"),
@@ -738,6 +748,25 @@ def ltp_table_opened(_, snapshot: str, process: str, horizon_hours: int):
             idx += 1
     return columns
 
+
+@callback(
+    Output("lots2-material-setpoints-ltp-row", "data"),
+    Output("lots2-ltp-popup-total", "children"),
+    Output("lots2-ltp-popup-summary", "hidden"),
+    Input("lots2-ltp-selected-solution", "data")
+)
+def ltp_table_row_selected(ltp_solution: dict[str, any]|None):
+    if not ltp_solution or "targets" not in ltp_solution:
+        return None, None, True
+    targets = ProductionTargets.model_validate(ltp_solution["targets"])
+    ltp_structure = targets.material_weights
+    sum_value = None
+    if ltp_structure:
+        ltp_structure = {key: 0 if isinstance(val, float|int) and val < 1e-4 else val for key, val in ltp_structure.items()}
+        ltp_structure["_sum"] = sum(t.total_weight for t in targets.target_weight.values())
+        sum_value = ltp_structure["_sum"]
+    return ltp_structure, sum_value, False
+
 @callback(
     Output("lots2-material-setpoints-memory", "clear_data"),
     Input("lots2-materials-clear", "n_clicks"),
@@ -788,6 +817,7 @@ def ltp_row_selected(selected_rows: list[dict[str, any]]|None, snapshot: datetim
     return result_data, False
 
 
+
 @callback(
     Output("lots2-details-plants", "children"),
     Output("lots2-details-plants", "className"),
@@ -802,7 +832,7 @@ def ltp_row_selected(selected_rows: list[dict[str, any]]|None, snapshot: datetim
     State("lots2-ltp-selected-solution", "data"),
     Input("lots2-process-selector", "value"),
     Input("lots2-active-tab", "data"),
-    Input("lots2-targets-init-lots", "n_clicks"),
+    # Input("lots2-targets-init-lots", "n_clicks"),
     Input("lots2-ltp-submit", "n_clicks"),
     Input("lots2-check-use-lot-range", "value")
 )
@@ -813,7 +843,7 @@ def update_plants(snapshot: str,
                   ltp_solution: dict[str, any]|None,
                   process: str,
                   active_tab: Literal["targets", "orders", "settings"]|None,
-                  _, __,
+                  _,  # __,
                   use_lot_range0: list[Literal[""]]
                   ) -> tuple[list[Component], list[any], list[Literal[""]], str, str, dict|None]:
     changed = GuiUtils.changed_ids()
@@ -2399,12 +2429,35 @@ clientside_callback(
     State("lots2-materials-state", "id"),
 )
 
+clientside_callback(
+    ClientsideFunction(
+        namespace="lots2",
+        function_name="setBacklogStructureOverview"
+    ),
+    Output("lots2-ltp-popup-structure", "title"),
+    Input("lots2-material-setpoints-ltp-repr", "data"),
+    State("lots2-dummy-undefined", "data"),
+    State("lots2-ltp-popup-structure", "id"),
+)
+
+
 #  { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
 @callback(
           Output("lots2-material-setpoints-repr", "data"),
           Input("lots2-material-setpoints", "data")
 )
 def structure_settings_changed(structure: dict[str, float]|None) -> dict[str, Any]|None:
+    return _structure_to_repr(structure)
+
+@callback(
+          Output("lots2-material-setpoints-ltp-repr", "data"),
+          Input("lots2-material-setpoints-ltp-row", "data")
+)
+def structure_settings_changed2(structure: dict[str, float]|None) -> dict[str, Any]|None:
+    return _structure_to_repr(structure)
+
+
+def _structure_to_repr(structure: dict[str, float]|None) -> dict[str, Any]|None:
     if structure is None:
         return None
     result = {}

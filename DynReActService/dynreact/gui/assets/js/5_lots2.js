@@ -20,12 +20,33 @@
             const site = dynreact?.getSite();
             if (site) {
                 grid.setMaterials(process, site.material_categories, site.lot_creation);
-                if (totalProduction)
-                    grid.initTargets(totalProduction);
+                if (totalProduction)  // TODO consider setpoints
+                    grid.initTargets(totalProduction, setpoints);
             }
         } else {
             // lots2-details-plants changed -> try to add diff to default field
+            // TODO consider setpoints
             grid.totalValueChanged(totalProduction);
+        }
+
+    }
+
+    globalThis.dash_clientside.lots2.initMaterialGrid2 = function(_, process, totalProduction, setpoints, gridId) {
+        if (!process)
+            return;
+        if (!globalThis.customElements.get(materialsTag))
+            globalThis.customElements.define(materialsTag, MaterialsGrid2);     //use class MaterialGrid
+        const gridContainer = document.querySelector("#" + gridId);             //object MaterialGrid
+        let grid = gridContainer.querySelector(materialsTag);
+        // const changed = dash_clientside.callback_context.triggered_id;
+        grid = grid || JsUtils.createElement(materialsTag, {parent: gridContainer, attributes: {"columns-selectable": ""}});
+        const site = dynreact?.getSite();
+        if (totalProduction === undefined)
+            totalProduction = setpoints?._sum;
+        if (site) {
+            grid.setMaterials(process, site.material_categories, site.lot_creation);
+            if (totalProduction)
+                grid.initTargets(totalProduction, setpoints);
         }
 
     }

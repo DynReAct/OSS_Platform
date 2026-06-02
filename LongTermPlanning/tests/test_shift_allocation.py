@@ -43,7 +43,7 @@ class ShiftAllocationTest(unittest.TestCase):
         done_level = np.array([[idx for idx in range(num_shifts+1)]], dtype=np.float64)
         storage_levels = {"A": 0.5 * np.ones(shape=(1, num_shifts+1), dtype=np.float64), "B": 0.5 * np.ones(shape=(1, num_shifts+1), dtype=np.float64), "DONE": done_level}
         allocator = ShiftAllocator(site, structure, shifts, plant_availabilities, storage_levels, equipment_to_storages, storages_to_equipment, rand_seed=42)
-        result, levels = allocator.run()
+        result, levels = allocator.run(fail_on_validation_error=True)
         assert all(proc in result.production_sub_targets for proc in processes), f"Process missing in allocator result: {next(proc for proc in processes if proc not in result.production_sub_targets)}"
         proc0_targets: list[ProductionTargets] = result.production_sub_targets[processes[0]]
         active_shifts0 = [t for t in proc0_targets if 0 in t.target_weight and t.target_weight[0].total_weight >= 1e-4]
@@ -142,7 +142,7 @@ class ShiftAllocationTest(unittest.TestCase):
         storage_levels["B"][3:5, :] = 0.5 / 2
 
         allocator = ShiftAllocator(site, structure, shifts, plant_availabilities, storage_levels, equipment_to_storages, storages_to_equipment, rand_seed=42)
-        result, levels = allocator.run()
+        result, levels = allocator.run(fail_on_validation_error=True)
         assert all(proc in result.production_sub_targets for proc in processes), f"Process missing in allocator result: {next(proc for proc in processes if proc not in result.production_sub_targets)}"
         proc0_targets: list[ProductionTargets] = result.production_sub_targets[processes[0]]
         storage_levels2: dict[str, list[float]] = { stg: [level_dict[stg].filling_level for level_dict in levels if stg in level_dict] for stg in ("A", "B", "DONE")}
@@ -254,11 +254,11 @@ class ShiftAllocationTest(unittest.TestCase):
         storage_levels["A"][3, :] = 0.05
         storage_levels["A"][4, :] = 0.45
         storage_levels["B"][0:2, :] = 0.05
-        storage_levels["B"][3, :] = 0.4
+        storage_levels["B"][2, :] = 0.4
         storage_levels["B"][3, :] = 0.05
         storage_levels["B"][4, :] = 0.45
         allocator = ShiftAllocator(site, structure, shifts, plant_availabilities, storage_levels, equipment_to_storages, storages_to_equipment, rand_seed=42)
-        result, levels = allocator.run()
+        result, levels = allocator.run(fail_on_validation_error=True)
         assert all(proc in result.production_sub_targets for proc in
                    processes), f"Process missing in allocator result: {next(proc for proc in processes if proc not in result.production_sub_targets)}"
         proc0_targets: list[ProductionTargets] = result.production_sub_targets[processes[0]]
@@ -343,8 +343,8 @@ class ShiftAllocationTest(unittest.TestCase):
         storages_to_equipment["A"][0][0, 1] = 0.
         storages_to_equipment["A"][0][1:3, 1] = 0.5 / 2 * hours_per_shift
         # shift 2
-        storages_to_equipment["A"][0][0, 1] = 0.5 * 2/3 * hours_per_shift
-        storages_to_equipment["A"][0][1:3, 1] = 0.5 / 6 * hours_per_shift
+        storages_to_equipment["A"][0][0, 2] = 0.5 * 2/3 * hours_per_shift
+        storages_to_equipment["A"][0][1:3, 2] = 0.5 / 6 * hours_per_shift
         done_level = np.zeros(shape=(mat_shape, num_shifts + 1), dtype=np.float64)
         done_level[0, :] = (0., 0.5 / 3 * hours_per_shift, 0.5 / 3 * hours_per_shift, 0.5 * hours_per_shift)
         done_level[1, :] = (0., 0.5 / 3 * hours_per_shift, 0.5 * 5/6 * hours_per_shift, 0.5 * hours_per_shift)
@@ -356,7 +356,7 @@ class ShiftAllocationTest(unittest.TestCase):
         storage_levels = {"A": 0.5 * np.ones(shape=(mat_shape, num_shifts + 1), dtype=np.float64),
                           "DONE": done_level}
         allocator = ShiftAllocator(site, structure, shifts, plant_availabilities, storage_levels, equipment_to_storages, storages_to_equipment, rand_seed=42)
-        result, levels = allocator.run()
+        result, levels = allocator.run(fail_on_validation_error=True)
         assert process in result.production_sub_targets, f"Process missing in allocator result: {process}"
         proc0_targets: list[ProductionTargets] = result.production_sub_targets[process]
         classes_cats1 = [cl.id for cl in mat_cats[0].classes]
@@ -439,10 +439,10 @@ class ShiftAllocationTest(unittest.TestCase):
         storages_to_equipment["A"][0][3:5, 1] = 1 / 2 * hours_per_shift
         storages_to_equipment["A"][0][5, 1] = hours_per_shift
         # shift 2
-        storages_to_equipment["A"][0][0, 1] = 2/3 * hours_per_shift
-        storages_to_equipment["A"][0][1:3, 1] = 1/6 * hours_per_shift
-        storages_to_equipment["A"][0][3:5, 1] = 1/2 * hours_per_shift
-        storages_to_equipment["A"][0][5, 1] = hours_per_shift
+        storages_to_equipment["A"][0][0, 2] = 2/3 * hours_per_shift
+        storages_to_equipment["A"][0][1:3, 2] = 1/6 * hours_per_shift
+        storages_to_equipment["A"][0][3:5, 2] = 1/2 * hours_per_shift
+        storages_to_equipment["A"][0][5, 2] = hours_per_shift
 
         done_level = np.zeros(shape=(mat_shape, num_shifts + 1), dtype=np.float64)
         done_level[0, :] = (0., 1/6 * hours_per_shift, 1/6 * hours_per_shift, 5/6 * hours_per_shift)
@@ -455,7 +455,7 @@ class ShiftAllocationTest(unittest.TestCase):
         storage_levels = {"A": 0.5 * np.ones(shape=(mat_shape, num_shifts + 1), dtype=np.float64),
                           "DONE": done_level}
         allocator = ShiftAllocator(site, structure, shifts, plant_availabilities, storage_levels, equipment_to_storages, storages_to_equipment, rand_seed=42)
-        result, levels = allocator.run()
+        result, levels = allocator.run(fail_on_validation_error=True)
         assert process in result.production_sub_targets, f"Process missing in allocator result: {process}"
         proc0_targets: list[ProductionTargets] = result.production_sub_targets[process]
         classes_cats1 = [cl.id for cl in mat_cats[0].classes]

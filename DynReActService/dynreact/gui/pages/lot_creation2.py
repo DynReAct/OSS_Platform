@@ -8,7 +8,7 @@ import json
 
 import dash
 import pandas as pd
-from dash import html, callback, Input, Output, dcc, State, ctx, no_update, clientside_callback, ClientsideFunction
+from dash import html, callback, Input, Output, dcc, State, ctx, no_update, clientside_callback, ClientsideFunction, ALL
 import plotly.express as px
 import dash_ag_grid as dash_ag
 from dash.development.base_component import Component
@@ -23,7 +23,7 @@ from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Equipment, Order, Lot, ProductionPlanning, ProductionTargets, EquipmentProduction, \
     MidTermTargets, ObjectiveFunction, Process, TargetLotSize, ProcessLotCreationSettings, OrderAssignment, \
-    PlannedWorkingShift, Snapshot, Site
+    PlannedWorkingShift, Snapshot, Site, MaterialClass
 from pydantic.fields import FieldInfo
 
 from dynreact.app import state, config
@@ -133,15 +133,31 @@ def layout(*args, **kwargs):
         #         "ltp_solution": MidTermTargets
         #     }
         dcc.Store(id="lots2-ltp-selected-solution", storage_type="memory"),  # serialized solution + some metadata tbd
-
+        #     settings = {
+        #         plant_id: {
+        #             total_value: float|int,
+        #             predecessor_lot: str|None,
+        #             lot_range: tuple[float, float]|None
+        #         }
+        #     }
+        dcc.Store(id="lots2-plant-settings", storage_type="memory"),  # dictionary
+        dcc.Store(id="lots2-active-plants", storage_type="memory", data=tuple()),    # Sequence[int], never None
 
         dcc.Interval(id="lots2-interval", interval=3_600_000),  # for polling when optimization is running
         dcc.Interval(id="lots2-process-init", interval=100),
-        # ======== Popups  =========
+
+        # Material structure setpoints
+        ####################
         structure_portfolio_popup(111222),
-        dcc.Store(id="lots2-material-setpoints", data=None, storage_type="memory"),  # dictionary
         dcc.Store(id="lots2-material-setpoints-user", data=None, storage_type="memory"),  # dictionary
         dcc.Store(id="lots2-material-setpoints-ltp", data=None, storage_type="memory"),  # dictionary
+        dcc.Store(id="lots2-material-setpoints-memory", storage_type="memory"),  # dictionary; seldom None; consolidated from user and ltp version
+        dcc.Store(id="lots2-material-setpoints", data=None, storage_type="memory"), # dictionary; the final material structure selected
+        # Same as above, but intended for display to the user
+        #  { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
+        dcc.Store(id="lots2-material-setpoints-repr", data=None, storage_type="memory"),
+        ####################
+
         dcc.Store(id="lots2-custom-priority-store", data=None, storage_type="memory"),
     ], id="lots2")
     return layout
@@ -181,14 +197,27 @@ def targets_tab(horizon: int):
                     html.Div("Append to existing lots?", title="Instead of creating new lots, add orders to an existing lot (select via \"Previous lot\" column)"),
                 ], className="lots2-use-range-checkbox"),
                 html.Div(id="lots2-details-plants", className="lots2-plants-targets grid-items-4"),
-                html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
-                html.Div(dcc.Textarea(id="lots2-structure-logging", value="", className="lots2-textarea")),
+                html.Div([
+                    html.Span("Total production: "),
+                    html.Span(id="lots2-plant-targets-sum"),
+                    html.Span("t"),
+                ]),
+                html.Div([
+                    html.Div("Structure planning: "),
+                    dcc.Checklist(id="lots2-check-material-planning", options=checklist_dict, value=[])
+                ], className="lots2-structure-toggle"), #
+                html.Div([
+                    html.Div(html.Button("Structure planning", id="lots2-structure-btn", className="lots2-target-buttons2")),
+                    #html.Div(dcc.Textarea(id="lots2-structure-logging", value="", className="lots2-textarea")),
+                    html.Div(id="lots2-materials-state"),
+                ], id="lots2-materials-panel"),
+
                 # html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "hidden"}))
-                html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "visible"}))
+                #html.Div(dcc.Input(type="number", id="lots2-structure-sum", style={"visibility": "visible"}))
             ]), html.Div([
                 html.H4("Plant performance models"),
                 html.Div(id="lots2-details-performance-models", className="lots2-performance-models")
-            ], id="lots2-details-performance-wrapper", hidden=True)
+            ], id="lots2-details-performance-wrapper", hidden=True),
         ], className="lots2-production-performance-split"),
     ]
 
@@ -710,7 +739,7 @@ def ltp_table_opened(_, snapshot: str, process: str, horizon_hours: int):
     return columns
 
 @callback(
-    Output("lots2-material-setpoints", "clear_data"),
+    Output("lots2-material-setpoints-memory", "clear_data"),
     Input("lots2-materials-clear", "n_clicks"),
     Input("lots2-process-selector", "value")
 )
@@ -854,12 +883,14 @@ def update_plants(snapshot: str,
                     min_val = 0 if settings is None else settings.min if isinstance(settings, TargetLotSize) else settings.get(plant.id, TargetLotSize(min=0, max=0)).min
                     max_val = 0 if settings is None else settings.max if isinstance(settings, TargetLotSize) else settings.get(plant.id, TargetLotSize(min=0, max=0)).max
                     div2 = html.Div(
-                        dcc.Input(type="number", min="0", value=str(min_val), placeholder="Lot size minimum in t"),
+                        dcc.Input(id={"role": "plant-lotmin", "id": plant.id},
+                        type="number", min="0", value=str(min_val), placeholder="Lot size minimum in t"),
                         title="Lot size minimum in t", className="lot2-size-min", style={'display': 'block'},
                         **{"data-plant": str(plant.id), "data-default": str(0)})
 
                     div3 = html.Div(
-                        dcc.Input(type="number", min="0", value=str(max_val), placeholder="Lot size maximum in t"),
+                        dcc.Input(id={"role": "plant-lotmax", "id": plant.id},
+                        type="number", min="0", value=str(max_val), placeholder="Lot size maximum in t"),
                         title="Lot size maximum in t", className="lot2-size-max", style={'display': 'block'},
                         **{"data-plant": str(plant.id), "data-default": str(0)})
 
@@ -877,11 +908,11 @@ def update_plants(snapshot: str,
                 continue
         # set start vals
         target = round(target_weights.get(plant.id, 0.))
-        checkbox = html.Div(dcc.Checklist(options=[""], value=[""] if target > 0 else []),
+        checkbox = html.Div(dcc.Checklist(id={"role": "plant-checked", "id": plant.id}, options=[""], value=[""] if target > 0 else []),
                             title="Include plant " + str(plant.name_short if plant.name_short is not None else plant.id) + " in planning?")
         elements.append(checkbox)
         elements.append(GuiUtils.plant_element(plant))
-        target_div = html.Div(dcc.Input(type="number", min="0", value=str(target), placeholder="Target production in t"),
+        target_div = html.Div(dcc.Input(type="number", min="0", value=str(target), id={"role": "plant-input", "id": plant.id}, placeholder="Target production in t"),
                        title="Target production in t", className="create-plant-input", **{"data-plant": str(plant.id), "data-default": str(target) })
         elements.append(target_div)
         current_lots: list[Lot] = lots.get(plant.id)
@@ -895,7 +926,8 @@ def update_plants(snapshot: str,
             # This should also work, but it does not => leads to an infinite loop => WHY? => this would allow us to style options differently depending on whether the lot is complete or not
             # "label": html.Span([lot[0].id], title=_lot_info(lot[0]), className="lots2-option-grey" if not lot[1] else "")
             prev_lot = html.Div(
-                dcc.Dropdown(placeholder="Select a lot",
+                dcc.Dropdown(id={"role": "plant-lot", "id": plant.id},
+                             placeholder="Select a lot",
                              options=[{"value": "", "label": "", "title": "No predecessor defined."}] +
                                      [{"value": lot[0].id, "label": [lot[0].id], "title": _lot_info(lot[0])} for lot in lot_entries],
                              value=value
@@ -931,12 +963,14 @@ def update_plants(snapshot: str,
             settings = site.lot_creation.processes[process].lot_sizes if site.lot_creation is not None and process in site.lot_creation.processes else None
             min_val = 0 if settings is None else settings.min if isinstance(settings, TargetLotSize) else settings.get(plant.id, TargetLotSize(min=0, max=0)).min
             max_val = 0 if settings is None else settings.max if isinstance(settings, TargetLotSize) else settings.get(plant.id, TargetLotSize(min=0, max=0)).max
-            div2 = html.Div(dcc.Input(type="number", min="0", value=str(min_val), placeholder="Lot size minimum in t"),
+            div2 = html.Div(dcc.Input(id={"role": "plant-lotmin", "id": plant.id},
+                            type="number", min="0", value=str(min_val), placeholder="Lot size minimum in t"),
                             title="Lot size minimum in t", className="lot2-size-min",
                             style={'display': 'block'},
                             **{"data-plant": str(plant.id), "data-default": str(target)})
 
-            div3 = html.Div(dcc.Input(type="number", min="0", value=str(max_val), placeholder="Lot size maximum in t"),
+            div3 = html.Div(dcc.Input(id={"role": "plant-lotmax", "id": plant.id},
+                            type="number", min="0", value=str(max_val), placeholder="Lot size maximum in t"),
                             title="Lot size maximum in t", className="lot2-size-max",
                             style={'display': 'block'},
                             **{"data-plant": str(plant.id), "data-default": str(target)})
@@ -980,6 +1014,87 @@ def _targets_from_ltp(selected_row: dict[str, any], process: str, snapshot: Snap
     targets, _, __ = ModelUtils.mid_term_targets_from_ltp_result(mid_term, process, snapshot, timedelta(hours=horizon_hours), num_shifts, site, snapshot_provider, equipment_ids=equipment_ids)
     # targets: ProductionTargets = ModelUtils.mid_term_targets_from_ltp_result_deprecated(mid_term, process, start_time, start_time + timedelta(hours=horizon_hours))
     return targets
+
+
+@callback(
+          Output("lots2-material-setpoints-memory", "data"),
+          Input("lots2-material-setpoints-ltp", "data"),
+          Input("lots2-target-weight", "data"),
+          Input("lots2-process-selector", "value"),
+          Input("lots2-active-plants", "data"),
+          Input("lots2-material-setpoints-user", "data"),
+          State("lots2-material-setpoints-memory", "data"),
+)
+def ltp_submit(ltp_structure: dict[str, float]|None, target_weight: float|None, process: str|None, active_plants: Sequence[int],
+                                                user_structure: dict[str, float]|None, old_structure: dict[str, float]|None):
+    if not target_weight or not process or not dash_authenticated(config):
+        return None
+    changed = GuiUtils.changed_ids()
+    process_changed = "lots2-process-selector" in changed
+    plants_changed = "lots2-active-plants" in changed
+    ltp_structure_set: bool = ltp_structure is not None and "lots2-material-setpoints-ltp" in changed and not process_changed
+    user_structure_set: bool = not ltp_structure_set and user_structure is not None and "lots2-material-setpoints-user" in changed and not process_changed
+    cats = [cat for cat in state.get_site().material_categories if cat.process_steps is None or process in cat.process_steps]
+    site = state.get_site()
+    equipment = [site.get_equipment(e, do_raise=True) for e in active_plants]
+    mat_by_cats: dict[str, Sequence[MaterialClass]] = {cat.id: [mat for mat in cat.classes if any(e.material_constraints is None or e.material_constraints.excluded is None \
+                                                                or mat.id not in e.material_constraints.excluded for e in equipment)] for cat in cats}
+    all_mats: Sequence[str] = [mat.id for mats in mat_by_cats.values() for mat in mats]
+    old_sum = old_structure.get("_sum", 0) if old_structure is not None else 0
+    new_sum = target_weight
+    if new_sum < 0.1:
+        return None
+    new_structure = old_structure
+    if ltp_structure_set:
+        new_structure = dict(ltp_structure)
+    elif user_structure_set:
+        new_structure = dict(user_structure)
+    elif not process_changed and not plants_changed and old_structure is not None and old_sum > 0:
+        if abs(new_sum - old_sum) < 0.1:
+            return dash.no_update
+        factor = new_sum / old_sum
+        new_structure = {key: val * factor for key, val in old_structure.items()}
+    if new_structure is None:
+        return new_structure
+    # adapt to selected process and plants: not all material classes may be present
+    for cat, mats in mat_by_cats.items():
+        cat_obj = next(c for c in cats if c.id == cat)
+        all_cat_mats = [cl.id for cl in cat_obj.classes]
+        reported_mats = [mat for mat in new_structure.keys() if mat in all_cat_mats]
+        if len(all_cat_mats) == len(mats) or len(reported_mats) == 0:
+            continue
+        reported_mats_matching = [mat for mat in reported_mats if mat in all_mats]
+        for mat in (m for m in reported_mats if m not in reported_mats_matching):
+            new_structure.pop(mat, None)
+        if len(reported_mats_matching) == 0:
+            continue
+        sum_matching_mats = sum(new_structure.get(mat) for mat in reported_mats_matching)
+        missing = target_weight - sum_matching_mats
+        if sum_matching_mats > target_weight/2 and missing / sum_matching_mats < 0.01:
+            continue
+        factors = {mat: new_structure[mat]/sum_matching_mats for mat in reported_mats_matching}
+        for mat in reported_mats_matching:
+            new_structure[mat] = new_structure[mat] + factors[mat] * missing
+    for cat in (c for c in state.get_site().material_categories if c.id not in mat_by_cats):
+        for cl in cat.classes:
+            new_structure.pop(cl.id, None)
+    return new_structure
+
+@callback(
+          Output("lots2-material-setpoints", "data"),
+          Input("lots2-material-setpoints-memory", "data"),
+          Input("lots2-check-material-planning", "value"),
+)
+def final_structure_changed(structure: dict[str, float]|None, structure_checked: Sequence[Literal[""]]|None):
+    return structure if structure_checked and len(structure_checked) > 0 else None
+
+
+@callback(
+          Output("lots2-materials-panel", "hidden"),
+          Input("lots2-check-material-planning", "value"),
+)
+def structure_visibility_changed(structure_checked: Sequence[Literal[""]]|None):
+    return not structure_checked or len(structure_checked) == 0
 
 
 @callback(
@@ -1559,27 +1674,27 @@ def update_table_filters(_, selected_lots: list[str]|None, old_filter):
     return dash.no_update, dash.no_update, len(old_filter) == 0
 
 
-@callback(
-    Output("lots2-structure-logging", "value"),
-    Output("lots2-structure-sum", "value"),
-    Input("lots2-material-setpoints", "data")
-)
-def show_userinput_structure_planning( json_data):
-    result_structure_planning = str(json_data)
-    def get_sum_from_setpoints():
-        # calc sum for one column
-        colsum = 0
-        if json_data is not None:
-            site = state.get_site()
-            material_categories = site.material_categories
-            cat0 = material_categories[0]
-            for myclass in cat0.classes:
-                if myclass.id in json_data.keys():
-                    colsum = colsum + json_data.get(myclass.id)
-        return colsum
-
-    sum_setpoints = get_sum_from_setpoints()
-    return result_structure_planning, sum_setpoints
+#@callback(
+#    Output("lots2-structure-logging", "value"),
+#    # Output("lots2-structure-sum", "value"),
+#    Input("lots2-material-setpoints", "data")
+#)
+#def show_userinput_structure_planning( json_data):
+#    result_structure_planning = str(json_data)
+#    def get_sum_from_setpoints():
+#        # calc sum for one column
+#        colsum = 0
+#        if json_data is not None:
+#            site = state.get_site()
+#            material_categories = site.material_categories
+#            cat0 = material_categories[0]
+#            for myclass in cat0.classes:
+#                if myclass.id in json_data.keys():
+#                    colsum = colsum + json_data.get(myclass.id)
+#        return colsum
+#
+#    sum_setpoints = get_sum_from_setpoints()
+#    return result_structure_planning   # , sum_setpoints
 
 @callback(
     Output("lots2-orders-custom-priority-table", "rowData"),
@@ -1784,7 +1899,7 @@ def update_figure(history: list[float]|None):
 
           State("lots2-orders-data", "data"),  # we'd like to make this an Input, but it leads to circular dependencies with process_selector
           State("lots2-store-results", "value"),
-          State("lots2-structure-sum", "value"),
+          #State("lots2-structure-sum", "value"),
           State("lots2-material-setpoints", "data"),
           State("lots2-custom-priority-store", "data"),
           State("lots2-details-plants", "children"),
@@ -1813,7 +1928,7 @@ def process_changed(snapshot: datetime|None,
                     create_comment: str|None,
                     order_data: dict[str, Any] | None, # keys "snapshot", "process", "orders_selected_cnt", "orders_selected_weight"
                     store_results0: list[Literal[""]],
-                    structure_sum: int|None,
+                    #structure_sum: int|None,
                     material_structure: dict[str, any]|None,
                     orders_custom_priority_json: str|None,
                     components: list[Component]|None,
@@ -1838,6 +1953,7 @@ def process_changed(snapshot: datetime|None,
         total_weight, message = target_values_sum(process=process, plants=[p.id for p in plants], components=components)
         return total_weight
     details_sum = _structure_calc_sum(components, process)
+    structure_sum = None if material_structure is None else material_structure.get("_sum")
     if structure_sum is not None and structure_sum > 0 and details_sum > 0:
         diff = 2 * abs(structure_sum - details_sum) / (structure_sum + details_sum)
         if diff > 0.01:
@@ -2152,6 +2268,48 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
     return state.get_lot_creator().is_running()[0], None, None
 
 
+@callback(Output("lots2-target-weight", "data"),
+         Output("lots2-plant-settings", "data"),
+         Input({"role": "plant-checked", "id": ALL}, "id"),
+         Input({"role": "plant-checked", "id": ALL}, "value"),
+         Input({"role": "plant-input", "id": ALL}, "value"),
+         Input({"role": "plant-lot", "id": ALL}, "value"),
+         Input({"role": "plant-lotmin", "id": ALL}, "value"),
+         Input({"role": "plant-lotmax", "id": ALL}, "value"))
+def test_test(plants, checked: Sequence[Sequence[Literal[""]]], inputs: Sequence[str|float], selected_lots: Sequence[str|None],
+              lots_min: Sequence[float|None]|None, lots_max: Sequence[float|None]|None):
+    plants_checked = [len(c) > 0 for c in checked]
+    total_values = [0 if not plants_checked[idx] or not GuiUtils.is_numeric(inp) else float(inp) for idx, inp in enumerate(inputs)]
+    lots_range = None
+    if len(lots_min) == len(lots_max) and len(lots_min) == len(plants_checked):
+        lots_range = ((float(mn), float(mx)) if checked and GuiUtils.is_numeric(mn) and GuiUtils.is_numeric(mx) else None
+                                                                for checked, mn, mx in zip(plants_checked, lots_min, lots_max))
+        lots_range = [min_max if min_max is None or min_max[0] <= min_max[1] else None for min_max in lots_range]
+    plant_settings = {}
+    for idx, p_id_dict in enumerate(plants):
+        if not plants_checked[idx] or total_values[idx] <= 0:
+            continue
+        total = total_values[idx]
+        predecessor = selected_lots[idx]
+        p_lot_range = lots_range[idx] if lots_range is not None else None
+        plant_settings[p_id_dict["id"]] = {"total_value": total, "predecessor_lot": predecessor, "lot_range": p_lot_range}
+    return sum(total_values), plant_settings
+
+@callback(
+          Output("lots2-active-plants", "data"),
+          Input("lots2-plant-settings", "data"),
+          State("lots2-active-plants", "data"),
+)
+def plant_settings_changed(settings: dict[int, Any]|None, active_plants: Sequence[str]) -> Sequence[int]:
+    if settings is None or len(settings) == 0:
+        return tuple()
+    num_current = len(active_plants)
+    num_new = len(settings) if settings is not None else 0
+    if num_current == num_new and all(p in settings for p in active_plants):
+        return dash.no_update
+    return tuple(int(p) for p in settings.keys())
+
+
 # Swimlane related callbacks
 
 clientside_callback(
@@ -2190,17 +2348,6 @@ clientside_callback(
     #config_prevent_initial_callbacks=True
 )
 
-
-@callback(
-    Output("lots2-material-setpoints", "data"),
-    Input("lots2-material-setpoints-user", "data"),
-    Input("lots2-material-setpoints-ltp", "data")
-)
-def merge_material_setpoints(mat_user: dict[str, float]|None, mat_ltp: dict[str, float]|None):
-    is_ltp_triggered = "lots2-material-setpoints-ltp" in GuiUtils.changed_ids()
-    return mat_ltp if is_ltp_triggered else mat_user
-
-
 # reset material grid set default
 clientside_callback(
     ClientsideFunction(
@@ -2230,14 +2377,45 @@ clientside_callback(
 clientside_callback(
     ClientsideFunction(
         namespace="lots2",
-        function_name="initMaterialGrid"
+        function_name="initMaterialGrid2"
     ),
     Output("lots2-materials-grid", "title"),
-    Input("lots2-weight-total", "value"),
+    Input("lots2-structure-btn", "n_clicks"),
     State("lots2-process-selector", "value"),
-    State("lots2-material-setpoints", "data"),
+    State("lots2-target-weight", "data"),
+    State("lots2-material-setpoints-memory", "data"),
     State("lots2-materials-grid", "id"),
+    prevent_initial_call=True,
 )
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="lots2",
+        function_name="setBacklogStructureOverview"
+    ),
+    Output("lots2-materials-state", "title"),
+    Input("lots2-material-setpoints-repr", "data"),
+    State("lots2-dummy-undefined", "data"),
+    State("lots2-materials-state", "id"),
+)
+
+#  { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
+@callback(
+          Output("lots2-material-setpoints-repr", "data"),
+          Input("lots2-material-setpoints", "data")
+)
+def structure_settings_changed(structure: dict[str, float]|None) -> dict[str, Any]|None:
+    if structure is None:
+        return None
+    result = {}
+    for cat in state.get_site().material_categories:
+        class_dict = {}
+        for clzz in (c for c in cat.classes if c.id in structure):
+            class_dict[clzz.id] = {"name": clzz.name or clzz.id, "weight": structure.get(clzz.id, 0.)}
+        if len(class_dict) > 0:
+            result[cat.id] = {"name": cat.name or cat.id, "classes": class_dict}
+    return result if len(result) > 0 else None
+
 
 clientside_callback(
     ClientsideFunction(
@@ -2274,38 +2452,34 @@ clientside_callback(
 @callback(
     Output("lots2-weight-total", "value"),
     Input("lots2-structure-btn", "n_clicks"),
-    State("lots2-details-plants", "children"),
-    State("lots2-process-selector", "value"),
-    State("lots2-material-setpoints", "data"),
-
+    State("lots2-target-weight", "data")
 )
-def structure_update(_, components: list[Component]|None, process: str|None, setpoints):
-    #first OUT is sum in grid, lots2-weight-total used as IN for other fcts
-    #second OUT is sum hidden
-    plants = state.get_site().get_process_equipment(process)
-    total_weight, message = target_values_sum(process=process, plants=[p.id for p in plants], components=components)
-    return total_weight  #f"{total_weight:.2f}"
+def structure_update(_, target: float|None):
+    return target
 
-@callback(
-    Output("lots2-target-weight", "data"),
-    Input("lots2-active-tab", "data"),
-    State("lots2-process-selector", "value"),
-    State("lots2-details-plants", "children"),
-)
-def target_value_update(active_tab: Literal["targets", "orders", "settings"]|None, process: str|None, components: list[Component]|None):
-    plants = state.get_site().get_process_equipment(process)
-    total_weight, message = target_values_sum(process=process, plants=[p.id for p in plants], components=components)
-    return total_weight
+#@callback(
+#    Output("lots2-target-weight", "data"),
+#    Input("lots2-active-tab", "data"),
+#    State("lots2-process-selector", "value"),
+#    State("lots2-details-plants", "children"),
+#)
+#def target_value_update(active_tab: Literal["targets", "orders", "settings"]|None, process: str|None, components: list[Component]|None):
+#    plants = state.get_site().get_process_equipment(process)
+#    total_weight, message = target_values_sum(process=process, plants=[p.id for p in plants], components=components)
+#    return total_weight
+
 
 
 @callback(
     Output("lots2-orders-backlog-target-weight", "children"),
+    Output("lots2-plant-targets-sum", "children"),
     Input("lots2-target-weight", "data")  # updated on tab changes and when the process changes
 )
 def target_value_update_backlog(target_value: float):
     if not isinstance(target_value, float|int):
         target_value = 0
-    return f"{target_value:.2f}" if int(target_value) != target_value else str(target_value)
+    formatted_sum = f"{target_value:.2f}" if int(target_value) != target_value else str(target_value)
+    return formatted_sum, formatted_sum
 
 
 def target_values_from_settings(process: str, period: tuple[datetime, datetime], plants: list[int], use_lot_range: bool, components: list[Component]|None) -> tuple[ProductionTargets|None, bool, dict[int, str], str|None]:

@@ -41,3 +41,19 @@ class GuiUtils:
             return DatetimeUtils.format(snapshot.astimezone(zi))
         return DatetimeUtils.format(state.as_timezone(snapshot))
 
+    @staticmethod
+    def is_numeric(s: str|float|int|None, allow_negative: bool=False) -> bool:
+        if isinstance(s, float|int):
+            return True
+        if s is None or s == "":
+            return False
+        s = s.strip()
+        if allow_negative and s[0] == "-" and len(s) > 1:
+            s = s[1:]
+        if s.isnumeric():
+            return True
+        if "." not in s or len(s) - len(s.replace(".", "")) != 1:
+            return False
+        if s[0] == "." or s[-1] == ".":
+            return False
+        return GuiUtils.is_numeric(s.replace(".", ""))

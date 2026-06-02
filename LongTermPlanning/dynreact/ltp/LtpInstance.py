@@ -32,7 +32,7 @@ class LtpInstance:
         self._interrupted = threading.Event()
         self._done = threading.Event()
 
-    def start(self) -> tuple[MidTermTargets, list[dict[str, StorageLevel]]]:
+    def start(self, debug: bool=False, fail_on_validation_error: bool=False) -> tuple[MidTermTargets, list[dict[str, StorageLevel]]]:
         model, storages, storages_to_equipment, equipment_to_storages, objective_components, frozen_horizons = self._build_model()
         # print("  MODEL", model)
         self._check_interrupted()
@@ -47,13 +47,18 @@ class LtpInstance:
         storage_levels = {stg: level.np2d for stg, level in storages.items()}
         storages_to_equipment_flow = {stg: {key: val.np2d for key, val in dct.items()} for stg, dct in storages_to_equipment.items()}
         equipment_to_storages_flow = {e: {key: val.np2d for key, val in dct.items()} for e, dct in equipment_to_storages.items()}
+        if debug or fail_on_validation_error:
+            LtpUtils.analyze_flows(equipment_to_storages_flow, storages_to_equipment_flow, self._site, len(self._shifts),
+                                   fail_on_error=fail_on_validation_error, prefix="::LtpInstance equipment validation::")
+            LtpUtils.analyze_storages(equipment_to_storages_flow, storages_to_equipment_flow, storage_levels, self._site, len(self._shifts),
+                                   fail_on_error=fail_on_validation_error, prefix="::LtpInstance storage validation::")
         ## store results for later evaluation
         # LtpUtils.store_results(self._site, self._structure, self._shifts, self._availabilities,
-        #                       storage_levels, storages_to_equipment_flow, equipment_to_storages_flow, "ltp_result.json")
-        # return LtpUtils.to_results(self._site, self._shifts, self._structure, storages, storages_to_equipment, equipment_to_storages)
+        #                       storage_levels, storages_to_equipment_flow, equipment_to_storages_flow, "ltp_result.json", frozen_horizons=frozen_horizons)
+        # return LtpUtils.to_results(self._site, self._shifts, self._structure, storage_levels, storages_to_equipment_flow, equipment_to_storages_flow)
         shifts_allocator = ShiftAllocator(self._site, self._structure, self._shifts, self._availabilities, storage_levels,
                                           equipment_to_storages_flow, storages_to_equipment_flow, frozen_horizons=frozen_horizons)
-        return shifts_allocator.run()
+        return shifts_allocator.run(debug=debug, fail_on_validation_error=fail_on_validation_error, skip_init_check=True)
 
     def interrupt(self) -> bool:
         if not self._done.is_set():

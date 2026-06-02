@@ -500,12 +500,12 @@ class MaterialCategory(Model):
     name: str|None = None
     name_de: str | None = None
     description: str|None = None
-    classes: list[MaterialClass]
+    classes: Sequence[MaterialClass]
     """
     Mutually exclusive material classes. It is assumed
     that every material and order can be assigned to exactly one class within the category.
     """
-    process_steps: list[str]|None = None
+    process_steps: Sequence[str]|None = None
     "Optional list of process steps for which the category is potentially relevant in the mid-term planning."
 
 

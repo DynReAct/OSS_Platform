@@ -12,6 +12,7 @@ class MaterialsGrid2 extends HTMLElement {
     #buttongroup;
     #buttongroup_primary;
     #state_arr = [];
+    #isPrimary = false;
 
     static get observedAttributes() {
         return ["columns-selectable"];
@@ -60,7 +61,6 @@ class MaterialsGrid2 extends HTMLElement {
 
         const buttongroup = document.createElement("div");
         this.#buttongroup = buttongroup;
-        let is_primary = false;
     }
 
     goFirst(dd, daFirst) {
@@ -590,13 +590,13 @@ class MaterialsGrid2 extends HTMLElement {
         let sum2spread = 0;
         if (lot_creation){
             if (Object.keys(lot_creation.processes).includes(process) && lot_creation.processes[process].structure?.primary_category){
-                this.is_primary = true;
+                this.#isPrimary = true;
                 primary_category_id = lot_creation.processes[process].structure.primary_category;
                 let ordered_materials = this.goFirst(materials, primary_category_id);
                 materials = ordered_materials;
             }
             else{
-                this.is_primary = false;
+                this.#isPrimary = false;
             }
         }
         let column = 0;
@@ -643,7 +643,7 @@ class MaterialsGrid2 extends HTMLElement {
                     inp.readOnly = true;
                 } else {
                      inp.addEventListener("change", (event) => {
-                        if (!this.is_primary){
+                        if (!this.#isPrimary){
                             sum2spread = this.#totalValue;
                             this.changeFilling(material_category, material_class.id, sum2spread);
                         }
@@ -676,7 +676,7 @@ class MaterialsGrid2 extends HTMLElement {
             if (columnsSelectable) {
                 const toggle = JsUtils.createElement("div", {parent: categoryHeader, attributes: {"data-active": "true"}, text: "✔",
                                             classes: "active-toggle", title: "Disable structure category"});
-                if (this.is_primary){
+                if (this.#isPrimary){
                     //case primary, first col open, all others disabled
                     if (column > 1){
                         delete toggle.dataset["active"];
@@ -713,7 +713,7 @@ class MaterialsGrid2 extends HTMLElement {
                         categoryHeader.classList.remove("ltp-material-disabled");
                     }
                     // update state
-                    if (this.is_primary){
+                    if (this.#isPrimary){
                         const masterId = this.getMasterIdFromGrid();
                         this.updateStateColState(masterId);
                     }
@@ -724,7 +724,7 @@ class MaterialsGrid2 extends HTMLElement {
         this.#grid.style["grid-template-columns"] = "repeat(" + columns + ", 1fr)";
         this.#grid.appendChild(frag);
 
-        if (this.is_primary){
+        if (this.#isPrimary){
             let masterRow;
             const masterRowMin = 2;     //fix
             const materialPrim = this.#grid.querySelectorAll("div[data-category=\"" + primary_category_id + "\"].ltp-material-class");
@@ -918,7 +918,7 @@ class MaterialsGrid2 extends HTMLElement {
         return !!this.#materials;
     }
 
-    initTargets(totalValue) {
+    initTargets(totalValue, setpoints) {
         // start or setDefaultButton or outer clearButton
         // called by clientside resetMaterialGrid and clearMaterialGrid
         if (totalValue === undefined || !this.#materials)
@@ -928,7 +928,8 @@ class MaterialsGrid2 extends HTMLElement {
         for (const category of this.#materials) {
             const sharesMissing = category.classes.filter(m => m.default_share === undefined);
             const sharesDefined = sharesMissing.length <= 1;
-            const shares = Object.fromEntries(category.classes.filter(cl => cl.default_share !== undefined).map(cl => [cl.id, cl.default_share]));
+            const shares = !setpoints || Object.keys(setpoints).length === 0 ? Object.fromEntries(category.classes.filter(cl => cl.default_share !== undefined).map(cl => [cl.id, cl.default_share])) :
+                        Object.fromEntries(category.classes.filter(cl => cl.id in setpoints).map(cl => [cl.id, setpoints[cl.id]/totalValue]));
             if (sharesMissing.length === 1) {
                 const aggregated = Object.values(shares).reduce((a,b) => a+b, 0);
                 const final = aggregated >= 1 ? 0 : 1 - aggregated;
@@ -955,13 +956,10 @@ class MaterialsGrid2 extends HTMLElement {
                 inp.max = totalValue;
             }
         }
-        if (!this.is_primary){
+        if (!this.#isPrimary) {
             // all cols active
             this.spreadDefaultVisAll();
-        }
-
-        if (this.is_primary)
-        {  // all reset actions
+        } else {  // all reset actions
             // 1 delete all states + unmark
             const primary_category_id = this.#lot_creation.processes[this.#processName].structure.primary_category;
             //loop materials for cat=prim_cat
@@ -997,7 +995,7 @@ class MaterialsGrid2 extends HTMLElement {
         if (!this.#materials)
             return undefined;
         const results = Object.create(null);
-        if (!this.is_primary){
+        if (!this.#isPrimary){
             // get all values from grid
             results['_sum'] = this.#totalValue;
             for (const container of this.#grid.querySelectorAll("div[data-category][data-material]:not(.ltp-material-disabled)")) {
@@ -1005,7 +1003,7 @@ class MaterialsGrid2 extends HTMLElement {
                 results[container.dataset.material] = parseFloat(inp.value) || 0;
             }
         }
-        else{ // get setpoints from state
+        else { // get setpoints from state
             results['_sum'] = this.#totalValue;
             for (let ii = 0; ii < this.#state_arr.length; ii++) {
                 const oneEntry = this.#state_arr[ii];
@@ -1128,7 +1126,7 @@ class MaterialsGrid2 extends HTMLElement {
         }
         Array.from(this.#grid.querySelectorAll("[data-category][data-material] input[type=number]")).forEach(inp => inp.max = totalProduction);
         let changed = false;
-        if (this.is_primary) {
+        if (this.#isPrimary) {
             //1 changeFilling only master category
             const container1 = this.#grid.querySelector(".ltp-material-master");
             const primary_category_id = container1.dataset.category;
@@ -1223,6 +1221,10 @@ class MaterialsGrid2 extends HTMLElement {
             this.setAttribute("columns-selectable", "");
         else
             this.removeAttribute("columns-selectable");
+    }
+
+    get isPrimary() {
+        return this.#isPrimary;
     }
 
 }

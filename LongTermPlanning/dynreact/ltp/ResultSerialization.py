@@ -39,5 +39,6 @@ class SerializableResult(BaseModel, frozen=True, use_attribute_docstrings=True, 
     storage_levels: dict[str, NumPyArray]
     storages_to_equipment: dict[str, dict[int, NumPyArray]]
     equipment_to_storages: dict[int, dict[str, NumPyArray]]
+    frozen_horizons: dict[int, datetime] | None = None
 
 

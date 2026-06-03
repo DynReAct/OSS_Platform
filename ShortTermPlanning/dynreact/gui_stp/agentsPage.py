@@ -20,7 +20,13 @@ from dynreact.gui_stp.agents_state import AgentsState
 from dynreact.app import state
 from dynreact.gui.dash_app import app
 from dynreact.shortterm.common import KeySearch, purge_topics, delete_topics
-from dynreact.shortterm.short_term_planning import create_auction, start_auction, genauction, ask_results
+from dynreact.shortterm.short_term_planning import (
+    create_auction,
+    start_auction,
+    genauction,
+    ask_results,
+    normalize_auction_results,
+)
 from dynreact.gui.localization import Localization
 from dynreact.gui.pages.session_state import language
 from dash import ALL
@@ -60,6 +66,16 @@ def _get_stp_runtime_context() -> tuple[str | None, str | None, str | None, obje
         KeySearch.search_for_value("TOPIC_CALLBACK"),
         KeySearch.search_for_value("SMALL_WAIT"),
     )
+
+
+def _filter_results_to_selected_equipment(results: dict[str, Any], selected_equipment: list[str]) -> dict[str, Any]:
+    """Keep only result buckets that belong to the current auction selection."""
+    selected = {str(equipment) for equipment in selected_equipment}
+    return {
+        str(equipment): jobs
+        for equipment, jobs in results.items()
+        if str(equipment) in selected
+    }
 
 
 EXTERNAL_PERF_URL = KeySearch.search_for_value("PERF_URL")
@@ -167,7 +183,13 @@ def flatten_jobs_and_transform(jobs: Any, columns: Any) -> Any:
             if path and identifier:
                 expr = parse(f'$.{path}')
                 match = expr.find(record)
-                flattened[identifier] = match[0].value if match else None
+                value = match[0].value if match else None
+
+                # Backward compatibility for old mappings that still expect job_id.
+                if value is None and path == "job_id":
+                    value = record.get("id")
+
+                flattened[identifier] = value
         flatten_jobs.append(flattened)
     return flatten_jobs
 
@@ -765,6 +787,8 @@ def handle_create_click(ag_create: Any, reftxt: Any, matype: Any, plnts: Any, lm
 
     # Set up auction details
     auction.code = reftxt
+    auction.equip = list(plnts)
+    auction.resul = {}
     snpshot = current.strftime("%Y-%m-%dT%H:%M:%S%z")
 
     # Prepare materials list based on type and assigned materials
@@ -926,6 +950,8 @@ def handle_refresh_click(ag_refresh: Any, reftxt: Any, auction: Any) -> Any:
         consumer=consumer,
         verbose=VB
     )
+    res = normalize_auction_results(res)
+    res = _filter_results_to_selected_equipment(res, auction.equip)
     auction.auction_status = JobStatus.R
     auction.set_resul(res)
 

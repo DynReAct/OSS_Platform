@@ -195,17 +195,17 @@ class Auction(BaseModel):
 
         :param dict results: Auction results.
         """
-        for equipment in results.keys():
-            if equipment in self.resul.keys():
-                merged = {}
-                for job in self.resul[equipment]:
-                    hash_job = hash_object(job)
-                    if merged.get(hash_job) is None:
-                        merged[hash_job] = job
+        normalized_results: Dict[str, List[dict[str, Any]]] = {}
 
-                self.resul[equipment] = list(merged.values())
-            else:
-                self.resul[equipment] = results[equipment]
+        for equipment, jobs in results.items():
+            merged = {}
+            for job in jobs:
+                hash_job = hash_object(job)
+                if merged.get(hash_job) is None:
+                    merged[hash_job] = job
+            normalized_results[equipment] = list(merged.values())
+
+        self.resul = normalized_results
 
     def set_status(self, job_status: JobStatus) -> None:
         """

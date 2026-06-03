@@ -510,8 +510,10 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
         )
 
         latest_payload = None
+        expected_source = f"LOG:{topic}"
         for message in wait_for_callback(
-                topic_callback, "AUCTIONSTARTED", consumer, verbose, sleep_timeout=1, max_iters=poll_seconds
+                topic_callback, "AUCTIONSTARTED", consumer, verbose,
+                sleep_timeout=1, max_iters=poll_seconds, expected_source=expected_source
         ):
             print(json.dumps(message["payload"]))
             payload = json.loads(message['payload']) if isinstance(message["payload"], str) else message['payload']
@@ -563,7 +565,7 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
 
 def wait_for_callback(
         topic: str, expected_action: str, consumer: Consumer, verbose: int,
-        sleep_timeout: int = 1, max_iters: int = 10
+        sleep_timeout: int = 1, max_iters: int = 10, expected_source: str | None = None
 ) -> Generator[dict[str, Any] | None, None, None]:
     """
     Starts an auction by instructing the LOG to check the presence of all agents
@@ -575,6 +577,7 @@ def wait_for_callback(
     :param int sleep_timeout: Sleep timeout to wait for message
     :param int max_iters:
         Maximum iterations with no message (if this parameter is 1, the loop will stop once there are no more messages)
+    :param str expected_source: Optional exact message source filter.
     """
 
     # Consume all messages until reaching a message destined for UX or exhausting the maximum number of iterations
@@ -615,6 +618,9 @@ def wait_for_callback(
                 dctmsg = json.loads(vals.decode("utf-8") if isinstance(vals, bytes) else vals)
                 match = re.search(dctmsg['dest'], "UX")
                 action = dctmsg['action'].upper()
+
+                if expected_source is not None and dctmsg.get('source') != expected_source:
+                    continue
 
                 if match and action == expected_action:
                     yield dctmsg
@@ -658,7 +664,13 @@ def ask_results(
 
     sleep(wait_answer, producer=producer, verbose=verbose)
 
-    message_objs = wait_for_callback(topic_callback, "RESULTS", consumer, verbose)
+    message_objs = wait_for_callback(
+        topic_callback,
+        "RESULTS",
+        consumer,
+        verbose,
+        expected_source=f"LOG:{topic}"
+    )
 
     for message in message_objs:
 

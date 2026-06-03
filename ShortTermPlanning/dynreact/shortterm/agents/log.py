@@ -125,6 +125,7 @@ class Log(Agent):
         self.expected_equipments = set()
         self.finished_equipments = set()
         self.auction_end_requested = False
+        self.auction_completed = False
 
         if manager:
             self.handler = DockerManager(tag=f"log{DOCKER_REPLICA}")
@@ -440,23 +441,17 @@ class Log(Agent):
                 "3ca0c034-fb34-4c06-a576-d9e0f146d3d0"
             )
 
-        should_end = (
+        should_mark_complete = (
             self.auction_start
-            and not self.auction_end_requested
+            and not self.auction_completed
             and len(self.expected_equipments) > 0
             and self.finished_equipments >= self.expected_equipments
         )
-        if should_end:
-            self.auction_end_requested = True
+        if should_mark_complete:
+            self.auction_completed = True
             self.write_log(
-                "All participating equipments finished. Requesting auction shutdown.",
+                "All participating equipments finished. Waiting for results retrieval before shutdown.",
                 "85a1f6ff-57db-4dcb-a246-44734201e175"
-            )
-            end_auction(
-                topic=self.topic,
-                producer=self.producer,
-                verbose=self.verbose,
-                wait_time=KeySearch.search_for_value("SMALL_WAIT")
             )
         return 'CONTINUE'
 
@@ -563,6 +558,19 @@ class Log(Agent):
         )
         if self.verbose > 1:
             self.write_log(f"Answered {sender} with the current results of the auction: {self.results}", "b49a876b-8bf2-4677-8142-b32f8b2e5df5")
+
+        if self.auction_completed and not self.auction_end_requested:
+            self.auction_end_requested = True
+            self.write_log(
+                "Results served after all equipments finished. Requesting auction shutdown.",
+                "5efceaf8-b7f2-44f3-a19a-c8700efbc677"
+            )
+            end_auction(
+                topic=self.topic,
+                producer=self.producer,
+                verbose=self.verbose,
+                wait_time=KeySearch.search_for_value("SMALL_WAIT")
+            )
         return 'CONTINUE'
 
     def callback_before_message(self) -> str:

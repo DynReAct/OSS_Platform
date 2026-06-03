@@ -951,7 +951,7 @@ def check_running_transfer(last_transferred_lot: str|None) -> tuple[bool, any]:
             err = lottransfer_thread.error()
             result = err if err is not None else lottransfer_thread.result()
             while len(lottransfer_results) > 10:
-                key = iter(lottransfer_results)
+                key = next(iter(lottransfer_results))
                 lottransfer_results.pop(key)
             lottransfer_results[lottransfer_thread.identifier()] = result
             lottransfer_thread = None

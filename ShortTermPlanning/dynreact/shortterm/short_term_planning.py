@@ -76,6 +76,29 @@ def _ux_group_id() -> str:
     return f"UX-{normalized_context}"
 
 
+def _format_container_diagnostics(agent_label: str, containers: list[dict[str, Any]]) -> list[str]:
+    """Return one short diagnostic line for each non-running tracked container."""
+    diagnostics = []
+    for container in containers:
+        if container.get("status") == "running":
+            continue
+        reason_bits = []
+        if container.get("oom_killed"):
+            reason_bits.append("oom-killed")
+        exit_code = container.get("exit_code")
+        if exit_code is not None:
+            reason_bits.append(f"exit_code={exit_code}")
+        error = container.get("error")
+        if error:
+            reason_bits.append(f"error={error}")
+        finished_at = container.get("finished_at")
+        if finished_at and finished_at != "0001-01-01T00:00:00Z":
+            reason_bits.append(f"finished_at={finished_at}")
+        reason = ", ".join(reason_bits) if reason_bits else "no Docker state details"
+        diagnostics.append(f"{agent_label}:{container.get('name', container.get('id', 'unknown'))} [{container.get('status', 'unknown')}] {reason}")
+    return diagnostics
+
+
 def list_all_topics(admin_client: AdminClient, verbose: int) -> Any:
     """
     List all topics in the Kafka broker.
@@ -964,8 +987,18 @@ def execute_short_term_planning(args: dict) -> Any:
                 print(f"Tracked {material_tracked} MATERIAL containers")
 
         if running_base_agents < min_base_agents:
+            base_diagnostics = []
+            if log_handler is not None:
+                base_diagnostics.extend(_format_container_diagnostics("LOG", log_handler.tracked_containers))
+            if equipment_handler is not None:
+                base_diagnostics.extend(_format_container_diagnostics("EQUIPMENT", equipment_handler.tracked_containers))
+            if material_handler is not None:
+                base_diagnostics.extend(_format_container_diagnostics("MATERIAL", material_handler.tracked_containers))
+            diagnostics_msg = "; ".join(base_diagnostics) if base_diagnostics else "no non-running tracked containers were reported by Docker"
             raise Exception(
-                f"Missing base agents, expected {min_base_agents} currently running {running_base_agents}. Aborting!")
+                f"Missing base agents, expected {min_base_agents} currently running {running_base_agents}. "
+                f"Container diagnostics: {diagnostics_msg}. Aborting!"
+            )
 
     results = {}
 

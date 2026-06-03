@@ -345,7 +345,7 @@ class Log(Agent):
                 "topic": topic, 
                 "agent-name": agent,
                 "log-file": log_file,
-                "variables": KeySearch.dump_model()
+                "variables": KeySearch.dump_model(include_env=False)
             }
 
             self.handler.launch_container(

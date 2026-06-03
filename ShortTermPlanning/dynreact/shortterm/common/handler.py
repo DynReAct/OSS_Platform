@@ -24,6 +24,38 @@ def _namespaced_tag(tag: str | None) -> str | None:
     return f"{context_prefix}:{tag}"
 
 
+def _container_state_details(container: Any) -> dict[str, Any]:
+    """Extract the most relevant Docker state details for diagnostics."""
+    state = getattr(container, "attrs", {}).get("State", {}) or {}
+    exit_code = state.get("ExitCode")
+    return {
+        "exit_code": exit_code if exit_code not in (None, "") else None,
+        "oom_killed": bool(state.get("OOMKilled", False)),
+        "error": state.get("Error") or None,
+        "started_at": state.get("StartedAt") or None,
+        "finished_at": state.get("FinishedAt") or None,
+    }
+
+
+def _container_status_reason(container_info: dict[str, Any]) -> str:
+    """Render a short human-readable explanation for one tracked container."""
+    reason_bits = []
+    if container_info.get("oom_killed"):
+        reason_bits.append("oom-killed")
+    exit_code = container_info.get("exit_code")
+    if exit_code is not None:
+        reason_bits.append(f"exit_code={exit_code}")
+    error = container_info.get("error")
+    if error:
+        reason_bits.append(f"error={error}")
+    finished_at = container_info.get("finished_at")
+    if finished_at and finished_at != "0001-01-01T00:00:00Z":
+        reason_bits.append(f"finished_at={finished_at}")
+    if not reason_bits:
+        return container_info.get("status", "unknown")
+    return f"{container_info.get('status', 'unknown')}: " + ", ".join(reason_bits)
+
+
 class DockerManager:
     """Docker manager.
     
@@ -103,6 +135,13 @@ class DockerManager:
                     if value:
                         environment_variables[key] = value
 
+                replica_variables = params.get("variables") if isinstance(params, dict) else None
+                if isinstance(replica_variables, dict):
+                    for key in inherited_env_keys:
+                        value = replica_variables.get(key)
+                        if value not in (None, ""):
+                            environment_variables[key] = str(value)
+
                 if envs:
                     environment_variables.update(envs)
 
@@ -134,10 +173,14 @@ class DockerManager:
                     run_kwargs["network"] = docker_network
 
                 container = self.client.containers.run(**run_kwargs)
-                self.tracked_containers.append({
+                container.reload()
+                container_info = {
                     "id": container.id,
                     "status": container.status,
-                })
+                    "name": container.name,
+                }
+                container_info.update(_container_state_details(container))
+                self.tracked_containers.append(container_info)
                 print(f"Container '{container.name if name else container.short_id}' launched successfully!")
                 return container
             else:
@@ -181,10 +224,17 @@ class DockerManager:
                 return
 
             for container in containers:
+                container.reload()
+                container_info = {
+                    "id": container.id,
+                    "status": container.status,
+                    "name": container.name,
+                }
+                container_info.update(_container_state_details(container))
                 if container.status == "running":
                     container.stop()
                 container.remove(force=True)
-                print(f"Container '{container.name}' removed.")
+                print(f"Container '{container.name}' removed ({_container_status_reason(container_info)}).")
 
         except Exception as e:
             print(f"Error cleaning containers: {e}")
@@ -208,10 +258,17 @@ class DockerManager:
                 return
 
             for container in matched_containers:
+                container.reload()
+                container_info = {
+                    "id": container.id,
+                    "status": container.status,
+                    "name": container.name,
+                }
+                container_info.update(_container_state_details(container))
                 if container.status == "running":
                     container.stop()
                 container.remove(force=True)
-                print(f"Container '{container.name}' removed.")
+                print(f"Container '{container.name}' removed ({_container_status_reason(container_info)}).")
 
         except Exception as e:
             print(f"Error cleaning containers: {e}")
@@ -252,12 +309,17 @@ class DockerManager:
             print(f"\nTracked Containers for tag '{self.tag}':")
             for container in containers:
                 container.reload()
-                self.tracked_containers.append({
+                container_info = {
                     "id": container.id,
                     "status": container.status,
                     "name": container.name
-                })
-                print(f"ID: {container.short_id} | Name: {container.name} | Status: {container.status}")
+                }
+                container_info.update(_container_state_details(container))
+                self.tracked_containers.append(container_info)
+                print(
+                    f"ID: {container.short_id} | Name: {container.name} | "
+                    f"Status: {_container_status_reason(container_info)}"
+                )
 
         return self.tracked_containers
 

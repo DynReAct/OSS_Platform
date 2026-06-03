@@ -114,13 +114,17 @@ class Log(Agent):
         self.action_methods.update({
             'CREATE': self.handle_create_action, 'CHECK': self.handle_check_action, 'WRITE': self.handle_write_action,
             'PINGANSWER': self.handle_pinganswer_action, "ASKRESULTS": self.handle_askresults_action,
-            "ISAUCTIONACTIVE": self.handle_is_auction_started_action, "RECIEVEERROR": self.handle_receive_error_action
+            "ISAUCTIONACTIVE": self.handle_is_auction_started_action, "RECIEVEERROR": self.handle_receive_error_action,
+            "EQUIPMENTFINISHED": self.handle_equipmentfinished_action
         })
 
         # To handle the start of the auction
         self.present_agents = set()
         self.auction_start = False
         self.total_num_agents = None
+        self.expected_equipments = set()
+        self.finished_equipments = set()
+        self.auction_end_requested = False
 
         if manager:
             self.handler = DockerManager(tag=f"log{DOCKER_REPLICA}")
@@ -147,6 +151,14 @@ class Log(Agent):
         if not os_path.is_file():
             self.write_log(f"ERROR: {self.log_file} does not exist", "b82f31ef-1750-4f33-8b2c-7bba4ed408de", action='CREATE')
         self.write_log(f"New log file created for topic {self.topic}.", "1a40e14a-845a-489a-8bea-5768c8940f1f", action='CREATE')
+
+    @staticmethod
+    def _extract_equipment_id(agent_name: str) -> str | None:
+        """Extract the stable equipment id from one equipment agent name."""
+        parts = str(agent_name).split(":")
+        if len(parts) >= 4 and parts[0] == "EQUIPMENT":
+            return str(parts[-2])
+        return None
 
     def write_log(self, msg: str, identifier: str, to_stdout: bool = False, action: str = 'WRITE', verbose: float = float("inf")) -> None:
         """
@@ -395,12 +407,57 @@ class Log(Agent):
         agent = dctmsg['source']
         if agent not in self.present_agents:
             self.present_agents.add(agent)
+            equipment_id = self._extract_equipment_id(agent)
+            if equipment_id is not None:
+                self.expected_equipments.add(equipment_id)
             if self.verbose > 1:
                 self.write_log(
                     f"Added agent {agent} to the list of present agents. "
                     f"Progress: {len(self.present_agents)} / {self.total_num_agents}",
                     "87a353b2-de86-4c4b-bc6b-1f25768094a2"
                 )
+        return 'CONTINUE'
+
+    def handle_equipmentfinished_action(self, dctmsg: dict) -> str:
+        """Record one finished equipment and close the auction when all are done."""
+        payload = dctmsg.get("payload", {})
+        equipment_id = payload.get("equipment")
+        if equipment_id is None:
+            equipment_id = self._extract_equipment_id(dctmsg.get("source", ""))
+        if equipment_id is None:
+            self.write_log(
+                f"Ignoring EQUIPMENTFINISHED without a valid equipment id: {dctmsg}",
+                "0a0cf4ab-8df7-40b4-9bc0-7869fc19dadd"
+            )
+            return 'CONTINUE'
+
+        equipment_key = str(equipment_id)
+        self.finished_equipments.add(equipment_key)
+        if self.verbose > 1:
+            self.write_log(
+                f"Equipment {equipment_key} finished. Progress: "
+                f"{len(self.finished_equipments)} / {len(self.expected_equipments)}.",
+                "3ca0c034-fb34-4c06-a576-d9e0f146d3d0"
+            )
+
+        should_end = (
+            self.auction_start
+            and not self.auction_end_requested
+            and len(self.expected_equipments) > 0
+            and self.finished_equipments >= self.expected_equipments
+        )
+        if should_end:
+            self.auction_end_requested = True
+            self.write_log(
+                "All participating equipments finished. Requesting auction shutdown.",
+                "85a1f6ff-57db-4dcb-a246-44734201e175"
+            )
+            end_auction(
+                topic=self.topic,
+                producer=self.producer,
+                verbose=self.verbose,
+                wait_time=KeySearch.search_for_value("SMALL_WAIT")
+            )
         return 'CONTINUE'
 
     def count_agents(self, agent_type: str) -> Any:

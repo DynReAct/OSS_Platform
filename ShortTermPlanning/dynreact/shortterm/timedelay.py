@@ -16,6 +16,9 @@ class TimeDelay(BaseModel):
         EXIT_WAIT: Delay before stopping the agents.
         RUNNING_WAIT: Delay after launching base agents.
         SMALL_WAIT: Small generic wait used to settle background activity.
+        STARTUP_POLL_WAIT: Seconds between UX startup-status checks.
+        STARTUP_STABLE_CHECKS: Consecutive unchanged status checks before declaring a stall.
+        STARTUP_SILENT_CHECKS: Consecutive missing callbacks before declaring a communication failure.
     """
 
     AUCTION_WAIT: int | None = Field(default=None, description="Auction wait to start in seconds.")
@@ -24,3 +27,6 @@ class TimeDelay(BaseModel):
     EXIT_WAIT: int | None = Field(default=None, description="Auction wait to exit in seconds.")
     RUNNING_WAIT: int | None = Field(default=None, description="Running wait in seconds.")
     SMALL_WAIT: int | None = Field(default=5, description="General-purpose wait in seconds.")
+    STARTUP_POLL_WAIT: int | None = Field(default=5, description="Seconds between UX startup-status checks.")
+    STARTUP_STABLE_CHECKS: int | None = Field(default=3, description="Consecutive unchanged startup checks before the UX marks the auction as stalled.")
+    STARTUP_SILENT_CHECKS: int | None = Field(default=3, description="Consecutive missing startup callbacks before the UX marks the auction as failed.")

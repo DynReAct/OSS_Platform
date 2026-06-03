@@ -451,7 +451,12 @@ def create_auction(
 
 def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents: int, verbose: int) -> None:
     """
-    Starts an auction by instructing the LOG to check the presence of all agents
+    Starts an auction by instructing the LOG to check the presence of all agents.
+
+    The UX polls progress every 5 seconds and treats the startup as stalled
+    only when the reported agent counts stop evolving for several checks in a row.
+    A silent-callback guard remains to avoid waiting forever if the LOG stops
+    answering entirely.
 
     :param str topic: Topic name of the auction we want to start
     :param object producer: A Kafka Producer instance
@@ -462,6 +467,9 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
 
     topic_gen = _key_str("TOPIC_GEN")
     topic_callback = _key_str("TOPIC_CALLBACK")
+    poll_seconds = max(1, int(_key_float("STARTUP_POLL_WAIT", 5)))
+    stable_checks_limit = max(1, int(_key_float("STARTUP_STABLE_CHECKS", 3)))
+    silent_checks_limit = max(1, int(_key_float("STARTUP_SILENT_CHECKS", 3)))
 
     sendmsgtopic(
         producer=producer, tsend=topic_gen, topic=topic, source="UX", dest="LOG:" + topic_gen,
@@ -486,8 +494,11 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
         action="WRITE", payload=dict(msg="Waiting for auction confirmation"), vb=verbose
     )
 
-    for i in range(5):
+    previous_progress: tuple[int, int, int, int, int] | None = None
+    stable_checks = 0
+    silent_checks = 0
 
+    while True:
         sendmsgtopic(
             producer=producer,
             tsend=topic,
@@ -498,30 +509,63 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
             vb=verbose
         )
 
-        message_objs = wait_for_callback(topic_callback, "AUCTIONSTARTED", consumer, verbose, sleep_timeout=2, max_iters=10)
+        latest_payload = None
+        expected_source = f"LOG:{topic}"
+        for message in wait_for_callback(
+                topic_callback, "AUCTIONSTARTED", consumer, verbose,
+                sleep_timeout=1, max_iters=poll_seconds, expected_source=expected_source
+        ):
+            print(json.dumps(message["payload"]))
+            payload = json.loads(message['payload']) if isinstance(message["payload"], str) else message['payload']
+            latest_payload = payload
 
-        for message in message_objs:
-
-            if message is None:
-                print("Exiting start auction loop")
-                break
-            else:
-                print(json.dumps(message["payload"]))
-
-            payload = json.loads(message['payload']) if (type(message["payload"]) is str) else message['payload']
-            if payload["is_auction_started"]:
-                return
-            elif payload["total_num_agents"] < payload["present_agents"]["total"]:
+        if latest_payload is None:
+            silent_checks += 1
+            if silent_checks >= silent_checks_limit:
                 dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
-                raise Exception(f"{dt} | ERROR: More agents responded than expected. Expected {payload["total_num_agents"]["total"]} got {payload["present_agents"]}")
+                raise Exception(
+                    f"{dt} | ERROR: Failed to start/run auction, no status callbacks received after "
+                    f"{silent_checks_limit} checks of {poll_seconds}s"
+                )
+            continue
 
-    dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
-    raise Exception(f"{dt} | ERROR: Failed to start/run auction, timeout exceeded")
+        silent_checks = 0
+
+        if latest_payload["is_auction_started"]:
+            return
+
+        if latest_payload["total_num_agents"] < latest_payload["present_agents"]["total"]:
+            dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+            raise Exception(
+                f"{dt} | ERROR: More agents responded than expected. "
+                f"Expected {latest_payload['total_num_agents']} got {latest_payload['present_agents']}"
+            )
+
+        current_progress = (
+            int(latest_payload["present_agents"].get("log", 0)),
+            int(latest_payload["present_agents"].get("material", 0)),
+            int(latest_payload["present_agents"].get("equipment", 0)),
+            int(latest_payload["present_agents"].get("total", 0)),
+            int(latest_payload.get("total_num_agents", 0)),
+        )
+
+        if current_progress == previous_progress:
+            stable_checks += 1
+        else:
+            stable_checks = 0
+            previous_progress = current_progress
+
+        if stable_checks >= stable_checks_limit:
+            dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+            raise Exception(
+                f"{dt} | ERROR: Failed to start/run auction, agent counts stopped evolving after "
+                f"{stable_checks_limit} checks of {poll_seconds}s. Last status: {latest_payload}"
+            )
 
 
 def wait_for_callback(
         topic: str, expected_action: str, consumer: Consumer, verbose: int,
-        sleep_timeout: int = 1, max_iters: int = 10
+        sleep_timeout: int = 1, max_iters: int = 10, expected_source: str | None = None
 ) -> Generator[dict[str, Any] | None, None, None]:
     """
     Starts an auction by instructing the LOG to check the presence of all agents
@@ -533,6 +577,7 @@ def wait_for_callback(
     :param int sleep_timeout: Sleep timeout to wait for message
     :param int max_iters:
         Maximum iterations with no message (if this parameter is 1, the loop will stop once there are no more messages)
+    :param str expected_source: Optional exact message source filter.
     """
 
     # Consume all messages until reaching a message destined for UX or exhausting the maximum number of iterations
@@ -573,6 +618,9 @@ def wait_for_callback(
                 dctmsg = json.loads(vals.decode("utf-8") if isinstance(vals, bytes) else vals)
                 match = re.search(dctmsg['dest'], "UX")
                 action = dctmsg['action'].upper()
+
+                if expected_source is not None and dctmsg.get('source') != expected_source:
+                    continue
 
                 if match and action == expected_action:
                     yield dctmsg
@@ -616,7 +664,13 @@ def ask_results(
 
     sleep(wait_answer, producer=producer, verbose=verbose)
 
-    message_objs = wait_for_callback(topic_callback, "RESULTS", consumer, verbose)
+    message_objs = wait_for_callback(
+        topic_callback,
+        "RESULTS",
+        consumer,
+        verbose,
+        expected_source=f"LOG:{topic}"
+    )
 
     for message in message_objs:
 

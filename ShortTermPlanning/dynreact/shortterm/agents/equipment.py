@@ -178,6 +178,26 @@ class Equipment(Agent):
                            identifier="5e0e90e2-12be-4048-b70f-73917bfe947b",
                            to_stdout=True)
 
+    def logical_equipment_id(self) -> str:
+        """Return the stable equipment identifier for this agent."""
+        parts = str(self.agent).split(":")
+        if len(parts) >= 3:
+            return str(parts[-2])
+        return str(self.equipment)
+
+    def notify_equipment_finished(self, reason: str) -> None:
+        """Inform the auction LOG that this equipment has finished bidding."""
+        sendmsgtopic(
+            producer=self.producer,
+            tsend=self.topic,
+            topic=self.topic,
+            source=self.agent,
+            dest="LOG:" + self.topic,
+            action="EQUIPMENTFINISHED",
+            payload={"equipment": self.logical_equipment_id(), "reason": reason},
+            vb=self.verbose
+        )
+
     def has_reached_target_tons(self) -> bool:
         """
         Return whether the equipment has reached its assigned target tonnage.
@@ -202,6 +222,7 @@ class Equipment(Agent):
         self.status = new_status if new_status is not None else self.status
 
         if self.has_reached_target_tons():
+            self.notify_equipment_finished("target_tons_reached")
             self.write_log(
                 f"Equipment {self.agent} reached target tonnage "
                 f"({self.accumulated_tons:.2f}/{self.target_tons:.2f} t). Ending equipment agent.",
@@ -495,6 +516,7 @@ class Equipment(Agent):
 
         # Kill this equipment child if there are no more materials to ask
         if len(self.bids) == 0:
+            self.notify_equipment_finished("no_more_bids")
             if self.verbose > 1:
                 self.write_log(
                     f"No more bids to process. The equipment will not be assigned to any material. "

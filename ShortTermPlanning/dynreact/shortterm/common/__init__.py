@@ -105,7 +105,7 @@ class KeySearch:
         return cls._global_config is not None
 
     @classmethod
-    def dump_model(cls) -> Any:
+    def dump_model(cls, include_env: bool = True) -> Any:
         """
         Dump the class information to a dict, assigning values from the config and environment.
 
@@ -118,9 +118,10 @@ class KeySearch:
         dump_model = cls._global_config.model_copy()
         update = {}
 
-        for field_name in dump_model.__class__.model_fields.keys():
-            if field_name in os.environ:
-                update[field_name] = os.environ[field_name]
+        if include_env:
+            for field_name in dump_model.__class__.model_fields.keys():
+                if field_name in os.environ:
+                    update[field_name] = os.environ[field_name]
 
         merged = dump_model.model_dump()
         merged.update(update)

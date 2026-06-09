@@ -178,7 +178,7 @@ class Material(Agent):
                 "params": params,
                 "transport_times": transport_times,
                 "coil_lengths": coil_lengths,
-                "variables": KeySearch.dump_model()
+                "variables": KeySearch.dump_model(include_env=False)
             }
 
             self.handler.launch_container(

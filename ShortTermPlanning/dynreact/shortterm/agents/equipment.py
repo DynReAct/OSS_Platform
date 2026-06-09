@@ -295,7 +295,7 @@ class Equipment(Agent):
                 "status": status,
                 "operation_speed": float(operation_speed),
                 "target_tons": _coerce_float(target_tons, DEFAULT_TARGET_TONS),
-                "variables": KeySearch.dump_model(),
+                "variables": KeySearch.dump_model(include_env=False),
             }
             if start_time is not None:
                 init_kwargs["start_time"] = start_time

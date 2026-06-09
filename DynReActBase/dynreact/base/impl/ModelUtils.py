@@ -124,7 +124,7 @@ class ModelUtils:
         max_end: datetime = snapshot.timestamp + horizon
         start_time_by_equipment: dict[int, datetime] = {}
         for equipment in equipment_ids:
-            lots = [lot for lot in snapshot.lots.get(equipment, tuple()) if snapshot_provider.is_lot_complete(lot) and lot.end_time is not None]
+            lots = [lot for lot in snapshot.lots.get(equipment, tuple()) if lot.active and lot.end_time is not None]  # and snapshot_provider.is_lot_complete(lot)
             eq_horizon = max(lt.end_time for lt in lots) if len(lots) > 0 else snapshot.timestamp
             if eq_horizon >= max_planning_time:  # nothing to be planned for this equipment, lots already cover the planning horizon
                 continue

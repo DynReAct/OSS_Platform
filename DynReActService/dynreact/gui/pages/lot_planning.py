@@ -584,7 +584,7 @@ def _append_lot_info_for_order(row: dict[str, Any], o: Order, process: str, snap
     all_prev_lots: list[str] = [o.lots[proc] for proc in previous_processes if proc in o.lots]
     all_prev_lot_objs: list[Lot] = [lt_obj for plant in prev_proc_plants if plant in all_lots for lt_obj in all_lots[plant] if lt_obj.id in all_prev_lots]
     now = DatetimeUtils.now()
-    lot_entries: list[tuple[Lot, bool, datetime | None]] = sorted([(lot, sp.is_lot_complete(lot), lot.end_time) for lot in all_prev_lot_objs],
+    lot_entries: list[tuple[Lot, bool, datetime | None]] = sorted([(lot, lot.active, lot.end_time) for lot in all_prev_lot_objs],  # sp.is_lot_complete(lot)
                         key=lambda tp: (-1 if tp[1] else 0, now - tp[2] if tp[2] is not None else datetime(year=3000, month=1, day=1, tzinfo=timezone.utc)))
     last_lot = lot_entries[0][0] if len(lot_entries) > 0 and lot_entries[0][1] else None  # preselect the last complete lot
     if last_lot is not None:

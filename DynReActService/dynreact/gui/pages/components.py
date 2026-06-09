@@ -53,7 +53,7 @@ def prepare_lots_for_lot_view(snapshot: str|datetime|None, process: str|None, re
     previous_lots: dict[int, Lot] = {plant: next((lot for lot in snap_obj.lots[plant] if order in lot.orders), None) for plant, order in result.previous_orders.items() if plant in plants} \
                 if result.previous_orders is not None and preprend_snapshot else {}
     previous_lots = {plant: lot for plant, lot in previous_lots.items() if lot is not None}
-    previous_complete: dict[int, bool] = {plant: snap_provider.is_lot_complete(lot) for plant, lot in previous_lots.items()}
+    previous_complete: dict[int, bool] = {plant: lot.active for plant, lot in previous_lots.items()}  # snap_provider.is_lot_complete(lot)
     if is_snap_solution or preprend_snapshot:
         for eq, eq_lots in snap_obj.lots.items():
             if eq not in plants:
@@ -64,9 +64,10 @@ def prepare_lots_for_lot_view(snapshot: str|datetime|None, process: str|None, re
                     match.start_time = lt.start_time
                     match.end_time = lt.end_time
                     match.status = lt.status
+                    match.active = lt.active
                 if preprend_snapshot and eq in previous_lots:  # TODO also show plants without lots but in targets
                     prev_complete = previous_complete[lt.equipment]
-                    current_complete = snap_provider.is_lot_complete(lt)
+                    current_complete = lt.active # snap_provider.is_lot_complete(lt)
                     if (prev_complete and not current_complete) or (previous_lots[eq].end_time is not None and lt.end_time is not None and lt.end_time > previous_lots[eq].end_time):
                         continue
                     if not prev_complete and not current_complete:

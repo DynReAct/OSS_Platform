@@ -173,8 +173,12 @@
             swimlane?.setPlanning(undefined, undefined, undefined, undefined);
             return "";
         }
+        /*
         const completeLotsOnly = snapLots && data.find(lot => lot.lot_complete) !== undefined;
         swimlane.completeLotsOnly = completeLotsOnly;
+        */
+        const activeLotsOnly = snapLots && data.find(lot => lot.active) !== undefined;
+        swimlane.activeLotsOnly = activeLotsOnly;
         swimlane.shiftHorizon = snapLots ? "P1D" : undefined;
         if (shifts) {  // XXX copied from DynReActViz
             const _fixShifts = (shifts) => {

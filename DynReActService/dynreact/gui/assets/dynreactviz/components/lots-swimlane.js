@@ -26,7 +26,7 @@ export class LotsSwimlane extends HTMLElement {
     }
     static get observedAttributes() {
         return ["auto-fetch", "row-size", "lot-height", "lot-color", "lot-sizing", "show-lot-labels", "lot-label-min-width", "new-lot-color", "process", "server",
-            "skip-shifts", "complete-lots-only", "min-status", "shift-horizon"];
+            "skip-shifts", "complete-lots-only", "active-lots-only", "min-status", "shift-horizon"];
     }
     #lanesContainer;
     #tooltipContainer;
@@ -200,6 +200,15 @@ export class LotsSwimlane extends HTMLElement {
         else
             this.removeAttribute("complete-lots-only");
     }
+    get activeLotsOnly() {
+        return this.getAttribute("active-lots-only") !== null;
+    }
+    set activeLotsOnly(activeOnly) {
+        if (activeOnly)
+            this.setAttribute("active-lots-only", "true");
+        else
+            this.removeAttribute("active-lots-only");
+    }
     get minStatus() {
         const status = Number.parseInt(this.getAttribute("min-status"));
         return status >= 0 ? status : undefined;
@@ -365,9 +374,10 @@ export class LotsSwimlane extends HTMLElement {
         });
         this.#lotsOriginal = lots;
         this.#shifts = shifts;
-        const completeOnly = this.completeLotsOnly;
-        if (completeOnly)
+        if (this.completeLotsOnly)
             lots = lots.filter(lot => lot.lot_complete);
+        if (this.activeLotsOnly)
+            lots = lots.filter(lot => lot.active && lot.end_time);
         const minStatus = this.minStatus;
         if (minStatus >= 0)
             lots = lots.filter(lot => lot.status >= minStatus);
@@ -746,6 +756,7 @@ export class LotsSwimlane extends HTMLElement {
                 this.#initProcess(newValue || undefined);
                 break;
             case "complete-lots-only":
+            case "active-lots-only":
             case "min-status":
                 if (this.#lotsOriginal) {
                     // TODO new mthod for this

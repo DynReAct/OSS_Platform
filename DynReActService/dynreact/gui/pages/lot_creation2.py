@@ -950,7 +950,7 @@ def update_plants(snapshot: str,
         dummy_end = datetime(year=3000, month=1,day=1, tzinfo=timezone.utc)
         if current_lots is not None and len(current_lots) > 0:
             # sort by completeness and lot end time
-            lot_entries: list[tuple[Lot, bool, datetime|None]] = sorted([(lot, sp.is_lot_complete(lot), lot.end_time) for lot in current_lots],
+            lot_entries: list[tuple[Lot, bool, datetime|None]] = sorted([(lot, lot.active, lot.end_time) for lot in current_lots],   # (lot, sp.is_lot_complete(lot), lot.end_time)
                                                                         key=lambda tp: (-1 if tp[1] else 0, now - (tp[2] or dummy_end)))
             value = lot_entries[0][0].id if lot_entries[0][1] else None  # preselect the last complete lot
             # This should also work, but it does not => leads to an infinite loop => WHY? => this would allow us to style options differently depending on whether the lot is complete or not
@@ -1574,7 +1574,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
         prev_lot_proc = next((p for p in prev_processes if p in o.lots), None)
         prev_lot_id = o.lots.get(prev_lot_proc)
         prev_lot = all_lots.get(prev_lot_id)
-        if prev_lot is None or not snapshot_provider.is_lot_complete(prev_lot):
+        if prev_lot is None or prev_lot.end_time is None or not prev_lot.active:   # or not snapshot_provider.is_lot_complete(prev_lot):
             _availability_by_order[order] = None
             return None
         lt_times = snapshot_provider.get_order_lot_times(snapshot_obj.timestamp, o.id)

@@ -3,7 +3,8 @@ from typing import Mapping, Sequence
 
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.model import MidTermTargets, ProductionTargets, EquipmentProduction, ProductionPlanning, Site, \
-    EquipmentAvailability, MaterialCategory, SUM_MATERIAL, Lot, PlannedWorkingShift, Snapshot
+    EquipmentAvailability, MaterialCategory, SUM_MATERIAL, Lot, PlannedWorkingShift, Snapshot, StorageLevel, Storage, \
+    Material
 
 
 class ModelUtils:
@@ -447,6 +448,72 @@ class ModelUtils:
         common_horizon = None if any(e not in horizons for e in equipment) else min(horizons.values())
         return common_horizon, horizons, last_orders
 
-
-
+    @staticmethod
+    def storage_content_from_snapshot(snapshot: Snapshot, site: Site) -> dict[str, StorageLevel]:
+        material_by_orders: dict[str, list[Material]] = {}
+        for mat in snapshot.material:
+            if mat.order not in material_by_orders:
+                material_by_orders[mat.order] = []
+            material_by_orders[mat.order].append(mat)
+        storage_by_equipment: dict[int, Storage] = \
+            {e.id: site.get_storage(e.storage_in, do_raise=True) for e in site.equipment if e.storage_in is not None}
+        # outer key: storage, inner key: material class
+        material_levels: dict[str, dict[str, float]] = {}
+        total_weight: dict[str, float] = {}  # by storage
+        for order in snapshot.orders:
+            equipment = order.current_equipment
+            storages = [s for s in (storage_by_equipment.get(e) for e in equipment) if s is not None] \
+                                        if equipment is not None else tuple()
+            if len(storages) == 0:
+                continue
+            shares: dict[str, float] = {}  # share by storage
+            materials = material_by_orders.get(order.id)
+            if len(storages) == 1:
+                shares[storages[0].name_short] = 1
+            elif materials is None or len(materials) == 0:
+                for stg in storages:
+                    shares[stg.name_short] = 1/len(storages)
+            else:
+                for mat in materials:
+                    storage = storage_by_equipment.get(mat.current_equipment)
+                    if storage is not None:
+                        stg_id = storage.name_short
+                        if stg_id not in shares:
+                            shares[stg_id] = 0.
+                        shares[stg_id] += mat.weight / order.actual_weight
+            for storage in storages:
+                stg_id = storage.name_short
+                share = shares.get(stg_id)
+                if share is None or share <= 0:
+                    continue
+                if stg_id not in total_weight:
+                    total_weight[stg_id] = 0.
+                total_weight[stg_id] += order.actual_weight * share
+                ml = order.material_classes
+                if ml is not None:
+                    if stg_id not in material_levels:
+                        material_levels[stg_id] = {}
+                    mat_levels: dict[str, float] = material_levels[stg_id]
+                    for clzz in ml.values():
+                        if clzz == "_sum":
+                            continue
+                        if clzz not in mat_levels:
+                            mat_levels[clzz] = 0.
+                        mat_levels[clzz] += order.actual_weight * share
+        storage_levels: dict[str, StorageLevel] = {}
+        for storage, total in total_weight.items():
+            if total <= 0:
+                continue
+            stg_obj = site.get_storage(storage, do_raise=True)
+            capacity = stg_obj.capacity_weight  # may be None
+            filling_level = total if capacity is None else total/capacity
+            mat_levels = material_levels.get(storage)
+            relative_mat_levels = {mat: level/capacity for mat, level in mat_levels.items()} \
+                if mat_levels is not None and capacity is not None and len(mat_levels) > 0 \
+                else mat_levels if mat_levels is not None and len(mat_levels) > 0 \
+                else None
+            level = StorageLevel(storage=storage, filling_level=filling_level,
+                                 timestamp=snapshot.timestamp, material_levels=relative_mat_levels)
+            storage_levels[storage] = level
+        return storage_levels
 

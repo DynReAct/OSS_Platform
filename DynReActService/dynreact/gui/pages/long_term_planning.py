@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, date, tzinfo, timezone
 from typing import Any, Sequence, Literal, Mapping
 
 import dash
-from dash import html, dcc, callback, Output, Input, clientside_callback, ClientsideFunction, State
+from dash import html, dcc, callback, Output, Input, clientside_callback, ClientsideFunction, State, ALL
 from dash.development.base_component import Component
 
 from dynreact.auth.authentication import dash_authenticated
@@ -192,6 +192,7 @@ def layout(*args, **kwargs):
         structure_portfolio_popup(total_production),
         plant_calendar_popup(),
         storage_init_popup(kwargs.get("snapshot")),   # TODO better selection of snapshot
+        storage_structure_portfolio_popup(),
         ## stores information about the last start time and horizon for which material properties have been set,
         ## in the format {"startTime": startTime, "horizon": horizon}
         #dcc.Store(id="ltp-material-settings", storage_type="memory"),
@@ -239,6 +240,22 @@ def structure_portfolio_popup(initial_production: float):
             ], className="ltp-materials-buttons")
         ], title=""),
         id="ltp-structure-dialog", className="dialog-filled", open=False)
+
+
+# TODO need to remember for which storage the popup was opened
+def storage_structure_portfolio_popup():
+    return html.Dialog(
+        html.Div([
+            html.H3("Storage structure"),  # TODO show storage name
+            # materials_table()
+            html.Div(id="ltp-stg-materials-grid"),
+            html.Div([
+                html.Button("Accept", id="ltp-stg-materials-accept", className="dynreact-button"),
+                html.Button("Reset", id="ltp-stg-materials-reset", className="dynreact-button"),
+                html.Button("Cancel", id="ltp-stg-materials-cancel", className="dynreact-button")
+            ], className="ltp-materials-buttons")
+        ], title=""),
+        id="ltp-stg-structure-dialog", className="dialog-filled", open=False)
 
 
 def plant_calendar_popup():
@@ -897,6 +914,7 @@ def availabilities_changed(availabilities_json: dict[str, any]|None):   # user c
     return graph_stylesheets(av.period[0], av.period[1])
 
 
+# TODO consider selected snapshot for init_from_snap
 @callback(Output("ltp-storage-levels", "data"),
           Input("ltp-storageinit-snap-trigger", "n_clicks"),
           Input("ltp-storageinit-half-trigger", "n_clicks"),
@@ -915,7 +933,27 @@ def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
         return None
     site = state.get_site()
     storages: dict[str, StorageLevel] = {}
-    init_half = "ltp-storageinit-half-trigger" in changed_ids or len(changed_ids) == 0 or (levels is None and "ltp-start-time" in changed_ids)
+    init_half = "ltp-storageinit-half-trigger" in changed_ids
+    init_from_snap = not init_half and "ltp-storageinit-snap-trigger" in changed_ids
+    best_match = start_time
+    if not init_half and not init_from_snap:
+        if "ltp-start-time" in changed_ids:
+            # check first if a suitable snapshot is available
+            sp = state.get_snapshot_provider()
+            last_snap = sp.previous(time=start_time)
+            next_snap = sp.next(time=start_time)
+            best_match = last_snap if next_snap is None else next_snap if last_snap is None else \
+                last_snap if abs((start_time-last_snap).total_seconds()) <= abs((next_snap-start_time).total_seconds()) else next_snap
+            if best_match is not None and abs(best_match - start_time).total_seconds() <= timedelta(hours=24).total_seconds():
+                init_from_snap = True
+        if not init_from_snap:
+            init_half = True
+    if init_from_snap:
+        snap = state.get_snapshot(time=best_match)
+        if snap is None and levels is None:
+            init_half = True
+        elif snap is not None:
+            storages = ModelUtils.storage_content_from_snapshot(snap, state.get_site())
     if init_half:
         for storage in site.storages:
             material_levels = {cl.id: 0.5 * (cl.default_share if cl.default_share is not None else 1 if cl.is_default else 0)  \
@@ -933,10 +971,7 @@ def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
                             material_levels[cl.id] = min(1., material_levels[cl.id] / total_share)
             level = StorageLevel(storage=storage.name_short, filling_level=0.5, timestamp=start_time, material_levels=material_levels)
             storages[storage.name_short] = level
-    if "ltp-storageinit-snap-trigger" in changed_ids:
-        # TODO
-        raise Exception("not implemented yet")
-    if "ltp-start-time" in changed_ids and levels is not None:
+    if not init_half and not init_from_snap and levels is not None:
         storages = TypeAdapter(dict[str, StorageLevel]).validate_json(levels)
         for level in storages.values():
             level.timestamp = start_time
@@ -1041,7 +1076,7 @@ def set_structure_targets_overview(structure: dict[str, float]|None):
     if len(total_value_by_cat) == 0:
         return "To be defined", title, None, None
     first_total = next(v for v in total_value_by_cat.values())
-    if any(v for v in total_value_by_cat.values() if abs(v - first_total) / abs(v + first_total) > epsilon):
+    if any(abs(v - first_total) / abs(v + first_total) > epsilon for v in total_value_by_cat.values()):
         return "Inconsistent state", title, None, None,
     #structure_by_category = {cat: strct for cat, strct in structure_by_category.items() if cat in total_value_by_cat}
     applicable_cats = [cat for cat in categories if cat.id in total_value_by_cat]
@@ -1060,7 +1095,6 @@ def set_structure_targets_overview(structure: dict[str, float]|None):
         Output("ltp-init-storages-result", "children"),
         Input("ltp-storage-levels", "data")
 )
-# TODO currently returns a flat structure, i.e. one div per plant. Better: make it a grid, with 2 divs per plant, also divide between 3 or so columns
 def set_storage_targets_overview(levels: str|None):  # {storage id: StorageLevel}
     title="Click the \"Storage initialization\" button above to define the initial storage content"
     if not levels or not dash_authenticated(config):
@@ -1068,24 +1102,50 @@ def set_storage_targets_overview(levels: str|None):  # {storage id: StorageLevel
     storage_levels = TypeAdapter(dict[str, StorageLevel]).validate_json(levels)
     storages = [s for s in state.get_site().storages if s.name_short in storage_levels]
     divs = [html.Div("Storage id", className="ltp-overview-grid-header"), html.Div("Content", className="ltp-overview-grid-header"),
-            html.Div("Filling level", className="ltp-overview-grid-header")]
+            html.Div("Filling level", className="ltp-overview-grid-header"), html.Div("Material structure", className="ltp-overview-grid-header")]
     for storage in storages:
         lv: StorageLevel|None = storage_levels.get(storage.name_short)
         level: float = lv.filling_level if lv is not None else 0
         capacity = storage.capacity_weight or 0
-        name = html.Div(storage.name_short)
+        title = f"Capacity: {capacity/1000:.3}kt"
+        name = html.Div(storage.name_short, title=title)
         #value_abs = html.Div(f"{(level * capacity)/1000} kt")
         #value_rel = html.Div(f"{round(level * 100)}%")
         value_abs = html.Div([
-            dcc.Input(value=level * capacity / 1000, min=0, max=capacity/1000, type="number", className="ltp-stg-level-abs"),
+            dcc.Input(value=f"{level * capacity / 1000:.3}", min=0, max=capacity/1000, type="number", className="ltp-stg-level-abs"),
             html.Span("kt")
-        ], **{"data-capacity": str(capacity)})
+        ], title=title, **{"data-capacity": str(capacity)})
         value_rel = html.Div([
             dcc.Input(value=round(level * 100), min=0, max=100, type="number", className="ltp-stg-level-abs"),
             html.Span("%")
         ], **{"data-storage": storage.name_short})
-        divs.extend((name, value_abs, value_rel))
+        structure = html.Div([
+            # TODO role
+            #  Input({"role": "plant-lotmax", "id": ALL}, "value"))
+            html.Button("Edit structure", id={"role": "ltp-stg-structure-btn", "id": storage.name_short}, className="dynreact-button-small")
+        ])
+        divs.extend((name, value_abs, value_rel, structure))
     return None, None, divs
+
+"""
+@callback(
+        Output("ltp-stg-structure-dialog", "title"),
+        Input({"role": "ltp-stg-structure-btn", "id": ALL}, "n_clicks"),
+)
+def test_l_(clicks):
+    return f"--{clicks}--"
+"""
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="dialog",
+        function_name="showModal"
+    ),
+    Output("ltp-stg-structure-dialog", "title"),
+    Input({"role": "ltp-stg-structure-btn", "id": ALL}, "n_clicks"),
+    State("ltp-stg-structure-dialog", "id"),
+)
+
 
 
 
@@ -1109,13 +1169,13 @@ clientside_callback(
           Input("ltp-start-end", "data"))  # State or Input?
 def frozen_lot_structure(snapshot: str|None, start_time_type: Literal["now", "nextmonth", "other"]|None, start_end: tuple[str|None, str|None]|None):
     if not dash_authenticated(config) or start_time_type != "now" or not start_end:
-        return None
+        return None, None
     start = state.as_timezone(DatetimeUtils.parse_date(start_end[0]))
     end = state.as_timezone(DatetimeUtils.parse_date(start_end[1]))
     snapshot = DatetimeUtils.parse_date(snapshot)
     snap_obj = state.get_snapshot(time=snapshot)
     if snap_obj is None:
-        return None
+        return None, None
     snap_provider = state.get_snapshot_provider()
     # TODO missing lots from earlier process stages with shortcuts
     frozen_lots = {eq: [lot for lot in lots if snap_provider.is_lot_complete(lot) and

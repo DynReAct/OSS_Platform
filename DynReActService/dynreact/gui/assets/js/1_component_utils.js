@@ -3,7 +3,7 @@
     globalThis.dash_clientside = Object.assign({}, globalThis.dash_clientside, {
         dialog: {
             showModal: function(clicks, dialogId) {
-                if (!clicks)  // prevent initial callback
+                if (!clicks || (Array.isArray(clicks) && clicks.findIndex(cl => cl) < 0))  // prevent initial callback
                     return "";
                 const dialog = document.querySelector("dialog#" + dialogId);
                 if (!dialog) {

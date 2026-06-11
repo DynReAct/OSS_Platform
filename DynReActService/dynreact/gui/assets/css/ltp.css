@@ -108,7 +108,7 @@
 
 .ltp-init-storages-result {
     display: grid;
-    grid-template-columns: repeat(3, auto);
+    grid-template-columns: repeat(4, auto);
     column-gap: 1em;
     row-gap: 0.3em;
 }

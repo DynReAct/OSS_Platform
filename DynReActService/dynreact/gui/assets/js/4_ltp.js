@@ -34,6 +34,51 @@
         return materialGrid?.getSetpoints();
     }
 
+    const _round = (num) => {
+        if (Number.isInteger(num))
+            return num;
+        if (num > 100)
+            return Math.round(num);
+        return Number.parseFloat(JsUtils.formatNumber(num, 4, 5));
+    };
+
+    globalThis.dash_clientside.ltp.initStorageMaterialGrid = function(btn_clicks, storage_levels, gridId) {
+        if (btn_clicks.find(cl => cl !== undefined) === undefined)
+            return;
+        if (!globalThis.customElements.get(materialsTag))
+            globalThis.customElements.define(materialsTag, MaterialsGridLtp);
+        const grid = document.querySelector("#" + gridId);
+        JsUtils.clear(grid);
+        const stg = dash_clientside.callback_context.triggered_id?.id;
+        if (typeof(storage_levels)==="string")
+            storage_levels = JSON.parse(storage_levels);
+        if (!storage_levels || !(stg in storage_levels))
+            return;
+        const site = dynreact?.getSite();
+        const stgObj = site?.storages?.find(s => s.name_short = stg);
+        if (!stgObj)
+            return;
+        const capacity = stgObj.capacity_weight;
+        const excludedMaterial = stgObj.material_constraints?.excluded;
+        let catsIncluded = site.material_categories;
+        if (excludedMaterial) {
+            catsIncluded = catsIncluded
+                .map(cat => {return {...cat, classes: cat.classes.filter(cl => excludedMaterial.indexOf(cl.id) < 0)};})
+                .filter(cat => cat.classes.length > 1);
+        }
+        const level = storage_levels[stg];
+        let materialLevels = level?.material_levels;
+        if (!materialLevels) {
+            const adjustedCategories = JsUtils.defaultMaterialSharesByCategory(catsIncluded, excludedMaterial);
+            catsIncluded = adjustedCategories;
+            const adjustedClasses = adjustedCategories.flatMap(cat => cat.classes);
+            materialLevels = Object.fromEntries(adjustedClasses.map(cl => [cl.id, cl.default_share * capacity]));
+        }
+        materialLevels = Object.fromEntries(Object.entries(materialLevels).map(([mat, value]) => [mat,  _round(value * capacity)]));
+        const el = JsUtils.createElement(materialsTag, {parent: grid});
+        el.setMaterials(catsIncluded, materialLevels, level.filling_level * capacity);
+    }
+
     globalThis.dash_clientside.ltp.initCalendar = function(plantAvailabilities, shifts, plant, startEndTime, divId) {
         if (!globalThis.customElements.get(plantCalendarTag))
             globalThis.customElements.define(plantCalendarTag, PlantCalendar);

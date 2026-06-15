@@ -699,6 +699,20 @@ clientside_callback(
 
 clientside_callback(
     ClientsideFunction(
+        namespace="ltp",
+        function_name="initStorageMaterialGrid"
+    ),
+    Output("ltp-stg-materials-grid", "title"),
+    Input({"role": "ltp-stg-structure-btn", "id": ALL}, "n_clicks"),
+    State("ltp-storage-levels", "data"),   # {stg id: StorageLevel}
+    State("ltp-stg-materials-grid", "id"),
+    #config_prevent_initial_callbacks=True
+)
+
+
+
+clientside_callback(
+    ClientsideFunction(
         namespace="dialog",
         function_name="showModal"
     ),
@@ -1119,13 +1133,18 @@ def set_storage_targets_overview(levels: str|None):  # {storage id: StorageLevel
             dcc.Input(value=round(level * 100), min=0, max=100, type="number", className="ltp-stg-level-abs"),
             html.Span("%")
         ], **{"data-storage": storage.name_short})
+        # XXX here we assume mat does not contain "-", since this is converted to camelCase in dataset!
+        mat_dict: dict[str, float|str] = ({f"data-mat_{mat}": level for mat, level in lv.material_levels.items()} if lv is not None and lv.material_levels is not None else None) or {}
+        mat_dict["data-storage"] = storage.name_short
+        if storage.material_constraints is not None and len(storage.material_constraints.excluded) > 0:
+            mat_dict["data-excluded"] = ",".join(storage.material_constraints.excluded)
         structure = html.Div([
-            # TODO role
-            #  Input({"role": "plant-lotmax", "id": ALL}, "value"))
-            html.Button("Edit structure", id={"role": "ltp-stg-structure-btn", "id": storage.name_short}, className="dynreact-button-small")
+            html.Button("Edit structure", id={"role": "ltp-stg-structure-btn", "id": storage.name_short}, className="dynreact-button-small", **mat_dict)
         ])
         divs.extend((name, value_abs, value_rel, structure))
     return None, None, divs
+
+
 
 """
 @callback(
@@ -1145,9 +1164,6 @@ clientside_callback(
     Input({"role": "ltp-stg-structure-btn", "id": ALL}, "n_clicks"),
     State("ltp-stg-structure-dialog", "id"),
 )
-
-
-
 
 clientside_callback(
     ClientsideFunction(

@@ -216,6 +216,8 @@ def layout(*args, **kwargs):
         # as output from the calendar popup
         dcc.Store(id="ltp-availability-buffer", storage_type="memory"),
         dcc.Store(id="ltp-storage-levels"),  # None or {storage id: StorageLevel}
+        dcc.Store(id="ltp-stg-materials-selected", storage_type="memory"),  # storage selected for editing mateiral structure
+        dcc.Store(id="ltp-stg-materials-update", storage_type="memory"),    # updated structure for selected storage
         dcc.Store(id="ltp-min-capacity", storage_type="memory", data=100_000),
         dcc.Store(id="ltp-result-message", storage_type="memory"),
         dcc.Store(id="ltp-start-end", storage_type="memory"),   # [start date, end date], e.g. ["2026-05-01", "2026-06-01"]
@@ -700,16 +702,25 @@ clientside_callback(
 clientside_callback(
     ClientsideFunction(
         namespace="ltp",
+        function_name="getMaterialSetpoints"
+    ),
+    Output("ltp-stg-materials-update", "data"),
+    Input("ltp-stg-materials-accept", "n_clicks"),
+    State("ltp-stg-materials-grid", "id"),
+    #config_prevent_initial_callbacks=True
+)
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="ltp",
         function_name="initStorageMaterialGrid"
     ),
-    Output("ltp-stg-materials-grid", "title"),
+    Output("ltp-stg-materials-selected", "data"),  # the currently selected storage for structure editing
     Input({"role": "ltp-stg-structure-btn", "id": ALL}, "n_clicks"),
     State("ltp-storage-levels", "data"),   # {stg id: StorageLevel}
     State("ltp-stg-materials-grid", "id"),
     #config_prevent_initial_callbacks=True
 )
-
-
 
 clientside_callback(
     ClientsideFunction(
@@ -737,10 +748,32 @@ clientside_callback(
         namespace="dialog",
         function_name="closeModal"
     ),
+    Output("ltp-stg-materials-cancel", "title"),
+    Input("ltp-stg-materials-cancel", "n_clicks"),
+    State("ltp-stg-structure-dialog", "id"),
+    State("ltp-stg-materials-cancel", "title"),
+)
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="dialog",
+        function_name="closeModal"
+    ),
     Output("ltp-materials-accept", "title"),
     Input("ltp-materials-accept", "n_clicks"),
     State("ltp-structure-dialog", "id"),
     State("ltp-materials-accept", "title"),
+)
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="dialog",
+        function_name="closeModal"
+    ),
+    Output("ltp-stg-materials-accept", "title"),
+    Input("ltp-stg-materials-accept", "n_clicks"),
+    State("ltp-stg-structure-dialog", "id"),
+    State("ltp-stg-materials-accept", "title"),
 )
 
 clientside_callback(
@@ -934,9 +967,11 @@ def availabilities_changed(availabilities_json: dict[str, any]|None):   # user c
           Input("ltp-storageinit-half-trigger", "n_clicks"),
           Input("ltp-storageinit-clear", "n_clicks"),
           Input("ltp-start-time", "value"),
-          State("ltp-storage-levels", "data"),)
+          Input("ltp-stg-materials-update", "data"),
+          State("ltp-storage-levels", "data"),
+          State("ltp-stg-materials-selected", "data"),)
           #config_prevent_initial_callbacks=True)
-def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
+def set_storage_levels(_, __, ___, start_time: datetime|str, storage_update: dict[str, float]|None, levels: str|None, storage_for_update: str|None):
     if not dash_authenticated(config):
         return None
     start_time = DatetimeUtils.parse_date(start_time)
@@ -947,10 +982,11 @@ def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
         return None
     site = state.get_site()
     storages: dict[str, StorageLevel] = {}
+    user_material_update: bool = "ltp-stg-materials-update" in changed_ids and storage_update is not None and levels is not None and storage_for_update is not None
     init_half = "ltp-storageinit-half-trigger" in changed_ids
     init_from_snap = not init_half and "ltp-storageinit-snap-trigger" in changed_ids
     best_match = start_time
-    if not init_half and not init_from_snap:
+    if not init_half and not init_from_snap and not user_material_update:
         if "ltp-start-time" in changed_ids:
             # check first if a suitable snapshot is available
             sp = state.get_snapshot_provider()
@@ -989,6 +1025,10 @@ def set_storage_levels(_, __, ___, start_time: datetime|str, levels: str|None):
         storages = TypeAdapter(dict[str, StorageLevel]).validate_json(levels)
         for level in storages.values():
             level.timestamp = start_time
+        if user_material_update and storage_for_update in storages:
+            stg_obj = site.get_storage(storage_for_update, do_raise=True)
+            capacity = stg_obj.capacity_weight
+            storages[storage_for_update].material_levels = {mat: value/capacity for mat, value in storage_update.items()}
     if len(storages) == 0:
         return dash.no_update
     return TypeAdapter(dict[str, StorageLevel]).dump_json(storages).decode("utf-8")
@@ -1145,7 +1185,6 @@ def set_storage_targets_overview(levels: str|None):  # {storage id: StorageLevel
     return None, None, divs
 
 
-
 """
 @callback(
         Output("ltp-stg-structure-dialog", "title"),
@@ -1164,6 +1203,7 @@ clientside_callback(
     Input({"role": "ltp-stg-structure-btn", "id": ALL}, "n_clicks"),
     State("ltp-stg-structure-dialog", "id"),
 )
+
 
 clientside_callback(
     ClientsideFunction(

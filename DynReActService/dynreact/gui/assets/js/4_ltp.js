@@ -44,7 +44,7 @@
 
     globalThis.dash_clientside.ltp.initStorageMaterialGrid = function(btn_clicks, storage_levels, gridId) {
         if (btn_clicks.find(cl => cl !== undefined) === undefined)
-            return;
+            return undefined;
         if (!globalThis.customElements.get(materialsTag))
             globalThis.customElements.define(materialsTag, MaterialsGridLtp);
         const grid = document.querySelector("#" + gridId);
@@ -53,11 +53,11 @@
         if (typeof(storage_levels)==="string")
             storage_levels = JSON.parse(storage_levels);
         if (!storage_levels || !(stg in storage_levels))
-            return;
+            return undefined;
         const site = dynreact?.getSite();
         const stgObj = site?.storages?.find(s => s.name_short = stg);
         if (!stgObj)
-            return;
+            return undefined;
         const capacity = stgObj.capacity_weight;
         const excludedMaterial = stgObj.material_constraints?.excluded;
         let catsIncluded = site.material_categories;
@@ -77,6 +77,7 @@
         materialLevels = Object.fromEntries(Object.entries(materialLevels).map(([mat, value]) => [mat,  _round(value * capacity)]));
         const el = JsUtils.createElement(materialsTag, {parent: grid});
         el.setMaterials(catsIncluded, materialLevels, level.filling_level * capacity);
+        return stg;
     }
 
     globalThis.dash_clientside.ltp.initCalendar = function(plantAvailabilities, shifts, plant, startEndTime, divId) {

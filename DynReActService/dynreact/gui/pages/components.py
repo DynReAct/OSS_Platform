@@ -83,8 +83,8 @@ def prepare_lots_for_lot_view(snapshot: str|datetime|None, process: str|None, re
         o.actual_weight if o.actual_weight is not None else (o.target_weight if o.target_weight is not None else 0)
         for o in orders if o is not None) for lot, orders in orders_by_lot.items()}
     equipment_with_missing_time_info = set(lot.equipment for lot in lots if lot.start_time is None or lot.end_time is None)
-    equipment_timing_info = {e: [lot.weight/((lot.end_time - lot.start_time).total_seconds()/3_600) for lot in lots if lot.equipment == e and lot.start_time is not None and lot.end_time is not None and lot.weight is not None]
-                             for e in equipment_with_missing_time_info}
+    equipment_timing_info = {e: [lot.weight/((lot.end_time - lot.start_time).total_seconds()/3_600) for lot in lots if lot.equipment == e and lot.start_time is not None and
+                                 lot.end_time is not None and lot.end_time > lot.start_time and lot.weight is not None] for e in equipment_with_missing_time_info}
     # tons per hour
     throughput_capacity: dict[int, float] = {e: plants[e].throughput_capacity or (np.mean(equipment_timing_info[e]) if len(equipment_timing_info[e]) > 0 else 1.) for e in equipment_with_missing_time_info}
     start_time_by_equipment: dict[int, datetime] = {e: max([lt.end_time for lt in lots if lt.end_time is not None and lt.equipment == e] + [snapshot]) for e in equipment_with_missing_time_info}

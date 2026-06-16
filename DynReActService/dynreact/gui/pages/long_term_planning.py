@@ -1243,7 +1243,7 @@ def frozen_lot_structure(snapshot: str|None, start_time_type: Literal["now", "ne
     total_weight = sum(lot.weight or 0. for lot in final_lots)
     material_weights = {}
     for lot in (lt for lt in final_lots if lt.material_weights is not None):
-        share = 1 if lot.end_time <= end and lot.start_time >= start else (min(lot.end_time, end) - max(lot.start_time, start))/(lot.end_time - lot.start_time)
+        share = 1 if lot.end_time <= end and lot.start_time >= start else 0 if lot.end_time <= lot.start_time else (min(lot.end_time, end) - max(lot.start_time, start))/(lot.end_time - lot.start_time)
         for mat, weight in lot.material_weights.items():
             material_weights[mat] = material_weights.get(mat, 0.) + weight*share
     final_mat_structure = {}

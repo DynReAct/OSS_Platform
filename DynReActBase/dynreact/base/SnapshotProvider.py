@@ -9,8 +9,8 @@ from datetime import datetime, timezone, timedelta
 from typing import Iterator, Literal, Iterable, Any, Sequence, Callable
 
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import Snapshot, Site, Lot, Process, Material, Order, MaterialCategory, MaterialClass, \
-    ServiceMetrics, LotTimes
+from dynreact.base.model import Snapshot, Site, Lot, Process, Material, Order, MaterialCategory, MaterialClass, LotTimes
+from dynreact.base.monitoring import ServiceMetrics
 
 
 # Note: requires Python >= 3.11

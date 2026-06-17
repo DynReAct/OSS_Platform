@@ -67,6 +67,10 @@ def layout(*args, **kwargs):
                         html.Div(snap_links, className="submenu-content")
                     ])
                 ], className="menu-link login-required", title="Open snapshots tab")
+    mtp_links = [dcc.Link("Lots planned", id="menu-lots-planned_header", className="menu-link", href="/dash/lots/planned", title="Lots planned"),
+                dcc.Link("Lot creation", id="menu-lots2-creation_header", className="menu-link", href="/dash/lots/create2", title="Lots creation (new)")]
+    if state.has_batch_mtp():
+        mtp_links.append(dcc.Link("Batch job", id="menu-snaps-batch_header", className="menu-link", href="/dash/lots/batch", title="Lot creation batch jobs"))
     menu_container = html.Div([
         dcc.Location(id="menu-url"),
         language,
@@ -95,11 +99,7 @@ def layout(*args, **kwargs):
             html.Div([
                     html.Div([
                         html.Div("Lot creation", id="menu-lots_header"),
-                        html.Div([
-                            dcc.Link("Lots planned", id="menu-lots-planned_header", className="menu-link", href="/dash/lots/planned", title="Lots planned"),
-                            #dcc.Link("Lot creation", id="menu-lots-creation_header", className="menu-link", href="/dash/lots/create", title="Lots creation"),
-                            dcc.Link("Lot creation", id="menu-lots2-creation_header", className="menu-link", href="/dash/lots/create2", title="Lots creation (new)")
-                        ], className="submenu-content")
+                        html.Div(mtp_links, className="submenu-content")
                     ]),
 
                     #html.Select([

@@ -21,6 +21,7 @@ from dynreact.base.impl.AggregationPersistence import AggregationPersistence
 from dynreact.base.impl.AggregationProviderImpl import AggregationProviderImpl
 from dynreact.base.impl.MemoryResultsPersistence import MemoryResultsPersistence
 from dynreact.base.model import Snapshot, Site, ProductionPlanning, ProductionTargets, Material, Lot
+from dynreact.base.monitoring import LotsBatchJobStatistics
 from dynreact.lots_optimization import LotCreator
 from dynreact.AggregateResultsPersistence import AggregateResultsPersistence
 
@@ -70,6 +71,15 @@ class DynReActSrvState:
         if self._config.lots_batch_config:
             from dynreact.batch import LotsBatchOptimizationJob
             self._lots_batch_job = LotsBatchOptimizationJob(self._config, self)
+
+    def has_batch_mtp(self) -> bool:
+        return self._lots_batch_job is not None
+
+    def get_batch_mtp_data(self) -> LotsBatchJobStatistics|None:
+        if self._lots_batch_job is None:
+            return None
+        stats = self._lots_batch_job.stats()
+        return stats
 
     def as_timezone(self, dtm: datetime) -> datetime:
         """

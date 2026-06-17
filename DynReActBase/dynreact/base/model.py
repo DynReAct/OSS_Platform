@@ -867,30 +867,3 @@ class AggregatedStorageContent(Model):
     content_by_storage: dict[str, AggregatedMaterial]
     content_by_process: dict[str, AggregatedMaterial]
     content_by_equipment: dict[int, AggregatedMaterial]
-
-
-class ServiceHealth(Model):
-
-    status: int
-    "0: ok"
-    running_since: datetime|None=None
-
-
-class Metric(Model):
-    id: str
-    labels: dict[str, str]|None=None
-
-
-class PrimitiveMetric(Metric):
-    value: float|int
-
-
-class Histogram(Metric):
-    data: list[float]
-    buckets: list[float]
-    include_infinity: bool=True
-
-
-class ServiceMetrics(Model):
-    service_id: str
-    metrics: Sequence[Metric]

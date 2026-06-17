@@ -7,7 +7,8 @@ import requests
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation, PlantPerformanceInput, \
     PerformanceModelMetadata, PlantPerformanceResults, PlantPerformanceResultsFailed, PlantPerformanceResultsSuccess
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import Site, Order, Material, ServiceHealth
+from dynreact.base.model import Site, Order, Material
+from dynreact.base.monitoring import ServiceHealth
 
 
 @dataclasses.dataclass

@@ -1,7 +1,8 @@
 from typing import Sequence
 
 from dynreact.base.PermissionManager import PermissionManager
-from dynreact.base.model import Lot, Site, Snapshot, ServiceMetrics
+from dynreact.base.model import Lot, Site, Snapshot
+from dynreact.base.monitoring import ServiceMetrics
 
 
 class LotSink:

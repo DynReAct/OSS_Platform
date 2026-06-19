@@ -39,6 +39,7 @@ class ServiceMetrics(Model):
 # =============================================== #
 
 class LotCreationProcessStatistics(Model):
+    solution_id: str
     order_backlog_count: int
     order_backlog_tons: float
     lots_created: int

@@ -53,7 +53,7 @@ class LotsBatchOptimizationJob:
     TODO use logging over print
     """
 
-    _base_stats: LotCreationProcessStatistics = LotCreationProcessStatistics(order_backlog_count=0, order_backlog_tons=0., lots_created=0,
+    _base_stats: LotCreationProcessStatistics = LotCreationProcessStatistics(solution_id="", order_backlog_count=0, order_backlog_tons=0., lots_created=0,
         orders_assigned=0, tons_assigned=0., tons_target=0.,  objective_value=0., equipment=tuple(), missing_material=0,
         material_insufficient_for_target=0, lots_exceed_planning_horizon=0, errors=0)
 
@@ -139,13 +139,14 @@ class LotsBatchOptimizationJob:
         reference_duration: timedelta = site.lot_creation.duration if site.lot_creation is not None else timedelta(days=1)
         planning_horizon: timedelta = self._config.period
         now = DatetimeUtils.now().astimezone()
+        snap_now = snapshot.astimezone()
         # this is the generic period, but we'll adapt it further for each process stage depending on the horizon of existing lots
-        period = (now, now + planning_horizon)
+        period = (snap_now, snap_now + planning_horizon)
         lot_size_to_tuple = lambda x: x if x is None else (x.min, x.max)
         all_orders = {o.id: o for o in snap.orders}
         do_append: bool = self._config.append_period
         if do_append:
-            period = (now, now + self._config.max_equipment_horizon)
+            period = (snap_now, snap_now + self._config.max_equipment_horizon)
         stats: dict[str, LotCreationProcessStatistics] = {proc.process: LotsBatchOptimizationJob._base_stats.model_copy(deep=True) for proc in self._config.processes}
         for proc in self._config.processes:
             if self._stopped.is_set():
@@ -157,8 +158,8 @@ class LotsBatchOptimizationJob:
                 equipment = site.get_process_equipment(process)
                 equipment_ids = [e.id for e in equipment]
                 # Here the hours=8 offset in the lot.end_time condition is added to ensure that the last order of an existing lot that is about to be finished can be considered
-                existing_lots: list[Lot] = [lot for eq, lots in snap.lots.items() if eq in equipment_ids for lot in lots if   # TODO lot status filter correct?
-                        (lot.active and lot.start_time is not None and lot.end_time is not None and lot.end_time > period[0] - timedelta(hours=8) and lot.start_time < period[1])]
+                existing_lots: list[Lot] = [lot for eq, lots in snap.lots.items() if eq in equipment_ids for lot in lots if   
+                        (lot.active and lot.start_time is not None and lot.end_time is not None and lot.end_time > period[0] - timedelta(hours=8))]
                 lots_horizon, equipment_horizons, last_orders = ModelUtils.lots_horizon(equipment_ids, existing_lots)
                 if lots_horizon is not None and lots_horizon >= period[1]:
                     stat.lots_exceed_planning_horizon += 1
@@ -262,7 +263,8 @@ class LotsBatchOptimizationJob:
                 opti = algo.create_instance(proc.process, snap, costs, targets=final_targets, initial_solution=initial_solution, orders=eligible_orders)
                 # TODO parameters
                 time_id: str = DatetimeUtils.format(DatetimeUtils.now(), use_zone=False).replace("-", "").replace(":","").replace("T", "")
-                listener = FrontendOptimizationListener(proc.process + "_" + time_id + "_batch", persistence, store_results, opti, timeout=proc.max_duration)
+                solution_id = proc.process + "_" + time_id + "_batch"
+                listener = FrontendOptimizationListener(solution_id, persistence, store_results, opti, timeout=proc.max_duration)
                 if custom_listener is not None:
                     opti.add_listener(custom_listener)
                 t0 = time.time()
@@ -277,6 +279,7 @@ class LotsBatchOptimizationJob:
                     lots_created = len(all_lots)
                     tons_assigned = sum(lot.weight or 0 for lot in all_lots)
                     orders_assigned = sum(len(lot.orders) for lot in all_lots)
+                    stat.solution_id = solution_id
                     stat.objective_value = objective
                     stat.lots_created = lots_created
                     stat.orders_assigned = orders_assigned

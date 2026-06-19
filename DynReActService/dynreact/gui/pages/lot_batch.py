@@ -59,9 +59,8 @@ def set_stats(_):
             equipment_names = [eq.name or eq.name_short or str(eq.id) for eq in equipment]
             reason = "An error occurred" if results.errors > 0 else "Not enough material for lot creation" if results.missing_material \
                     else "Existing lots exceed planning horizon" if results.lots_exceed_planning_horizon else ""
-            # TODO solution id
-            link = dcc.Link("Results", href=f"/dash/lots/planned?snapshot={DatetimeUtils.format(state.as_timezone(stats.previous_snapshot), use_zone=True)}&process={proc}",
-                            target="_blank", title="Open results in new tab") if results.lots_created > 0 else None
+            href = f"/dash/lots/planned?snapshot={DatetimeUtils.format(state.as_timezone(stats.previous_snapshot), use_zone=True)}&process={proc}&solution={results.solution_id}"
+            link = dcc.Link("Results", href=href, target="_blank", title="Open results in new tab") if results.lots_created > 0 else html.Span()
             children.extend([html.Span(proc, title=proc_obj.name or proc_obj.name_short),
                  html.Span(f"{results.lots_created}"), link, html.Span(f"{equipment_names}"), html.Span(f"{results.order_backlog_count}"),
                  html.Span(f"{results.orders_assigned}"), html.Span(f"{results.order_backlog_tons:.4g}"), html.Span(f"{results.tons_assigned:.4g}"),

@@ -7,6 +7,7 @@ node {
     env.LOCAL_REGISTRY = LOCAL_REGISTRY
     env.IMAGE_TAG = IMAGE_TAG
     env.SHORT_TERM_PLANNING_PARAMS = "default+file:/repo/ShortTermPlanning/tests/stp_context_oss_test.json"
+    env.EXPECTED_STP_PROFILE = "oss"
     env.CONTAINER_NAME_PREFIX = "JENKINS_OSS_TEST_${env.BUILD_ID}"
     env.DOCKER_NETWORK = "host"
     env.PERF_URL = "http://192.168.111.11:5027"
@@ -86,6 +87,7 @@ node {
           -e PERF_URL="$PERF_URL" \\
           -e TRANSPORT_TIMES_URL="$TRANSPORT_TIMES_URL" \\
           -e SHORT_TERM_PLANNING_PARAMS="$SHORT_TERM_PLANNING_PARAMS" \\
+          -e EXPECTED_STP_PROFILE="$EXPECTED_STP_PROFILE" \\
           -e CONTAINER_NAME_PREFIX="$CONTAINER_NAME_PREFIX" \\
           -e LOCAL_REGISTRY="$LOCAL_REGISTRY" \\
           -e IMAGE_NAME="$IMAGE_NAME" \\
@@ -137,7 +139,7 @@ runStageWithCleanup('Run Scenario 0') {
 
 
     runStageWithCleanup('Run Scenario 1') {
-        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'EXPECTED_STP_PROFILE', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests

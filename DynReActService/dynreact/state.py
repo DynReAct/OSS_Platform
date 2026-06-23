@@ -61,6 +61,8 @@ class DynReActSrvState:
         self._coils_by_orders_cache: dict[datetime, dict[str, list[Material]]] = {}
         self._stp_page = None
         self._stp = None
+        self._moa_page = None
+        self._moa_loaded = False
         self._aggregation: AggregationProvider|None = None
         self._aggregation_persistence: AggregationPersistence|None = None
         self._optimization_state = LotCreator()
@@ -307,6 +309,15 @@ class DynReActSrvState:
 
     def get_lot_sinks(self, if_exists: bool=False) -> dict[str, LotSink]:
         return self._plugins.get_lot_sinks()
+
+    def has_material_order_allocation_page(self):
+        return self._config.material_order_allocation_frontend is not None
+
+    def get_material_order_allocation_page(self):
+        if not self._moa_loaded:
+            self._moa_loaded = True
+            self._moa_page = self._plugins.load_material_order_allocation_frontend()
+        return self._moa_page
 
     def get_stp_page(self):
         if self._stp_page is None:

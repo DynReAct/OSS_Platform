@@ -27,8 +27,8 @@
   "ltp": {
     "title": "Langzeitplanung"
   },
-  "coa": {
-    "title": "Ring-Auftrag Zuordnung"
+  "moa": {
+    "title": "Material-Auftrag Zuordnung"
   },
   "lots": {
     "title": "Loserzeugung"

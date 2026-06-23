@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Sequence
 
@@ -25,6 +26,12 @@ app = dash.Dash(__name__, server=server, routes_pathname_prefix="/", requests_pa
 # app = dash.Dash(__name__, server=server,  url_base_pathname="/dash/",
 #                 assets_folder="assets", suppress_callback_exceptions=False, title="DynReAct",
 #                 use_pages=True, pages_folder="pages")
+
+if config.preload_dash_bootstrap:
+    try:
+        import dash_bootstrap_components
+    except ImportError as e:
+        logging.getLogger("dynreact.dash_app").warning(f"Failed to load dash-bootstrap-components: {e}")
 
 if config.auth_method is not None:
     secret_key = os.getenv("FLASK_SESSION_KEY")
@@ -71,6 +78,54 @@ def layout(*args, **kwargs):
                 dcc.Link("Lot creation", id="menu-lots2-creation_header", className="menu-link", href="/dash/lots/create2", title="Lots creation (new)")]
     if state.has_batch_mtp():
         mtp_links.append(dcc.Link("Batch job", id="menu-snaps-batch_header", className="menu-link", href="/dash/lots/batch", title="Lot creation batch jobs"))
+    moa_link = None
+    if state.has_material_order_allocation_page():
+        moa_link = dcc.Link("Material-order allocation", id="menu-moa_header", className="menu-link login-required", href="/dash/moa", title="Open material order allocation tab")
+    menu_entries = [
+        dcc.Link("Site", id="menu-site_header", className="menu-link login-required", href="/dash/site", title="Site"),
+        #dcc.Link("Long term planning", id="menu-ltp_header", className="menu-link login-required", href="/dash/ltp", title="Open long term planning tab"),
+        html.Div([
+            html.Div([
+                html.Div("Long term planning", id="menu-ltp_header"),
+                html.Div([
+                    dcc.Link("Results", id="menu-ltp-planned_header", className="menu-link", href="/dash/ltp/planned", title="Long term planning results"),
+                    dcc.Link("Long term planning", id="menu-ltp-new_header", className="menu-link", href="/dash/ltp", title="Open long term planning tab"),
+                    dcc.Link("Equipment performance", id="menu-ltp-perf_header", className="menu-link", href="/dash/ltp/performance", title="Open equipment performance tab")
+                ], className="submenu-content")
+            ]),
+        ], className="menu-link login-required", title="Open long term planning tab"),
+        moa_link,
+        #dcc.Link("Lot creation", id="menu-lots_header", className=["menu-link"], href="/dash/lots", title="Open lot creation tab"),
+        html.Div([
+                html.Div([
+                    html.Div("Lot creation", id="menu-lots_header"),
+                    html.Div(mtp_links, className="submenu-content")
+                ]),
+
+                #html.Select([
+                #  html.Option(label="test", value="test", selected=False)
+                #], id="menu-lots-selector")
+            ], className="menu-link login-required", title="Open lot creation tab"),
+        dcc.Link("Short term planning", id="menu-agents_header", className="menu-link login-required",
+                 href="/dash/stp", title="Open short term planning tab"),
+        snapshot_link,
+        html.Div([
+            html.Div([
+                html.Div("Performance models", id="menu-perf_header"),
+                html.Div([
+                    dcc.Link("Quality", id="menu-perf-quality_header", className="menu-link", href="/dash/perfmodels", title="Open quality performance models tab"),
+                    dcc.Link("Energy", id="menu-perf-energy_header", className="menu-link", href="/dash/perfmodels/energy", title="Open energy performance models tab"),
+                ], className="submenu-content")
+            ]),
+        ], className="menu-link login-required", title="Open plant performance models tabs"),
+        html.Div(id="menu-user_header"),
+        html.Div([
+            html.Img(src="/dash/assets/icons/globe.svg", role="img"),
+            dcc.Dropdown(id="menu-lang-select", options=[{"label": "English", "value": "en"},
+                                                         {"label": "Deutsch", "value": "de"},
+                                                         {"label": "Español", "value": "es"}])],
+                className="lang-selector", title="Select the language"),
+    ]
     menu_container = html.Div([
         dcc.Location(id="menu-url"),
         language,
@@ -81,51 +136,7 @@ def layout(*args, **kwargs):
         #html.Div("DynReAct", className="dynreact-header"),
         html.Img(src=app.get_asset_url(DYNREACT_LOGO), className="menu-logo"),
         html.Img(src=app.get_asset_url(DYNREACT_BACKGROUND), className="menu-background"),
-        html.Div([
-            dcc.Link("Site", id="menu-site_header", className="menu-link login-required", href="/dash/site", title="Site"),
-            #dcc.Link("Long term planning", id="menu-ltp_header", className="menu-link login-required", href="/dash/ltp", title="Open long term planning tab"),
-            html.Div([
-                html.Div([
-                    html.Div("Long term planning", id="menu-ltp_header"),
-                    html.Div([
-                        dcc.Link("Results", id="menu-ltp-planned_header", className="menu-link", href="/dash/ltp/planned", title="Long term planning results"),
-                        dcc.Link("Long term planning", id="menu-ltp-new_header", className="menu-link", href="/dash/ltp", title="Open long term planning tab"),
-                        dcc.Link("Equipment performance", id="menu-ltp-perf_header", className="menu-link", href="/dash/ltp/performance", title="Open equipment performance tab")
-                    ], className="submenu-content")
-                ]),
-            ], className="menu-link login-required", title="Open long term planning tab"),
-            dcc.Link("Coil-order allocation", id="menu-coa_header", className="menu-link login-required", href="/dash/coa", title="Open coil order allocation tab"),
-            #dcc.Link("Lot creation", id="menu-lots_header", className=["menu-link"], href="/dash/lots", title="Open lot creation tab"),
-            html.Div([
-                    html.Div([
-                        html.Div("Lot creation", id="menu-lots_header"),
-                        html.Div(mtp_links, className="submenu-content")
-                    ]),
-
-                    #html.Select([
-                    #  html.Option(label="test", value="test", selected=False)
-                    #], id="menu-lots-selector")
-                ], className="menu-link login-required", title="Open lot creation tab"),
-            dcc.Link("Short term planning", id="menu-agents_header", className="menu-link login-required",
-                     href="/dash/stp", title="Open short term planning tab"),
-            snapshot_link,
-            html.Div([
-                html.Div([
-                    html.Div("Performance models", id="menu-perf_header"),
-                    html.Div([
-                        dcc.Link("Quality", id="menu-perf-quality_header", className="menu-link", href="/dash/perfmodels", title="Open quality performance models tab"),
-                        dcc.Link("Energy", id="menu-perf-energy_header", className="menu-link", href="/dash/perfmodels/energy", title="Open energy performance models tab"),
-                    ], className="submenu-content")
-                ]),
-            ], className="menu-link login-required", title="Open plant performance models tabs"),
-            html.Div(id="menu-user_header"),
-            html.Div([
-                html.Img(src="/dash/assets/icons/globe.svg", role="img"),
-                dcc.Dropdown(id="menu-lang-select", options=[{"label": "English", "value": "en"},
-                                                             {"label": "Deutsch", "value": "de"},
-                                                             {"label": "Español", "value": "es"}])],
-                    className="lang-selector", title="Select the language"),
-        ], id="main-menu", className="main-menu")
+        html.Div(menu_entries, id="main-menu", className="main-menu")
     ],
     className="menu-container", id="menu")  # id should match outer key in translation file
     # see https://dash.plotly.com/urls#query-strings

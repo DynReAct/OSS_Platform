@@ -1,5 +1,6 @@
 import importlib
 import importlib.util
+import logging
 import sys
 import traceback
 from typing import Any
@@ -39,6 +40,8 @@ from dynreact.module_loader import instantiate_first_matching, resolve_explicit_
 
 class Plugins:
 
+    _LOG_ID = "dynreact.plugins.Plugins"
+
     def __init__(self, config: DynReActSrvConfig):
         self._config = config
         self._profile: str|None = config.profile
@@ -58,12 +61,12 @@ class Plugins:
         self._permissions: PermissionManager|None = None
 
     @staticmethod
-    def _stp_error_page(stp: str, error: Exception|None = None):
+    def _module_error_page(module: str, module_id: str, module_name: str, error: Exception | None = None):
         from dash import html
-        msg = f"Failed to load STP frontend '{stp}'."
+        msg = f"Failed to load {module_id} frontend '{module}'."
         details = str(error) if error is not None else "Unknown error"
         return html.Div([
-            html.H2("Short Term Planning Unavailable"),
+            html.H2(f"{module_name} Unavailable"),
             html.P(msg),
             html.Pre(details, style={"whiteSpace": "pre-wrap"}),
             html.P("Check that the frontend package is installed and that its Python dependencies are available."),
@@ -231,7 +234,7 @@ class Plugins:
             except Exception as exc:
                 print("Failed to load standard Agents page")
                 traceback.print_exc()
-                return Plugins._stp_error_page(stp, exc)
+                return Plugins._module_error_page(stp, "STP", "Short Term Planning", exc)
         try:
             modl = importlib.import_module(stp)
             layout = getattr(modl, "layout", None)
@@ -259,7 +262,38 @@ class Plugins:
                 print(f"An error occurred loading the STP frontend {stp}")
                 traceback.print_exc()
                 import_error = exc
-        return Plugins._stp_error_page(stp, import_error)
+        return Plugins._module_error_page(stp, "STP", "Short Term Planning", import_error)
+
+    def load_material_order_allocation_frontend(self):
+        moa = self._config.material_order_allocation_frontend
+        if not moa:
+            return None
+        try:
+            modl = importlib.import_module(moa)
+            layout = getattr(modl, "layout", None)
+            if layout is not None:
+                return layout
+        except Exception as exc:
+            logging.getLogger(Plugins._LOG_ID).error(f"An error occurred loading the MOA frontend {moa}: {exc}")
+            import_error = exc
+        else:
+            import_error = None
+
+        importers = iter(sys.meta_path)
+        for importer in importers:
+            try:
+                spec_res = importer.find_spec(moa, path=None)
+                if spec_res is not None:
+                    modl = importlib.util.module_from_spec(spec_res)
+                    spec_res.loader.exec_module(modl)
+                    layout = getattr(modl, "layout", None)
+                    if layout is not None:
+                        sys.modules[moa] = modl
+                        return layout
+            except Exception as exc:
+                logging.getLogger(Plugins._LOG_ID).error(f"An error occurred loading the MOA frontend {moa}: {exc}")
+                import_error = exc
+        return Plugins._module_error_page(moa, "MOA", "Material-order allocation", import_error)
 
     @staticmethod
     def _load_plant_performance_model(config: str, site: Site) -> PlantPerformanceModel|None:

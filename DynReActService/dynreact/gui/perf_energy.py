@@ -82,6 +82,21 @@ def _number(value: Any, default: float = 0.0) -> float:
     return float(stripped.replace(",", "."))
 
 
+def _trim_prediction_outliers(values: list[float], sigma_factor: float = 3.0) -> list[float]:
+    """Drop extreme model predictions beyond mean +/- sigma_factor * sd."""
+    if len(values) < 3:
+        return values
+    mean = sum(values) / len(values)
+    variance = sum((value - mean) ** 2 for value in values) / len(values)
+    sd = math.sqrt(variance)
+    if not math.isfinite(sd) or sd == 0.0:
+        return values
+    lower = mean - sigma_factor * sd
+    upper = mean + sigma_factor * sd
+    filtered = [value for value in values if lower <= value <= upper]
+    return filtered or values
+
+
 class EnergyBackend:
     """Common interface for energy backends."""
 
@@ -104,12 +119,14 @@ class HttpEnergyBackend(EnergyBackend):
         region: str,
         timeout: float,
         token: str | None = None,
-        equipment: dict[str, dict[str, str]] | None = None,
+        equipment: dict[str, dict[str, Any]] | None = None,
+        uncertainty_sigma_factor: float = 3.0,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._region = region
         self._timeout = timeout
         self._supported = equipment or {}
+        self._uncertainty_sigma_factor = uncertainty_sigma_factor
         self._session = requests.Session()
         self._session.headers.update({"accept": "application/json"})
         if token:
@@ -133,7 +150,7 @@ class HttpEnergyBackend(EnergyBackend):
         skipped = 0
         for item in scheduled:
             spec = selected[item.equipment_name]
-            features = self._features_from_row(item.row or {}, spec, item.duration_min, item.time_gap_min)
+            features = self._features_from_row(item.row or {}, spec, item)
             service_equipment = spec["service_equipment"]
             predictions = self._post_json("/energy_estimation_all", params={"equipment_id": service_equipment}, payload={"features": features})
             ensemble_key = f"ensemble_stack_{service_equipment}"
@@ -153,6 +170,8 @@ class HttpEnergyBackend(EnergyBackend):
                 payload={"features": features},
             )
             numeric_predictions = [float(val) for val in predictions.values() if isinstance(val, (int, float))]
+            sigma_factor = float(spec.get("uncertainty_sigma_factor", self._uncertainty_sigma_factor))
+            numeric_predictions = _trim_prediction_outliers(numeric_predictions, sigma_factor=sigma_factor)
             result_rows.append(
                 {
                     "equipment": item.equipment_name,
@@ -234,7 +253,15 @@ class HttpEnergyBackend(EnergyBackend):
                 previous_end = item.end_time
         return result
 
-    def _features_from_row(self, row: dict[str, str], spec: dict[str, str], duration_min: float, time_gap_min: float) -> dict[str, Any]:
+    def _features_from_row(self, row: dict[str, str], spec: dict[str, Any], item: ScheduledCoil) -> dict[str, Any]:
+        feature_table = spec.get("feature_table")
+        if isinstance(feature_table, dict) and len(feature_table) > 0:
+            resolved = self._resolve_feature_table(row, spec, item, feature_table)
+            required = self._required_feature_names(spec, resolved)
+            return {name: resolved[name] for name in required}
+
+        duration_min = item.duration_min
+        time_gap_min = item.time_gap_min
         service_equipment = spec["service_equipment"]
         if service_equipment in ("TD1", "TD2"):
             return {
@@ -257,6 +284,114 @@ class HttpEnergyBackend(EnergyBackend):
             "Processing time (min)": duration_min,
             "Time_gap": time_gap_min,
         }
+
+    def _required_feature_names(self, spec: dict[str, Any], resolved: dict[str, Any]) -> list[str]:
+        models = spec.get("model_features")
+        if not isinstance(models, dict) or len(models) == 0:
+            return list(resolved.keys())
+        required: list[str] = []
+        seen: set[str] = set()
+        for feature_names in models.values():
+            if not isinstance(feature_names, list):
+                continue
+            for name in feature_names:
+                if not isinstance(name, str) or name in seen or name not in resolved:
+                    continue
+                seen.add(name)
+                required.append(name)
+        return required or list(resolved.keys())
+
+    def _resolve_feature_table(
+        self,
+        row: dict[str, str],
+        spec: dict[str, Any],
+        item: ScheduledCoil,
+        feature_table: dict[str, Any],
+    ) -> dict[str, Any]:
+        resolved: dict[str, Any] = {}
+        for feature_name, descriptor in feature_table.items():
+            if not isinstance(feature_name, str):
+                continue
+            resolved[feature_name] = self._resolve_feature_value(feature_name, descriptor, row, spec, item)
+        return resolved
+
+    def _resolve_feature_value(
+        self,
+        feature_name: str,
+        descriptor: Any,
+        row: dict[str, str],
+        spec: dict[str, Any],
+        item: ScheduledCoil,
+    ) -> Any:
+        if not isinstance(descriptor, dict):
+            return descriptor
+
+        source = str(descriptor.get("source") or "row").strip().lower()
+        required = bool(descriptor.get("required", False))
+        default = descriptor.get("default", 0.0 if str(descriptor.get("type") or "").strip().lower() == "number" else "")
+        raw_value: Any
+        if source == "row":
+            raw_value = self._row_value(row, descriptor)
+        elif source == "computed":
+            raw_value = self._computed_value(descriptor, spec, item)
+        elif source == "literal":
+            raw_value = descriptor.get("value")
+        else:
+            raise ValueError(f"Unsupported energy feature source `{source}` for `{feature_name}`.")
+
+        if _is_missing_value(raw_value):
+            fallback_field = descriptor.get("fallback_computed")
+            if isinstance(fallback_field, str) and fallback_field.strip() != "":
+                raw_value = self._computed_value({"field": fallback_field}, spec, item)
+
+        if _is_missing_value(raw_value):
+            if required:
+                columns = descriptor.get("columns") or descriptor.get("column") or descriptor.get("field") or source
+                raise ValueError(f"Missing required energy feature `{feature_name}` from `{columns}`.")
+            raw_value = default
+
+        value_type = str(descriptor.get("type") or "").strip().lower()
+        value = _number(raw_value, _number(default)) if value_type == "number" else raw_value
+        scale = descriptor.get("scale")
+        if isinstance(scale, (int, float)):
+            value = float(value) * float(scale)
+        return value
+
+    def _row_value(self, row: dict[str, str], descriptor: dict[str, Any]) -> Any:
+        columns = descriptor.get("columns")
+        if isinstance(columns, list):
+            for column in columns:
+                if not isinstance(column, str):
+                    continue
+                value = row.get(column)
+                if not _is_missing_value(value):
+                    return value
+            return None
+        column = descriptor.get("column")
+        if isinstance(column, str):
+            return row.get(column)
+        return None
+
+    def _computed_value(self, descriptor: dict[str, Any], spec: dict[str, Any], item: ScheduledCoil) -> Any:
+        field = str(descriptor.get("field") or "").strip()
+        if field == "duration_min":
+            return item.duration_min
+        if field == "time_gap_min":
+            return item.time_gap_min
+        if field == "coil_id":
+            return item.coil_id
+        if field == "order_id":
+            return item.order_id
+        if field == "lot_id":
+            return item.lot_id
+        if field == "start_time_iso":
+            return item.start_time.isoformat()
+        if field == "end_time_iso":
+            return item.end_time.isoformat()
+        if field == "performance_column":
+            column_name = spec.get("performance_column")
+            return item.row.get(column_name) if isinstance(column_name, str) and item.row is not None else None
+        raise ValueError(f"Unsupported computed energy field `{field}`.")
 
     def _post_json(self, path: str, params: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         response = self._session.post(f"{self._base_url}{path}", params=params, json=payload, timeout=self._timeout)
@@ -489,6 +624,7 @@ def _build_http_backend(http_cfg: dict[str, Any]) -> HttpEnergyBackend:
         timeout=float(http_cfg.get("timeout", 20.0)),
         token=_resolve_http_token(http_cfg),
         equipment=equipment,
+        uncertainty_sigma_factor=float(http_cfg.get("uncertainty_sigma_factor", 3.0)),
     )
 
 
@@ -499,7 +635,26 @@ def _normalize_energy_context(context: dict[str, Any]) -> dict[str, Any]:
     if isinstance(functions_cfg, dict):
         normalized["defaults"] = functions_cfg.get("defaults", normalized.get("defaults") or {})
         normalized["equipment"] = functions_cfg.get("equipment", normalized.get("equipment") or {})
+    http_cfg = normalized.get("http")
+    if isinstance(http_cfg, dict):
+        equipment_cfg = http_cfg.get("equipment")
+        if isinstance(equipment_cfg, dict):
+            for spec in equipment_cfg.values():
+                if not isinstance(spec, dict):
+                    continue
+                feature_table = spec.get("feature_table")
+                legacy_features = spec.get("features")
+                if not isinstance(feature_table, dict) and isinstance(legacy_features, dict):
+                    spec["feature_table"] = legacy_features
     return normalized
+
+
+def _is_missing_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() == ""
+    return False
 
 
 def _build_backend_from_context(path: Path, context: dict[str, Any]) -> EnergyBackend:

@@ -7,7 +7,11 @@ node {
     env.LOCAL_REGISTRY = LOCAL_REGISTRY
     env.IMAGE_TAG = IMAGE_TAG
     env.SHORT_TERM_PLANNING_PARAMS = "default+file:/repo/ShortTermPlanning/tests/stp_context_oss_test.json"
+    env.EXPECTED_STP_PROFILE = "oss"
     env.CONTAINER_NAME_PREFIX = "JENKINS_OSS_TEST_${env.BUILD_ID}"
+    env.TEST_KAFKA_TOPIC_PREFIX = "Dynreact_OSS"
+    env.TEST_TOPIC_GEN = "DynReact-OSS-TEST-Gen"
+    env.TEST_TOPIC_CALLBACK = "DynReact-OSS-TEST-Callback"
     env.DOCKER_NETWORK = "host"
     env.PERF_URL = "http://192.168.111.11:5027"
     env.TRANSPORT_TIMES_URL = "default+file:/repo/DynReActService/data/site.json"
@@ -80,12 +84,16 @@ node {
           -v /var/log/dynreact-logs:/var/log/dynreact-logs:rw,rshared \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           -e KAFKA_IP="$KAFKA_IP" \\
           -e LOG_FILE_PATH="$LOG_FILE_PATH" \\
           -e REST_URL="$REST_URL" \\
           -e PERF_URL="$PERF_URL" \\
           -e TRANSPORT_TIMES_URL="$TRANSPORT_TIMES_URL" \\
           -e SHORT_TERM_PLANNING_PARAMS="$SHORT_TERM_PLANNING_PARAMS" \\
+          -e EXPECTED_STP_PROFILE="$EXPECTED_STP_PROFILE" \\
           -e CONTAINER_NAME_PREFIX="$CONTAINER_NAME_PREFIX" \\
           -e LOCAL_REGISTRY="$LOCAL_REGISTRY" \\
           -e IMAGE_NAME="$IMAGE_NAME" \\
@@ -110,6 +118,9 @@ runStageWithCleanup('Run Scenario 0') {
           -v ${WORKSPACE}/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           -e PIP_CACHE_DIR=/tmp/pip-cache \\
           --user "0:0" \\
           ${envArgs} \\
@@ -137,7 +148,7 @@ runStageWithCleanup('Run Scenario 0') {
 
 
     runStageWithCleanup('Run Scenario 1') {
-        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'EXPECTED_STP_PROFILE', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -150,6 +161,9 @@ runStageWithCleanup('Run Scenario 0') {
           -v "/var/log/dynreact-logs:/var/log/dynreact-logs:rw,rshared" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           --user "0:0" \\
           ${envArgs} \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
@@ -181,6 +195,9 @@ runStageWithCleanup('Run Scenario 0') {
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           --user "0:0" \\
           ${envArgs} \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
@@ -213,6 +230,9 @@ runStageWithCleanup('Run Scenario 0') {
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           ${envArgs} \\
           --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
@@ -246,6 +266,9 @@ runStageWithCleanup('Run Scenario 0') {
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           ${envArgs} \\
           --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
@@ -279,6 +302,9 @@ runStageWithCleanup('Run Scenario 0') {
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           -e REMOTE_BASE_AGENTS="1" \\
           ${envArgs} \\
           --user "0:0" \\
@@ -312,6 +338,9 @@ runStageWithCleanup('Run Scenario 0') {
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           -e REMOTE_BASE_AGENTS="1" \\
           ${envArgs} \\
           --user "0:0" \\
@@ -345,6 +374,9 @@ runStageWithCleanup('Run Scenario 0') {
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           -e REMOTE_BASE_AGENTS="1" \\
           ${envArgs} \\
           --user "0:0" \\
@@ -378,6 +410,9 @@ runStageWithCleanup('Run Scenario 0') {
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -e PYTHONDONTWRITEBYTECODE=1 \\
           -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           -e REMOTE_BASE_AGENTS="1" \\
           ${envArgs} \\
           --user "0:0" \\

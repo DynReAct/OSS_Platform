@@ -27,12 +27,6 @@ app = dash.Dash(__name__, server=server, routes_pathname_prefix="/", requests_pa
 #                 assets_folder="assets", suppress_callback_exceptions=False, title="DynReAct",
 #                 use_pages=True, pages_folder="pages")
 
-if config.preload_dash_bootstrap:
-    try:
-        import dash_bootstrap_components
-    except ImportError as e:
-        logging.getLogger("dynreact.dash_app").warning(f"Failed to load dash-bootstrap-components: {e}")
-
 if config.auth_method is not None:
     secret_key = os.getenv("FLASK_SESSION_KEY")
     if secret_key is None:

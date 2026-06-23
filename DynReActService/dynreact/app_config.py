@@ -71,8 +71,6 @@ class DynReActSrvConfig:
     stp_frontend: str = "default"  # default is the frontend provided in this module
     material_order_allocation_frontend: str|None = None
     "Optionally register a frontend for a custom material-order allocation service"
-    preload_dash_bootstrap: bool = False
-    "If any of the optional pages depends on dash-bootstrap-components, then we need to preload them at app start"
     profile: str|None = None
     "Optional profile name for loading of custom components. If unset, DynReAct uses the base OSS/default loading path. Can be overwritten for individual components."
 
@@ -113,7 +111,6 @@ class DynReActSrvConfig:
                  energy_provider: str|None = None,
                  stp_frontend: str|None = None,
                  material_order_allocation_frontend: str|None = None,
-                 preload_dash_bootstrap_components: bool|None = None,
                  time_zone: str | None = None,
                  profile: str|None = None
                  ):
@@ -262,9 +259,6 @@ class DynReActSrvConfig:
             if material_order_allocation_frontend == "":
                 material_order_allocation_frontend = None
         self.material_order_allocation_frontend = material_order_allocation_frontend
-        if preload_dash_bootstrap_components is None:
-            preload_dash_bootstrap_components = os.getenv("PRELOAD_DASH_BOOTSTRAP") is not None and os.getenv("PRELOAD_DASH_BOOTSTRAP").lower() not in ("false", "0")
-        self.preload_dash_bootstrap = preload_dash_bootstrap_components
 
 
 class ConfigProvider:

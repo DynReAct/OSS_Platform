@@ -17,7 +17,7 @@
 
 .perf-equipment-status {
     display: grid;
-    grid-template-columns: repeat(3, auto);
+    grid-template-columns: repeat(4, auto);
     column-gap: 1em;
     row-gap: 0.5em;
     justify-content: start;

@@ -86,7 +86,12 @@ class PerformanceModelClient(PlantPerformanceModel):
                                    headers=PerformanceModelClient._attach_token({"Content-Type": "application/json", "Accept": "application/json"}, self._token)
                                    )
             if not response.ok:
-                return PlantPerformanceResultsFailed(reason=response.status_code, message=response.reason)
+                jsn = None
+                try:
+                    jsn = response.json()
+                except:
+                    pass
+                return PlantPerformanceResultsFailed(reason=response.status_code, message=response.reason, details=jsn)
             result = PlantPerformanceResultsSuccess.model_validate(response.json())
             return result
         except requests.exceptions.ConnectionError:
@@ -104,7 +109,12 @@ class PerformanceModelClient(PlantPerformanceModel):
                                      headers=PerformanceModelClient._attach_token({"Accept": "application/json"}, self._token)
                                      )
             if not response.ok:
-                return PlantPerformanceResultsFailed(reason=response.status_code, message=response.reason)
+                jsn = None
+                try:
+                    jsn = response.json()
+                except:
+                    pass
+                return PlantPerformanceResultsFailed(reason=response.status_code, message=response.reason, details=jsn)
             result = TypeAdapter(dict[int, EquipmentStatusEstimation]).validate_python(response.json())
             return result
         except requests.exceptions.ConnectionError:

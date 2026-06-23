@@ -1,3 +1,4 @@
+import logging
 import traceback
 from datetime import datetime, date
 from typing import Any, Sequence
@@ -165,13 +166,13 @@ if len(perf_models) > 0:
             plant_names = None
             site = state.get_site()
             if plants is None:
-                equipment = [eq for proc in procs for eq in site.get_process_equipment(proc, do_raise=True)] if procs is not None else site.equipment
+                equipment = [eq for proc in procs for eq in site.get_process_equipment(proc)] if procs is not None else site.equipment
                 plant_names = [eq.name or eq.name_short or str(eq.id) for eq in equipment]
                 plants = [eq.id for eq in equipment]
             if procs is not None:
                 procs = ",".join(procs)
             if plants is not None and plant_names is None:
-                plant_names = [eq.name or eq.name_short or str(eq.id) for eq in (site.get_equipment(p) for p in plants)]
+                plant_names = [eq.name or eq.name_short or str(eq.id) for eq in (site.get_equipment(p) for p in plants) if eq is not None]
             plants_title = None
             if plants is not None and len(plants) > 0:
                 plants_title = "Ids: " + (",".join(str(pl) for pl in plants))
@@ -180,6 +181,7 @@ if len(perf_models) > 0:
             plant_names = None if plant_names is None else ", ".join(plant_names)
             return procs, plants, procs, plant_names, plants_title, False, False
         except:  # TODO display error message
+            traceback.print_exc()
             return None, None, None, None, None, True, True
 
     @callback(
@@ -194,17 +196,24 @@ if len(perf_models) > 0:
             return None, True
         children = [html.Span("Equipment", className="perf-table-header"),
                     html.Span("Active", title="Is the equipment operating at all?", className="perf-table-header"),
-                    html.Span("Capacity", title="An indicative overall equipment capacity", className="perf-table-header")]
+                    html.Span("Capacity", title="An indicative overall equipment capacity", className="perf-table-header"),
+                    html.Span("Reason", title="Reason for reduced performance, if applicable", className="perf-table-header")]
         try:
             status: dict[int, EquipmentStatusEstimation]|PlantPerformanceResultsFailed = selected_model.bulk_equipment_status(applicable_equipment)
+            if isinstance(status, PlantPerformanceResultsFailed):  # TODO display error message
+                logging.getLogger(f"dynreact.PlantPerformanceModelClient::{{{selected_model_id}}}").warning(f"Plant performance mode request failed: {status}")
+                return None, True
             site = state.get_site()
             for eq, stat in status.items():
-                eq_obj = site.get_equipment(eq, do_raise=True)
+                eq_obj = site.get_equipment(eq)
+                if eq_obj is None:
+                    continue
                 capacity = stat.capacity
                 children.extend([
                     html.Span(eq_obj.name or eq_obj.name_short or str(eq_obj.id), title=f"Equipment id: {eq_obj.id}"),
                     html.Span(str(stat.active), title="Equipment out of operation" if not stat.active else "Equipment active"),
-                    html.Span("100%" if capacity == 1 else "0%" if capacity == 0 else f"{capacity*100:.2g}%")
+                    html.Span("100%" if capacity == 1 else "0%" if capacity == 0 else f"{capacity*100:.2g}%"),
+                    html.Span(stat.status_description)
                 ])
             return children, False
         except:  # TODO display error to user

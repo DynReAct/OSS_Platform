@@ -29,6 +29,7 @@ class PlantPerformanceResultsFailed(BaseModel, use_attribute_docstrings=True):
     reason: int
     "http status code, or 1 for service not available"
     message: str|None=None
+    details: dict|None=None
 
 
 # TODO upon dropping Python 3.11 support we can replace ...: TypeAlias = by type ... =

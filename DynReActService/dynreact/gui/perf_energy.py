@@ -28,10 +28,7 @@ from dash import Input, Output, State, callback, dcc, html
 
 from dynreact.app import config, state
 
-try:
-    from dynreact.snapshot.ras import RasSnapshotProvider
-except Exception:
-    RasSnapshotProvider = None
+from dynreact.gui.snapshot_rows import require_snapshot_rows_provider
 
 @dataclass(frozen=True)
 class ScheduledCoil:
@@ -97,6 +94,7 @@ def _trim_prediction_outliers(values: list[float], sigma_factor: float = 3.0) ->
     return filtered or values
 
 
+
 class EnergyBackend:
     """Common interface for energy backends."""
 
@@ -137,9 +135,7 @@ class HttpEnergyBackend(EnergyBackend):
         return [{"label": eq, "value": eq} for eq in self._supported if eq in site_names]
 
     def analyse(self, equipment_names: list[str], start_time: datetime, end_time: datetime) -> tuple[list[dict[str, Any]], str]:
-        provider = state.get_snapshot_provider()
-        if RasSnapshotProvider is None or not isinstance(provider, RasSnapshotProvider):
-            raise ValueError("The HTTP energy backend currently requires the RAS snapshot provider.")
+        provider = require_snapshot_rows_provider(state.get_snapshot_provider())
         rows = provider.get_snapshot_rows()
         selected = {eq: self._supported[eq] for eq in equipment_names if eq in self._supported}
         scheduled = self._scheduled_from_rows(rows, selected, start_time, end_time)

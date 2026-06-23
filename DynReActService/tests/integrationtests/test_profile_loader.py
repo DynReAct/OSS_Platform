@@ -14,6 +14,7 @@ from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.impl.FileSnapshotProvider import FileSnapshotProvider
 from dynreact.plugins import Plugins
 from dynreact.state import DynReActSrvState
+from dynreact.gui.snapshot_rows import require_snapshot_rows_provider
 
 
 @contextmanager
@@ -313,6 +314,15 @@ class ProfileLoaderTest(unittest.TestCase):
         finally:
             dash.register_page = original_register_page
         self.assertEqual(calls["count"], 1)
+
+
+    def test_energy_backend_accepts_duck_typed_snapshot_provider(self):
+        provider = types.SimpleNamespace(get_snapshot_rows=lambda snapshot=None: [])
+        self.assertIs(require_snapshot_rows_provider(provider), provider)
+
+    def test_energy_backend_rejects_provider_without_rows(self):
+        with self.assertRaisesRegex(ValueError, "get_snapshot_rows"):
+            require_snapshot_rows_provider(object())
 
 
 if __name__ == "__main__":

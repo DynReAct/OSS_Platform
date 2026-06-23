@@ -194,9 +194,10 @@ if len(perf_models) > 0:
         selected_model = find_model(selected_model_id)
         if not dash_authenticated(config) or selected_model is None or applicable_equipment is None or len(applicable_equipment) == 0:
             return None, True
+
         children = [html.Span("Equipment", className="perf-table-header"),
-                    html.Span("Active", title="Is the equipment operating at all?", className="perf-table-header"),
-                    html.Span("Capacity", title="An indicative overall equipment capacity", className="perf-table-header"),
+                    html.Span("Status", title="Equipment status indicator", className="perf-table-header"),
+                    html.Span("Performance", title="An indicative overall equipment performance", className="perf-table-header"),
                     html.Span("Reason", title="Reason for reduced performance, if applicable", className="perf-table-header")]
         try:
             status: dict[int, EquipmentStatusEstimation]|PlantPerformanceResultsFailed = selected_model.bulk_equipment_status(applicable_equipment)
@@ -209,9 +210,28 @@ if len(perf_models) > 0:
                 if eq_obj is None:
                     continue
                 capacity = stat.capacity
+                if capacity >= 0.67:
+                    # warn1 = "rgb(230, 251, 19)"  # at 67%
+                    red = 230 * (1-capacity)/0.33
+                    green = 255
+                    blue = 19 * (1-capacity)/0.33
+                    border_color = "green"
+                elif capacity >= 0.33:
+                    # warn2 = "rgb(251, 140, 19)"  # at 33%
+                    red = 230 + (0.67 - capacity)/0.34 * 21
+                    green = 140 + (capacity - 0.33)/0.34 * 115
+                    blue = 19
+                    border_color = "orange"
+                else:
+                    red = 255
+                    green = 140 * capacity/0.33
+                    blue = 19 * capacity/0.33
+                    border_color = "darkred"
+                color = f"rgb({red}, {green}, {blue})"
                 children.extend([
                     html.Span(eq_obj.name or eq_obj.name_short or str(eq_obj.id), title=f"Equipment id: {eq_obj.id}"),
-                    html.Span(str(stat.active), title="Equipment out of operation" if not stat.active else "Equipment active"),
+                    #html.Span(str(stat.active), title="Equipment out of operation" if not stat.active else "Equipment active"),
+                    html.Div(style={"display": "inline-block", "background-color": color, "height": "14px", "width": "14px", "border-radius": "50%", "border": f"3px solid {border_color}"}),
                     html.Span("100%" if capacity == 1 else "0%" if capacity == 0 else f"{capacity*100:.2g}%"),
                     html.Span(stat.status_description)
                 ])

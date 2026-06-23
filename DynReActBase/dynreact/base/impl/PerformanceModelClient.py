@@ -1,11 +1,15 @@
 import dataclasses
 import traceback
+import urllib.parse
 from datetime import datetime, timedelta
+from typing import Sequence
 
 import requests
+from pydantic import TypeAdapter
 
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation, PlantPerformanceInput, \
-    PerformanceModelMetadata, PlantPerformanceResults, PlantPerformanceResultsFailed, PlantPerformanceResultsSuccess
+    PerformanceModelMetadata, PlantPerformanceResults, PlantPerformanceResultsFailed, PlantPerformanceResultsSuccess, \
+    EquipmentStatusEstimation, EquipmentStatusResults
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Site, Order, Material
 from dynreact.base.monitoring import ServiceHealth
@@ -90,6 +94,25 @@ class PerformanceModelClient(PlantPerformanceModel):
         except:
             traceback.print_exc()
             return PlantPerformanceResultsFailed(reason=500, message="Internal server error")
+
+    def bulk_equipment_status(self, plant: Sequence[int]) -> EquipmentStatusResults:
+        if not plant or len(plant) == 0:
+            return {}
+        params = "&".join([f"equipment={urllib.parse.quote_plus(str(p))}" for p in plant])
+        try:
+            response = requests.get(self._address + "status?" + params,
+                                     headers=PerformanceModelClient._attach_token({"Accept": "application/json"}, self._token)
+                                     )
+            if not response.ok:
+                return PlantPerformanceResultsFailed(reason=response.status_code, message=response.reason)
+            result = TypeAdapter(dict[int, EquipmentStatusEstimation]).validate_python(response.json())
+            return result
+        except requests.exceptions.ConnectionError:
+            return PlantPerformanceResultsFailed(reason=1, message="Service not available")
+        except:
+            traceback.print_exc()
+            return PlantPerformanceResultsFailed(reason=500, message="Internal server error")
+
 
     @staticmethod
     def _validate_path(pth: str) -> str:

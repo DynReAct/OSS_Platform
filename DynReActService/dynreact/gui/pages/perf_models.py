@@ -1,6 +1,6 @@
 import traceback
 from datetime import datetime, date
-from typing import Any
+from typing import Any, Sequence
 
 import dash
 from dash import html, dcc, callback, Output, Input, State
@@ -10,7 +10,8 @@ from pydantic.fields import FieldInfo
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
-from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PlantPerformanceResults
+from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PlantPerformanceResults, \
+    EquipmentStatusEstimation, PlantPerformanceResultsFailed
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Process, Equipment, Order
 
@@ -78,6 +79,10 @@ if len(perf_models) > 0:
                 ], className="perf-process-container"), id="perf-process-container", hidden=True)
             ], className="perf-model-selection"),
             html.Br(),
+
+            html.H3("Equipment status", id="perf-equipment-header", hidden=True),
+            html.Div(id="perf-equipment-status", className="perf-equipment-status"),
+
             html.H3("Orders", id="perf-orders-header"),
             html.Div([
                 dash_ag.AgGrid(
@@ -103,12 +108,14 @@ if len(perf_models) > 0:
                 html.Br(),
             ], id="perf-orders-container", hidden=True),
 
-            dcc.Store(id="perf-process"),   # comma-separated list of strings, or None
-            dcc.Store(id="perf-plants")     # comma-separated list of ints, or None
+            dcc.Store(id="perf-process", storage_type="memory"),   # comma-separated list of strings, or None
+            dcc.Store(id="perf-plants", storage_type="memory")     # comma-separated list of ints, or None
         ], id="perf-title")
         return layout_
 
     def find_model(model_id: str|None) -> PlantPerformanceModel|None:
+        if model_id is None:
+            return None
         models = state.get_plant_performance_models()
 
         def get_id(model: PlantPerformanceModel) -> str:
@@ -144,25 +151,65 @@ if len(perf_models) > 0:
               Output("perf-plants", "data"),
               Output("perf-selected-process", "children"),
               Output("perf-selected-equipment", "children"),
+              Output("perf-selected-equipment", "title"),
               Output("perf-process-container", "hidden"),
               Output("perf-orders-container", "hidden"),
               Input("perf-model-selector", "value")
     )
-    def procs_and_plants(selected_model_id: str) -> tuple[str|None, str|None, str|None, str|None, bool, bool]:
+    def procs_and_plants(selected_model_id: str) -> tuple[str|None, str|None, str|None, str|None, str|None, bool, bool]:
         if not dash_authenticated(config) or selected_model_id is None:
-            return None, None, None, None, True, True
+            return None, None, None, None, None, True, True
         selected_model = find_model(selected_model_id)
         try:
             procs, plants = selected_model.applicable_processes_and_plants()
+            plant_names = None
+            site = state.get_site()
+            if plants is None:
+                equipment = [eq for proc in procs for eq in site.get_process_equipment(proc, do_raise=True)] if procs is not None else site.equipment
+                plant_names = [eq.name or eq.name_short or str(eq.id) for eq in equipment]
+                plants = [eq.id for eq in equipment]
             if procs is not None:
                 procs = ",".join(procs)
+            if plants is not None and plant_names is None:
+                plant_names = [eq.name or eq.name_short or str(eq.id) for eq in (site.get_equipment(p) for p in plants)]
+            plants_title = None
             if plants is not None and len(plants) > 0:
-                plants = ",".join(str(pl) for pl in plants)
+                plants_title = "Ids: " + (",".join(str(pl) for pl in plants))
             else:
-                plants = "all"
-            return procs, plants, procs, plants, False, False
-        except:
-            return None, None, None, None, True, True
+                plants_title = "all"
+            plant_names = None if plant_names is None else ", ".join(plant_names)
+            return procs, plants, procs, plant_names, plants_title, False, False
+        except:  # TODO display error message
+            return None, None, None, None, None, True, True
+
+    @callback(
+        Output("perf-equipment-status", "children"),
+        Output("perf-equipment-header", "hidden"),
+        Input("perf-plants", "data"),
+        State("perf-model-selector", "value")
+    )
+    def show_equipment_status_overview(applicable_equipment: Sequence[int]|None, selected_model_id: str|None):
+        selected_model = find_model(selected_model_id)
+        if not dash_authenticated(config) or selected_model is None or applicable_equipment is None or len(applicable_equipment) == 0:
+            return None, True
+        children = [html.Span("Equipment", className="perf-table-header"),
+                    html.Span("Active", title="Is the equipment operating at all?", className="perf-table-header"),
+                    html.Span("Capacity", title="An indicative overall equipment capacity", className="perf-table-header")]
+        try:
+            status: dict[int, EquipmentStatusEstimation]|PlantPerformanceResultsFailed = selected_model.bulk_equipment_status(applicable_equipment)
+            site = state.get_site()
+            for eq, stat in status.items():
+                eq_obj = site.get_equipment(eq, do_raise=True)
+                capacity = stat.capacity
+                children.extend([
+                    html.Span(eq_obj.name or eq_obj.name_short or str(eq_obj.id), title=f"Equipment id: {eq_obj.id}"),
+                    html.Span(str(stat.active), title="Equipment out of operation" if not stat.active else "Equipment active"),
+                    html.Span("100%" if capacity == 1 else "0%" if capacity == 0 else f"{capacity*100:.2g}%")
+                ])
+            return children, False
+        except:  # TODO display error to user
+            traceback.print_exc()
+            return None, True
 
     @callback(
               Output("perf-orders-table", "columnDefs"),

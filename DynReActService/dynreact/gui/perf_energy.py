@@ -935,7 +935,11 @@ def _build_backend_from_context(path: Path, context: dict[str, Any]) -> EnergyBa
     if provider_type == "file":
         return FileEnergyBackend(str(path))
     if provider_type == "http":
-        http_cfg = normalized.get("http") if isinstance(normalized.get("http"), dict) else normalized
+        http_cfg: dict[str, Any]
+        if isinstance(normalized.get("http"), dict):
+            http_cfg = normalized["http"]
+        else:
+            http_cfg = normalized
         return _build_http_backend(http_cfg)
     raise ValueError(f"Unsupported energy context provider `{provider_type}` in {path}.")
 
@@ -1209,7 +1213,7 @@ def layout(*args: Any, **kwargs: Any) -> html.Div|None:
     State("perf-energy-until", "value"),
     prevent_initial_call=True,
 )
-def run_energy_analysis(_: int, equipment_names: list[str] | None, start_value: str | None, end_value: str | None) -> tuple[bool, str, str, list[dict[str, Any]], go.Figure, str, list[dict[str, Any]], go.Figure]:
+def run_energy_analysis(_: int, equipment_names: list[str] | None, start_value: str | None, end_value: str | None) -> tuple[Any, ...]:
     """Validate input, run the backend, and build the Dash callback payload."""
     equipment_names = equipment_names or []
     if len(equipment_names) == 0 or not start_value or not end_value:
@@ -1218,8 +1222,11 @@ def run_energy_analysis(_: int, equipment_names: list[str] | None, start_value: 
     end_time = _ensure_local_datetime(datetime.fromisoformat(end_value))
     if end_time <= start_time:
         return True, "The 'Until' timestamp must be later than the 'From' timestamp.", "Waiting for valid input.", dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    backend = _backend
+    if backend is None:
+        return True, "Energy backend is not configured.", "Waiting for valid input.", [], _empty_figure(), "Total price: 0.00 EUR", [], _empty_demand_figure()
     try:
-        rows, status = _backend.analyse(equipment_names, start_time, end_time)
+        rows, status = backend.analyse(equipment_names, start_time, end_time)
     except Exception as exc:
         dialog, status = _friendly_energy_error(exc)
         return True, dialog, status, [], _empty_figure(), "Total price: 0.00 EUR", [], _empty_demand_figure()

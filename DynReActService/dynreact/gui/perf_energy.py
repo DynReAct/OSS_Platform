@@ -820,10 +820,27 @@ def _table_columns() -> list[dict[str, Any]]:
     ]
 
 
+def _demand_table_columns() -> list[dict[str, Any]]:
+    """Return the AgGrid column configuration for the total demand table."""
+    return [
+        {"field": "time", "headerName": "Time", "pinned": True},
+        {"field": "interval_end", "headerName": "Interval end"},
+        {"field": "total_energy_kwh", "headerName": "Total energy demand (kWh)", "filter": "agNumberColumnFilter", "valueFormatter": {"function": "params.value == null ? '' : d3.format(',.3f')(params.value)"}},
+        {"field": "active_coils", "headerName": "Active coils", "filter": "agNumberColumnFilter"},
+    ]
+
+
 def _empty_figure() -> go.Figure:
     """Return the initial empty figure."""
     fig = go.Figure()
     fig.update_layout(template="plotly_white", height=650, title="Energy estimation results", xaxis_title="Time", yaxis_title="Energy per coil (kWh)")
+    return fig
+
+
+def _empty_demand_figure() -> go.Figure:
+    """Return the initial empty total demand figure."""
+    fig = go.Figure()
+    fig.update_layout(template="plotly_white", height=520, title="Total energy demand", xaxis_title="Time", yaxis_title="Total energy demand (kWh / interval)")
     return fig
 
 
@@ -867,12 +884,97 @@ def _build_figure(rows: list[dict[str, Any]], start_value: str, end_value: str) 
     return fig
 
 
+def _total_energy_demand_interval_min() -> int:
+    """Return the configured aggregation interval for total demand."""
+    provider = _energy_source().strip()
+    file_path = _provider_file_path(provider)
+    if file_path is not None and os.path.isfile(file_path):
+        with file_path.open("r", encoding="utf-8") as handle:
+            context = _normalize_energy_context(json.load(handle))
+        configured = context.get("total_energy_demand_interval_min")
+        if isinstance(configured, (int, float)) and float(configured) > 0:
+            return int(float(configured))
+    return 5
+
+
+def _build_total_demand_rows(rows: list[dict[str, Any]], start_value: str, end_value: str, interval_min: int) -> list[dict[str, Any]]:
+    """Aggregate energy into fixed-width time buckets."""
+    if len(rows) == 0:
+        return []
+    interval_seconds = max(1, int(interval_min)) * 60
+    analysis_start = _ensure_local_datetime(datetime.fromisoformat(start_value))
+    analysis_end = _ensure_local_datetime(datetime.fromisoformat(end_value))
+    if analysis_end <= analysis_start:
+        return []
+
+    buckets: list[dict[str, Any]] = []
+    bucket_start = analysis_start
+    while bucket_start < analysis_end:
+        bucket_end = min(bucket_start + timedelta(seconds=interval_seconds), analysis_end)
+        total_energy = 0.0
+        active_coils = 0
+        for row in rows:
+            row_start = _ensure_local_datetime(datetime.fromisoformat(row["start_time"]))
+            row_end = _ensure_local_datetime(datetime.fromisoformat(row["end_time"]))
+            overlap_start = max(bucket_start, row_start)
+            overlap_end = min(bucket_end, row_end)
+            overlap_seconds = max(0.0, (overlap_end - overlap_start).total_seconds())
+            if overlap_seconds <= 0.0:
+                continue
+            duration_seconds = max(1.0, (row_end - row_start).total_seconds())
+            total_energy += float(row.get("ensemble_energy_kwh") or 0.0) * (overlap_seconds / duration_seconds)
+            active_coils += 1
+        buckets.append(
+            {
+                "time": bucket_start.isoformat(),
+                "interval_end": bucket_end.isoformat(),
+                "total_energy_kwh": round(total_energy, 3),
+                "active_coils": active_coils,
+            }
+        )
+        bucket_start = bucket_end
+    return buckets
+
+
+def _build_total_demand_figure(rows: list[dict[str, Any]], start_value: str, end_value: str, interval_min: int) -> go.Figure:
+    """Create the Plotly figure for total energy demand."""
+    demand_rows = _build_total_demand_rows(rows, start_value, end_value, interval_min)
+    if len(demand_rows) == 0:
+        return _empty_demand_figure()
+    x_values = [datetime.fromisoformat(row["time"]) for row in demand_rows]
+    y_values = [row["total_energy_kwh"] for row in demand_rows]
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=x_values,
+            y=y_values,
+            mode="lines+markers",
+            line={"color": "#0f766e", "width": 2},
+            marker={"size": 5},
+            fill="tozeroy",
+            fillcolor="rgba(15,118,110,0.12)",
+            hovertemplate="%{x}<br>%{y:,.3f} kWh<extra></extra>",
+            name="Total energy demand",
+        )
+    )
+    fig.update_layout(
+        template="plotly_white",
+        height=520,
+        title=f"Total energy demand ({interval_min}-minute intervals)",
+        xaxis={"title": "Time", "range": [datetime.fromisoformat(start_value), datetime.fromisoformat(end_value)]},
+        yaxis={"title": "Total energy demand (kWh / interval)", "tickformat": ",.3f"},
+        margin={"l": 80, "r": 40, "t": 80, "b": 60},
+    )
+    return fig
+
+
 def layout(*args: Any, **kwargs: Any) -> html.Div|None:
     if _backend is None:
         return None
     """Render the energy page."""
     snapshot_id = state.get_snapshot_provider().current_snapshot_id()
     snapshot_label = snapshot_id.strftime("%Y-%m-%d %H:%M:%S %Z") if snapshot_id is not None else "None"
+    demand_interval_min = _total_energy_demand_interval_min()
     return html.Div(
         [
             dcc.ConfirmDialog(id="perf-energy-validation-dialog"),
@@ -894,6 +996,13 @@ def layout(*args: Any, **kwargs: Any) -> html.Div|None:
                 [
                     dash_ag.AgGrid(id="perf-energy-table", columnDefs=_table_columns(), rowData=[], className="ag-theme-alpine", defaultColDef={"sortable": True, "filter": True, "resizable": True}, style={"height": "340px", "width": "100%", "marginBottom": "1rem"}, columnSize="responsiveSizeToFit"),
                     dcc.Graph(id="perf-energy-graph", figure=_empty_figure()),
+                    html.H2("Total Energy Demand"),
+                    html.Div([
+                        html.Div(f"Aggregation interval: {demand_interval_min} minutes", style={"fontWeight": "bold"}),
+                        html.Button("Download total demand csv", id="perf-energy-demand-download", className="dynreact-button"),
+                    ], style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": "0.5rem", "gap": "1rem", "flexWrap": "wrap"}),
+                    dash_ag.AgGrid(id="perf-energy-demand-table", columnDefs=_demand_table_columns(), rowData=[], className="ag-theme-alpine", defaultColDef={"sortable": True, "filter": True, "resizable": True}, style={"height": "280px", "width": "100%", "marginBottom": "1rem"}, columnSize="responsiveSizeToFit"),
+                    dcc.Graph(id="perf-energy-demand-graph", figure=_empty_demand_figure()),
                 ],
                 delay_show=100,
             ),
@@ -908,30 +1017,52 @@ def layout(*args: Any, **kwargs: Any) -> html.Div|None:
     Output("perf-energy-table", "rowData"),
     Output("perf-energy-graph", "figure"),
     Output("perf-energy-total-price", "children"),
+    Output("perf-energy-demand-table", "rowData"),
+    Output("perf-energy-demand-graph", "figure"),
     Input("perf-energy-start", "n_clicks"),
     State("perf-energy-equipment-checklist", "value"),
     State("perf-energy-from", "value"),
     State("perf-energy-until", "value"),
     prevent_initial_call=True,
 )
-def run_energy_analysis(_: int, equipment_names: list[str] | None, start_value: str | None, end_value: str | None) -> tuple[bool, str, str, list[dict[str, Any]], go.Figure, str]:
+def run_energy_analysis(_: int, equipment_names: list[str] | None, start_value: str | None, end_value: str | None) -> tuple[bool, str, str, list[dict[str, Any]], go.Figure, str, list[dict[str, Any]], go.Figure]:
     """Validate input and run the configured analysis backend."""
     equipment_names = equipment_names or []
     if len(equipment_names) == 0 or not start_value or not end_value:
-        return True, "Please select at least one equipment and both time bounds before starting the analysis.", "Waiting for valid input.", dash.no_update, dash.no_update, dash.no_update
+        return True, "Please select at least one equipment and both time bounds before starting the analysis.", "Waiting for valid input.", dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
     start_time = _ensure_local_datetime(datetime.fromisoformat(start_value))
     end_time = _ensure_local_datetime(datetime.fromisoformat(end_value))
     if end_time <= start_time:
-        return True, "The 'Until' timestamp must be later than the 'From' timestamp.", "Waiting for valid input.", dash.no_update, dash.no_update, dash.no_update
+        return True, "The 'Until' timestamp must be later than the 'From' timestamp.", "Waiting for valid input.", dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
     try:
         rows, status = _backend.analyse(equipment_names, start_time, end_time)
     except Exception as exc:
         dialog, status = _friendly_energy_error(exc)
-        return True, dialog, status, [], _empty_figure(), "Total price: 0.00 EUR"
+        return True, dialog, status, [], _empty_figure(), "Total price: 0.00 EUR", [], _empty_demand_figure()
     total_price = sum(float(row.get("energy_cost_eur") or 0.0) for row in rows)
     missing_price_rows = sum(1 for row in rows if row.get("energy_cost_eur") is None)
     if missing_price_rows > 0:
         total_label = f"Total price: partial result ({total_price:.2f} EUR, pricing missing for {missing_price_rows} coils)"
     else:
         total_label = f"Total price: {total_price:.2f} EUR"
-    return False, "", status, rows, _build_figure(rows, start_value, end_value), total_label
+    demand_interval_min = _total_energy_demand_interval_min()
+    demand_rows = _build_total_demand_rows(rows, start_value, end_value, demand_interval_min)
+    demand_figure = _build_total_demand_figure(rows, start_value, end_value, demand_interval_min)
+    return False, "", status, rows, _build_figure(rows, start_value, end_value), total_label, demand_rows, demand_figure
+
+
+@callback(
+    Output("perf-energy-demand-table", "exportDataAsCsv"),
+    Output("perf-energy-demand-table", "csvExportParams"),
+    Input("perf-energy-demand-download", "n_clicks"),
+    State("perf-energy-demand-table", "rowData"),
+    prevent_initial_call=True,
+)
+def export_total_demand_csv(_: int | None, row_data: list[dict[str, Any]] | None) -> tuple[bool, dict[str, Any] | None]:
+    """Export the total energy demand table as CSV."""
+    if not row_data:
+        return False, None
+    snapshot_id = state.get_snapshot_provider().current_snapshot_id()
+    timestamp = snapshot_id.strftime("%Y%m%d%H%M%S") if snapshot_id is not None else datetime.now().strftime("%Y%m%d%H%M%S")
+    options = {"fileName": f"total_energy_demand_{timestamp}.csv", "columnSeparator": ";", "suppressQuotes": True}
+    return True, options

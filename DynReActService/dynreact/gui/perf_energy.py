@@ -32,7 +32,21 @@ from dynreact.gui.snapshot_rows import require_snapshot_rows_provider
 
 @dataclass(frozen=True)
 class ScheduledCoil:
-    """Scheduled coil-like unit to be analysed."""
+    """Represent one scheduled coil prepared for energy evaluation.
+
+    Attributes:
+        equipment_name: Site equipment name associated with the coil.
+        coil_id: Coil or material identifier used in the snapshot.
+        order_id: Production order identifier.
+        start_time: Planned processing start time.
+        end_time: Planned processing end time.
+        duration_min: Planned processing duration in minutes.
+        time_gap_min: Idle gap since the previous coil on the same equipment.
+        order: Order object when available from snapshot-based analysis.
+        coil: Coil object when available from snapshot-based analysis.
+        lot_id: Lot identifier associated with the coil.
+        row: Raw snapshot row when the data originates from a row provider.
+    """
 
     equipment_name: str
     coil_id: str
@@ -48,12 +62,12 @@ class ScheduledCoil:
 
 
 def _ensure_local_datetime(value: datetime) -> datetime:
-    """Normalize a datetime to a timezone-aware local value."""
+    """Normalize one datetime to a timezone-aware local timestamp."""
     return value.astimezone() if value.tzinfo is not None else value.replace(tzinfo=datetime.now().astimezone().tzinfo)
 
 
 def _parse_ras_datetime(value: str | None) -> datetime | None:
-    """Parse one RAS datetime string."""
+    """Parse one RAS timestamp using the supported export formats."""
     if value is None:
         return None
     stripped = value.strip()
@@ -68,7 +82,7 @@ def _parse_ras_datetime(value: str | None) -> datetime | None:
 
 
 def _number(value: Any, default: float = 0.0) -> float:
-    """Convert one value to float using DynReAct-style CSV conventions."""
+    """Convert one value to ``float`` using DynReAct CSV conventions."""
     if value is None:
         return default
     if isinstance(value, (int, float)):
@@ -80,7 +94,11 @@ def _number(value: Any, default: float = 0.0) -> float:
 
 
 def _number_from_mixed(value: Any, default: float = 0.0) -> float:
-    """Extract a numeric value from mixed alphanumeric process codes such as `D00` or `A023`."""
+    """Extract a numeric value from mixed alphanumeric strings.
+
+    This helper is used for fields such as ``D00`` or ``A023`` where the
+    semantic payload is numeric but the raw source also contains letters.
+    """
     if value is None:
         return default
     if isinstance(value, (int, float)):
@@ -103,7 +121,16 @@ def _number_from_mixed(value: Any, default: float = 0.0) -> float:
 
 
 def _trim_prediction_outliers(values: list[float], sigma_factor: float = 3.0) -> list[float]:
-    """Drop extreme model predictions beyond mean +/- sigma_factor * sd."""
+    """Remove extreme predictions before deriving uncertainty bounds.
+
+    Args:
+        values: Raw model prediction values for the same coil.
+        sigma_factor: Number of standard deviations used as the cutoff.
+
+    Returns:
+        Filtered predictions. If filtering would remove every value, the
+        original list is returned.
+    """
     if len(values) < 3:
         return values
     mean = sum(values) / len(values)
@@ -118,6 +145,7 @@ def _trim_prediction_outliers(values: list[float], sigma_factor: float = 3.0) ->
 
 
 def _preferred_prediction_keys(service_equipment: str) -> list[str]:
+    """Return model keys ordered by preference for one service equipment."""
     return [
         f"ensemble_stack_{service_equipment}",
         f"hgb_{service_equipment}",
@@ -127,7 +155,16 @@ def _preferred_prediction_keys(service_equipment: str) -> list[str]:
 
 
 def _pick_preferred_prediction(predictions: dict[str, Any], service_equipment: str) -> tuple[str | None, float | None]:
-    """Return the preferred available model prediction for one equipment."""
+    """Return the best available prediction according to the preference order.
+
+    Args:
+        predictions: Mapping from model key to predicted energy.
+        service_equipment: Service-side equipment identifier.
+
+    Returns:
+        A tuple containing the selected model key and its predicted energy. If
+        no finite value is available, both elements are ``None``.
+    """
     for key in _preferred_prediction_keys(service_equipment):
         value = predictions.get(key)
         if isinstance(value, (int, float)) and math.isfinite(float(value)):
@@ -136,6 +173,7 @@ def _pick_preferred_prediction(predictions: dict[str, Any], service_equipment: s
 
 
 def _prediction_summary(predictions: dict[str, Any], service_equipment: str) -> str:
+    """Render a compact summary of candidate model predictions for the UI."""
     parts: list[str] = []
     for key in _preferred_prediction_keys(service_equipment):
         value = predictions.get(key)
@@ -150,19 +188,19 @@ def _prediction_summary(predictions: dict[str, Any], service_equipment: str) -> 
 
 
 class EnergyBackend:
-    """Common interface for energy backends."""
+    """Define the common contract implemented by all energy analysis backends."""
 
     def available_equipment(self) -> list[dict[str, str]]:
-        """Return selector options."""
+        """Return checklist options for the equipment selector."""
         raise NotImplementedError
 
     def analyse(self, equipment_names: list[str], start_time: datetime, end_time: datetime) -> tuple[list[dict[str, Any]], str]:
-        """Run the energy analysis."""
+        """Run the energy analysis for the selected equipment and window."""
         raise NotImplementedError
 
 
 class HttpEnergyBackend(EnergyBackend):
-    """Backend that delegates the analysis to the external FastAPI service."""
+    """Execute the analysis by calling the external energy FastAPI service."""
 
     def __init__(
         self,
@@ -185,10 +223,22 @@ class HttpEnergyBackend(EnergyBackend):
             self._session.headers["X-Token"] = token
 
     def available_equipment(self) -> list[dict[str, str]]:
+        """Return selector options for supported equipment present at the site."""
         site_names = {eq.name_short for eq in state.get_site().get_process_all_equipment()}
         return [{"label": eq, "value": eq} for eq in self._supported if eq in site_names]
 
     def analyse(self, equipment_names: list[str], start_time: datetime, end_time: datetime) -> tuple[list[dict[str, Any]], str]:
+        """Run the HTTP-backed analysis and prepare UI-ready result rows.
+
+        Args:
+            equipment_names: Selected site equipment names.
+            start_time: Lower bound of the analysis window.
+            end_time: Upper bound of the analysis window.
+
+        Returns:
+            A tuple containing the result rows and a human-readable status
+            message.
+        """
         provider = require_snapshot_rows_provider(state.get_snapshot_provider())
         rows = provider.get_snapshot_rows()
         selected = {eq: self._supported[eq] for eq in equipment_names if eq in self._supported}
@@ -283,6 +333,17 @@ class HttpEnergyBackend(EnergyBackend):
         start_time: datetime,
         end_time: datetime,
     ) -> list[ScheduledCoil]:
+        """Extract scheduled coils from raw snapshot rows.
+
+        Args:
+            rows: Raw snapshot rows as returned by the configured provider.
+            selected: Mapping of selected equipment names to their config blocks.
+            start_time: Lower bound of the analysis window.
+            end_time: Upper bound of the analysis window.
+
+        Returns:
+            Scheduled coils intersecting the requested time window.
+        """
         grouped: dict[str, list[ScheduledCoil]] = {eq: [] for eq in selected}
         for row in rows:
             coil_id = (row.get("MatID") or row.get("Me-ID-Primary") or "").strip()
@@ -338,6 +399,16 @@ class HttpEnergyBackend(EnergyBackend):
         return result
 
     def _features_from_row(self, row: dict[str, str], spec: dict[str, Any], item: ScheduledCoil) -> dict[str, Any]:
+        """Build the feature payload for one scheduled coil row.
+
+        Args:
+            row: Raw snapshot row.
+            spec: Equipment-specific configuration block.
+            item: Scheduled coil metadata derived from the row.
+
+        Returns:
+            Feature mapping expected by the energy estimation service.
+        """
         feature_table = spec.get("feature_table")
         if isinstance(feature_table, dict) and len(feature_table) > 0:
             resolved = self._resolve_feature_table(row, spec, item, feature_table)
@@ -370,6 +441,15 @@ class HttpEnergyBackend(EnergyBackend):
         }
 
     def _required_feature_names(self, spec: dict[str, Any], resolved: dict[str, Any]) -> list[str]:
+        """Return the union of required feature names across configured models.
+
+        Args:
+            spec: Equipment-specific configuration block.
+            resolved: Fully resolved feature map for the current row.
+
+        Returns:
+            Ordered feature names that should be sent to the service.
+        """
         models = spec.get("model_features")
         if not isinstance(models, dict) or len(models) == 0:
             return list(resolved.keys())
@@ -392,6 +472,17 @@ class HttpEnergyBackend(EnergyBackend):
         item: ScheduledCoil,
         feature_table: dict[str, Any],
     ) -> dict[str, Any]:
+        """Resolve a declarative feature table into concrete feature values.
+
+        Args:
+            row: Raw snapshot row.
+            spec: Equipment-specific configuration block.
+            item: Scheduled coil metadata.
+            feature_table: Declarative mapping of feature names to descriptors.
+
+        Returns:
+            Concrete feature values ready to be serialized.
+        """
         resolved: dict[str, Any] = {}
         for feature_name, descriptor in feature_table.items():
             if not isinstance(feature_name, str):
@@ -407,6 +498,22 @@ class HttpEnergyBackend(EnergyBackend):
         spec: dict[str, Any],
         item: ScheduledCoil,
     ) -> Any:
+        """Resolve one declarative feature descriptor into a concrete value.
+
+        Args:
+            feature_name: Logical feature name expected by the model.
+            descriptor: Descriptor declaring the value source and coercion rules.
+            row: Raw snapshot row.
+            spec: Equipment-specific configuration block.
+            item: Scheduled coil metadata.
+
+        Returns:
+            The resolved feature value, already coerced and scaled if needed.
+
+        Raises:
+            ValueError: If the descriptor uses an unsupported source or a
+                required value cannot be produced.
+        """
         if not isinstance(descriptor, dict):
             return descriptor
 
@@ -446,6 +553,7 @@ class HttpEnergyBackend(EnergyBackend):
         return value
 
     def _row_value(self, row: dict[str, str], descriptor: dict[str, Any]) -> Any:
+        """Read one raw value from a row-based descriptor definition."""
         columns = descriptor.get("columns")
         if isinstance(columns, list):
             for column in columns:
@@ -461,6 +569,19 @@ class HttpEnergyBackend(EnergyBackend):
         return None
 
     def _computed_value(self, descriptor: dict[str, Any], spec: dict[str, Any], item: ScheduledCoil) -> Any:
+        """Resolve one computed feature from scheduled-coil metadata.
+
+        Args:
+            descriptor: Descriptor containing the computed field name.
+            spec: Equipment-specific configuration block.
+            item: Scheduled coil metadata.
+
+        Returns:
+            Computed value derived from the scheduled item.
+
+        Raises:
+            ValueError: If the computed field name is unsupported.
+        """
         field = str(descriptor.get("field") or "").strip()
         if field == "duration_min":
             return item.duration_min
@@ -482,6 +603,7 @@ class HttpEnergyBackend(EnergyBackend):
         raise ValueError(f"Unsupported computed energy field `{field}`.")
 
     def _post_json(self, path: str, params: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+        """POST one JSON request to the configured energy service endpoint."""
         response = self._session.post(f"{self._base_url}{path}", params=params, json=payload, timeout=self._timeout)
         response.raise_for_status()
         data = response.json()
@@ -489,7 +611,7 @@ class HttpEnergyBackend(EnergyBackend):
 
 
 class FileEnergyBackend(EnergyBackend):
-    """Backend that evaluates local formulas from a JSON context file."""
+    """Evaluate the analysis locally from formulas stored in a JSON context."""
 
     def __init__(self, file_path: str) -> None:
         self._path = Path(file_path)
@@ -499,11 +621,22 @@ class FileEnergyBackend(EnergyBackend):
             self._context = _normalize_energy_context(json.load(handle))
 
     def available_equipment(self) -> list[dict[str, str]]:
+        """Return selector options for locally configured equipment."""
         equipment_cfg = self._context.get("equipment") or {}
         site_names = {eq.name_short for eq in state.get_site().get_process_all_equipment()}
         return [{"label": eq, "value": eq} for eq in equipment_cfg if eq in site_names]
 
     def analyse(self, equipment_names: list[str], start_time: datetime, end_time: datetime) -> tuple[list[dict[str, Any]], str]:
+        """Run the local formula-based analysis for the selected time window.
+
+        Args:
+            equipment_names: Selected site equipment names.
+            start_time: Lower bound of the analysis window.
+            end_time: Upper bound of the analysis window.
+
+        Returns:
+            A tuple containing the result rows and a status message.
+        """
         snapshot_id = state.get_snapshot_provider().current_snapshot_id()
         snapshot = state.get_snapshot(snapshot_id)
         if snapshot is None:
@@ -537,6 +670,15 @@ class FileEnergyBackend(EnergyBackend):
         return result_rows, f"Completed the local energy analysis for {len(result_rows)} scheduled coils using {self._path.name}."
 
     def _evaluate_metrics(self, item: ScheduledCoil, equipment_cfg: dict[str, Any]) -> dict[str, float]:
+        """Evaluate configured local formulas for one scheduled coil.
+
+        Args:
+            item: Scheduled coil to evaluate.
+            equipment_cfg: Effective equipment configuration after defaults.
+
+        Returns:
+            Evaluated energy, uncertainty, cost, and unit-price metrics.
+        """
         price_expr = equipment_cfg.get("price_eur_mwh", "80.0")
         energy_expr = equipment_cfg.get("energy_kwh", "coil_weight_t * duration_min * 10.0")
         cost_expr = equipment_cfg.get("cost_eur", "ensemble_energy_kwh * unit_price_eur_mwh / 1000.0")
@@ -561,7 +703,17 @@ class FileEnergyBackend(EnergyBackend):
 
 
 def _scheduled_from_snapshot(snapshot: Any, equipment_names: list[str], start_time: datetime, end_time: datetime) -> list[ScheduledCoil]:
-    """Extract scheduled coils from a generic snapshot."""
+    """Extract scheduled coils from a generic snapshot-based data source.
+
+    Args:
+        snapshot: Snapshot object providing orders, lots, and timing data.
+        equipment_names: Selected site equipment names.
+        start_time: Lower bound of the analysis window.
+        end_time: Upper bound of the analysis window.
+
+    Returns:
+        Scheduled coils intersecting the requested time window.
+    """
     start_time = _ensure_local_datetime(start_time)
     end_time = _ensure_local_datetime(end_time)
     coils_by_order = state.get_coils_by_order(snapshot.timestamp)
@@ -610,7 +762,15 @@ def _scheduled_from_snapshot(snapshot: Any, equipment_names: list[str], start_ti
 
 
 def _safe_eval(expression: str, variables: dict[str, Any]) -> float:
-    """Evaluate one local energy expression with a restricted namespace."""
+    """Evaluate one local formula using a restricted expression namespace.
+
+    Args:
+        expression: Formula expression declared in the JSON context.
+        variables: Runtime variables made available to the formula.
+
+    Returns:
+        Evaluated numeric result as ``float``.
+    """
     allowed = {
         "abs": abs,
         "min": min,
@@ -624,7 +784,15 @@ def _safe_eval(expression: str, variables: dict[str, Any]) -> float:
 
 
 def _file_eval_context(item: ScheduledCoil, equipment_cfg: dict[str, Any]) -> dict[str, Any]:
-    """Build the variable context for file-based formula evaluation."""
+    """Build the variable dictionary used by file-based formula backends.
+
+    Args:
+        item: Scheduled coil being evaluated.
+        equipment_cfg: Effective equipment configuration after defaults.
+
+    Returns:
+        Variable mapping exposed to local formula expressions.
+    """
     coil = item.coil
     order = item.order
     props = getattr(order, "material_properties", {}) or {}
@@ -666,7 +834,7 @@ def _file_eval_context(item: ScheduledCoil, equipment_cfg: dict[str, Any]) -> di
 
 
 def _energy_source() -> str:
-    """Return the configured energy provider URI."""
+    """Return the configured energy provider URI from runtime settings."""
     provider = (config.energy_provider or "").strip()
     if provider == "":
         raise ValueError("DYNREACT_ENERGY is not configured.")
@@ -674,7 +842,7 @@ def _energy_source() -> str:
 
 
 def _provider_file_path(provider: str) -> Path | None:
-    """Resolve one file-backed provider URI to an absolute path."""
+    """Resolve one file-backed provider URI into an absolute path."""
     if provider.startswith("default+file:"):
         provider = provider[len("default+file:"):]
     elif provider.startswith("ras+file:"):
@@ -690,7 +858,7 @@ def _provider_file_path(provider: str) -> Path | None:
 
 
 def _resolve_http_token(http_cfg: dict[str, Any]) -> str | None:
-    """Resolve the HTTP token, preferably from the environment."""
+    """Resolve the HTTP authentication token, preferably from the environment."""
     token = http_cfg.get("token")
     if token:
         return str(token)
@@ -699,7 +867,7 @@ def _resolve_http_token(http_cfg: dict[str, Any]) -> str | None:
 
 
 def _build_http_backend(http_cfg: dict[str, Any]) -> HttpEnergyBackend:
-    """Instantiate the HTTP backend from one JSON config block."""
+    """Instantiate the HTTP backend from one normalized config block."""
     base_url = str(http_cfg.get("DYNREACT_ENERGY_PERF") or http_cfg.get("base_url") or "").strip()
     if base_url == "":
         raise ValueError("Energy HTTP configuration is missing `DYNREACT_ENERGY_PERF`.")
@@ -717,7 +885,7 @@ def _build_http_backend(http_cfg: dict[str, Any]) -> HttpEnergyBackend:
 
 
 def _normalize_energy_context(context: dict[str, Any]) -> dict[str, Any]:
-    """Normalize legacy and structured energy context layouts."""
+    """Normalize legacy and structured energy context layouts in-place."""
     normalized = dict(context)
     functions_cfg = normalized.get("energy_functions")
     if isinstance(functions_cfg, dict):
@@ -738,6 +906,7 @@ def _normalize_energy_context(context: dict[str, Any]) -> dict[str, Any]:
 
 
 def _is_missing_value(value: Any) -> bool:
+    """Return whether one raw value should be treated as missing."""
     if value is None:
         return True
     if isinstance(value, str):
@@ -746,7 +915,7 @@ def _is_missing_value(value: Any) -> bool:
 
 
 def _friendly_energy_error(exc: Exception) -> tuple[str, str]:
-    """Convert one backend exception into a user-facing dialog and status message."""
+    """Convert one backend exception into user-facing dialog and status text."""
     message = str(exc)
     if "429" in message and "Too Many Requests" in message:
         dialog = "Live electricity pricing is temporarily rate-limited. Energy estimation is available, but price calculation cannot be completed right now. Please retry in a moment."
@@ -760,7 +929,7 @@ def _friendly_energy_error(exc: Exception) -> tuple[str, str]:
 
 
 def _build_backend_from_context(path: Path, context: dict[str, Any]) -> EnergyBackend:
-    """Instantiate one backend from a JSON energy context file."""
+    """Instantiate one backend from a parsed energy context document."""
     normalized = _normalize_energy_context(context)
     provider_type = str(normalized.get("provider") or "file").strip().lower()
     if provider_type == "file":
@@ -772,7 +941,7 @@ def _build_backend_from_context(path: Path, context: dict[str, Any]) -> EnergyBa
 
 
 def _build_backend() -> EnergyBackend|None:
-    """Instantiate the configured backend."""
+    """Instantiate the backend selected by the current runtime configuration."""
     provider = _energy_source().strip()
     file_path = _provider_file_path(provider)
     if file_path is not None and os.path.isfile(file_path):
@@ -801,7 +970,7 @@ _backend = _build_backend()
 
 
 def _table_columns() -> list[dict[str, Any]]:
-    """Return the AgGrid column configuration."""
+    """Return the AgGrid column definition for the main energy result table."""
     return [
         {"field": "equipment", "pinned": True},
         {"field": "coil_id", "headerName": "Coil", "pinned": True},
@@ -821,7 +990,7 @@ def _table_columns() -> list[dict[str, Any]]:
 
 
 def _demand_table_columns() -> list[dict[str, Any]]:
-    """Return the AgGrid column configuration for the total demand table."""
+    """Return the AgGrid column definition for the total demand table."""
     return [
         {"field": "time", "headerName": "Time", "pinned": True},
         {"field": "interval_end", "headerName": "Interval end"},
@@ -831,21 +1000,21 @@ def _demand_table_columns() -> list[dict[str, Any]]:
 
 
 def _empty_figure() -> go.Figure:
-    """Return the initial empty figure."""
+    """Return the empty Plotly figure used before analysis results exist."""
     fig = go.Figure()
     fig.update_layout(template="plotly_white", height=650, title="Energy estimation results", xaxis_title="Time", yaxis_title="Energy per coil (kWh)")
     return fig
 
 
 def _empty_demand_figure() -> go.Figure:
-    """Return the initial empty total demand figure."""
+    """Return the empty Plotly figure used for total demand before analysis."""
     fig = go.Figure()
     fig.update_layout(template="plotly_white", height=520, title="Total energy demand", xaxis_title="Time", yaxis_title="Total energy demand (kWh / interval)")
     return fig
 
 
 def _build_figure(rows: list[dict[str, Any]], start_value: str, end_value: str) -> go.Figure:
-    """Create the final figure."""
+    """Build the main Plotly figure for per-coil and cumulative energy results."""
     if len(rows) == 0:
         return _empty_figure()
     fig = go.Figure()
@@ -885,7 +1054,7 @@ def _build_figure(rows: list[dict[str, Any]], start_value: str, end_value: str) 
 
 
 def _total_energy_demand_interval_min() -> int:
-    """Return the configured aggregation interval for total demand."""
+    """Return the configured aggregation interval for total demand in minutes."""
     provider = _energy_source().strip()
     file_path = _provider_file_path(provider)
     if file_path is not None and os.path.isfile(file_path):
@@ -898,7 +1067,17 @@ def _total_energy_demand_interval_min() -> int:
 
 
 def _build_total_demand_rows(rows: list[dict[str, Any]], start_value: str, end_value: str, interval_min: int) -> list[dict[str, Any]]:
-    """Aggregate energy into fixed-width time buckets."""
+    """Aggregate predicted energy into fixed-width demand buckets.
+
+    Args:
+        rows: Per-coil energy rows already prepared for the UI.
+        start_value: Analysis start time in ISO format.
+        end_value: Analysis end time in ISO format.
+        interval_min: Aggregation interval in minutes.
+
+    Returns:
+        Row dictionaries describing total demand per time bucket.
+    """
     if len(rows) == 0:
         return []
     interval_seconds = max(1, int(interval_min)) * 60
@@ -937,7 +1116,7 @@ def _build_total_demand_rows(rows: list[dict[str, Any]], start_value: str, end_v
 
 
 def _build_total_demand_figure(rows: list[dict[str, Any]], start_value: str, end_value: str, interval_min: int) -> go.Figure:
-    """Create the Plotly figure for total energy demand."""
+    """Build the Plotly figure for aggregated total energy demand."""
     demand_rows = _build_total_demand_rows(rows, start_value, end_value, interval_min)
     if len(demand_rows) == 0:
         return _empty_demand_figure()
@@ -969,9 +1148,14 @@ def _build_total_demand_figure(rows: list[dict[str, Any]], start_value: str, end
 
 
 def layout(*args: Any, **kwargs: Any) -> html.Div|None:
+    """Render the configurable energy analysis page.
+
+    Returns:
+        The page layout when an energy backend is configured, otherwise ``None``
+        so the hosting UI can hide the page gracefully.
+    """
     if _backend is None:
         return None
-    """Render the energy page."""
     snapshot_id = state.get_snapshot_provider().current_snapshot_id()
     snapshot_label = snapshot_id.strftime("%Y-%m-%d %H:%M:%S %Z") if snapshot_id is not None else "None"
     demand_interval_min = _total_energy_demand_interval_min()
@@ -1026,7 +1210,7 @@ def layout(*args: Any, **kwargs: Any) -> html.Div|None:
     prevent_initial_call=True,
 )
 def run_energy_analysis(_: int, equipment_names: list[str] | None, start_value: str | None, end_value: str | None) -> tuple[bool, str, str, list[dict[str, Any]], go.Figure, str, list[dict[str, Any]], go.Figure]:
-    """Validate input and run the configured analysis backend."""
+    """Validate input, run the backend, and build the Dash callback payload."""
     equipment_names = equipment_names or []
     if len(equipment_names) == 0 or not start_value or not end_value:
         return True, "Please select at least one equipment and both time bounds before starting the analysis.", "Waiting for valid input.", dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
@@ -1059,7 +1243,7 @@ def run_energy_analysis(_: int, equipment_names: list[str] | None, start_value: 
     prevent_initial_call=True,
 )
 def export_total_demand_csv(_: int | None, row_data: list[dict[str, Any]] | None) -> tuple[bool, dict[str, Any] | None]:
-    """Export the total energy demand table as CSV."""
+    """Trigger CSV export for the total energy demand table."""
     if not row_data:
         return False, None
     snapshot_id = state.get_snapshot_provider().current_snapshot_id()

@@ -182,6 +182,8 @@ class HttpEnergyBackend(EnergyBackend):
         result_rows: list[dict[str, Any]] = []
         skipped = 0
         fallback_used = 0
+        price_rate_limited = 0
+        price_unavailable = 0
         for item in scheduled:
             spec = selected[item.equipment_name]
             features = self._features_from_row(item.row or {}, spec, item)
@@ -193,20 +195,37 @@ class HttpEnergyBackend(EnergyBackend):
                 continue
             if selected_model_key != f"ensemble_stack_{service_equipment}":
                 fallback_used += 1
-            cost_result = self._post_json(
-                "/order_cost_estimation",
-                params={
-                    "model_key": selected_model_key,
-                    "order_id": item.coil_id,
-                    "duration_min": item.duration_min,
-                    "start_time_iso": item.start_time.isoformat(),
-                    "region": self._region,
-                },
-                payload={"features": features},
-            )
             numeric_predictions = [float(val) for val in predictions.values() if isinstance(val, (int, float)) and math.isfinite(float(val))]
             sigma_factor = float(spec.get("uncertainty_sigma_factor", self._uncertainty_sigma_factor))
             numeric_predictions = _trim_prediction_outliers(numeric_predictions, sigma_factor=sigma_factor)
+            cost_value: float | None = None
+            unit_price_value: float | None = None
+            try:
+                cost_result = self._post_json(
+                    "/order_cost_estimation",
+                    params={
+                        "model_key": selected_model_key,
+                        "order_id": item.coil_id,
+                        "duration_min": item.duration_min,
+                        "start_time_iso": item.start_time.isoformat(),
+                        "region": self._region,
+                    },
+                    payload={"features": features},
+                )
+                raw_cost = cost_result.get("total_cost_eur")
+                if isinstance(raw_cost, (int, float)):
+                    cost_value = round(float(raw_cost), 4)
+                raw_unit_price = (cost_result.get("unit_price") or {}).get("price_eur_mwh")
+                if isinstance(raw_unit_price, (int, float)):
+                    unit_price_value = round(float(raw_unit_price), 3)
+            except requests.HTTPError as exc:
+                message = str(exc)
+                if "429" in message and "Too Many Requests" in message:
+                    price_rate_limited += 1
+                elif "502" in message or "upstream pricing provider" in message:
+                    price_unavailable += 1
+                else:
+                    raise
             result_rows.append(
                 {
                     "equipment": item.equipment_name,
@@ -220,8 +239,8 @@ class HttpEnergyBackend(EnergyBackend):
                     "ensemble_energy_kwh": round(float(selected_energy), 3),
                     "uncertainty_min_kwh": round(min(numeric_predictions), 3) if numeric_predictions else None,
                     "uncertainty_max_kwh": round(max(numeric_predictions), 3) if numeric_predictions else None,
-                    "energy_cost_eur": round(float(cost_result.get("total_cost_eur", 0.0)), 4),
-                    "unit_price_eur_mwh": round(float((cost_result.get("unit_price") or {}).get("price_eur_mwh", 0.0)), 3),
+                    "energy_cost_eur": cost_value,
+                    "unit_price_eur_mwh": unit_price_value,
                     "source": "http",
                 }
             )
@@ -229,6 +248,10 @@ class HttpEnergyBackend(EnergyBackend):
         status = f"Completed the energy analysis for {len(result_rows)} scheduled coils. Skipped {skipped} coils."
         if fallback_used > 0:
             status += f" Used fallback models for {fallback_used} coils when the ensemble prediction was unavailable."
+        if price_rate_limited > 0:
+            status += f" Live pricing was temporarily rate-limited for {price_rate_limited} coils, so their energy is shown without cost."
+        if price_unavailable > 0:
+            status += f" Live pricing was unavailable for {price_unavailable} coils, so their energy is shown without cost."
         return result_rows, status
 
     def _scheduled_from_rows(
@@ -700,6 +723,20 @@ def _is_missing_value(value: Any) -> bool:
     return False
 
 
+def _friendly_energy_error(exc: Exception) -> tuple[str, str]:
+    """Convert one backend exception into a user-facing dialog and status message."""
+    message = str(exc)
+    if "429" in message and "Too Many Requests" in message:
+        dialog = "Live electricity pricing is temporarily rate-limited. Energy estimation is available, but price calculation cannot be completed right now. Please retry in a moment."
+        status = "Energy analysis could not finish because the live pricing provider is temporarily rate-limited."
+        return dialog, status
+    if "502" in message or "upstream pricing provider" in message:
+        dialog = "Live electricity pricing is temporarily unavailable for the selected time range. Please retry later."
+        status = "Energy analysis could not finish because live pricing data is currently unavailable."
+        return dialog, status
+    return message, f"Analysis failed: {message}"
+
+
 def _build_backend_from_context(path: Path, context: dict[str, Any]) -> EnergyBackend:
     """Instantiate one backend from a JSON energy context file."""
     normalized = _normalize_energy_context(context)
@@ -866,6 +903,12 @@ def run_energy_analysis(_: int, equipment_names: list[str] | None, start_value: 
     try:
         rows, status = _backend.analyse(equipment_names, start_time, end_time)
     except Exception as exc:
-        return True, str(exc), f"Analysis failed: {exc}", [], _empty_figure(), "Total price: 0.00 EUR"
+        dialog, status = _friendly_energy_error(exc)
+        return True, dialog, status, [], _empty_figure(), "Total price: 0.00 EUR"
     total_price = sum(float(row.get("energy_cost_eur") or 0.0) for row in rows)
-    return False, "", status, rows, _build_figure(rows, start_value, end_value), f"Total price: {total_price:.2f} EUR"
+    missing_price_rows = sum(1 for row in rows if row.get("energy_cost_eur") is None)
+    if missing_price_rows > 0:
+        total_label = f"Total price: partial result ({total_price:.2f} EUR, pricing missing for {missing_price_rows} coils)"
+    else:
+        total_label = f"Total price: {total_price:.2f} EUR"
+    return False, "", status, rows, _build_figure(rows, start_value, end_value), total_label

@@ -789,11 +789,11 @@ def _table_columns() -> list[dict[str, Any]]:
         {"field": "end_time", "headerName": "End"},
         {"field": "duration_min", "headerName": "Duration (min)", "filter": "agNumberColumnFilter"},
         {"field": "energy_model_key", "headerName": "Model"},
-        {"field": "ensemble_energy_kwh", "headerName": "Estimated energy (kWh)", "filter": "agNumberColumnFilter"},
-        {"field": "uncertainty_min_kwh", "headerName": "Uncertainty min (kWh)", "filter": "agNumberColumnFilter"},
-        {"field": "uncertainty_max_kwh", "headerName": "Uncertainty max (kWh)", "filter": "agNumberColumnFilter"},
-        {"field": "energy_cost_eur", "headerName": "Cost (EUR)", "filter": "agNumberColumnFilter"},
-        {"field": "unit_price_eur_mwh", "headerName": "Unit price (EUR/MWh)", "filter": "agNumberColumnFilter"},
+        {"field": "ensemble_energy_kwh", "headerName": "Estimated energy (kWh)", "filter": "agNumberColumnFilter", "valueFormatter": {"function": "params.value == null ? '' : d3.format(',.2f')(params.value)"}},
+        {"field": "uncertainty_min_kwh", "headerName": "Uncertainty min (kWh)", "filter": "agNumberColumnFilter", "valueFormatter": {"function": "params.value == null ? '' : d3.format(',.2f')(params.value)"}},
+        {"field": "uncertainty_max_kwh", "headerName": "Uncertainty max (kWh)", "filter": "agNumberColumnFilter", "valueFormatter": {"function": "params.value == null ? '' : d3.format(',.2f')(params.value)"}},
+        {"field": "energy_cost_eur", "headerName": "Cost (EUR)", "filter": "agNumberColumnFilter", "valueFormatter": {"function": "params.value == null ? '' : d3.format(',.2f')(params.value)"}},
+        {"field": "unit_price_eur_mwh", "headerName": "Unit price (EUR/MWh)", "filter": "agNumberColumnFilter", "valueFormatter": {"function": "params.value == null ? '' : d3.format(',.2f')(params.value)"}},
         {"field": "source", "headerName": "Source"},
     ]
 
@@ -830,15 +830,15 @@ def _build_figure(rows: list[dict[str, Any]], start_value: str, end_value: str) 
             cum_cost.append(running_cost)
         fig.add_trace(go.Scatter(x=x_values + list(reversed(x_values)), y=y_high + list(reversed(y_low)), fill="toself", fillcolor=f"rgba(99,110,250,0.15)", line={"color": "rgba(0,0,0,0)"}, hoverinfo="skip", name=f"{equipment_name} uncertainty"))
         fig.add_trace(go.Scatter(x=x_values, y=y_values, mode="lines+markers", line={"color": color}, name=f"{equipment_name} ensemble"))
-        fig.add_trace(go.Scatter(x=x_values, y=cum_energy, mode="lines", line={"color": color, "dash": "dash"}, name=f"{equipment_name} cumulative energy", yaxis="y2"))
-        fig.add_trace(go.Scatter(x=x_values, y=cum_cost, mode="lines", line={"color": color, "dash": "dot"}, name=f"{equipment_name} cumulative cost", yaxis="y3"))
+        fig.add_trace(go.Scatter(x=x_values, y=cum_energy, mode="lines", line={"color": color, "dash": "dash"}, name=f"{equipment_name} cumulative energy", yaxis="y2", hovertemplate="%{y:,.2f} kWh<extra></extra>"))
+        fig.add_trace(go.Scatter(x=x_values, y=cum_cost, mode="lines", line={"color": color, "dash": "dot"}, name=f"{equipment_name} cumulative cost", yaxis="y3", hovertemplate="%{y:,.2f} EUR<extra></extra>"))
     fig.update_layout(
         template="plotly_white",
         height=720,
         xaxis={"title": "Time", "range": [datetime.fromisoformat(start_value), datetime.fromisoformat(end_value)]},
         yaxis={"title": "Energy per coil (kWh)"},
-        yaxis2={"title": "Cumulative energy (kWh)", "overlaying": "y", "side": "right"},
-        yaxis3={"title": "Cumulative cost (EUR)", "anchor": "free", "overlaying": "y", "side": "right", "position": 0.96},
+        yaxis2={"title": "Cumulative energy (kWh)", "overlaying": "y", "side": "right", "tickformat": ",.0f"},
+        yaxis3={"title": "Cumulative cost (EUR)", "anchor": "free", "overlaying": "y", "side": "right", "position": 0.96, "tickformat": ",.2f", "tickprefix": "EUR "},
         legend={"orientation": "h", "y": 1.02, "x": 0},
     )
     return fig

@@ -117,19 +117,36 @@ def _trim_prediction_outliers(values: list[float], sigma_factor: float = 3.0) ->
     return filtered or values
 
 
-def _pick_preferred_prediction(predictions: dict[str, Any], service_equipment: str) -> tuple[str | None, float | None]:
-    """Return the preferred available model prediction for one equipment."""
-    preferred_keys = [
+def _preferred_prediction_keys(service_equipment: str) -> list[str]:
+    return [
         f"ensemble_stack_{service_equipment}",
         f"hgb_{service_equipment}",
         f"rf_{service_equipment}",
         f"lin_{service_equipment}",
     ]
-    for key in preferred_keys:
+
+
+def _pick_preferred_prediction(predictions: dict[str, Any], service_equipment: str) -> tuple[str | None, float | None]:
+    """Return the preferred available model prediction for one equipment."""
+    for key in _preferred_prediction_keys(service_equipment):
         value = predictions.get(key)
         if isinstance(value, (int, float)) and math.isfinite(float(value)):
             return key, float(value)
     return None, None
+
+
+def _prediction_summary(predictions: dict[str, Any], service_equipment: str) -> str:
+    parts: list[str] = []
+    for key in _preferred_prediction_keys(service_equipment):
+        value = predictions.get(key)
+        if isinstance(value, (int, float)) and math.isfinite(float(value)):
+            rendered = f"{float(value):,.2f}"
+        elif value is None:
+            rendered = "n/a"
+        else:
+            rendered = str(value)
+        parts.append(f"{key}={rendered}")
+    return " | ".join(parts)
 
 
 class EnergyBackend:
@@ -181,6 +198,7 @@ class HttpEnergyBackend(EnergyBackend):
 
         result_rows: list[dict[str, Any]] = []
         skipped = 0
+        skipped_no_preferred = 0
         fallback_used = 0
         price_rate_limited = 0
         price_unavailable = 0
@@ -189,9 +207,11 @@ class HttpEnergyBackend(EnergyBackend):
             features = self._features_from_row(item.row or {}, spec, item)
             service_equipment = spec["service_equipment"]
             predictions = self._post_json("/energy_estimation_all", params={"equipment_id": service_equipment}, payload={"features": features})
+            prediction_summary = _prediction_summary(predictions, service_equipment)
             selected_model_key, selected_energy = _pick_preferred_prediction(predictions, service_equipment)
             if selected_model_key is None or selected_energy is None:
                 skipped += 1
+                skipped_no_preferred += 1
                 continue
             if selected_model_key != f"ensemble_stack_{service_equipment}":
                 fallback_used += 1
@@ -241,11 +261,13 @@ class HttpEnergyBackend(EnergyBackend):
                     "uncertainty_max_kwh": round(max(numeric_predictions), 3) if numeric_predictions else None,
                     "energy_cost_eur": cost_value,
                     "unit_price_eur_mwh": unit_price_value,
-                    "source": "http",
+                    "model_predictions": prediction_summary,
                 }
             )
         result_rows.sort(key=lambda item: (item["start_time"], item["equipment"], item["coil_id"]))
         status = f"Completed the energy analysis for {len(result_rows)} scheduled coils. Skipped {skipped} coils."
+        if skipped_no_preferred > 0:
+            status += f" {skipped_no_preferred} skipped coils had no finite prediction from the preferred models (ensemble, hgb, rf, lin)."
         if fallback_used > 0:
             status += f" Used fallback models for {fallback_used} coils when the ensemble prediction was unavailable."
         if price_rate_limited > 0:
@@ -794,7 +816,7 @@ def _table_columns() -> list[dict[str, Any]]:
         {"field": "uncertainty_max_kwh", "headerName": "Uncertainty max (kWh)", "filter": "agNumberColumnFilter", "valueFormatter": {"function": "params.value == null ? '' : d3.format(',.2f')(params.value)"}},
         {"field": "energy_cost_eur", "headerName": "Cost (EUR)", "filter": "agNumberColumnFilter", "valueFormatter": {"function": "params.value == null ? '' : d3.format(',.2f')(params.value)"}},
         {"field": "unit_price_eur_mwh", "headerName": "Unit price (EUR/MWh)", "filter": "agNumberColumnFilter", "valueFormatter": {"function": "params.value == null ? '' : d3.format(',.2f')(params.value)"}},
-        {"field": "source", "headerName": "Source"},
+        {"field": "model_predictions", "headerName": "Candidate predictions", "tooltipField": "model_predictions", "minWidth": 360, "flex": 2},
     ]
 
 
@@ -828,18 +850,19 @@ def _build_figure(rows: list[dict[str, Any]], start_value: str, end_value: str) 
             running_cost += float(row["energy_cost_eur"] or 0.0)
             cum_energy.append(running_energy)
             cum_cost.append(running_cost)
-        fig.add_trace(go.Scatter(x=x_values + list(reversed(x_values)), y=y_high + list(reversed(y_low)), fill="toself", fillcolor=f"rgba(99,110,250,0.15)", line={"color": "rgba(0,0,0,0)"}, hoverinfo="skip", name=f"{equipment_name} uncertainty"))
-        fig.add_trace(go.Scatter(x=x_values, y=y_values, mode="lines+markers", line={"color": color}, name=f"{equipment_name} ensemble"))
-        fig.add_trace(go.Scatter(x=x_values, y=cum_energy, mode="lines", line={"color": color, "dash": "dash"}, name=f"{equipment_name} cumulative energy", yaxis="y2", hovertemplate="%{y:,.2f} kWh<extra></extra>"))
-        fig.add_trace(go.Scatter(x=x_values, y=cum_cost, mode="lines", line={"color": color, "dash": "dot"}, name=f"{equipment_name} cumulative cost", yaxis="y3", hovertemplate="%{y:,.2f} EUR<extra></extra>"))
+        fig.add_trace(go.Scatter(x=x_values + list(reversed(x_values)), y=y_high + list(reversed(y_low)), fill="toself", fillcolor=f"rgba(99,110,250,0.10)", line={"color": "rgba(0,0,0,0)"}, hoverinfo="skip", showlegend=False, legendgroup=equipment_name, name=f"{equipment_name} uncertainty"))
+        fig.add_trace(go.Scatter(x=x_values, y=y_values, mode="lines+markers", line={"color": color, "width": 2}, marker={"size": 5}, name=f"{equipment_name} energy", legendgroup=equipment_name))
+        fig.add_trace(go.Scatter(x=x_values, y=cum_energy, mode="lines", line={"color": color, "dash": "dash", "width": 2}, name=f"{equipment_name} cum. energy", yaxis="y2", hovertemplate="%{y:,.2f} kWh<extra></extra>", legendgroup=equipment_name))
+        fig.add_trace(go.Scatter(x=x_values, y=cum_cost, mode="lines", line={"color": color, "dash": "dot", "width": 2}, name=f"{equipment_name} cum. cost", yaxis="y3", hovertemplate="%{y:,.2f} EUR<extra></extra>", legendgroup=equipment_name))
     fig.update_layout(
         template="plotly_white",
-        height=720,
+        height=760,
+        margin={"l": 80, "r": 180, "t": 110, "b": 70},
         xaxis={"title": "Time", "range": [datetime.fromisoformat(start_value), datetime.fromisoformat(end_value)]},
-        yaxis={"title": "Energy per coil (kWh)"},
-        yaxis2={"title": "Cumulative energy (kWh)", "overlaying": "y", "side": "right", "tickformat": ",.0f"},
-        yaxis3={"title": "Cumulative cost (EUR)", "anchor": "free", "overlaying": "y", "side": "right", "position": 0.96, "tickformat": ",.2f", "tickprefix": "EUR "},
-        legend={"orientation": "h", "y": 1.02, "x": 0},
+        yaxis={"title": "Energy per coil (kWh)", "tickformat": ",.0f"},
+        yaxis2={"title": "Cumulative energy (kWh)", "overlaying": "y", "side": "right", "tickformat": ",.0f", "showgrid": False},
+        yaxis3={"title": "Cumulative cost (EUR)", "anchor": "free", "overlaying": "y", "side": "right", "position": 0.90, "tickformat": ",.2f", "tickprefix": "EUR ", "showgrid": False},
+        legend={"orientation": "v", "y": 1.0, "yanchor": "top", "x": 1.02, "xanchor": "left", "font": {"size": 11}, "bgcolor": "rgba(255,255,255,0.75)"},
     )
     return fig
 

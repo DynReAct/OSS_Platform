@@ -79,6 +79,29 @@ def _number(value: Any, default: float = 0.0) -> float:
     return float(stripped.replace(",", "."))
 
 
+def _number_from_mixed(value: Any, default: float = 0.0) -> float:
+    """Extract a numeric value from mixed alphanumeric process codes such as `D00` or `A023`."""
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    stripped = str(value).strip()
+    if stripped == "":
+        return default
+    direct = stripped.replace(",", ".")
+    try:
+        return float(direct)
+    except ValueError:
+        pass
+    digits = "".join(ch for ch in direct if ch.isdigit() or ch in '.-')
+    if digits in {"", "-", ".", "-."}:
+        return default
+    try:
+        return float(digits)
+    except ValueError:
+        return default
+
+
 def _trim_prediction_outliers(values: list[float], sigma_factor: float = 3.0) -> list[float]:
     """Drop extreme model predictions beyond mean +/- sigma_factor * sd."""
     if len(values) < 3:
@@ -93,6 +116,20 @@ def _trim_prediction_outliers(values: list[float], sigma_factor: float = 3.0) ->
     filtered = [value for value in values if lower <= value <= upper]
     return filtered or values
 
+
+def _pick_preferred_prediction(predictions: dict[str, Any], service_equipment: str) -> tuple[str | None, float | None]:
+    """Return the preferred available model prediction for one equipment."""
+    preferred_keys = [
+        f"ensemble_stack_{service_equipment}",
+        f"hgb_{service_equipment}",
+        f"rf_{service_equipment}",
+        f"lin_{service_equipment}",
+    ]
+    for key in preferred_keys:
+        value = predictions.get(key)
+        if isinstance(value, (int, float)) and math.isfinite(float(value)):
+            return key, float(value)
+    return None, None
 
 
 class EnergyBackend:
@@ -144,20 +181,22 @@ class HttpEnergyBackend(EnergyBackend):
 
         result_rows: list[dict[str, Any]] = []
         skipped = 0
+        fallback_used = 0
         for item in scheduled:
             spec = selected[item.equipment_name]
             features = self._features_from_row(item.row or {}, spec, item)
             service_equipment = spec["service_equipment"]
             predictions = self._post_json("/energy_estimation_all", params={"equipment_id": service_equipment}, payload={"features": features})
-            ensemble_key = f"ensemble_stack_{service_equipment}"
-            ensemble_energy = predictions.get(ensemble_key)
-            if ensemble_energy is None:
+            selected_model_key, selected_energy = _pick_preferred_prediction(predictions, service_equipment)
+            if selected_model_key is None or selected_energy is None:
                 skipped += 1
                 continue
+            if selected_model_key != f"ensemble_stack_{service_equipment}":
+                fallback_used += 1
             cost_result = self._post_json(
                 "/order_cost_estimation",
                 params={
-                    "model_key": ensemble_key,
+                    "model_key": selected_model_key,
                     "order_id": item.coil_id,
                     "duration_min": item.duration_min,
                     "start_time_iso": item.start_time.isoformat(),
@@ -165,7 +204,7 @@ class HttpEnergyBackend(EnergyBackend):
                 },
                 payload={"features": features},
             )
-            numeric_predictions = [float(val) for val in predictions.values() if isinstance(val, (int, float))]
+            numeric_predictions = [float(val) for val in predictions.values() if isinstance(val, (int, float)) and math.isfinite(float(val))]
             sigma_factor = float(spec.get("uncertainty_sigma_factor", self._uncertainty_sigma_factor))
             numeric_predictions = _trim_prediction_outliers(numeric_predictions, sigma_factor=sigma_factor)
             result_rows.append(
@@ -177,7 +216,8 @@ class HttpEnergyBackend(EnergyBackend):
                     "start_time": item.start_time.isoformat(),
                     "end_time": item.end_time.isoformat(),
                     "duration_min": round(item.duration_min, 2),
-                    "ensemble_energy_kwh": round(float(ensemble_energy), 3),
+                    "energy_model_key": selected_model_key,
+                    "ensemble_energy_kwh": round(float(selected_energy), 3),
                     "uncertainty_min_kwh": round(min(numeric_predictions), 3) if numeric_predictions else None,
                     "uncertainty_max_kwh": round(max(numeric_predictions), 3) if numeric_predictions else None,
                     "energy_cost_eur": round(float(cost_result.get("total_cost_eur", 0.0)), 4),
@@ -186,7 +226,10 @@ class HttpEnergyBackend(EnergyBackend):
                 }
             )
         result_rows.sort(key=lambda item: (item["start_time"], item["equipment"], item["coil_id"]))
-        return result_rows, f"Completed the energy analysis for {len(result_rows)} scheduled coils. Skipped {skipped} coils."
+        status = f"Completed the energy analysis for {len(result_rows)} scheduled coils. Skipped {skipped} coils."
+        if fallback_used > 0:
+            status += f" Used fallback models for {fallback_used} coils when the ensemble prediction was unavailable."
+        return result_rows, status
 
     def _scheduled_from_rows(
         self,
@@ -347,7 +390,11 @@ class HttpEnergyBackend(EnergyBackend):
             raw_value = default
 
         value_type = str(descriptor.get("type") or "").strip().lower()
-        value = _number(raw_value, _number(default)) if value_type == "number" else raw_value
+        if value_type == "number":
+            parser = _number_from_mixed if bool(descriptor.get("extract_digits", False)) else _number
+            value = parser(raw_value, _number(default))
+        else:
+            value = raw_value
         scale = descriptor.get("scale")
         if isinstance(scale, (int, float)):
             value = float(value) * float(scale)
@@ -704,7 +751,8 @@ def _table_columns() -> list[dict[str, Any]]:
         {"field": "start_time", "headerName": "Start"},
         {"field": "end_time", "headerName": "End"},
         {"field": "duration_min", "headerName": "Duration (min)", "filter": "agNumberColumnFilter"},
-        {"field": "ensemble_energy_kwh", "headerName": "Ensemble energy (kWh)", "filter": "agNumberColumnFilter"},
+        {"field": "energy_model_key", "headerName": "Model"},
+        {"field": "ensemble_energy_kwh", "headerName": "Estimated energy (kWh)", "filter": "agNumberColumnFilter"},
         {"field": "uncertainty_min_kwh", "headerName": "Uncertainty min (kWh)", "filter": "agNumberColumnFilter"},
         {"field": "uncertainty_max_kwh", "headerName": "Uncertainty max (kWh)", "filter": "agNumberColumnFilter"},
         {"field": "energy_cost_eur", "headerName": "Cost (EUR)", "filter": "agNumberColumnFilter"},

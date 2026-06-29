@@ -6,10 +6,6 @@ from dynreact.base.monitoring import ServiceMetrics
 
 
 class LotSink:
-    """
-    @beta
-    Implementation expected in dynreact.lots.LotSinkImpl
-    """
 
     def __init__(self, url: str, site: Site, permissions: PermissionManager):
         self._url = url
@@ -32,6 +28,18 @@ class LotSink:
                  external_id: str|None = None,
                  comment: str|None = None,
                  user: str|None=None) -> str:
+        """
+        Parameters:
+            lot: the lot to be transferred
+            snapshot: the snapshot the new lots are based on
+            material: optional dictionary order id -> list of material ids
+            external_id: optional external id
+            comment: optional lot comment
+            user: user id responsible for the lot transfer
+
+        Returns:
+            New lot id
+        """
         raise Exception("not implemented")
 
     def transfer_append(self,
@@ -41,11 +49,15 @@ class LotSink:
                         material: dict[str, Sequence[str]] | None = None,
                         user: str|None=None) -> str:
         """
-        :param lot:
-        :param start_order: first order to be transferred
-        :param snapshot:
-        :material: optional dictionary order id -> list of material ids
-        :return: lot id
+        Parameters:
+            lot: the lot to be transferred
+            start_order: first order to be transferred
+            snapshot: the snapshot the new lots are based on
+            material: optional dictionary order id -> list of material ids
+            user: user id responsible for the lot transfer
+
+        Returns:
+            New lot id
         """
         raise Exception("not implemented")
 

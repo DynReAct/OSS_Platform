@@ -12,7 +12,7 @@ license = {text = "MIT"}
 dynamic = ["dependencies"]
 
 [tool.setuptools]
-packages = ["dynreact.shortterm", "dynreact.auction", "dynreact.gui_stp"]
+packages = ["dynreact.shortterm", "dynreact.shortterm.common", "dynreact.shortterm.common.data", "dynreact.shortterm.agents", "dynreact.auction", "dynreact.gui_stp"]
 package-dir = {"" = "."}
 
 [tool.setuptools.dynamic]

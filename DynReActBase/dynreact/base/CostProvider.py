@@ -163,8 +163,11 @@ class CostProvider:
 
     def structure_costs(self, planning: ProductionPlanning):
         """
-        :param planning
-        :return:
+        Parameters:
+            planning:
+
+        Returns:
+
         """
         if planning.target_structure is None:
             return 0
@@ -229,8 +232,10 @@ class CostProvider:
 
     def structure_costs_parameter(self) -> float:
         """
-        Overwrite this with a positive value to enable the default structure costs algorithm
-        :return:
+        Overwrite this with a positive value to enable the default structure costs algorithm.
+
+        Returns:
+            cost parameter related to material structure deviations
         """
         return 0
 
@@ -252,8 +257,10 @@ class CostProvider:
 
     def priority_costs_parameter(self) -> float:
         """
-        Overwrite this with a positive value to enable the default priority costs algorithm
-        :return:
+        Overwrite this with a positive value to enable the default priority costs algorithm.
+
+        Returns:
+            cost parameter related to order priorities
         """
         return 0
 
@@ -264,6 +271,9 @@ class CostProvider:
     def path_dependent_costs(self, process: str) -> bool:
         """
         Overwrite in subclass if the optimal sorting of orders depends on global/path-dependent costs.
+
+        Returns:
+            a boolean value indicating whether path-dependent (or "global") costs apply.
         """
         return False
 
@@ -271,8 +281,12 @@ class CostProvider:
         """
         Optional method, for display purposes only. To be overridden in derived class.
         Convention: "order.material_properties.<$FIELD_NAME>", "material.properties.<$FIELD_NAME>"
-        :param equipment:
-        :return:
+
+        Parameters:
+            equipment:
+
+        Returns:
+            A list of order attributes relevant for the cost function.
         """
         return None
 

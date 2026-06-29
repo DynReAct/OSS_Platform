@@ -112,6 +112,12 @@ The classes defined in this module are serializable and can be made accessible v
         show_signature: true
 
 
+## LotTimes class
+
+::: dynreact.base.model.LotTimes
+    options:
+        docstring_style: sphinx
+        show_signature: true
 
 
 ## MaterialOrderData class
@@ -138,7 +144,12 @@ The classes defined in this module are serializable and can be made accessible v
         show_signature: true
 
 
+## ObjectiveFunction class
 
+::: dynreact.base.model.ObjectiveFunction
+    options:
+        docstring_style: sphinx
+        show_signature: true
 
 
 ## EquipmentProduction class
@@ -235,6 +246,14 @@ The classes defined in this module are serializable and can be made accessible v
              - get_material_equipment
              - get_orders_equipment
              - get_material_selected_orders
+
+
+## PlannedWorkingShift
+
+::: dynreact.base.model.PlannedWorkingShift
+    options:
+        docstring_style: sphinx
+        show_signature: true
 
 
 ## LongTermTargets class

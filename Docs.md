@@ -22,7 +22,9 @@ pip install -r requirements_dev.txt
     mkdocs build
     ```
     
-    This will generate or update the *site* folder within *DynReActBase*. Copy this folder to *<repo_base>/docs* and rename it to *DynReActBase*. Repeat for the [ShortTermPlanning](./ShortTermPlanning) folder, this time renaming *site* to *ShortTermPlanning*.
+    This will generate or update the *site* folder within *DynReActBase*. Copy this folder to *<repo_base>/docs* and rename it to *DynReActBase*. 
+    Repeat for the [ShortTermPlanning](./ShortTermPlanning) folder, this time renaming *site* to *ShortTermPlanning*.
+
 * Commit the updated *docs* folder to the *gh-pages* branch of the repository. Check that the documentation has been generated correctly at https://dynreact.github.io/OSS_Platform/ (maybe wait a short moment until static site generation is done).    
 
 

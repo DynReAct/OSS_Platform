@@ -3,9 +3,9 @@
 <head>
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="description" content="None" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <link rel="shortcut icon" href="img/favicon.ico" />
-    <title>Dynreact Base</title>
+    <title>Production history reader - Dynreact Base</title>
     <link rel="stylesheet" href="css/theme.css" />
     <link rel="stylesheet" href="css/theme_extra.css" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
@@ -13,8 +13,8 @@
     
       <script>
         // Current page data
-        var mkdocs_page_name = "General";
-        var mkdocs_page_input_path = "index.md";
+        var mkdocs_page_name = "Production history reader";
+        var mkdocs_page_input_path = "prod_history_reader.md";
         var mkdocs_page_url = null;
       </script>
     
@@ -40,10 +40,8 @@
                 <li class="toctree-l1"><a class="" href="../index.html">Back</a>
                 </li>
               </ul>
-              <ul class="current">
-                <li class="toctree-l1 current"><a class="reference internal current" href="#">General</a>
-    <ul class="current">
-    </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="index.html">General</a>
                 </li>
               </ul>
               <ul>
@@ -62,8 +60,14 @@
                 <li class="toctree-l1"><a class="reference internal" href="shifts_provider.html">Shifts provider</a>
                 </li>
               </ul>
-              <ul>
-                <li class="toctree-l1"><a class="reference internal" href="prod_history_reader.html">Production history reader</a>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Production history reader</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#productionhistoryreader-class">ProductionHistoryReader class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.ProductionHistoryReader.ProductionHistoryReader">ProductionHistoryReader</a>
+    </li>
+    </ul>
                 </li>
               </ul>
               <ul>
@@ -100,7 +104,7 @@
         <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
   <ul class="wy-breadcrumbs">
     <li><a href="index.html" class="icon icon-home" aria-label="Docs"></a></li>
-      <li class="breadcrumb-item active">General</li>
+      <li class="breadcrumb-item active">Production history reader</li>
     <li class="wy-breadcrumbs-aside">
     </li>
   </ul>
@@ -109,25 +113,59 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
             <div class="section" itemprop="articleBody">
               
-                <h1 id="dynreact-base">Dynreact Base</h1>
-<p>Dynreact basic components and interfaces:</p>
-<ul>
-<li><code>model.py</code>: contains the basic domain model for the DynReAct production planning software</li>
-<li><code>SnapshotProvider.py</code>: defines the SnapshotProvider data source interface</li>
-<li><code>SnapshotImporter.py</code>: defines the SnapshotImporter extension of SnapshotProvider</li>
-<li><code>ShiftsProvider.py</code>: defines the ShiftsProvider data source interface</li>
-<li><code>ProductionHistoryReader.py</code>: defines the ProductionHistoryReader data source interface</li>
-<li><code>LotSink.py</code>: defines the LotSink data sink interface</li>
-<li><code>CostProvider.py</code>: contains all the custom logic and classes for building an objective function for schedules</li>
-<li><code>LongTermPlanning.py</code>: provides the interface for the LongTermPlanning algorithm</li>
-<li><code>LotsOptimizer.py</code>: contains the interface specification for the mid-term planning algorithm</li>
-<li><code>PlantPerformanceModel.py</code>: defines the PlantPerformanceModel interface</li>
-</ul>
+                <h1 id="production-history-reader">Production history reader</h1>
+<p>The ProductionHistoryReader module defines the ProductionHistoryReader interface, importing aggregated
+past production statistics from an external data source.
+While a custom implementation is indispensable for productive use, a dummy implementation is provided for test
+and development purposes. It can be activated via the environment variable</p>
+<pre><code>HISTORY_READER=dummy:default
+</code></pre>
+<p>It assumes all equipment to have been operating at full capacity all the time, not taking into account shifts or downtimes.</p>
+<hr />
+<h2 id="productionhistoryreader-class"><strong>ProductionHistoryReader</strong> class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.base.ProductionHistoryReader.ProductionHistoryReader"></a>
+    <div class="doc doc-contents first">
+
+
+        <p>A service that provides information about historical production values.</p>
+
+
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
               
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="model.html" class="btn btn-neutral float-right" title="Model">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="shifts_provider.html" class="btn btn-neutral float-left" title="Shifts provider"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="lot_sink.html" class="btn btn-neutral float-right" title="Lot sink">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -150,8 +188,10 @@
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
+      <span><a href="shifts_provider.html" style="color: #fcfcfc">&laquo; Previous</a></span>
     
-      <span><a href="model.html" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+      <span><a href="lot_sink.html" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>
@@ -167,8 +207,3 @@
 
 </body>
 </html>
-
-<!--
-MkDocs version : 1.6.1
-Build Date UTC : 2026-06-29 12:59:49.577453+00:00
--->

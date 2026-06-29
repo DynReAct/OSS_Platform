@@ -15,10 +15,3 @@ for more complex use cases.
         show_source: false
 
 
-## **SnapshotProvider** class
-
-::: dynreact.base.SnapshotProvider.OrderInitMethod
-    options:
-        members_order: source
-        show_signature: true
-        show_source: false

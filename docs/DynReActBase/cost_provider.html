@@ -44,30 +44,6 @@
                 <li class="toctree-l1"><a class="reference internal" href="index.html">General</a>
                 </li>
               </ul>
-              <ul class="current">
-                <li class="toctree-l1 current"><a class="reference internal current" href="#">Cost provider</a>
-    <ul class="current">
-    <li class="toctree-l2"><a class="reference internal" href="#costprovider-class">CostProvider class</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider">CostProvider</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.__init__">__init__</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.evaluate_order_assignments">evaluate_order_assignments</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.objective_function">objective_function</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.process_objective_function">process_objective_function</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.equipment_status">equipment_status</a>
-    </li>
-    </ul>
-                </li>
-              </ul>
-              <ul>
-                <li class="toctree-l1"><a class="reference internal" href="lots_optimizer.html">Lots optimizer</a>
-                </li>
-              </ul>
               <ul>
                 <li class="toctree-l1"><a class="reference internal" href="model.html">Model</a>
                 </li>
@@ -77,7 +53,67 @@
                 </li>
               </ul>
               <ul>
+                <li class="toctree-l1"><a class="reference internal" href="snapshot_importer.html">Snapshot importer</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="shifts_provider.html">Shifts provider</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="prod_history_reader.html">Production history reader</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="lot_sink.html">Lot sink</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Cost provider</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#costprovider-class">CostProvider class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider">CostProvider</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.__init__">__init__</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.transition_costs">transition_costs</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.assignment_costs">assignment_costs</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.logistic_costs">logistic_costs</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.structure_costs_parameter">structure_costs_parameter</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.priority_costs_parameter">priority_costs_parameter</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.path_dependent_costs">path_dependent_costs</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.evaluate_order_assignments">evaluate_order_assignments</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.update_transition_costs">update_transition_costs</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.objective_function">objective_function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.process_objective_function">process_objective_function</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.equipment_status">equipment_status</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.CostProvider.CostProvider.relevant_fields">relevant_fields</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
                 <li class="toctree-l1"><a class="reference internal" href="longtermplanning.html">Long term planning</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="lots_optimizer.html">Lots optimizer</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="plant_performance_model.html">Plant performance model</a>
                 </li>
               </ul>
       </div>
@@ -104,9 +140,8 @@
             <div class="section" itemprop="articleBody">
               
                 <h1 id="cost-provider">Cost provider</h1>
-<p>The CostProvider module defines the CostProvider class, which should be thought of as an
-interface that must be implemented for each specific scheduling use-case. It contains all
-the custom logic for building an objective function for schedules.</p>
+<p>The CostProvider module defines the CostProvider class, an interface that must be implemented for each specific 
+scheduling use-case. It contains all the custom logic for building an objective function for schedules.</p>
 <hr />
 <h2 id="costprovider-class"><strong>CostProvider</strong> class</h2>
 
@@ -422,7 +457,44 @@ Implementation expected in package dynreact.cost.CostCalculatorImpl</p>
 <span class="normal">304</span>
 <span class="normal">305</span>
 <span class="normal">306</span>
-<span class="normal">307</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">CostProvider</span><span class="p">:</span>
+<span class="normal">307</span>
+<span class="normal">308</span>
+<span class="normal">309</span>
+<span class="normal">310</span>
+<span class="normal">311</span>
+<span class="normal">312</span>
+<span class="normal">313</span>
+<span class="normal">314</span>
+<span class="normal">315</span>
+<span class="normal">316</span>
+<span class="normal">317</span>
+<span class="normal">318</span>
+<span class="normal">319</span>
+<span class="normal">320</span>
+<span class="normal">321</span>
+<span class="normal">322</span>
+<span class="normal">323</span>
+<span class="normal">324</span>
+<span class="normal">325</span>
+<span class="normal">326</span>
+<span class="normal">327</span>
+<span class="normal">328</span>
+<span class="normal">329</span>
+<span class="normal">330</span>
+<span class="normal">331</span>
+<span class="normal">332</span>
+<span class="normal">333</span>
+<span class="normal">334</span>
+<span class="normal">335</span>
+<span class="normal">336</span>
+<span class="normal">337</span>
+<span class="normal">338</span>
+<span class="normal">339</span>
+<span class="normal">340</span>
+<span class="normal">341</span>
+<span class="normal">342</span>
+<span class="normal">343</span>
+<span class="normal">344</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">CostProvider</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    An interface that must be implemented for each specific scheduling use-case. It contains all</span>
 <span class="sd">    the custom logic for building an objective function for schedules.</span>
@@ -441,6 +513,21 @@ Implementation expected in package dynreact.cost.CostCalculatorImpl</p>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;not implemented&quot;</span><span class="p">)</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">assignment_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">equipment</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">,</span> <span class="n">order</span><span class="p">:</span> <span class="n">Order</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Costs for assigning an order to a specific equipment. This cost component can be used to define</span>
+<span class="sd">        equipment preferences for specific orders at a given process stage. It must then be taken into consideration in</span>
+<span class="sd">        evaluate_equipment_assignments() and update_transition_costs().</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            equipment: equipment</span>
+<span class="sd">            order: order</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Costs (non-negative float)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="mi">0</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">logistic_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">new_equipment</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">,</span> <span class="n">order</span><span class="p">:</span> <span class="n">Order</span><span class="p">,</span> <span class="n">material</span><span class="p">:</span> <span class="n">Material</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Calculates the transition costs for an order or individual material from an order to be transported to a new</span>
@@ -452,9 +539,12 @@ Implementation expected in package dynreact.cost.CostCalculatorImpl</p>
                                    <span class="n">snapshot</span><span class="p">:</span> <span class="n">Snapshot</span><span class="p">,</span> <span class="n">total_priority</span><span class="p">:</span> <span class="nb">int</span><span class="o">|</span><span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">orders_custom_priority</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
                                    <span class="n">previous_orders</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ProductionPlanning</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        :param process:</span>
-<span class="sd">        :param assignments:</span>
-<span class="sd">        :return:</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            process:</span>
+<span class="sd">            assignments:</span>
+
+<span class="sd">        Returns:</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1">#plants = [p for p in self._site.plants if p.process == process]</span>
         <span class="n">plant_ids</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">targets</span><span class="o">.</span><span class="n">target_weight</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
@@ -485,27 +575,13 @@ Implementation expected in package dynreact.cost.CostCalculatorImpl</p>
         <span class="k">return</span> <span class="n">ProductionPlanning</span><span class="p">(</span><span class="n">process</span><span class="o">=</span><span class="n">process</span><span class="p">,</span> <span class="n">order_assignments</span><span class="o">=</span><span class="n">order_assignments</span><span class="p">,</span> <span class="n">equipment_status</span><span class="o">=</span><span class="n">status</span><span class="p">,</span>
                                   <span class="n">target_structure</span><span class="o">=</span><span class="n">target_structure</span><span class="p">,</span> <span class="n">total_priority</span><span class="o">=</span><span class="n">total_priority</span><span class="p">,</span> <span class="n">previous_orders</span><span class="o">=</span><span class="n">previous_orders</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_equipment_assignments</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">equipment_targets</span><span class="p">:</span> <span class="n">EquipmentProduction</span><span class="p">,</span> <span class="n">process</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">assignments</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OrderAssignment</span><span class="p">],</span> <span class="n">snapshot</span><span class="p">:</span> <span class="n">Snapshot</span><span class="p">,</span>
-                                       <span class="n">planning_period</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">datetime</span><span class="p">,</span> <span class="n">datetime</span><span class="p">],</span> <span class="n">min_due_date</span><span class="p">:</span> <span class="n">datetime</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                                       <span class="n">current_material</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Material</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                                       <span class="n">track_structure</span><span class="p">:</span> <span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">main_category</span><span class="p">:</span> <span class="nb">str</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                                       <span class="n">orders_custom_priority</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                                       <span class="n">previous_order</span><span class="p">:</span> <span class="nb">str</span><span class="o">|</span><span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EquipmentStatus</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_transition_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plant</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">,</span> <span class="n">current</span><span class="p">:</span> <span class="n">Order</span><span class="p">,</span> <span class="nb">next</span><span class="p">:</span> <span class="n">Order</span><span class="p">,</span> <span class="n">status</span><span class="p">:</span> <span class="n">EquipmentStatus</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">:</span> <span class="n">Snapshot</span><span class="p">,</span>
+                                <span class="n">new_lot</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">current_material</span><span class="p">:</span> <span class="n">Material</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">next_material</span><span class="p">:</span> <span class="n">Material</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                                <span class="n">orders_custom_priority</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">EquipmentStatus</span><span class="p">,</span> <span class="n">ObjectiveFunction</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Main function to be implemented in derived class taking into account global status.</span>
-<span class="sd">        Note that this must set the PlantStatus.planning.target_fct value.</span>
-<span class="sd">        :param equipment:</span>
-<span class="sd">        :param assignments: order assignments; keys: order ids</span>
-<span class="sd">        :param target_weight:</span>
-<span class="sd">        :param snapshot:</span>
-<span class="sd">        :param current_coils: should only be present if the last order is not assumed to be processed entirely</span>
-<span class="sd">        :param track_structure:</span>
-<span class="sd">        :param main_category: only relevant if track_structure is true; used for nested structure targets</span>
-<span class="sd">        :param orders_custom_priority:</span>
-<span class="sd">        :param previous_order:</span>
-<span class="sd">        :return:</span>
+<span class="sd">        Intended to be called by the lot creation, which first needs to check whether a new lot has to be created</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Not implemented&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;not implemented&quot;</span><span class="p">)</span>
 
     <span class="c1"># TODO this is meant to be an incremental version of the evaluate_order_assignment method above</span>
     <span class="c1">#def transition_costs_stateful(self, plant: Plant, current: Order, next: Order, status: PlantStatus, current_coil: Coil|None = None, next_coil: Coil|None = None) -&gt; tuple[PlantStatus, float]:</span>
@@ -516,13 +592,32 @@ Implementation expected in package dynreact.cost.CostCalculatorImpl</p>
     <span class="c1">#    &quot;&quot;&quot;</span>
     <span class="c1">#    raise Exception(&quot;not implemented&quot;)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">update_transition_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plant</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">,</span> <span class="n">current</span><span class="p">:</span> <span class="n">Order</span><span class="p">,</span> <span class="nb">next</span><span class="p">:</span> <span class="n">Order</span><span class="p">,</span> <span class="n">status</span><span class="p">:</span> <span class="n">EquipmentStatus</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">:</span> <span class="n">Snapshot</span><span class="p">,</span>
-                                <span class="n">new_lot</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">current_material</span><span class="p">:</span> <span class="n">Material</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">next_material</span><span class="p">:</span> <span class="n">Material</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-                                <span class="n">orders_custom_priority</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">EquipmentStatus</span><span class="p">,</span> <span class="n">ObjectiveFunction</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_equipment_assignments</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">equipment_targets</span><span class="p">:</span> <span class="n">EquipmentProduction</span><span class="p">,</span> <span class="n">process</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">assignments</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OrderAssignment</span><span class="p">],</span> <span class="n">snapshot</span><span class="p">:</span> <span class="n">Snapshot</span><span class="p">,</span>
+                                       <span class="n">planning_period</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">datetime</span><span class="p">,</span> <span class="n">datetime</span><span class="p">],</span> <span class="n">min_due_date</span><span class="p">:</span> <span class="n">datetime</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                                       <span class="n">current_material</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Material</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                                       <span class="n">track_structure</span><span class="p">:</span> <span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">main_category</span><span class="p">:</span> <span class="nb">str</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                                       <span class="n">orders_custom_priority</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                                       <span class="n">previous_order</span><span class="p">:</span> <span class="nb">str</span><span class="o">|</span><span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EquipmentStatus</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Intended to be called by the lot creation, which first needs to check whether a new lot has to be created</span>
+<span class="sd">        Main function to be implemented in derived class taking into account global status.</span>
+<span class="sd">        Note that this must set the PlantStatus.planning.target_fct value.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">            equipment_targets:</span>
+<span class="sd">            process:</span>
+<span class="sd">            assignments: order assignments; keys: order ids</span>
+<span class="sd">            snapshot:</span>
+<span class="sd">            planning_period: the time interval</span>
+<span class="sd">            min_due_date:</span>
+<span class="sd">            track_structure:</span>
+<span class="sd">            main_category: only relevant if track_structure is true; used for nested structure targets</span>
+<span class="sd">            orders_custom_priority: user-defined custom priorities</span>
+<span class="sd">            previous_order:</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            information about the equipment status, including the objective function value</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;not implemented&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Not implemented&quot;</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">objective_function</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">status</span><span class="p">:</span> <span class="n">EquipmentStatus</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ObjectiveFunction</span><span class="p">:</span>
         <span class="s2">&quot;Evaluate the target/objective function for a specific plant status&quot;</span>
@@ -550,8 +645,11 @@ Implementation expected in package dynreact.cost.CostCalculatorImpl</p>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">structure_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">planning</span><span class="p">:</span> <span class="n">ProductionPlanning</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        :param planning</span>
-<span class="sd">        :return:</span>
+<span class="sd">        Parameters:</span>
+<span class="sd">            planning:</span>
+
+<span class="sd">        Returns:</span>
+
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">planning</span><span class="o">.</span><span class="n">target_structure</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="mi">0</span>
@@ -616,8 +714,10 @@ Implementation expected in package dynreact.cost.CostCalculatorImpl</p>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">structure_costs_parameter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Overwrite this with a positive value to enable the default structure costs algorithm</span>
-<span class="sd">        :return:</span>
+<span class="sd">        Overwrite this with a positive value to enable the default structure costs algorithm.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            cost parameter related to material structure deviations</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="mi">0</span>
 
@@ -639,8 +739,10 @@ Implementation expected in package dynreact.cost.CostCalculatorImpl</p>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">priority_costs_parameter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Overwrite this with a positive value to enable the default priority costs algorithm</span>
-<span class="sd">        :return:</span>
+<span class="sd">        Overwrite this with a positive value to enable the default priority costs algorithm.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            cost parameter related to order priorities</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="mi">0</span>
 
@@ -651,6 +753,9 @@ Implementation expected in package dynreact.cost.CostCalculatorImpl</p>
     <span class="k">def</span><span class="w"> </span><span class="nf">path_dependent_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">process</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Overwrite in subclass if the optimal sorting of orders depends on global/path-dependent costs.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            a boolean value indicating whether path-dependent (or &quot;global&quot;) costs apply.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="kc">False</span>
 
@@ -658,8 +763,12 @@ Implementation expected in package dynreact.cost.CostCalculatorImpl</p>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Optional method, for display purposes only. To be overridden in derived class.</span>
 <span class="sd">        Convention: &quot;order.material_properties.&lt;$FIELD_NAME&gt;&quot;, &quot;material.properties.&lt;$FIELD_NAME&gt;&quot;</span>
-<span class="sd">        :param equipment:</span>
-<span class="sd">        :return:</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            equipment:</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A list of order attributes relevant for the cost function.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="kc">None</span>
 
@@ -757,6 +866,244 @@ Implementation expected in package dynreact.cost.CostCalculatorImpl</p>
 <div class="doc doc-object doc-function">
 
 
+<h2 id="dynreact.base.CostProvider.CostProvider.transition_costs" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">transition_costs</span><span class="p">(</span><span class="n">plant</span><span class="p">,</span> <span class="n">current</span><span class="p">,</span> <span class="nb">next</span><span class="p">,</span> <span class="n">current_material</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">next_material</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Calculates the transition costs for two orders at a given plant. If materials are specified,
+then the transition costs between individual materials are evaluated instead.
+This function does not take into account global constraints and objectives.</p>
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span>
+<span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">transition_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plant</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">,</span> <span class="n">current</span><span class="p">:</span> <span class="n">Order</span><span class="p">,</span> <span class="nb">next</span><span class="p">:</span> <span class="n">Order</span><span class="p">,</span> <span class="n">current_material</span><span class="p">:</span> <span class="n">Material</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">next_material</span><span class="p">:</span> <span class="n">Material</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculates the transition costs for two orders at a given plant. If materials are specified,</span>
+<span class="sd">    then the transition costs between individual materials are evaluated instead.</span>
+<span class="sd">    This function does not take into account global constraints and objectives.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;not implemented&quot;</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.CostProvider.CostProvider.assignment_costs" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">assignment_costs</span><span class="p">(</span><span class="n">equipment</span><span class="p">,</span> <span class="n">order</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Costs for assigning an order to a specific equipment. This cost component can be used to define
+equipment preferences for specific orders at a given process stage. It must then be taken into consideration in
+evaluate_equipment_assignments() and update_transition_costs().</p>
+<p>Parameters:
+    equipment: equipment
+    order: order</p>
+<p>Returns:
+    Costs (non-negative float)</p>
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span>
+<span class="normal">38</span>
+<span class="normal">39</span>
+<span class="normal">40</span>
+<span class="normal">41</span>
+<span class="normal">42</span>
+<span class="normal">43</span>
+<span class="normal">44</span>
+<span class="normal">45</span>
+<span class="normal">46</span>
+<span class="normal">47</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">assignment_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">equipment</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">,</span> <span class="n">order</span><span class="p">:</span> <span class="n">Order</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Costs for assigning an order to a specific equipment. This cost component can be used to define</span>
+<span class="sd">    equipment preferences for specific orders at a given process stage. It must then be taken into consideration in</span>
+<span class="sd">    evaluate_equipment_assignments() and update_transition_costs().</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        equipment: equipment</span>
+<span class="sd">        order: order</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Costs (non-negative float)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="mi">0</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.CostProvider.CostProvider.logistic_costs" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">logistic_costs</span><span class="p">(</span><span class="n">new_equipment</span><span class="p">,</span> <span class="n">order</span><span class="p">,</span> <span class="n">material</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Calculates the transition costs for an order or individual material from an order to be transported to a new
+equipment.</p>
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">49</span>
+<span class="normal">50</span>
+<span class="normal">51</span>
+<span class="normal">52</span>
+<span class="normal">53</span>
+<span class="normal">54</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">logistic_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">new_equipment</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">,</span> <span class="n">order</span><span class="p">:</span> <span class="n">Order</span><span class="p">,</span> <span class="n">material</span><span class="p">:</span> <span class="n">Material</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculates the transition costs for an order or individual material from an order to be transported to a new</span>
+<span class="sd">    equipment.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="mi">0</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.CostProvider.CostProvider.structure_costs_parameter" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">structure_costs_parameter</span><span class="p">()</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Overwrite this with a positive value to enable the default structure costs algorithm.</p>
+<p>Returns:
+    cost parameter related to material structure deviations</p>
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">233</span>
+<span class="normal">234</span>
+<span class="normal">235</span>
+<span class="normal">236</span>
+<span class="normal">237</span>
+<span class="normal">238</span>
+<span class="normal">239</span>
+<span class="normal">240</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">structure_costs_parameter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Overwrite this with a positive value to enable the default structure costs algorithm.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        cost parameter related to material structure deviations</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="mi">0</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.CostProvider.CostProvider.priority_costs_parameter" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">priority_costs_parameter</span><span class="p">()</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Overwrite this with a positive value to enable the default priority costs algorithm.</p>
+<p>Returns:
+    cost parameter related to order priorities</p>
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">258</span>
+<span class="normal">259</span>
+<span class="normal">260</span>
+<span class="normal">261</span>
+<span class="normal">262</span>
+<span class="normal">263</span>
+<span class="normal">264</span>
+<span class="normal">265</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">priority_costs_parameter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Overwrite this with a positive value to enable the default priority costs algorithm.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        cost parameter related to order priorities</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="mi">0</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.CostProvider.CostProvider.path_dependent_costs" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">path_dependent_costs</span><span class="p">(</span><span class="n">process</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Overwrite in subclass if the optimal sorting of orders depends on global/path-dependent costs.</p>
+<p>Returns:
+    a boolean value indicating whether path-dependent (or "global") costs apply.</p>
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">271</span>
+<span class="normal">272</span>
+<span class="normal">273</span>
+<span class="normal">274</span>
+<span class="normal">275</span>
+<span class="normal">276</span>
+<span class="normal">277</span>
+<span class="normal">278</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">path_dependent_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">process</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Overwrite in subclass if the optimal sorting of orders depends on global/path-dependent costs.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        a boolean value indicating whether path-dependent (or &quot;global&quot;) costs apply.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="kc">False</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h2 id="dynreact.base.CostProvider.CostProvider.evaluate_order_assignments" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">evaluate_order_assignments</span><span class="p">(</span><span class="n">process</span><span class="p">,</span> <span class="n">assignments</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">,</span> <span class="n">total_priority</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">orders_custom_priority</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">previous_orders</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
@@ -765,81 +1112,14 @@ Implementation expected in package dynreact.cost.CostCalculatorImpl</p>
 
     <div class="doc doc-contents ">
 
-        
+        <p>Parameters:
+    process:
+    assignments:</p>
+<p>Returns:</p>
 
-
-<table class="field-list">
-  <colgroup>
-    <col class="field-name" />
-    <col class="field-body" />
-  </colgroup>
-  <tbody valign="top">
-    <tr class="field">
-      <th class="field-name">Parameters:</th>
-      <td class="field-body">
-        <ul class="first simple">
-            <li>
-              <b><code>process</code></b>
-                  (<code>str</code>)
-              –
-              <div class="doc-md-description">
-                
-              </div>
-            </li>
-            <li>
-              <b><code>assignments</code></b>
-                  (<code>dict[str, <a class="autorefs autorefs-internal" title="dynreact.base.model.OrderAssignment" href="model.html#dynreact.base.model.OrderAssignment">OrderAssignment</a>]</code>)
-              –
-              <div class="doc-md-description">
-                
-              </div>
-            </li>
-        </ul>
-      </td>
-    </tr>
-  </tbody>
-</table>
-
-<table class="field-list">
-  <colgroup>
-    <col class="field-name" />
-    <col class="field-body" />
-  </colgroup>
-  <tbody valign="top">
-    <tr class="field">
-      <th class="field-name">Returns:</th>
-      <td class="field-body">
-        <ul class="first simple">
-            <li>
-                  <code><a class="autorefs autorefs-internal" title="dynreact.base.model.ProductionPlanning" href="model.html#dynreact.base.model.ProductionPlanning">ProductionPlanning</a></code>
-              –
-              <div class="doc-md-description">
-                
-              </div>
-            </li>
-        </ul>
-      </td>
-    </tr>
-  </tbody>
-</table>
             <details class="quote">
               <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">41</span>
-<span class="normal">42</span>
-<span class="normal">43</span>
-<span class="normal">44</span>
-<span class="normal">45</span>
-<span class="normal">46</span>
-<span class="normal">47</span>
-<span class="normal">48</span>
-<span class="normal">49</span>
-<span class="normal">50</span>
-<span class="normal">51</span>
-<span class="normal">52</span>
-<span class="normal">53</span>
-<span class="normal">54</span>
-<span class="normal">55</span>
-<span class="normal">56</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">56</span>
 <span class="normal">57</span>
 <span class="normal">58</span>
 <span class="normal">59</span>
@@ -859,13 +1139,34 @@ Implementation expected in package dynreact.cost.CostCalculatorImpl</p>
 <span class="normal">73</span>
 <span class="normal">74</span>
 <span class="normal">75</span>
-<span class="normal">76</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">evaluate_order_assignments</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">process</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">assignments</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OrderAssignment</span><span class="p">],</span> <span class="n">targets</span><span class="p">:</span> <span class="n">ProductionTargets</span><span class="p">,</span>
+<span class="normal">76</span>
+<span class="normal">77</span>
+<span class="normal">78</span>
+<span class="normal">79</span>
+<span class="normal">80</span>
+<span class="normal">81</span>
+<span class="normal">82</span>
+<span class="normal">83</span>
+<span class="normal">84</span>
+<span class="normal">85</span>
+<span class="normal">86</span>
+<span class="normal">87</span>
+<span class="normal">88</span>
+<span class="normal">89</span>
+<span class="normal">90</span>
+<span class="normal">91</span>
+<span class="normal">92</span>
+<span class="normal">93</span>
+<span class="normal">94</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">evaluate_order_assignments</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">process</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">assignments</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OrderAssignment</span><span class="p">],</span> <span class="n">targets</span><span class="p">:</span> <span class="n">ProductionTargets</span><span class="p">,</span>
                                <span class="n">snapshot</span><span class="p">:</span> <span class="n">Snapshot</span><span class="p">,</span> <span class="n">total_priority</span><span class="p">:</span> <span class="nb">int</span><span class="o">|</span><span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">orders_custom_priority</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
                                <span class="n">previous_orders</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ProductionPlanning</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    :param process:</span>
-<span class="sd">    :param assignments:</span>
-<span class="sd">    :return:</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        process:</span>
+<span class="sd">        assignments:</span>
+
+<span class="sd">    Returns:</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1">#plants = [p for p in self._site.plants if p.process == process]</span>
     <span class="n">plant_ids</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">targets</span><span class="o">.</span><span class="n">target_weight</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
@@ -904,6 +1205,40 @@ Implementation expected in package dynreact.cost.CostCalculatorImpl</p>
 <div class="doc doc-object doc-function">
 
 
+<h2 id="dynreact.base.CostProvider.CostProvider.update_transition_costs" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">update_transition_costs</span><span class="p">(</span><span class="n">plant</span><span class="p">,</span> <span class="n">current</span><span class="p">,</span> <span class="nb">next</span><span class="p">,</span> <span class="n">status</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">,</span> <span class="n">new_lot</span><span class="p">,</span> <span class="n">current_material</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">next_material</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">orders_custom_priority</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Intended to be called by the lot creation, which first needs to check whether a new lot has to be created</p>
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 96</span>
+<span class="normal"> 97</span>
+<span class="normal"> 98</span>
+<span class="normal"> 99</span>
+<span class="normal">100</span>
+<span class="normal">101</span>
+<span class="normal">102</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">update_transition_costs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plant</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">,</span> <span class="n">current</span><span class="p">:</span> <span class="n">Order</span><span class="p">,</span> <span class="nb">next</span><span class="p">:</span> <span class="n">Order</span><span class="p">,</span> <span class="n">status</span><span class="p">:</span> <span class="n">EquipmentStatus</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">:</span> <span class="n">Snapshot</span><span class="p">,</span>
+                            <span class="n">new_lot</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">current_material</span><span class="p">:</span> <span class="n">Material</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">next_material</span><span class="p">:</span> <span class="n">Material</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                            <span class="n">orders_custom_priority</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">EquipmentStatus</span><span class="p">,</span> <span class="n">ObjectiveFunction</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Intended to be called by the lot creation, which first needs to check whether a new lot has to be created</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;not implemented&quot;</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h2 id="dynreact.base.CostProvider.CostProvider.objective_function" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">objective_function</span><span class="p">(</span><span class="n">status</span><span class="p">)</span></code>
 
@@ -916,9 +1251,9 @@ Implementation expected in package dynreact.cost.CostCalculatorImpl</p>
 
             <details class="quote">
               <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">117</span>
-<span class="normal">118</span>
-<span class="normal">119</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">objective_function</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">status</span><span class="p">:</span> <span class="n">EquipmentStatus</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ObjectiveFunction</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">140</span>
+<span class="normal">141</span>
+<span class="normal">142</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">objective_function</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">status</span><span class="p">:</span> <span class="n">EquipmentStatus</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ObjectiveFunction</span><span class="p">:</span>
     <span class="s2">&quot;Evaluate the target/objective function for a specific plant status&quot;</span>
     <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;not implemented&quot;</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
@@ -943,25 +1278,25 @@ evaluated on the individual plants, but it is possible to override this behaviou
 
             <details class="quote">
               <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">121</span>
-<span class="normal">122</span>
-<span class="normal">123</span>
-<span class="normal">124</span>
-<span class="normal">125</span>
-<span class="normal">126</span>
-<span class="normal">127</span>
-<span class="normal">128</span>
-<span class="normal">129</span>
-<span class="normal">130</span>
-<span class="normal">131</span>
-<span class="normal">132</span>
-<span class="normal">133</span>
-<span class="normal">134</span>
-<span class="normal">135</span>
-<span class="normal">136</span>
-<span class="normal">137</span>
-<span class="normal">138</span>
-<span class="normal">139</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">process_objective_function</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">planning</span><span class="p">:</span> <span class="n">ProductionPlanning</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ObjectiveFunction</span><span class="p">:</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">144</span>
+<span class="normal">145</span>
+<span class="normal">146</span>
+<span class="normal">147</span>
+<span class="normal">148</span>
+<span class="normal">149</span>
+<span class="normal">150</span>
+<span class="normal">151</span>
+<span class="normal">152</span>
+<span class="normal">153</span>
+<span class="normal">154</span>
+<span class="normal">155</span>
+<span class="normal">156</span>
+<span class="normal">157</span>
+<span class="normal">158</span>
+<span class="normal">159</span>
+<span class="normal">160</span>
+<span class="normal">161</span>
+<span class="normal">162</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">process_objective_function</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">planning</span><span class="p">:</span> <span class="n">ProductionPlanning</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ObjectiveFunction</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Evaluate the objective function for one process. By default, this is the sum of all objective functions</span>
 <span class="sd">    evaluated on the individual plants, but it is possible to override this behaviour in a derived implementation</span>
@@ -1086,49 +1421,49 @@ evaluated on the individual plants, but it is possible to override this behaviou
 </table>
             <details class="quote">
               <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">256</span>
-<span class="normal">257</span>
-<span class="normal">258</span>
-<span class="normal">259</span>
-<span class="normal">260</span>
-<span class="normal">261</span>
-<span class="normal">262</span>
-<span class="normal">263</span>
-<span class="normal">264</span>
-<span class="normal">265</span>
-<span class="normal">266</span>
-<span class="normal">267</span>
-<span class="normal">268</span>
-<span class="normal">269</span>
-<span class="normal">270</span>
-<span class="normal">271</span>
-<span class="normal">272</span>
-<span class="normal">273</span>
-<span class="normal">274</span>
-<span class="normal">275</span>
-<span class="normal">276</span>
-<span class="normal">277</span>
-<span class="normal">278</span>
-<span class="normal">279</span>
-<span class="normal">280</span>
-<span class="normal">281</span>
-<span class="normal">282</span>
-<span class="normal">283</span>
-<span class="normal">284</span>
-<span class="normal">285</span>
-<span class="normal">286</span>
-<span class="normal">287</span>
-<span class="normal">288</span>
-<span class="normal">289</span>
-<span class="normal">290</span>
-<span class="normal">291</span>
-<span class="normal">292</span>
-<span class="normal">293</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">293</span>
 <span class="normal">294</span>
 <span class="normal">295</span>
 <span class="normal">296</span>
 <span class="normal">297</span>
-<span class="normal">298</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">equipment_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">:</span> <span class="n">Snapshot</span><span class="p">,</span> <span class="n">plant</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">,</span> <span class="n">planning_period</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">datetime</span><span class="p">,</span> <span class="n">datetime</span><span class="p">],</span> <span class="n">target_weight</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<span class="normal">298</span>
+<span class="normal">299</span>
+<span class="normal">300</span>
+<span class="normal">301</span>
+<span class="normal">302</span>
+<span class="normal">303</span>
+<span class="normal">304</span>
+<span class="normal">305</span>
+<span class="normal">306</span>
+<span class="normal">307</span>
+<span class="normal">308</span>
+<span class="normal">309</span>
+<span class="normal">310</span>
+<span class="normal">311</span>
+<span class="normal">312</span>
+<span class="normal">313</span>
+<span class="normal">314</span>
+<span class="normal">315</span>
+<span class="normal">316</span>
+<span class="normal">317</span>
+<span class="normal">318</span>
+<span class="normal">319</span>
+<span class="normal">320</span>
+<span class="normal">321</span>
+<span class="normal">322</span>
+<span class="normal">323</span>
+<span class="normal">324</span>
+<span class="normal">325</span>
+<span class="normal">326</span>
+<span class="normal">327</span>
+<span class="normal">328</span>
+<span class="normal">329</span>
+<span class="normal">330</span>
+<span class="normal">331</span>
+<span class="normal">332</span>
+<span class="normal">333</span>
+<span class="normal">334</span>
+<span class="normal">335</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">equipment_status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">:</span> <span class="n">Snapshot</span><span class="p">,</span> <span class="n">plant</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">,</span> <span class="n">planning_period</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">datetime</span><span class="p">,</span> <span class="n">datetime</span><span class="p">],</span> <span class="n">target_weight</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
                      <span class="n">material_based</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
                      <span class="n">current</span><span class="p">:</span> <span class="n">Order</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">previous</span><span class="p">:</span> <span class="n">Order</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
                      <span class="n">current_material</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Material</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">track_structure</span><span class="p">:</span> <span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EquipmentStatus</span><span class="p">:</span>
@@ -1177,6 +1512,55 @@ evaluated on the individual plants, but it is possible to override this behaviou
 
 </div>
 
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.CostProvider.CostProvider.relevant_fields" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">relevant_fields</span><span class="p">(</span><span class="n">equipment</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Optional method, for display purposes only. To be overridden in derived class.
+Convention: "order.material_properties.&lt;$FIELD_NAME&gt;", "material.properties.&lt;$FIELD_NAME&gt;"</p>
+<p>Parameters:
+    equipment:</p>
+<p>Returns:
+    A list of order attributes relevant for the cost function.</p>
+
+            <details class="quote">
+              <summary>Source code in <code>dynreact\base\CostProvider.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">280</span>
+<span class="normal">281</span>
+<span class="normal">282</span>
+<span class="normal">283</span>
+<span class="normal">284</span>
+<span class="normal">285</span>
+<span class="normal">286</span>
+<span class="normal">287</span>
+<span class="normal">288</span>
+<span class="normal">289</span>
+<span class="normal">290</span>
+<span class="normal">291</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">relevant_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">equipment</span><span class="p">:</span> <span class="n">Equipment</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="o">|</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Optional method, for display purposes only. To be overridden in derived class.</span>
+<span class="sd">    Convention: &quot;order.material_properties.&lt;$FIELD_NAME&gt;&quot;, &quot;material.properties.&lt;$FIELD_NAME&gt;&quot;</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        equipment:</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A list of order attributes relevant for the cost function.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="kc">None</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
 
 
   </div>
@@ -1188,8 +1572,8 @@ evaluated on the individual plants, but it is possible to override this behaviou
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="index.html" class="btn btn-neutral float-left" title="General"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="lots_optimizer.html" class="btn btn-neutral float-right" title="Lots optimizer">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="lot_sink.html" class="btn btn-neutral float-left" title="Lot sink"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="longtermplanning.html" class="btn btn-neutral float-right" title="Long term planning">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -1212,10 +1596,10 @@ evaluated on the individual plants, but it is possible to override this behaviou
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="index.html" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="lot_sink.html" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="lots_optimizer.html" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="longtermplanning.html" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

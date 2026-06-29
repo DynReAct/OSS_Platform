@@ -25,8 +25,13 @@ plugins:
 nav:
   - Back: ../index.html
   - General: index.md
-  - Cost provider: cost_provider.md
-  - Lots optimizer: lots_optimizer.md
   - Model: model.md
   - Snapshot provider: snapshot_provider.md
+  - Snapshot importer: snapshot_importer.md
+  - Shifts provider: shifts_provider.md
+  - Production history reader: prod_history_reader.md
+  - Lot sink: lot_sink.md
+  - Cost provider: cost_provider.md
   - Long term planning: longtermplanning.md
+  - Lots optimizer: lots_optimizer.md
+  - Plant performance model: plant_performance_model.md

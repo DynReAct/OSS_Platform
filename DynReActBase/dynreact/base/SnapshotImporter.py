@@ -12,9 +12,17 @@ class SnapshotImporter(SnapshotProvider):
     """
 
     def interval(self) -> timedelta:
+        """
+        Returns:
+            The import interval
+        """
         raise Exception("not implemented")
 
     def next_scheduled_import(self) -> datetime|None:
+        """
+        Returns:
+            the timestamp of the next scheduled import, if any
+        """
         raise Exception("not implemented")
 
     def trigger_import(self) -> datetime:
@@ -30,15 +38,25 @@ class SnapshotImporter(SnapshotProvider):
         raise Exception("not implemented")
 
     def pause(self):
+        """Pause the imports."""
         raise Exception("not implemented")
 
     def resume(self):
+        """Resume imports, if paused."""
         raise Exception("not implemented")
 
     def is_paused(self) -> bool:
+        """
+        Returns:
+            a boolean flag indicating whether imports are currently paused
+        """
         raise Exception("not implemented")
 
     def import_running(self) -> bool:
+        """
+        Returns:
+            a boolean flag indicating whether an import is currently active/running.
+        """
         raise Exception("not implemented")
 
 

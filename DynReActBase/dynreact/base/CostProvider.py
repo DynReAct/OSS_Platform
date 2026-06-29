@@ -28,6 +28,16 @@ class CostProvider:
         Calculates the transition costs for two orders at a given plant. If materials are specified,
         then the transition costs between individual materials are evaluated instead.
         This function does not take into account global constraints and objectives.
+
+        Parameters:
+            plant: equipment
+            current: order 1
+            next: order 2
+            current_material: optional material unit belonging to order 1
+            next_material: optional material unit belonging to order 2
+
+        Returns:
+            the virtual transition costs associated to the order-to-order transition
         """
         raise Exception("not implemented")
 
@@ -63,6 +73,7 @@ class CostProvider:
             assignments:
 
         Returns:
+                a production planning instance
         """
         #plants = [p for p in self._site.plants if p.process == process]
         plant_ids = list(targets.target_weight.keys())
@@ -145,6 +156,12 @@ class CostProvider:
         """
         Evaluate the objective function for one process. By default, this is the sum of all objective functions
         evaluated on the individual plants, but it is possible to override this behaviour in a derived implementation
+
+        Parameters:
+            planning: configuration to be evaluated
+
+        Returns:
+            objective function values
         """
         process = planning.process
         all_plants: dict[int, Equipment] = {p.id: p for p in self._site.equipment}
@@ -281,15 +298,20 @@ class CostProvider:
                          current: Order|None=None, previous: Order|None=None,
                          current_material: list[Material] | None = None, track_structure: bool=False) -> EquipmentStatus:
         """
-        :param snapshot:
-        :param plant:
-        :param planning_period  TODO validate that planning_period starts with current snapshot?
-        :param target_weight
-        :param material_based: treat coils as basic unit or orders (default)?
-        :param current: current order; by default this will be determined from the snapshot, but it can also be provided explicitly
-        :param previous: previous order;  by default this will be determined from the snapshot (if this information is available), but it can also be provided explicitly
-        :param: current_coils: should only be present if the last order is not assumed to be processed entirely
-        :return:
+        Get the equipment status, for instance as initial value for an order-sequence evaluation.
+
+        Parameters:
+            snapshot:
+            plant:
+            planning_period  TODO validate that planning_period starts with current snapshot?
+            target_weight
+            material_based: treat coils as basic unit or orders (default)?
+            current: current order; by default this will be determined from the snapshot, but it can also be provided explicitly
+            previous: previous order;  by default this will be determined from the snapshot (if this information is available), but it can also be provided explicitly
+            current_coils: should only be present if the last order is not assumed to be processed entirely
+
+        Returns:
+            the equipment status
         """
         process = self._site.get_process(plant.process, do_raise=True).name_short
         if current is None and current_material is not None and len(current_material) > 0:

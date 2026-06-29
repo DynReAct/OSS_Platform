@@ -160,8 +160,12 @@ class SnapshotProvider:
         """
         This method is used to check if orders assigned to some lot may be rescheduled.
         It can be overwritten by subclasses; by default, lots with status <= 1 are considered reschedulable.
-        :param lot:
-        :return:
+
+        Parameters:
+            lot: the lot to check
+
+        Returns:
+            a boolean flag indicating whether the lot is reschedulable
         """
         return lot.status <= 1
 
@@ -169,17 +173,25 @@ class SnapshotProvider:
         """
         This method is used to check if a lot is complete and can be scheduled.
         The methhod can be overwritten by subclasses. By default, lots with status >= 3 and start and end time set are considered complete.
-        :param lot:
-        :return:
+
+        Parameters:
+            lot: the lot to check
+
+        Returns:
+            a boolean flag indicating whether the lot is complete
         """
         return lot.status >= 3 and lot.start_time is not None and lot.end_time is not None
 
     def material_class_for_order(self, order: Order, category: MaterialCategory) -> MaterialClass|None:
         """
         Overwrite this method in derived class to provide a custom material class mapping
-        :param order:
-        :param category:
-        :return:
+
+        Parameters:
+            order: the order to analyze
+            category: the requested material category
+
+        Returns:
+            the material class associated to the order
         """
         if not self._has_class_mapping:
             raise Exception("Material class for order not implemented")

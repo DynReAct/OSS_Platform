@@ -18,10 +18,12 @@ class ShiftsProvider:
 
     def load_all(self, start: datetime, end: datetime|None=None, limit: int|None=100, equipments: Sequence[int]|None=None) -> dict[int, Sequence[PlannedWorkingShift]]:
         """
+        Load shifts for multiple equipment units at once.
+
         Parameters:
-            start:
-            end:
-            limit:
+            start: start time
+            end: end time
+            limit: max number shifts to return
             equipments: equipment ids to be included
 
         Returns:
@@ -30,4 +32,15 @@ class ShiftsProvider:
         raise Exception("not implemented")
 
     def load(self, equipment: int, start: datetime, end: datetime|None=None, limit: int|None=100) -> Sequence[PlannedWorkingShift]:
+        """
+        Load shifts for a single equipment unit.
+
+        Parameters:
+            start: start time
+            end: end time
+            limit: max number shifts to return
+
+        Returns:
+            A dictionary plant id -> shifts
+        """
         return self.load_all(start, end=end, limit=limit, equipments=(equipment, )).get(equipment)

@@ -67,6 +67,8 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.ProductionHistoryReader.ProductionHistoryReader">ProductionHistoryReader</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.ProductionHistoryReader.ProductionHistoryReader.production_aggregate">production_aggregate</a>
+    </li>
     </ul>
                 </li>
               </ul>
@@ -152,6 +154,31 @@ and development purposes. It can be activated via the environment variable</p>
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.ProductionHistoryReader.ProductionHistoryReader.production_aggregate" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">production_aggregate</span><span class="p">(</span><span class="n">process</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">equipment</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">material_filter</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Read production aggregates for a specific time interval.</p>
+<p>Parameters:
+    process: process id
+    start: start time
+    end: end time
+    equipment: optional equipment filter
+    material_filter: optional material type filter; sequence of material class ids</p>
+<p>Returns:
+    aggregated production values</p>
+
+    </div>
+
+</div>
 
 
 

@@ -59,7 +59,19 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotImporter.SnapshotImporter">SnapshotImporter</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotImporter.SnapshotImporter.interval">interval</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotImporter.SnapshotImporter.next_scheduled_import">next_scheduled_import</a>
+    </li>
     <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotImporter.SnapshotImporter.trigger_import">trigger_import</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotImporter.SnapshotImporter.pause">pause</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotImporter.SnapshotImporter.resume">resume</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotImporter.SnapshotImporter.is_paused">is_paused</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.SnapshotImporter.SnapshotImporter.import_running">import_running</a>
     </li>
     </ul>
                 </li>
@@ -159,6 +171,42 @@ extend this base class for this purpose.</p>
 <div class="doc doc-object doc-function">
 
 
+<h2 id="dynreact.base.SnapshotImporter.SnapshotImporter.interval" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">interval</span><span class="p">()</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Returns:
+    The import interval</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.SnapshotImporter.SnapshotImporter.next_scheduled_import" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">next_scheduled_import</span><span class="p">()</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Returns:
+    the timestamp of the next scheduled import, if any</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h2 id="dynreact.base.SnapshotImporter.SnapshotImporter.trigger_import" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">trigger_import</span><span class="p">()</span></code>
 
@@ -173,6 +221,76 @@ the currently retrieved snapshot should ideally be returned) or another import h
 This is a blocking operation.</p>
 <p>Returns:
     the new snapshot timestamp</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.SnapshotImporter.SnapshotImporter.pause" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">pause</span><span class="p">()</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Pause the imports.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.SnapshotImporter.SnapshotImporter.resume" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">resume</span><span class="p">()</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Resume imports, if paused.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.SnapshotImporter.SnapshotImporter.is_paused" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">is_paused</span><span class="p">()</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Returns:
+    a boolean flag indicating whether imports are currently paused</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.SnapshotImporter.SnapshotImporter.import_running" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">import_running</span><span class="p">()</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Returns:
+    a boolean flag indicating whether an import is currently active/running.</p>
 
     </div>
 

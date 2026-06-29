@@ -312,54 +312,11 @@ Implementation expected in module dynreact.snapshot.SnapshotProviderImpl</p>
 
         <p>This method is used to check if orders assigned to some lot may be rescheduled.
 It can be overwritten by subclasses; by default, lots with status &lt;= 1 are considered reschedulable.</p>
+<p>Parameters:
+    lot: the lot to check</p>
+<p>Returns:
+    a boolean flag indicating whether the lot is reschedulable</p>
 
-
-<table class="field-list">
-  <colgroup>
-    <col class="field-name" />
-    <col class="field-body" />
-  </colgroup>
-  <tbody valign="top">
-    <tr class="field">
-      <th class="field-name">Parameters:</th>
-      <td class="field-body">
-        <ul class="first simple">
-            <li>
-              <b><code>lot</code></b>
-                  (<code><a class="autorefs autorefs-internal" title="dynreact.base.model.Lot" href="model.html#dynreact.base.model.Lot">Lot</a></code>)
-              –
-              <div class="doc-md-description">
-                
-              </div>
-            </li>
-        </ul>
-      </td>
-    </tr>
-  </tbody>
-</table>
-
-<table class="field-list">
-  <colgroup>
-    <col class="field-name" />
-    <col class="field-body" />
-  </colgroup>
-  <tbody valign="top">
-    <tr class="field">
-      <th class="field-name">Returns:</th>
-      <td class="field-body">
-        <ul class="first simple">
-            <li>
-                  <code>bool</code>
-              –
-              <div class="doc-md-description">
-                
-              </div>
-            </li>
-        </ul>
-      </td>
-    </tr>
-  </tbody>
-</table>
     </div>
 
 </div>
@@ -377,54 +334,11 @@ It can be overwritten by subclasses; by default, lots with status &lt;= 1 are co
 
         <p>This method is used to check if a lot is complete and can be scheduled.
 The methhod can be overwritten by subclasses. By default, lots with status &gt;= 3 and start and end time set are considered complete.</p>
+<p>Parameters:
+    lot: the lot to check</p>
+<p>Returns:
+    a boolean flag indicating whether the lot is complete</p>
 
-
-<table class="field-list">
-  <colgroup>
-    <col class="field-name" />
-    <col class="field-body" />
-  </colgroup>
-  <tbody valign="top">
-    <tr class="field">
-      <th class="field-name">Parameters:</th>
-      <td class="field-body">
-        <ul class="first simple">
-            <li>
-              <b><code>lot</code></b>
-                  (<code><a class="autorefs autorefs-internal" title="dynreact.base.model.Lot" href="model.html#dynreact.base.model.Lot">Lot</a></code>)
-              –
-              <div class="doc-md-description">
-                
-              </div>
-            </li>
-        </ul>
-      </td>
-    </tr>
-  </tbody>
-</table>
-
-<table class="field-list">
-  <colgroup>
-    <col class="field-name" />
-    <col class="field-body" />
-  </colgroup>
-  <tbody valign="top">
-    <tr class="field">
-      <th class="field-name">Returns:</th>
-      <td class="field-body">
-        <ul class="first simple">
-            <li>
-                  <code>bool</code>
-              –
-              <div class="doc-md-description">
-                
-              </div>
-            </li>
-        </ul>
-      </td>
-    </tr>
-  </tbody>
-</table>
     </div>
 
 </div>
@@ -441,62 +355,12 @@ The methhod can be overwritten by subclasses. By default, lots with status &gt;=
     <div class="doc doc-contents ">
 
         <p>Overwrite this method in derived class to provide a custom material class mapping</p>
+<p>Parameters:
+    order: the order to analyze
+    category: the requested material category</p>
+<p>Returns:
+    the material class associated to the order</p>
 
-
-<table class="field-list">
-  <colgroup>
-    <col class="field-name" />
-    <col class="field-body" />
-  </colgroup>
-  <tbody valign="top">
-    <tr class="field">
-      <th class="field-name">Parameters:</th>
-      <td class="field-body">
-        <ul class="first simple">
-            <li>
-              <b><code>order</code></b>
-                  (<code><a class="autorefs autorefs-internal" title="dynreact.base.model.Order" href="model.html#dynreact.base.model.Order">Order</a></code>)
-              –
-              <div class="doc-md-description">
-                
-              </div>
-            </li>
-            <li>
-              <b><code>category</code></b>
-                  (<code><a class="autorefs autorefs-internal" title="dynreact.base.model.MaterialCategory" href="model.html#dynreact.base.model.MaterialCategory">MaterialCategory</a></code>)
-              –
-              <div class="doc-md-description">
-                
-              </div>
-            </li>
-        </ul>
-      </td>
-    </tr>
-  </tbody>
-</table>
-
-<table class="field-list">
-  <colgroup>
-    <col class="field-name" />
-    <col class="field-body" />
-  </colgroup>
-  <tbody valign="top">
-    <tr class="field">
-      <th class="field-name">Returns:</th>
-      <td class="field-body">
-        <ul class="first simple">
-            <li>
-                  <code><a class="autorefs autorefs-internal" title="dynreact.base.model.MaterialClass" href="model.html#dynreact.base.model.MaterialClass">MaterialClass</a> | None</code>
-              –
-              <div class="doc-md-description">
-                
-              </div>
-            </li>
-        </ul>
-      </td>
-    </tr>
-  </tbody>
-</table>
     </div>
 
 </div>

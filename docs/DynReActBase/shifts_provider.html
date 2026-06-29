@@ -65,6 +65,8 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.ShiftsProvider.ShiftsProvider.load_all">load_all</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.base.ShiftsProvider.ShiftsProvider.load">load</a>
+    </li>
     </ul>
                 </li>
               </ul>
@@ -168,11 +170,35 @@ but it can also be configured to add random downtimes, with optional random seed
 
     <div class="doc doc-contents ">
 
-        <p>Parameters:
-    start:
-    end:
-    limit:
+        <p>Load shifts for multiple equipment units at once.</p>
+<p>Parameters:
+    start: start time
+    end: end time
+    limit: max number shifts to return
     equipments: equipment ids to be included</p>
+<p>Returns:
+    A dictionary plant id -&gt; shifts</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.base.ShiftsProvider.ShiftsProvider.load" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">load</span><span class="p">(</span><span class="n">equipment</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span></code>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Load shifts for a single equipment unit.</p>
+<p>Parameters:
+    start: start time
+    end: end time
+    limit: max number shifts to return</p>
 <p>Returns:
     A dictionary plant id -&gt; shifts</p>
 

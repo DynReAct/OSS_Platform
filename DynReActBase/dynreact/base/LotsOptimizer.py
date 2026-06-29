@@ -15,8 +15,8 @@ from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import ProductionPlanning, PlanningData, ProductionTargets, Snapshot, OrderAssignment, Site, \
-    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction, MaterialClass, \
-    ServiceMetrics, Histogram
+    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction, MaterialClass
+from dynreact.base.monitoring import ServiceMetrics, Histogram
 
 
 class OptimizationListener:
@@ -141,9 +141,9 @@ class LotsOptimizer(Generic[P]):
         zombie_plant_status = next((p for p in status_plants if p not in target_plants), None)
         if zombie_plant_status is not None:
             raise Exception("Plant " + str(zombie_plant_status) + " has a status but no defined target value")
-        self._plants: list[Equipment] = [site.get_equipment(p, do_raise=True) for p in target_plants]
+        self._plants: dict[int, Equipment] = {p: site.get_equipment(p, do_raise=True) for p in target_plants}
         self._plant_ids: list[int] = target_plants
-        invalid_plant = next((plant for plant in self._plants if plant.process != process), None)
+        invalid_plant = next((plant for plant in self._plants.values() if plant.process != process), None)
         if invalid_plant is not None:
             raise Exception("Configured plant " + str(invalid_plant.name_short if invalid_plant.name_short is not None else invalid_plant.id)  \
                             + " belongs to process " + str(invalid_plant.process) + ", not " + process)
@@ -242,12 +242,14 @@ class LotsOptimizationAlgo:
     Implementation expected in module dynreact.lotscreation.LotsOptimizerImpl
     """
 
-    def __init__(self, site: Site):
+    def __init__(self, provider_url: str, site: Site):
+        self._url = provider_url
         self._site = site
         self._stats: dict[str, OptimizationStatistics] = {}
 
     # TODO clarify: should we consider the planning horizon here? => would need some information about planned lot execution time
     def snapshot_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider,
+                                snapshot_provider: SnapshotProvider|None=None,
                                 targets: ProductionTargets|None = None,
                                 orders: list[str] | None = None,
                                 include_inactive_lots: bool=False,
@@ -261,7 +263,7 @@ class LotsOptimizationAlgo:
                 continue
             weight_sum: float = 0.
             for lot in lots:
-                if not lot.active and not include_inactive_lots:
+                if not include_inactive_lots and (not lot.active or (snapshot_provider is not None and not snapshot_provider.is_lot_complete(lot))):
                     continue
                 for lot_idx, order_id in enumerate(lot.orders):
                     if orders is not None and order_id not in orders:
@@ -324,7 +326,7 @@ class LotsOptimizationAlgo:
             plant_obj = plants[p]
             if prev is not None:
                 prev_obj = snapshot.get_order(prev)
-                transition_costs: dict[str, float] = {oid: costs.transition_costs(plant_obj, prev_obj, order) + costs.assignment_costs(plant_obj, order) for oid, order in orders.items() if p in order.allowed_equipment}
+                transition_costs: dict[str, float] = {oid: costs.transition_costs(plant_obj, prev_obj, order) + costs.assignment_costs(plant_obj, order) for oid, order in orders.items() if p in order.allowed_equipment and oid not in start_orders.values()}
                 if len(transition_costs) > 0:
                     lowest_transition_order: str = min(transition_costs, key=transition_costs.get)
                     start_orders[p] = lowest_transition_order
@@ -421,17 +423,12 @@ class LotsOptimizationAlgo:
         instance = self._create_instance_internal(process, snapshot, targets, costs, None)
         plant_lots: dict[int, list[Lot]] = instance.assign_lots(assignments)
         order_assignments: dict[str, OrderAssignment] = {}
-        for order, plant in assignments.items():
-            if plant not in plant_lots:
-                continue
-            lots = plant_lots[plant]
-            lot: Lot | None = next((lot for lot in lots if order in lot.orders), None)
-            if lot is None:
-                continue
-            order_assignments[order] = OrderAssignment(order=order, equipment=plant, lot=lot.id,
-                                                       lot_idx=lot.orders.index(order) + 1)
+        for plant, lots in plant_lots.items():
+            for lot in lots:
+                for idx, order in enumerate(lot.orders):
+                    order_assignments[order] = OrderAssignment(order=order, equipment=plant, lot=lot.id, lot_idx=idx + 1)
         if orders is not None:
-            unassigned: Sequence[str] = (order for order in orders if order not in assignments)
+            unassigned: Sequence[str] = (order for order in orders if order not in order_assignments)
             order_assignments.update(
                 {order: OrderAssignment(order=order, equipment=-1, lot="", lot_idx=-1) for order in unassigned})
         planning = costs.evaluate_order_assignments(process, order_assignments, targets=targets, snapshot=snapshot,

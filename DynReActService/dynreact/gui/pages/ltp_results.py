@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, date, time
-from typing import Literal
+from typing import Literal, Mapping, Sequence
 
 import dash
 from dash import html, dcc, callback, Output, Input, clientside_callback, ClientsideFunction, State
@@ -7,39 +7,46 @@ import dash_ag_grid as dash_ag
 from pydantic import TypeAdapter
 from typing_extensions import Any
 
-from dynreact.base.LongTermPlanning import LongTermPlanning
-from dynreact.base.PlantAvailabilityPersistence import PlantAvailabilityPersistence
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import LongTermTargets, EquipmentAvailability, StorageLevel, MidTermTargets
+from dynreact.base.model import LongTermTargets, EquipmentAvailability, StorageLevel, MidTermTargets, ProductionTargets
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
-# from dynreact.gui.gui_utils import GuiUtils
-# from dynreact.gui.pages.plants_graph import plants_graph, default_stylesheet
+from dynreact.gui.gui_utils import GuiUtils
 
 dash.register_page(__name__, path="/ltp/planned")
 translations_key = "ltp_res"
 
 
 def layout(*args, **kwargs):
-    selected_start_date: date|None = DatetimeUtils.parse_date(kwargs.get("start"))
-    selected_start_date = selected_start_date.date() if selected_start_date is not None else None
-    start, end, start_time_options, selected = get_date_range(selected_start_date)
+    selected_start_time: datetime|None = DatetimeUtils.parse_date(kwargs.get("start"))
+    months, selected_month, start_times, selected_start_time = get_date_range(selected_start_time)
+    # start, end, start_time_options, selected = get_date_range(selected_start_date)
     site = state.get_site()
     num_processes = len(site.processes)
     materials = site.material_categories
     selected_material = kwargs.get("material") or kwargs.get("mat")
     selected_material = selected_material if selected_material is not None and next((m for m in materials if m.id == selected_material), None) is not None \
         else materials[0].id
+    initial_solution_id = None if selected_start_time is None else kwargs.get("solution")
     materials = [{"value": mat.id, "label": mat.name if mat.name is not None else mat.id, "selected": mat.id == selected_material} for mat in materials]
+    anim_tab_active: bool = kwargs.get("tab") is not None and kwargs.get("tab").lower() in ("anim", "animation")
+    tabular_tab_active = not anim_tab_active and kwargs.get("tab") is not None and kwargs.get("tab").lower() in ("tab", "table")
+    overview_tab_active = not anim_tab_active and not tabular_tab_active
+    tabular_tab_class = _tab_button_class(tabular_tab_active)
+    anim_tab_class = _tab_button_class(anim_tab_active)
+    overview_tab_class = _tab_button_class(overview_tab_active)
+    month_options = [m.strftime("%Y-%m") for m in months]
+    start_time_options = [DatetimeUtils.format(dt, use_zone=False) for dt in start_times]
+    selected_start_str = DatetimeUtils.format(selected_start_time, use_zone=False) if selected_start_time is not None else None
     return html.Div([
         html.H1("Long term planning results", id="ltp_res-title"),
         html.Div([
-            html.Div([html.Div("Start date: "), dcc.Dropdown(id="ltp_res-starttime-selector",  className="ltp_res-startselect",
-                                                             options=start_time_options, value=selected.strftime("%Y-%m-%d") if selected is not None else None)]),
-            html.Div([html.Div("Selection range: ", id="ltp_res-selection-range"),
-                   dcc.DatePickerRange(id="snapshots-date-range", display_format="YYYY-MM-DD", start_date=start, end_date=end)])
+            html.Div([html.Div("Month: "), dcc.Dropdown(id="ltp_res-month-selector", className="ltp_res-monthselect",
+                                                options=month_options, value=selected_month.strftime("%Y-%m") if selected_month is not None else None)]),
+            html.Div([html.Div("Start time: "), dcc.Dropdown(id="ltp_res-starttime-selector", className="ltp_res-startselect",
+                                                options=start_time_options, value=selected_start_str)]),
         ], className="ltp_res-selector-row"),
         html.H2("Solutions"),
         html.Div(
@@ -59,7 +66,7 @@ def layout(*args, **kwargs):
                 columnSizeOptions={"defaultMinWidth": 125},
                 columnSize="responsiveSizeToFit",
                 dashGridOptions={"rowSelection": "single", "domLayout": "autoHeight"},
-                style={"height": None}  # required with autoHeight
+                style={"height": None},  # required with autoHeight
                 ## tooltipField is not used, but it must match an existing field for the tooltip to be shown
                 # defaultColDef={"tooltipComponent": "CoilsTooltip", "tooltipField": "id"},
                 # dashGridOptions={"rowSelection": "multiple", "suppressRowClickSelection": True, "animateRows": False,
@@ -68,25 +75,42 @@ def layout(*args, **kwargs):
                 ## "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
             )
         ),
+        html.Div([
+            html.Div([
+                html.Button("Overview", id="ltp_res-overview-btn", className=overview_tab_class, title="Overeview of the long-term planning results"),
+                html.Button("Table", id="ltp_res-tabular-btn", className=tabular_tab_class, title="Tabular view of the long-term planning results"),
+                html.Button("Animation", id="ltp_res-anim-btn", className=anim_tab_class, title="Animation of the long-term planning results"),
+                html.Div()
+            ], className="ltp_res-tabs", hidden=True),
+
+            html.Div([
+                _tabular_tab(not tabular_tab_active),
+                _anim_tab(not anim_tab_active),
+                _overview_tab(not overview_tab_active)
+            ], className="ltp_res-tabs-container"),
+        ], id="ltp_res-tabs-hider", hidden=True),
+        dcc.Store(id="ltp_res-active-tab", data="tabular" if tabular_tab_active else "anim" if anim_tab_active else "overview", storage_type="memory"),  # either tabular or anim or overview
+        dcc.Store(id="ltp_res-solutions", storage_type="memory"),              # array of json docs
+        dcc.Store(id="ltp_res-selected-solution-id", storage_type="memory"),   # string
+        dcc.Store(id="ltp_res-selected-solution", storage_type="memory"),      # json doc
+        dcc.Store(id="ltp_res-initial_start", data=selected_start_str, storage_type="memory"),
+        dcc.Store(id="ltp_res-initial_solution_id", data=initial_solution_id, storage_type="memory"),
+        dcc.Store(id="ltp_res_material_structure", storage_type="memory"),  #  # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
+        dcc.Store(id="ltp_res_material-setpoints", storage_type="memory"),  # dict[str, float]
+        dcc.Store(id="ltp_res-client-init", storage_type="memory"),  # to ensure the selected ltp solution is transferred to the client before running any script there
+   ])
 
 
-        #html.Div([
-        #    html.Div("Process Panel"),
-        #    html.Div([
-        #        html.Div([
-        #            html.Div([
-        #                html.Div("Product type:"),
-        #                dcc.Dropdown(options=materials, className="ltp_res-prodtype")
-        #            ], className="ltp_res-prodtype-selection"),
-        #            plants_graph("ltp_res-plants-graph", style={"width": str(num_processes * 10) + "em", "height": "500px"}, *args,  **kwargs)
-        #        ]),
-        #        # TODO indicate start, end and selected date below!
-        #        dcc.Slider(id="ltp_res-date-ctrl", className="ltp_res-date-ctrl", min=0, max=1, step=1),  # max=4, step=1, value=horizon_days),  # date selector as a slider
-        #        #dcc.Input(type="range", id="ltp_res-date-ctrl", className="ltp_res-date-ctrl", min=0, max=1, step=1, list="ltp_res_dateslist"),  # max=4, step=1, value=horizon_days),  # date selector as a slider
-        #        #html.Datalist(id="ltp_res_dateslist")  # TODO ticks for the range input: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/datalist
-        #    ], className="ltp_res-panel-flex")
-        #], className="control-panel ltp_res-panel", id="ltp_res-process-panel"),
+def _overview_tab(hidden: bool):
+    return html.Div([
+        html.H2("Material production"),
+        html.Div(id="ltp_res-structure-overview"),
+        html.H2("Equipment shifts"),
+        html.Div(id="ltp_res-equipment-shifts", className="ltp_res-plant-results"),
+    ], id="ltp_res-overview-tab", hidden=hidden)
 
+def _tabular_tab(hidden: bool):
+    return html.Div([
         html.H2("Equipment production"),
         html.Div(
             dash_ag.AgGrid(
@@ -96,7 +120,7 @@ def layout(*args, **kwargs):
                 rowData=[],
                 getRowId="params.data.day",
                 className="ag-theme-alpine",  # ag-theme-alpine-dark
-                #columnSizeOptions={"defaultMinWidth": 125},
+                # columnSizeOptions={"defaultMinWidth": 125},
                 columnSize="responsiveSizeToFit",
                 dashGridOptions={"rowSelection": "single", "domLayout": "autoHeight"},
                 style={"height": None}  # required with autoHeight
@@ -134,55 +158,117 @@ def layout(*args, **kwargs):
                 #                 "popupParent": {"function": "setCoilPopupParent()"}},
                 ## "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
             )
-        ),
+        )
+    ], id="ltp_res-tabular-tab", hidden=hidden)
+
+def _anim_tab(hidden: bool):
+    return html.Div([
+        "Test!"
+    ], id="ltp_res-anim-tab", hidden=hidden)
 
 
-        dcc.Store(id="ltp_res-solutions"),              # array of json docs
-        dcc.Store(id="ltp_res-selected-solution-id"),   # string
-        dcc.Store(id="ltp_res-selected-solution"),      # json doc
-   ])
+@callback(Output("ltp_res-active-tab", "data"),
+          Input("ltp_res-tabular-btn", "n_clicks"),
+          Input("ltp_res-anim-btn", "n_clicks"),
+          Input("ltp_res-overview-btn", "n_clicks"))
+def set_active_tab(_, __, ___) -> str|None:
+    if not dash_authenticated(config):
+        return None
+    changed_ids = GuiUtils.changed_ids()
+    return "tabular" if "ltp_res-tabular-btn" in changed_ids else "anim" if "ltp_res-anim-btn" in changed_ids else "overview" if "ltp_res-overview-btn" in changed_ids else dash.no_update
 
 
-def get_date_range(start_date: date|None=None) -> tuple[date, date, list[date], date]:
+@callback(Output("ltp_res-tabular-btn", "className"),
+        Output("ltp_res-anim-btn", "className"),
+        Output("ltp_res-overview-btn", "className"),
+        Input("ltp_res-active-tab", "data"))
+def highlight_active_tab(active_tab: Literal["tabular", "anim", "overview"]|None):
+    tab_selected: bool = active_tab == "tabular"
+    anim_selected: bool = active_tab == "anim"
+    overview_selected: bool = active_tab == "overview"
+    return _tab_button_class(tab_selected), _tab_button_class(anim_selected), _tab_button_class(overview_selected)
+
+def _tab_button_class(selected: bool) -> str:
+    name = "ltp_res-tab-button"
+    if selected:
+        name += " ltp_res-tab-button-active"
+    return name
+
+@callback(
+    Output("ltp_res-tabular-tab", "hidden"),
+    Output("ltp_res-anim-tab", "hidden"),
+    Output("ltp_res-overview-tab", "hidden"),
+    Input("ltp_res-active-tab", "data"))
+def apply_active_tab(active_tab: Literal["tabular", "anim", "overview"]|None):
+    if not active_tab:
+        return True, True, True
+    return active_tab != "tabular", active_tab != "anim", active_tab != "overview"
+
+
+def get_date_range(start: datetime|None=None) -> tuple[Sequence[date], date|None, Sequence[datetime], datetime|None]:
     """
-    :param start_date:
-    :return: start, end, list of start times, selected start time
+    :param start:
+    :return: months, selected month, list of start times for selected month, selected start time
     """
     if not dash_authenticated(config):
-        return None, None, [], None
-    persistence: ResultsPersistence = state.get_results_persistence()
-    if start_date is None:
-        start_date = datetime.now()  # beginning of next month
-        start_date = (start_date.replace(day=1, minute=0, second=0, microsecond=0) + timedelta(days=32)).replace(day=1).date()
-    start_times: list[datetime] = persistence.start_times_ltp(DatetimeUtils.date_to_datetime(start_date - timedelta(days=150)),
-                                                                DatetimeUtils.date_to_datetime(start_date + timedelta(days=1)))
-    start_dates: list[date] = _start_times_to_dates(start_times)
-    start_date = start_date if start_date is not None and start_date in start_dates else None  # ?
-    if start_date is None:
-        return None, None, [], None
-    options = [{"label": snap_id, "value": snap_id, "selected": selected} for snap_id, selected in ((d.strftime("%Y-%m-%d"), d == start_date) for d in start_dates)]
-    if len(options) == 1:
-        dt = start_dates[0]
-        return dt - timedelta(days=1), dt + timedelta(days=1), options, dt
-    return start_date - timedelta(days=150), start_date + timedelta(days=1), options, start_date
+        return [], None, [], None
+    persistence: ResultsPersistence = state.get_results_persistence_aggregate()
+    now = DatetimeUtils.now()  # or rather use currently selected snapshot?
+    end_months_ltp: date|None = None if start is None or now - start < timedelta(days=365) else (start + timedelta(days=365)).date()
+    months = persistence.start_months_ltp(end=end_months_ltp, sort="desc", limit=50)
+    selected_month = start.date().replace(day=1) if start is not None else months[-1] if len(months) > 0 else None
+    if selected_month is not None and selected_month not in months:
+        sorted_months = sorted(months, key=lambda m: abs((m-selected_month).total_seconds()))
+        selected_month = sorted_months[0] if len(sorted_months) > 0 else None
+    if selected_month is not None:
+        start_dt = state.as_timezone(DatetimeUtils.date_to_datetime(selected_month, utc=False))
+        end_dt = (start_dt + timedelta(days=32)).replace(day=1)
+        start_times = persistence.start_times_ltp(start=start_dt, end=end_dt, sort="desc", limit=150)
+        cnt = len(start_times)
+        if cnt > 0 and (start is None or cnt == 1):
+            start = start_times[0]  # desc
+        elif cnt > 1:
+            start = sorted(start_times, key=lambda s: abs((s-start).total_seconds()))[0]
+        else:
+            start = None
+    else:
+        start_times = tuple()
+        start = None
+    return months, selected_month, start_times, start
 
-
-def _start_times_to_dates(lst: list[datetime]) -> list[date]:
-    result = list(set(l.date() for l in lst))
-    result.sort()
-    return result
+@callback(Output("ltp_res-starttime-selector", "options"),
+          Output("ltp_res-starttime-selector", "value"),
+          Input("ltp_res-month-selector", "value"),
+          State("ltp_res-initial_start", "data"),)
+def month_changed(month: str|None, initial_start: str|None):
+    month_parsed = DatetimeUtils.parse_date(month)
+    if month_parsed is None or not dash_authenticated(config):
+        return tuple(), None
+    month_dt = month_parsed.date().replace(day=1)
+    end_dt = (month_dt + timedelta(days=32)).replace(day=1)
+    persistence: ResultsPersistence = state.get_results_persistence_aggregate()
+    start_times = persistence.start_times_ltp(start=DatetimeUtils.date_to_datetime(month_dt, utc=False), end=DatetimeUtils.date_to_datetime(end_dt, utc=False), sort="desc", limit=150)
+    options = [DatetimeUtils.format(s, use_zone=False) for s in start_times]
+    selected = initial_start if initial_start in options else options[0] if len(options) > 0 else None
+    return options, selected
 
 
 @callback(Output("ltp_res-solutions", "data"),
           Output("ltp_res-solutions-table", "rowData"),
-          Input("ltp_res-starttime-selector", "value"))
-def find_solutions(starttime: str|None):
+          # we cannot set the selectedRows programmatically here, it causes sporadic failures in later triggers => looks like a bug in the dash-aggrid component
+          # Neither can we set the selection in the init/layer method => it will always lead to missing callbacks
+#          Output("ltp_res-solutions-table", "selectedRows"),
+          Output("ltp_res-initial_solution_id", "data"),
+          Input("ltp_res-starttime-selector", "value"),
+#          State("ltp_res-solutions-table", "selectedRows"),
+          State("ltp_res-initial_solution_id", "data"))
+def find_solutions(starttime: str|None, selected_solution: str|None): #,selected_rows: list[dict[str, any]|str]|None, initial_solution_id: str|None):
     parsed = DatetimeUtils.parse_date(starttime)
-    if parsed is None:
-        return [], []
-    #parsed_date = parsed.date()
-    persistence: ResultsPersistence = state.get_results_persistence()
-    solutions: list[str] = persistence.solutions_ltp(parsed)  # TODO is this exact? Or could we specify a range?
+    if parsed is None or not dash_authenticated(config):
+        return [], [], None #[]
+    parsed =  state.replace_timezone(parsed)
+    persistence: ResultsPersistence = state.get_results_persistence_aggregate()
+    solutions: list[str] = sorted(persistence.solutions_ltp(parsed), reverse=True)
     solutions2: list[tuple[MidTermTargets, list[dict[str, StorageLevel]]|None]] = [persistence.load_ltp(parsed, s) for s in solutions]
     rows = [{
             "id": solutions[idx],
@@ -193,43 +279,31 @@ def find_solutions(starttime: str|None):
             "storage_levels": TypeAdapter(list[dict[str, StorageLevel]]).dump_python(t[1])
         } for idx, t in enumerate(solutions2)]
     table_rows = [{k: v if k != "time_horizon" else round(v/7) for k, v in r.items()} for r in rows]
-    return rows, table_rows
+    #if len(rows) > 0 and initial_solution_id is not None and (selected_rows is None or (isinstance(selected_rows, dict) and len(selected_rows["ids"]) == 0) or len(selected_rows) == 0):
+    #    selected_rows = {"ids": [initial_solution_id]}
+    selected_solution = dash.no_update if selected_solution is not None and selected_solution in solutions else solutions[0] if len(solutions) > 0 else None
+    return rows, table_rows, selected_solution  #selected_rows
 
 
 # on table row selection change the selected solution
 @callback(Output("ltp_res-selected-solution-id", "data"),
         Output("ltp_res-selected-solution", "data"),
+        Output("ltp_res-tabs-hider", "hidden"),
         Input("ltp_res-solutions-table", "selectedRows"),
         State("ltp_res-solutions", "data"))
-def solution_selected(selected_rows: list[dict[str, any]]|None, solutions: list[dict[str, any]]|None):
-    if selected_rows is None or len(selected_rows) == 0:
-        return None, None
-    sol_id = selected_rows[0].get("id", None)
+def solution_selected(selected_rows: list[dict[str, any]|str]|None, solutions: list[dict[str, any]]|None):
+    if isinstance(selected_rows, dict):
+        selected_rows = selected_rows["ids"]
+    if solutions is None or len(solutions) == 0 or selected_rows is None or len(selected_rows) == 0:
+        return None, None, True
+    sol_id = selected_rows[0].get("id", None) if isinstance(selected_rows[0], Mapping) else selected_rows[0]
     if sol_id is None:
-        return None, None
-    sol = next(s for s in solutions if s.get("id", None) == sol_id) if solutions is not None else None
-    return sol_id, sol
-
-
-#@callback(
-#    Output("ltp_res-date-ctrl", "max"),
-#    Output("ltp_res-date-ctrl", "marks"),
-#    Input("ltp_res-selected-solution", "data"),
-#    State("ltp_res-starttime-selector", "value")
-#)
-#def solution_changed(solution: dict[str, any]|None, starttime: str|None):
-#    parsed: datetime = DatetimeUtils.parse_date(starttime)
-#    if solution is None or parsed is None:
-#        return 1, None
-#    days = solution.get("time_horizon", 0)
-#    marker_indices = range(days)
-#    if days > 8:
-#        num_marks = 8
-#        marker_indices = [round(0 + idx * (days-1)/(num_marks-1)) for idx in range(num_marks)]
-#        if (days-1) not in marker_indices:
-#            marker_indices.append(days-1)
-#    marks = {day: (parsed + timedelta(days=day)).strftime("%y-%m-%d") for day in marker_indices}
-#    return days, marks
+        return None, None, True
+    try:
+        sol = next(s for s in solutions if s.get("id", None) == sol_id) if solutions is not None else None
+        return sol_id, sol, False
+    except StopIteration:
+        return None, None, True
 
 
 @callback(
@@ -250,10 +324,10 @@ def update_plants_table(solution: dict[str, Any]):
                     "headerTooltip": f"{plant.name_short or plant.name} ({plant.id})" } for proc in procs for plant in site.get_process_equipment(proc.name_short)]
     column_defs = [{"field": "day", "pinned": True}] + column_defs
     row_data = []
-    current_day: date = sub_periods[0][0].date()
+    current_day: date = sub_periods[0][0].astimezone().date()
     current_data: dict[int|str, Any] = {"day": current_day.strftime("%Y-%m-%d")}
     for idx, period in enumerate(sub_periods):
-        day = period[0].date()
+        day = period[0].astimezone().date()
         if day != current_day:
             row_data.append(current_data)
             current_data = {"day": day.strftime("%Y-%m-%d")}
@@ -265,6 +339,7 @@ def update_plants_table(solution: dict[str, Any]):
                     current_data[plant] = 0
                 current_data[plant] += plant_targets.get("total_weight")
     row_data.append(current_data)
+    row_data = [{k: v if not isinstance(v, float|int) or v > 0.01 else 0 for k, v in row.items()} for row in row_data]
     return column_defs, row_data  # FIXME row_data looks ok, but the first day is missing in GUI
 
 
@@ -278,7 +353,8 @@ def update_storages_table(solution: dict[str, Any], rel_abs: Literal["relative",
     if solution is None or rel_abs is None or not dash_authenticated(config):
         return [{"field": "day", "pinned": True}], None
     levels = solution.get("storage_levels")  # serialized list[dict[str, StorageLevel]]
-    sub_periods: list[tuple[datetime, datetime]] = [(DatetimeUtils.parse_date(period[0]), DatetimeUtils.parse_date(period[1])) for period in solution.get("targets").get("sub_periods")]
+    sub_periods: list[tuple[datetime, datetime]] = [(state.replace_timezone(DatetimeUtils.parse_date(period[0])),
+                                                     state.replace_timezone(DatetimeUtils.parse_date(period[1]))) for period in solution.get("targets").get("sub_periods")]
     site = state.get_site()
     value_formatter_object = {"function": "formatCell(params.value, 4)"}
     column_defs = [{"field": storage.name_short, "headerName": str(storage.name or storage.name_short), "valueFormatter": value_formatter_object}
@@ -288,7 +364,8 @@ def update_storages_table(solution: dict[str, Any], rel_abs: Literal["relative",
     is_absolute = rel_abs == "absolute"
     storage_capacities = {s.name_short: s.capacity_weight for s in site.storages}
     for idx, period in enumerate(sub_periods):
-        if period[0].time().hour != 8:  # 6:  # FIXME hardcoded
+        # display a single value per day, not all shifts XXX
+        if period[0].time().hour not in (6,7,8,9,10):
             continue
         current_levels = levels[idx]
         current_data = {"day": period[0].date().strftime("%Y-%m-%d")}
@@ -298,4 +375,101 @@ def update_storages_table(solution: dict[str, Any], rel_abs: Literal["relative",
         row_data.append(current_data)
     # TODO final level
     return column_defs, row_data
+
+
+@callback(
+    Output("ltp_res_material_structure", "data"),
+    Output("ltp_res_material-setpoints", "data"),
+    Input("ltp_res-selected-solution", "data")
+)
+def update_solution_structure(solution: dict[str, Any]):
+    if solution is None or "storage_levels" not in solution or len(solution["storage_levels"]) == 0 or "DONE" not in solution["storage_levels"][-1]:
+        return None, None
+    prod_targets = solution["targets"]["production_targets"]
+    done_storage = solution["storage_levels"][-1]["DONE"]["material_levels"]
+    cats = state.get_site().material_categories
+    # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
+    json_result = {}
+    for cat in cats:
+        cat_obj = {"name": cat.name or cat.id, "classes": {}}
+        classes_obj = cat_obj["classes"]
+        for cl in cat.classes:
+            value = done_storage.get(cl.id, 0.)
+            if value != 0 and abs(value) < 1e-2:
+                value = 0
+            cl_obj = {"name": cl.name or cl.id, "weight": value}
+            classes_obj[cl.id] = cl_obj
+        json_result[cat.id] = cat_obj
+    return json_result, prod_targets
+
+
+@callback(
+    Output("ltp_res-equipment-shifts", "children"),
+    Input("ltp_res-selected-solution", "data")
+)
+def update_solution_shifts(solution: dict[str, Any]):
+    if solution is None or "targets" not in solution:
+        return None
+    prod_targets = solution["targets"]["production_sub_targets"]  # : dict[str, list[ProductionTargets]]
+    components = [html.Span("Equipment"), html.Span("Shifts"), html.Span("Production / kt"), html.Span()]
+    for eq in state.get_site().equipment:
+        proc = eq.process
+        components.append(html.Span(eq.name or eq.name_short or eq.id))
+        if proc not in prod_targets:
+            components.append(html.Span(""))
+            components.append(html.Span(""))
+            components.append(html.Span())
+            continue
+        process_targets = prod_targets[proc]  # list[ProductionTargets]
+        applicable_targets = [t for t in process_targets if str(eq.id) in t["target_weight"]]
+        num_shifts = sum(1 for targets in applicable_targets if targets["target_weight"][str(eq.id)]["total_weight"] >= 1e-2)
+        components.append(html.Span(str(num_shifts)))
+        total_prod = sum(targets["target_weight"][str(eq.id)]["total_weight"] for targets in applicable_targets) / 1_000
+        components.append(html.Span(f"{total_prod:.2f}"))
+        components.append(html.Span())
+    return components
+
+
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="dynreact",
+        function_name="setLtp"
+    ),
+    Output("ltp_res-client-init", "data"),
+    Input("ltp_res-selected-solution", "data")
+)
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="ltp",
+        function_name="create_ltp_animation",
+    ),
+    Output("ltp_res-anim-tab", "title"),
+    Input("ltp_res-client-init", "data"),
+    State("ltp_res-anim-tab", "id")
+)
+
+# This is a hacky workaround for a strange behaviour of dash-aggrid, which sporadically fails to deliver selectedRows events
+# when selectedRows are also set programmatically
+clientside_callback(
+    ClientsideFunction(
+        namespace="ltp",
+        function_name="clickSolutionTable",
+    ),
+    Output("ltp_res-title", "title"),
+    Input("ltp_res-initial_solution_id", "data"),
+    State("ltp_res-solutions-table", "id")
+)
+
+clientside_callback(
+    ClientsideFunction(
+        namespace="lots2",
+        function_name="setBacklogStructureOverview"
+    ),
+    Output("ltp_res-structure-overview", "title"),
+    Input("ltp_res_material_structure", "data"),   # dict[str, dict[str, float]]
+    Input("ltp_res_material-setpoints", "data"),
+    State("ltp_res-structure-overview", "id"),
+)
 

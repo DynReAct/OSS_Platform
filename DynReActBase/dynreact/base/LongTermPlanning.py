@@ -5,8 +5,9 @@ therefore it is required to develop a custom implementation for serious usage of
 """
 
 from datetime import datetime
+from typing import Sequence
 
-from dynreact.base.model import Site, LongTermTargets, MidTermTargets, StorageLevel, EquipmentAvailability
+from dynreact.base.model import Site, LongTermTargets, MidTermTargets, StorageLevel, EquipmentAvailability, Lot
 
 
 class LongTermPlanning:
@@ -23,7 +24,8 @@ class LongTermPlanning:
             structure: LongTermTargets,
             initial_storage_levels: dict[str, StorageLevel]|None=None,
             shifts: list[tuple[datetime, datetime]]|None=None,
-            plant_availabilities: dict[int, EquipmentAvailability] | None=None) -> tuple[MidTermTargets, list[dict[str, StorageLevel]]]:
+            plant_availabilities: dict[int, EquipmentAvailability] | None=None,
+            frozen_lots: dict[int, Sequence[Lot]]|None=None) -> tuple[MidTermTargets, list[dict[str, StorageLevel]]]:
         """
         Execute the long-term planning optimization.
 
@@ -35,10 +37,16 @@ class LongTermPlanning:
                 algorithm for shift creation can be used, depending on the implementation.
             plant_availabilities: information about plant availabilities. Keys: plant id, values: availability.
                 If this is not specified or some plant is missing, then a default availability should be assumed, such as 24h per day.
-
+            frozen_lots: if set, these lots define initial production per plant which is already defined and must be respected
+                by the LTP optimization. No other material must be planned for an equipment between the planning period start
+                and the end time of the last lot specified for this equipment.
         Returns:
             arg 0: the mid term production targets
             arg 1: Evolution of the storage levels over the planning sub periods (target values at the end of the shifts).
                                The list is for sub periods, the dict keys are storage ids.
         """
         raise Exception("not implemented")
+
+    def interrupt(self, id0: str) -> bool:
+        """Shall cause the corresponding run() method to throw InterruptedException, if not finished yet"""
+        pass

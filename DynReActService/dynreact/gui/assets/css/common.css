@@ -12,14 +12,19 @@
 
 .flex {
     display: flex;
+    align-items: center;
 }
 
-gap-05 {
+.gap-05 {
     column-gap: 0.5em;
 }
 
-gap-1 {
+.gap-1 {
     column-gap: 1em;
+}
+
+.gap-below-05 {
+    padding-bottom: 0.5em;
 }
 
 .left-space {

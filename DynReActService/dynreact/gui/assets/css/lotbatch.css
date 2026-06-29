@@ -1,0 +1,14 @@
+.lotbatch-prev-grid {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    column-gap: 1em;
+    row-gap: 0.5em;
+}
+
+.lotbatch-proc-table {
+    display: grid;
+    grid-template-columns: repeat(10, auto);
+    justify-content: start;
+    column-gap: 2em;
+    row-gap: 0.5em;
+}

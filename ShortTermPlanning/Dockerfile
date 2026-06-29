@@ -1,13 +1,6 @@
 FROM python:3.12.3 AS builder
 LABEL authors="Hector Flores"
 
-RUN pip install poetry==2.1.1
-
-ENV POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=1 \
-    POETRY_VIRTUALENVS_CREATE=1 \
-    POETRY_CACHE_DIR=/tmp/poetry_cache
-
 # Install system dependencies
 RUN apt update && apt upgrade -y && \
     apt install -y  \
@@ -28,7 +21,8 @@ RUN apt update && apt upgrade -y && \
 
 # Build librdkafka from source (latest version)
 WORKDIR /tmp
-RUN git clone --depth 1 --branch v2.8.0 https://github.com/confluentinc/librdkafka.git && \
+RUN git config --global http.postBuffer 104857600 && \
+    git clone --depth 1 --branch v2.8.0 https://github.com/confluentinc/librdkafka.git && \
     cd librdkafka && \
     ./configure --prefix=/usr --install-deps && \
     make -j$(nproc) && \
@@ -37,11 +31,30 @@ RUN git clone --depth 1 --branch v2.8.0 https://github.com/confluentinc/librdkaf
 
 WORKDIR /app
 
-COPY pyproject.toml ./
+# Opciones de pip limpias, sin rastro de poetry
+ENV PIP_INDEX_URL=https://pypi.org/simple \
+    PIP_TRUSTED_HOST="pypi.org files.pythonhosted.org" \
+    PIP_DEFAULT_TIMEOUT=120 \
+    PIP_RETRIES=10 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-RUN poetry install --only main --no-root --no-interaction && rm -rf $POETRY_CACHE_DIR
+# Copiamos el requirements.txt
+COPY requirements.txt ./
+
+# Creamos el entorno virtual, actualizamos pip/setuptools 
+# e instalamos requirements con --no-build-isolation para que flatdict instale bien
+RUN python -m venv /app/.venv && \
+    /app/.venv/bin/pip install --upgrade pip wheel setuptools && \
+    /app/.venv/bin/pip install --no-build-isolation -r requirements.txt
+
 
 FROM python:3.12.3
+
+ARG BUILD_DATE=""
+ARG JENKINS_BUILD_ID=""
+
+LABEL org.opencontainers.image.created="${BUILD_DATE}" \
+      es.upm.etsii.jenkins-pi.dynreact.build_id="${JENKINS_BUILD_ID}"
 
 RUN apt update && apt upgrade -y && apt install -y gosu
 
@@ -55,7 +68,11 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH="/app/shortterm" \
     IS_DOCKER="true" \
     LOCAL_REGISTRY=$DOCKER_REGISTRY \
-    PATH="/app/.venv/bin:$PATH"
+    PATH="/app/.venv/bin:$PATH" \
+    KAFKA_TOPIC_PREFIX="Dynreact_OSS" \
+    TOPIC_GEN="Dynreact-OSS-Gen" \
+    TOPIC_CALLBACK="Dynreact-OSS-Callback" \
+    SHORT_TERM_PLANNING_PARAMS="default+file:./data/stp_context.json"
 
 COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 
@@ -63,9 +80,16 @@ COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 COPY --from=builder /usr/lib/lib* /usr/lib/
 
 COPY dynreact/shortterm/common/ ./shortterm/dynreact/shortterm/common/
-COPY dynreact/shortterm/config.cnf ./shortterm/dynreact/shortterm/
-COPY dynreact/shortterm/agents/agent.py dynreact/shortterm/agents/equipment.py dynreact/shortterm/agents/log.py dynreact/shortterm/agents/material.py ./shortterm/dynreact/shortterm/agents/
-COPY dynreact/shortterm/agents/__main__.py ./shortterm/
+# IMPORTANTE: Copiamos la carpeta entera para que __main__.py quede en su sitio correcto
+COPY dynreact/shortterm/agents/ ./shortterm/dynreact/shortterm/agents/
+
+COPY dynreact/shortterm/__init__.py ./shortterm/dynreact/shortterm/
+COPY dynreact/shortterm/ShortTermPlanning.py ./shortterm/dynreact/shortterm/
+COPY dynreact/shortterm/short_term_planning.py ./shortterm/dynreact/shortterm/
+COPY dynreact/shortterm/replace_base.py ./shortterm/dynreact/shortterm/
+COPY dynreact/shortterm/shorttermtargets.py ./shortterm/dynreact/shortterm/
+COPY dynreact/shortterm/timedelay.py ./shortterm/dynreact/shortterm/
+COPY data/stp_context.json /app/data/stp_context.json
 
 RUN groupadd -r appgroup && useradd -r -u 1050 -g appgroup appuser
 RUN groupadd docker

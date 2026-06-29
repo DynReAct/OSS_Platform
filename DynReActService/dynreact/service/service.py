@@ -13,7 +13,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, \
     MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction, AggregatedStorageContent, \
-    AggregatedMaterial, Histogram, ServiceMetrics, PrimitiveMetric, PlannedWorkingShift, Lot
+    AggregatedMaterial, PlannedWorkingShift, Lot, LotTimes, TransportTimes
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.params import Path, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,8 +21,9 @@ from pydantic import AliasChoices
 
 from dynreact.app import config, state
 from dynreact.auth.authentication import fastapi_authentication
+from dynreact.base.monitoring import Histogram, PrimitiveMetric, ServiceMetrics
 from dynreact.service.model import EquipmentTransition, EquipmentTransitionStateful, LotsOptimizationInput, \
-    LotsOptimizationResults, TransitionInfo, MaterialTransfer, LongTermPlanningResults
+    LotsOptimizationResults, TransitionInfo, MaterialTransfer, LongTermPlanningResults, SnapshotExtended, LotExtended
 from dynreact.service.optim_listener import LotsOptimizationListener
 
 
@@ -75,7 +76,7 @@ def site(response: Response, username = username) -> Site:
         raise HTTPException(status_code=502, detail="Information not available")
 
 
-def _get_snapshot_plant(snapshot_id: str|datetime, plant_id: int) -> tuple[Snapshot, Equipment]:
+def _get_snapshot_plant(snapshot_id: str|datetime|None, plant_id: int) -> tuple[Snapshot, Equipment]:
     if isinstance(snapshot_id, str):
         snapshot_id = parse_datetime_str(snapshot_id)
     site0 = state.get_site()
@@ -86,6 +87,20 @@ def _get_snapshot_plant(snapshot_id: str|datetime, plant_id: int) -> tuple[Snaps
     if plant is None:
         raise HTTPException(status_code=404, detail="No such plant: " + str(plant_id))
     return snapshot, plant
+
+
+def _get_cost_provider():
+    try:
+        return state.get_cost_provider()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        configured_provider = config.cost_provider
+        if configured_provider is None or str(configured_provider).strip() == "":
+            detail = "Cost provider is not configured for this service."
+        else:
+            detail = f"Cost provider '{configured_provider}' is not available."
+        raise HTTPException(status_code=503, detail=detail) from exc
 
 
 @fastapi_app.get("/snapshots",
@@ -171,16 +186,28 @@ def snapshot(response: Response, timestamp: str | datetime = Path(..., examples=
                 "now": {"description": "Get the most recent snapshot", "value": "now"},
                 "now-1d": {"description": "Get yesterday's snapshot", "value": "now-1d"},
                 "2023-04-25T23:59Z": {"description": "A specific timestamp", "value": "2023-04-25T23:59Z"},
-            }), username = username) -> Snapshot:
+            }), username = username) -> SnapshotExtended:
     is_relative_timestamp: bool = isinstance(timestamp, str) and timestamp.startswith("now")
     if isinstance(timestamp, str):
         timestamp = parse_datetime_str(timestamp)
     snapshot0: Snapshot = state.get_snapshot(timestamp)
+    snap_provider = state.get_snapshot_provider()
+    snap_copy = snapshot0.model_dump(mode="python", exclude_unset=True, exclude_none=True)
+    lots_copy = {}
+    for eq, eq_lots in snapshot0.lots.items():
+        new_lots = []
+        lots_copy[eq] = new_lots
+        for lot in eq_lots:
+            dump = lot.model_dump(mode="python", exclude_unset=True, exclude_none=True)
+            dump["lot_complete"] = snap_provider.is_lot_complete(lot)
+            new_lots.append(LotExtended.model_validate(dump))
+    snap_copy["lots"] = lots_copy
+    snap_copy = SnapshotExtended.model_validate(snap_copy)
     if not is_relative_timestamp:
         response.headers["Cache-Control"] = "max-age=604800"  # 1 week
     else:
         response.headers["Cache-Control"] = "max-age=60"  # 1 minute
-    return snapshot0
+    return snap_copy
 
 @fastapi_app.get("/lots",
                  tags=["dynreact"],
@@ -239,6 +266,48 @@ def lots(response: Response, snapshot: str|datetime|None = Query(None, descripti
     if complete is not None:
         lots = [l for l in lots if sp.is_lot_complete(l) == complete]
     return lots
+
+@fastapi_app.get("/lot-times",
+                 tags=["dynreact"],
+                 response_model_exclude_unset=True,
+                 response_model_exclude_none=True,
+                 summary="Get anticipated processing times for either orders or material from a specific snapshot. Returns a map order/material id -> process -> lot times")
+def lot_times(snapshot: str|datetime|None = Query(None, description="Specify the snapshot id. If not set, the latest snapshot will be used",
+                                examples=[None, "now", "now-1d", "2023-12-04T23:59Z"], openapi_examples={
+                "unset": {"description": "No snapshot timestamp specified, will use latest", "value": None},
+                "now": {"description": "Get the most recent snapshot", "value": "now"},
+                "now-1d": {"description": "Get yesterday's snapshot", "value": "now-1d"},
+                "2023-04-25T23:59Z": {"description": "A specific timestamp", "value": "2023-04-25T23:59Z"},
+            }),
+            mode: Literal["order", "material"]|None = Query(None, description="Query lot times for orders or material. If none is selected but an id is provided, "
+                    + "the service decides according to whether an order or material id has been provided. Otherwise, orders are used by default."),
+            id: list[str]|None = Query(None, description="Filter by  order id or material id", examples=["123456"]),
+            process: str|int|None = Query(None, description="Filter by process stage", examples=[None, "PKL", 1], openapi_examples={
+                "unset": {"description": "No process filter", "value": None},
+                "PKL": {"description": "Specify process by name", "value": "PKL"},
+                "1": {"description": "Specify process by process id", "value": 1},
+            }),
+            username = username) -> dict[str, dict[str, LotTimes]]:
+    if isinstance(snapshot, str):
+        snapshot = None if snapshot == "" else parse_datetime_str(snapshot)
+    sp = state.get_snapshot_provider()
+    if mode is None and id is not None and len(id) > 0:
+        snap = sp.load(snapshot=snapshot)
+        if snap is None:
+            raise HTTPException(status_code=404, detail=f"Snapshot not found: {snapshot}")
+        for item_id in id:
+            mat = snap.get_material(item_id, do_raise=False)
+            order = None if mat is not None else snap.get_order(item_id, do_raise=False)
+            if mat is not None or order is not None:
+                mode = "material" if mat is not None else "order"
+                break
+        if mode is None:
+            raise HTTPException(status_code=404, detail=f"None of the ids {id} have been found in the snapshot from {snap.timestamp}.")
+    result = sp.get_material_lot_times(snapshot=snapshot, material=id) if mode == "material" else sp.get_order_lot_times(snapshot=snapshot, order=id)
+    process = None if process is None or process == "" else _get_process_name(process)
+    if process is not None:
+        result = {oid: {process: dct[process]} for oid, dct in result.items() if process in dct}
+    return result
 
 @fastapi_app.get("/planning-horizon",
                  tags=["dynreact"],
@@ -345,7 +414,7 @@ def transition_cost(transition: EquipmentTransition, username = username) -> flo
             raise HTTPException(status_code=404, detail="Coil " + str(transition.next_material) + " not found")
         if current_coil is None:
             raise HTTPException(status_code=404, detail="Current coil " + str(transition.current_material) + " not found or not provided")
-    costs: float = state.get_cost_provider().transition_costs(plant, current_order, next_order, current_material=current_coil, next_material=next_coil)
+    costs: float = _get_cost_provider().transition_costs(plant, current_order, next_order, current_material=current_coil, next_material=next_coil)
     return costs
 
 
@@ -364,8 +433,28 @@ def logistics_cost(transfer_data: MaterialTransfer, username = username) -> floa
         coil = snapshot.get_material(transfer_data.material)
         if coil is None:
             raise HTTPException(status_code=404, detail=f"Current coil {transfer_data.material} not found or not provided")
-    costs: float = state.get_cost_provider().logistic_costs(new_equipment=plant, order=order, material=coil)
+    costs: float = _get_cost_provider().logistic_costs(new_equipment=plant, order=order, material=coil)
     return costs
+
+
+@fastapi_app.get("/costs/assignment/{equipment_id}",
+                tags=["dynreact"],
+                response_model_exclude_unset=True,
+                response_model_exclude_none=True,
+                summary="Equipment assignment costs for individual orders.")
+def assignment_cost(equipment_id: int=Path(..., description="Equipment id"),
+                    order: list[str] = Query(..., description="Order ids"),
+                    snapshot_id: str|None = Query(None, description="Snapshot id"),
+                    username = username) -> dict[str, float]:
+    snap, equipment = _get_snapshot_plant(snapshot_id, equipment_id)
+    orders = {o: snap.get_order(o) for o in order}
+    none_orders = [oid for oid, o in orders.items() if o is None]
+    if len(none_orders) > 0:
+        raise HTTPException(404, f"Orders not found in snapshot {snapshot_id}: {none_orders}")
+    cost_provider = _get_cost_provider()
+    costs: dict[str, float] = {oid: cost_provider.assignment_costs(equipment, o) for oid, o in orders.items()}
+    return costs
+
 
 @fastapi_app.get("/costs/status/{equipment_id}/{snapshot_timestamp}",
                 tags=["dynreact"],
@@ -381,7 +470,7 @@ def plant_status(equipment_id: int, snapshot_timestamp: datetime | str = Path(..
                  unit: Literal["material", "order"] = Query("order", description="Treat materials as basic unit or orders (default)?"),
                  planning_horizon: Annotated[timedelta|str|None, Query(openapi_examples={"2d": {"value": "2d", "description": "A duration of two days"}},
                      # not working, need to use planning_horizon
-                    validation_alias=AliasChoices("planning-horizon", "planning_horizon", "planningHorizon"))] = timedelta(days=1),
+                     validation_alias=AliasChoices("planning-horizon", "planning_horizon", "planningHorizon"))] = timedelta(days=1),
                  # how to determine this? default throughput per plant; long term planning results; ...?
                  target_weight: Annotated[float|None, Query(description="Target weight. If not specified, it is determined from the snapshot")] = None,
                  current: str|None = Query(None, description="Order id or material id; determined from snapshot by default"),
@@ -409,8 +498,8 @@ def plant_status(equipment_id: int, snapshot_timestamp: datetime | str = Path(..
     if target_weight is None:
         target_weights = state.get_snapshot_provider().target_weights_from_snapshot(snapshot, plant.process)
         target_weight = target_weights.get(plant.id, 0)
-    return state.get_cost_provider().equipment_status(snapshot, plant, planning_period=interval, target_weight=target_weight,
-                                                      material_based=coil_based, current=current_order, current_material=current_coils)
+    return _get_cost_provider().equipment_status(snapshot, plant, planning_period=interval, target_weight=target_weight,
+                                                 material_based=coil_based, current=current_order, current_material=current_coils)
 
 
 @fastapi_app.post("/costs/transitions-stateful",
@@ -432,27 +521,72 @@ def target_function_update(transition: EquipmentTransitionStateful, username = u
     next_coil: Material | None = None
     current_order: Order | None = snapshot.get_order(transition.current_order)
     next_order: Order | None = snapshot.get_order(transition.next_order)
-    if next_order is None or current_order is None:
-        raise HTTPException(status_code=404, detail="Current or next order " + str(transition.current_order) + "/" + str(transition.next_order) + " not found")
+
+    if next_order is None:
+        raise HTTPException(status_code=404, detail=f"Next order {transition.next_order} not found")
+
+    status = transition.equipment_status
+    if current_order is None: # first order, cost is 0
+        return TransitionInfo(status=status, costs=0)
+
     if transition.next_material is not None:
         current_coil = snapshot.get_material(transition.current_material)
         next_coil = snapshot.get_material(transition.next_material)
         if current_coil is None or next_coil is None:
-            raise HTTPException(status_code=404, detail="Current/Next coil " + str(transition.current_material) + "/" + str(transition.next_material) + " not found")
-    # this is actually allowed at the beginning
-    #if current_order is None and current_coil is None:
-    #    raise HTTPException(status_code=404, detail="Current coil or order " + str(transition.current) + " not found")
-    status = transition.equipment_status
+            raise HTTPException(status_code=404, detail=f"Current/Next coil {transition.current_material}/{transition.next_material} not found")
+
     initial_solution = ProductionPlanning(process=plant.process, equipment_status={plant.id: status}, order_assignments={})
     targets = ProductionTargets(process=plant.process, target_weight={plant.id: status.targets},
                                 period=status.planning_period)
-    optimizer: LotsOptimizer = state.get_lots_optimization().create_instance(plant.process, snapshot, state.get_cost_provider(),
+    optimizer: LotsOptimizer = state.get_lots_optimization().create_instance(plant.process, snapshot, _get_cost_provider(),
                                                                     initial_solution=initial_solution, targets=targets)
     new_status, new_objective = optimizer.update_transition_costs(plant, current_order, next_order, status,
-                                                                    snapshot, current_material=current_coil, next_material=next_coil)
+                                                                  snapshot, current_material=current_coil, next_material=next_coil)
     return TransitionInfo(status=new_status, costs=new_objective)
 
 
+@fastapi_app.get("/costs/relevant-fields/{equipment_id}",
+                tags=["dynreact"],
+                response_model_exclude_unset=True,
+                response_model_exclude_none=True,
+                summary="Query order fields relevant to the transition cost function")
+def relevant_fields(equipment_id: int=Path(..., description="Equipment id"), username = username) -> list[str]:
+    equipment = state.get_site().get_equipment(equipment_id)
+    if equipment is None:
+        raise HTTPException(status_code=404, detail=f"No such equipment: {equipment_id}")
+    return _get_cost_provider().relevant_fields(equipment)
+
+
+@fastapi_app.get("/logistics/transfer-time/{equipment_id_1}/{equipment_id_2}",
+                tags=["dynreact"],
+                response_model_exclude_unset=True,
+                response_model_exclude_none=True,
+                summary="Transfer time from equipment 1 to equipment 2")
+def transfer_times(equipment_id_1: int|str=Path(..., description="Source equipment id"), equipment_id_2: int|str=Path(..., description="Target equipment id"), username = username) -> timedelta|None:
+    site = state.get_site()
+    id1 = _get_equipment_id(equipment_id_1)
+    id2 = _get_equipment_id(equipment_id_2)
+    tt: TransportTimes|None = site.transport_times
+    if tt is None:
+        raise HTTPException(status_code=500, detail=f"Transport times not configured")
+    delta: timedelta|None = tt.transport_times(id1, id2)
+    return delta
+
+
+@fastapi_app.get("/logistics/transfer-time",
+                tags=["dynreact"],
+                response_model_exclude_unset=True,
+                response_model_exclude_none=True,
+                summary="Query order fields relevant to the transition cost function")
+def all_transfer_times(username = username) -> TransportTimes:
+    site = state.get_site()
+    tt: TransportTimes|None = site.transport_times
+    if tt is None:
+        raise HTTPException(status_code=500, detail=f"Transport times not configured")
+    return tt
+
+
+# FIXME this does not enable access to stored results
 lots_optimization: tuple[int, LotsOptimizationListener]|None = None
 
 
@@ -468,7 +602,7 @@ def run_lots_optimization(data: LotsOptimizationInput, username = username) -> i
     snapshot: Snapshot = state.get_snapshot(data.snapshot)
     if snapshot is None:
         raise HTTPException(status_code=404, detail=f"Snapshot {data.snapshot} not found")
-    instance = optimizer.create_instance(data.targets.process, snapshot, state.get_cost_provider(),
+    instance = optimizer.create_instance(data.targets.process, snapshot, _get_cost_provider(),
                 targets=data.targets, initial_solution=data.initial_solution, min_due_date=data.min_due_date,
                 orders=data.orders)
     instance_id: int = random.randint(0, sys.maxsize)
@@ -526,7 +660,7 @@ def get_longtermplanning_results(
         start = parse_datetime_str(start)
     if isinstance(end, str):
         end = parse_datetime_str(end)
-    results_ctrl = state.get_results_persistence()
+    results_ctrl = state.get_results_persistence_aggregate()
     start_times = results_ctrl.start_times_ltp(start=start, end=end, sort=sort, limit=limit)
     return {DatetimeUtils.format(time): results_ctrl.solutions_ltp(time) for time in start_times}
 
@@ -544,7 +678,7 @@ def get_longtermplanning_result(
         solution_id: str = Path(..., description="Unique solution id"), username = username) -> LongTermPlanningResults|None:
     if isinstance(start, str):
         start = parse_datetime_str(start)
-    results_ctrl = state.get_results_persistence()
+    results_ctrl = state.get_results_persistence_aggregate()
     targets, levels = results_ctrl.load_ltp(start, solution_id)
     return LongTermPlanningResults(targets=targets, storage_levels=levels)
 
@@ -586,6 +720,53 @@ def planned_shifts(
         equipment_p = [p.id for p in plants if equipment is None or p.id in equipment]
         equipment = equipment_p
     return state.get_shifts_provider().load_all(start, end=end, limit=limit, equipments=equipment)
+
+@fastapi_app.get("/production-history",
+                tags=["dynreact"],
+                summary="Get production history by equipment id")
+def historic_production(
+        process: str|None = Query(None, description="Process steps to be included. Equipment for all processes will be included if not specified."),
+        equipment: list[int|str]|None = Query(None, description="Equipment ids to be included. All equipments will be included in the response if not specified (unless the process filter is set)"),
+        start: str|datetime|None = Query(None, description="Start time.",  examples=[None, "now-1d", "2023-04-25T00:00Z"], openapi_examples={
+                "now-1d": {"description": "One day ago", "value": "now-1d"},
+                "2023-04-25T00:00Z": {"description": "A specific timestamp", "value": "2023-04-25T00:00Z"},
+            }),
+        end: str|datetime|None = Query(None, description="End time, optional.", examples=[None, "now", "2023-04-27T00:00Z"], openapi_examples={
+                "now": {"description": "Now", "value": "now"},
+                "2023-04-27T00:00Z": {"description": "A specific timestamp", "value": "2023-04-27T00:00Z"},
+            }),
+        material: list[str]|None = Query(None, description="Filter for specific material classes"),
+        username = username) -> ProductionTargets:
+    if isinstance(start, str):
+        start = parse_datetime_str(start)
+    if isinstance(end, str):
+        end = parse_datetime_str(end)
+    if end is None:
+        if start is None:
+            end = state.as_timezone(state.get_snapshot_provider().current_snapshot_id()).replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            end = start + timedelta(days=1)
+    if start is None:
+        start = end - timedelta(days=1)
+    if equipment is not None:
+        equipment = [_get_equipment_id(e) for e in equipment]
+    if process:
+        plants = state.get_site().get_process_equipment(process)
+        if len(plants) == 0:
+            raise HTTPException(404, f"No equipment found for process {process}")
+        equipment_p = [p.id for p in plants if equipment is None or p.id in equipment]
+        equipment = equipment_p
+    equipment_objects = [state.get_site().get_equipment(e, do_raise=True) for e in equipment]
+    first_proc = equipment_objects[0].process
+    if any(e.process != first_proc for e in equipment_objects):
+        raise HTTPException(400, f"Equipment for multiple processes specified: {[e.process for e in equipment_objects]}")
+    if process is not None and first_proc != process:
+        raise HTTPException(400, f"Specified process does not match equipment process: {process} - {first_proc}")
+    if material is not None and len(material) > 0:
+        unknown_mat = [mat for mat in material if not any(cl.id == mat for cat in state.get_site().material_categories for cl in cat.classes)]
+        if len(unknown_mat) > 0:
+            raise HTTPException(400, f"Unknown material {unknown_mat}")
+    return state.get_history_reader().production_aggregate(first_proc, start, end, equipment=equipment, material_filter=material)
 
 
 @fastapi_app.get("/metrics",
@@ -708,4 +889,3 @@ def _get_process_name(process: int|str) -> str:
     if proc is None:
         raise HTTPException(status_code=404, detail=f"Process not found: {process}")
     return proc.name_short
-

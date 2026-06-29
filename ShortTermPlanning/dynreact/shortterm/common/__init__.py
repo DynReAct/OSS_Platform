@@ -1,16 +1,23 @@
+"""Common short-term planning utilities for OSS_Platform/ShortTermPlanning/dynreact/shortterm/common/__init__.
+
+The module is documented in English to make the short-term planning
+workflow easier to maintain across OSS and RAS-specific integrations.
+"""
+
+from typing import Any
 import json
 import argparse
+from datetime import datetime
 import os
 import traceback
 
-from confluent_kafka import Producer, OFFSET_END, TopicPartition
+from confluent_kafka import KafkaError, Message, Producer, OFFSET_END, TopicPartition
 from confluent_kafka.admin import AdminClient
+from flatdict import FlatDict
 
-TOPIC_GEN = os.environ.get("TOPIC_GEN", "DynReact-Gen")
-TOPIC_CALLBACK = os.environ.get("TOPIC_CALLBACK", "DynReact-Callback")
-SMALL_WAIT = 5
+from dynreact.shortterm.shorttermtargets import ShortTermTargets
 
-def _compute_partition_topic(topic_name: str, admin_client: AdminClient):
+def _compute_partition_topic(topic_name: str, admin_client: AdminClient) -> Any:
     """
     Function to list topic partitions.
 
@@ -30,7 +37,7 @@ def _compute_partition_topic(topic_name: str, admin_client: AdminClient):
         partitions = md.topics[topic_name].partitions
         return list(map(lambda p: TopicPartition(topic_name, int(p), offset=OFFSET_END), partitions.keys()))
 
-def purge_topics(topics: list):
+def purge_topics(topics: list[str]) -> None:
     """
     Function to purge list of topics.
 
@@ -39,19 +46,214 @@ def purge_topics(topics: list):
     returns: list of purged topics.
     """
 
-    admin_client = AdminClient({"bootstrap.servers": "138.100.82.173:9092"})
+    admin_client = AdminClient({"bootstrap.servers": KeySearch.search_for_value("KAFKA_IP")})
 
     topics_partitions = []
     for topic in topics:
         topics_partitions.extend(_compute_partition_topic(topic, admin_client))
 
-    topics = admin_client.delete_records(topics_partitions)
+    delete_results = admin_client.delete_records(topics_partitions)
 
-    for tp, f in topics.items():
+    for tp, f in delete_results.items():
         try:
             f.result()  # Raises exception if delete failed
         except Exception as e:
-            raise Exception(f"Failed: {tp} with error {e}")
+            dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+            raise Exception(f"{dt} | ERROR: Failed: {tp} with error {e}")
+
+def delete_topics(topics: list[str], silent: bool = False) -> None:
+    """
+    Function to delete list of topics.
+
+    :param str topics: Topic names to search partitions for.
+
+    returns: list of purged topics.
+    """
+
+    admin_client = AdminClient({"bootstrap.servers": KeySearch.search_for_value("KAFKA_IP")})
+
+    topics_partitions = []
+    for topic in topics:
+        topics_partitions.extend(_compute_partition_topic(topic, admin_client))
+
+    delete_results = admin_client.delete_topics(topics=topics)
+
+    for tp, f in delete_results.items():
+        try:
+            f.result()  # Raises exception if delete failed
+        except Exception as e:
+            if not silent:
+                dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+                raise Exception(f"{dt} | ERROR: Failed: {tp} with error {e}")
+
+class KeySearch:
+    """Key search.
+    
+    This class belongs to the short-term planning integration layer. It
+    encapsulates state, configuration, or UI behavior used by the planning
+    workflow without changing the runtime semantics of the original module.
+    """
+    _global_config: ShortTermTargets | None = None
+
+    @classmethod
+    def is_initialized(cls) -> Any:
+        """
+        Returns if the class has been initialized.
+
+        returns: boolean True or False.
+        """
+        return cls._global_config is not None
+
+    @classmethod
+    def dump_model(cls, include_env: bool = True) -> Any:
+        """
+        Dump the class information to a dict, assigning values from the config and environment.
+
+        :return: dict The model assigned.
+        """
+
+        if cls._global_config is None:
+            raise RuntimeError("KeySearch global config has not been set. Call KeySearch.set_global() first.")
+
+        dump_model = cls._global_config.model_copy()
+        update = {}
+
+        if include_env:
+            for field_name in dump_model.__class__.model_fields.keys():
+                if field_name in os.environ:
+                    update[field_name] = os.environ[field_name]
+
+        merged = dump_model.model_dump()
+        merged.update(update)
+        return dump_model.__class__.model_validate(merged).model_dump()
+
+    @classmethod
+    def assign_value(cls, key: str, value: str) -> None:
+        """
+        Assign new single value to a key.
+
+        :param str key: Key values to assign.
+        :param str value: New value.
+
+        :return: None.
+        """
+        if cls._global_config is None:
+            raise RuntimeError("KeySearch global config has not been set. Call KeySearch.set_global() first.")
+
+        merged = cls._global_config.model_dump()
+        merged[key] = value
+        cls._global_config = cls._global_config.__class__.model_validate(merged)
+
+    @classmethod
+    def assign_values(cls, new_values: dict) -> None:
+        """
+        Assign new values to keys (batch).
+
+        :param dict new_values: Key values to assign.
+        :return: None.
+        """
+        if cls._global_config is None:
+            raise RuntimeError("KeySearch global config has not been set. Call KeySearch.set_global() first.")
+
+        merged = cls._global_config.model_dump()
+        merged.update(new_values)
+        cls._global_config = cls._global_config.__class__.model_validate(merged)
+
+    @classmethod
+    def set_global(cls, config_provider: ShortTermTargets) -> None:
+        """
+        Function to update the config provider.
+
+        :param str config_provider: The configuration provider with the set values
+        """
+        cls._global_config = config_provider
+
+    @classmethod
+    def _get_value(cls, key_name: str, default_value: Any=None) -> Any:
+        """
+        Retrieve the value associated with a flattened key segment from the configuration.
+
+        :param key_name: The segment of the flattened key to match.
+        :param default_value: Value to return if no match is found.
+        :return: Matched value or the default.
+        """
+        if cls._global_config is None:
+            return default_value
+
+        cfg = cls._global_config.model_dump()
+
+        flatten_cfg = FlatDict(cfg, delimiter='.')
+        look_function = (value for key, value in flatten_cfg.items() if key_name == key.split(".")[-1])
+
+        deep_search = next(look_function, default_value)
+
+        return default_value if deep_search is None else deep_search
+
+    @classmethod
+    def search_for_value(cls, key_name: Any, default_value: Any=None) -> Any:
+        """
+        Function to check for a given key name between env and context including recursive structure.
+
+        Priority list:
+
+            - Environment value
+            - STP Context/Config definition
+
+        :param str key_name: Key name to search for
+        :param str default_value: Default value in case not found
+
+        returns: value of key otherwise null or default value.
+        """
+
+        if cls._global_config is None:
+            raise RuntimeError("KeySearch global config has not been set. Call KeySearch.set_global() first.")
+
+        if key_name in os.environ:
+            return os.environ[key_name]
+
+        if cls._global_config:
+            return cls._get_value(key_name, default_value)
+
+        return default_value
+
+
+def initialize_keysearch_from_runtime(
+    *,
+    default_uri: str = "default+file:./data/stp_context.json",
+    overrides: dict[str, Any] | None = None,
+) -> ShortTermTargets:
+    """
+    Initialize ``KeySearch`` from the runtime STP context when available.
+
+    The short-term agents and helper scripts are often started directly from a
+    container entrypoint, without going through the UI path that loads
+    ``stp_context.json``. In that case, relying on ``ShortTermTargets()``
+    alone silently falls back to OSS defaults. This helper keeps the existing
+    environment precedence but first loads the configured STP JSON when it is
+    present in the container.
+    """
+
+    config: ShortTermTargets | None = None
+    uri = os.getenv("SHORT_TERM_PLANNING_PARAMS", default_uri)
+
+    if isinstance(uri, str) and uri.startswith("default+file:"):
+        file_path = uri[len("default+file:"):]
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as file:
+                config = ShortTermTargets.model_validate_json(file.read())
+
+    if config is None:
+        config = ShortTermTargets()
+
+    if overrides:
+        normalized_overrides = {key: value for key, value in overrides.items() if value is not None}
+        if normalized_overrides:
+            merged = config.model_dump()
+            merged.update(normalized_overrides)
+            config = config.__class__.model_validate(merged)
+
+    KeySearch.set_global(config_provider=config)
+    return config
 
 class VAction(argparse.Action):
     """
@@ -72,9 +274,9 @@ class VAction(argparse.Action):
         metavar (str):
     """
 
-    def __init__(self, option_strings, dest, nargs=None, const=None,
-                 default=None, type=None, choices=None, required=False,
-                 help=None, metavar=None):
+    def __init__(self, option_strings: Any, dest: Any, nargs: Any=None, const: Any=None,
+                 default: Any=None, type: Any=None, choices: Any=None, required: Any=False,
+                 help: Any=None, metavar: Any=None) -> None:
         super(VAction, self).__init__(option_strings, dest, nargs, const,
                                       default, type, choices, required,
                                       help, metavar)
@@ -95,7 +297,7 @@ class VAction(argparse.Action):
         """
         self.values = 0
 
-    def __call__(self, parser, args, values, option_string=None):
+    def __call__(self, parser: Any, args: Any, values: Any, option_string: Any=None) -> None:
         """
         Function able to handle the arguments.
 
@@ -114,7 +316,7 @@ class VAction(argparse.Action):
         setattr(args, self.dest, self.values)
 
 
-def confirm(err: str, msg: str) -> None:
+def confirm(err: KafkaError | None, msg: Message) -> None:
     """
     Function to confirm the message delivery and prints an error message if any.
 
@@ -122,12 +324,12 @@ def confirm(err: str, msg: str) -> None:
     :param str msg: The message being confirmed.
     """
     if err:
-        print("Error sending message: " + msg + " [" + err + "]")
+        print(f"Error sending message: {msg} [{err}]")
     return None
 
 
 def sendmsgtopic(producer: Producer, tsend: str, topic: str, source: str, dest: str,
-                 action: str, payload: dict = None, vb: int = 0) -> None:
+                 action: str, payload: dict[str, Any] | None = None, vb: int = 0) -> None:
     """
     Send message to a Kafka topic.
 
@@ -151,7 +353,7 @@ def sendmsgtopic(producer: Producer, tsend: str, topic: str, source: str, dest: 
     )
     mtxt = json.dumps(msg)
     try:
-        producer.produce(value=mtxt, topic=tsend, on_delivery=confirm) # 30 seconds
+        producer.produce(value=mtxt.encode("utf-8"), topic=tsend, on_delivery=confirm) # 30 seconds
         producer.flush()
     except Exception as e:
         error_message = traceback.format_exc()

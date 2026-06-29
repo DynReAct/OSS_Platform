@@ -6,9 +6,8 @@ This module runs the setup code necessary to quickly run the functions.
 Note:
     These variables should be computed only once.
 """
-import os
-
-from dynreact.shortterm.common.data.load_url import load_url_json_get, URL_SNAPSHOTS, URL_SNAPSHOT_DATA
+from typing import Any
+from dynreact.shortterm.common.data.load_url import load_url_json_get, URL_SNAPSHOTS, URL_SNAPSHOT_DATA, URL_SITE
 
 class DataSetup:
     """
@@ -20,7 +19,7 @@ class DataSetup:
 
     """
 
-    def __init__(self, verbose: int = 1, snapshot_time: str = None):
+    def __init__(self, verbose: int = 1, snapshot_time: str | None = None) -> None:
         """
         Constructor function for the Log Class
 
@@ -64,7 +63,7 @@ class DataSetup:
         return snapshot_data
 
 
-    def get_all_materials_params(self):
+    def get_all_materials_params(self) -> Any:
         """
         Get the parameters of each material, including those of the corresponding order
 
@@ -98,7 +97,7 @@ class DataSetup:
         return equipment_materials
 
 
-    def get_material_params(self, material_id: str) -> dict:
+    def get_material_params(self, material_id: str | int) -> dict:
         """
         Get the parameters of the given material.
 

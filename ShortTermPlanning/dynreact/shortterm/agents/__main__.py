@@ -1,3 +1,10 @@
+"""Short-term planning agent implementation for OSS_Platform/ShortTermPlanning/dynreact/shortterm/agents/__main__.
+
+The module is documented in English to make the short-term planning
+workflow easier to maintain across OSS and RAS-specific integrations.
+"""
+
+from typing import Any
 import argparse
 import json
 from datetime import datetime
@@ -5,24 +12,35 @@ from pathlib import Path
 
 from dynreact.shortterm.agents.log import Log
 import platform
-import configparser
 import os
 
 from dynreact.shortterm.agents.equipment import Equipment
 from dynreact.shortterm.agents.material import Material
-from dynreact.shortterm.common import VAction, TOPIC_GEN, TOPIC_CALLBACK
+from dynreact.shortterm.common import VAction, KeySearch, initialize_keysearch_from_runtime
+from dynreact.shortterm.shorttermtargets import ShortTermTargets
+def log_base(verbose: int, kafka_ip: str) -> Any:
 
-def log_base(verbose: int):
-
+    """Log base.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Args:
+        verbose: Input value for the `verbose` parameter.
+        kafka_ip: Input value for the `kafka_ip` parameter.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
     if verbose > 0:
         print(f"Running log agent with {verbose=}")
 
     # Global configuration - assign the values to the global variables using the information above
-    config = configparser.ConfigParser()
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    config.read(os.path.join(current_dir, "dynreact", "shortterm", "config.cnf"))
-    kafka_ip = config['DEFAULT']['IP']
-    left_path = config['DEFAULT']['LogFilePath']
+    initialize_keysearch_from_runtime(overrides={"VB": verbose, "KAFKA_IP": kafka_ip})
+
+    left_path = KeySearch.search_for_value('LOG_FILE_PATH')
+    topic_gen = KeySearch.search_for_value('TOPIC_GEN')
+    topic_callback = KeySearch.search_for_value('TOPIC_CALLBACK')
 
     folder_path = Path(left_path)
 
@@ -31,59 +49,88 @@ def log_base(verbose: int):
         folder_path.mkdir(parents=True)
 
     # Creation of the main log file
-    now = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
-    log_file = f"{TOPIC_GEN}-{now}.log"
+    log_file = f"{topic_gen}.log"
     if platform.system() == 'Windows':
         log_file = log_file.replace(":", "_")
     log_file = os.path.join(left_path, log_file)
-    agent_gen = 'LOG:' + TOPIC_GEN
+    agent_gen = 'LOG:' + topic_gen
 
     main_log = Log(
-        topic=TOPIC_GEN, agent=agent_gen, kafka_ip=kafka_ip, left_path=left_path, log_file=log_file, verbose=verbose
+        topic=topic_gen, agent=agent_gen, log_file=log_file
     )
 
     # Creates Callback topic!
-    main_log.callback_on_topic_not_available(TOPIC_CALLBACK)
+    main_log.callback_on_topic_not_available(topic_callback)
 
     return main_log
 
-def equipment_base(verbose: int):
+def equipment_base(verbose: int, kafka_ip: str) -> Any:
+    """Equipment base.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Args:
+        verbose: Input value for the `verbose` parameter.
+        kafka_ip: Input value for the `kafka_ip` parameter.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
     if verbose > 0:
         print(f"Running equipment agent with {verbose=}")
 
     # Global configuration - assign the values to the global variables using the information above
-    config = configparser.ConfigParser()
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    config.read(os.path.join(current_dir, "dynreact", "shortterm", "config.cnf"))
-    kafka_ip = config['DEFAULT']['IP']
+    initialize_keysearch_from_runtime(overrides={"VB": verbose, "KAFKA_IP": kafka_ip})
+
+    topic_gen = KeySearch.search_for_value('TOPIC_GEN')
 
     main_equipment = Equipment(
-        topic=TOPIC_GEN, agent=f"EQUIPMENT:{TOPIC_GEN}", status=dict(), kafka_ip=kafka_ip,
-        counterbid_wait=15, verbose=verbose
+        topic=topic_gen, agent=f"EQUIPMENT:{topic_gen}", status=dict(),
     )
 
     return main_equipment
 
-def material_base(verbose: int):
+def material_base(verbose: int, kafka_ip: str) -> Any:
+    """Material base.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Args:
+        verbose: Input value for the `verbose` parameter.
+        kafka_ip: Input value for the `kafka_ip` parameter.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
     if verbose > 0:
         print(f"Running material agent with {verbose=}")
 
     # Global configuration - assign the values to the global variables using the information above
-    config = configparser.ConfigParser()
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    config.read(os.path.join(current_dir, "dynreact", "shortterm", "config.cnf"))
-    kafka_ip = config['DEFAULT']['IP']
+    initialize_keysearch_from_runtime(overrides={"VB": verbose, "KAFKA_IP": kafka_ip})
+
+    topic_gen = KeySearch.search_for_value('TOPIC_GEN')
 
     main_material = Material(
-        topic=TOPIC_GEN, agent=f"MATERIAL:{TOPIC_GEN}", params=dict(), kafka_ip=kafka_ip, verbose=verbose
+        topic=topic_gen, agent=f"MATERIAL:{topic_gen}", params=dict()
     )
 
     return  main_material
 
 
 
-def main():
+def main() -> None:
+    """Main.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
     print("Starting agent")
+
     parser = argparse.ArgumentParser(description="Select an agent to run.")
 
     subparsers = parser.add_subparsers(dest="agent", required=True, help="Choose an agent to run")
@@ -97,6 +144,7 @@ def main():
     parser_log_base = subparsers_log.add_parser("base", help="Run the base log agent")
     parser_log_base.add_argument("-v", "--verbose", default=0, nargs='?', action=VAction,
                     dest='verbose', help="Option for printing detailed information")
+    parser_log_base.add_argument("-k", "--kafka-ip", type=str, required=True, help="Kafka broker IP address")
 
     # Log Agent - Replica Mode
     parser_log_replica = subparsers_log.add_parser("replica", help="Run the replica log agent")
@@ -104,13 +152,8 @@ def main():
     # Required string arguments
     parser_log_replica.add_argument("-t", "--topic", type=str, required=True, help="Topic name")
     parser_log_replica.add_argument("-a", "--agent-name", type=str, required=True, help="Agent name")
-    parser_log_replica.add_argument("-k", "--kafka-ip", type=str, required=True, help="Kafka broker IP address")
-    parser_log_replica.add_argument("-p", "--left-path", type=str, required=True, help="Path to the left file")
     parser_log_replica.add_argument("-l", "--log-file", type=str, required=True, help="Path to the log file")
-
-    # Optional integer argument with default value
-    parser_log_replica.add_argument("-v", "--verbose", default=0, nargs='?', action=VAction,
-                                 dest='verbose', help="Option for printing detailed information")
+    parser_log_replica.add_argument("-v", "--variables", type=str, required=True, help="Dynamic values from the KeySearch dump model")
 
     # ------------------------
     # Instance Equipment Subparser
@@ -121,7 +164,7 @@ def main():
     parser_equipment_base = subparsers_equipment.add_parser("base", help="Run the base equipment agent")
     parser_equipment_base.add_argument("-v", "--verbose", default=0, nargs='?', action=VAction,
                                  dest='verbose', help="Option for printing detailed information")
-
+    parser_equipment_base.add_argument("-k", "--kafka-ip", type=str, required=True, help="Kafka broker IP address")
 
     # Equipment Agent - Replica Mode
     parser_equipment_replica = subparsers_equipment.add_parser("replica", help="Run the replica equipment agent")
@@ -130,12 +173,10 @@ def main():
     parser_equipment_replica.add_argument("-t", "--topic", type=str, required=True, help="Topic name")
     parser_equipment_replica.add_argument("-a", "--agent-name", type=str, required=True, help="Agent name")
     parser_equipment_replica.add_argument("-s", "--status", type=str, required=True, help="Equipment Status")
-    parser_equipment_replica.add_argument("-k", "--kafka-ip", type=str, required=True, help="Kafka broker IP address")
-    parser_equipment_replica.add_argument("-cw", "--counter-wait", type=int, required=True, help="Amount of time to wait to counterbid")
-
-    # Optional integer argument with default value
-    parser_equipment_replica.add_argument("-v", "--verbose", default=0, nargs='?', action=VAction,
-                                    dest='verbose', help="Option for printing detailed information")
+    parser_equipment_replica.add_argument("-v", "--variables", type=str, required=True, help="Dynamic values from the KeySearch dump model")
+    parser_equipment_replica.add_argument("--os", "--operation_speed", type=float, dest="operation_speed", help="Operation speed")
+    parser_equipment_replica.add_argument("--st", "--start_time", type=str, dest="start_time", help="Start time")
+    parser_equipment_replica.add_argument("--target_tons", type=float, default=150000.0, help="Target assigned tonnage before the equipment stops bidding")
 
     # ------------------------
     # Instance Material Subparser
@@ -147,6 +188,7 @@ def main():
     parser_material_base = subparsers_material.add_parser("base", help="Run the base equipment agent")
     parser_material_base.add_argument("-v", "--verbose", default=0, nargs='?', action=VAction,
                                        dest='verbose', help="Option for printing detailed information")
+    parser_material_base.add_argument("-k", "--kafka-ip", type=str, required=True, help="Kafka broker IP address")
 
 
     # Material Agent - Replica Mode
@@ -156,11 +198,9 @@ def main():
     parser_material_replica.add_argument("-t", "--topic", type=str, required=True, help="Topic name")
     parser_material_replica.add_argument("-a", "--agent-name", type=str, required=True, help="Agent name")
     parser_material_replica.add_argument("-p", "--params", type=str, required=True, help="Materials parameters relevant to the configuration of the agent.")
-    parser_material_replica.add_argument("-k", "--kafka-ip", type=str, required=True, help="Kafka broker IP address")
-
-    # Optional integer argument with default value
-    parser_material_replica.add_argument("-v", "--verbose", default=0, nargs='?', action=VAction,
-                                          dest='verbose', help="Option for printing detailed information")
+    parser_material_replica.add_argument("-v", "--variables", type=str, required=True, help="Dynamic values from the KeySearch dump model")
+    parser_material_replica.add_argument("--tt", "--transport_times", type=str, dest="transport_times", help="Transport times for each equipment")
+    parser_material_replica.add_argument("--cl", "--coil_lengths", type=str, dest="coil_lengths", help="List of coil lengths")
 
     # ------------------------
 
@@ -169,43 +209,58 @@ def main():
     if args.type not in ["base", "replica"]:
         raise ValueError(f"Value {args.type} is not supported.")
 
+    agent = None
+
     if args.agent == "log":
         if args.type == "base":
-            agent = log_base(verbose = args.verbose)
+            agent = log_base(verbose=args.verbose, kafka_ip=args.kafka_ip)
         elif args.type == "replica":
-            agent = Log(topic=args.topic,
+
+            variables = json.loads(args.variables)
+            short_term_targets = ShortTermTargets.model_validate(variables)
+            KeySearch.set_global(config_provider=short_term_targets)
+
+            agent = Log(
+                topic=args.topic,
                 agent=args.agent_name,
-                kafka_ip=args.kafka_ip,
-                left_path=args.left_path,
                 log_file=args.log_file,
-                verbose=args.verbose,
                 manager=False
             )
 
     elif args.agent == "equipment":
         if args.type == "base":
-            agent = equipment_base(verbose=args.verbose)
+            agent = equipment_base(verbose=args.verbose, kafka_ip=args.kafka_ip)
         elif args.type == "replica":
+
+            variables = json.loads(args.variables)
+            short_term_targets = ShortTermTargets.model_validate(variables)
+            KeySearch.set_global(config_provider=short_term_targets)
+
             agent = Equipment(
                 topic=args.topic,
                 agent=args.agent_name,
-                kafka_ip=args.kafka_ip,
-                counterbid_wait=args.counter_wait,
                 status=json.loads(args.status),
-                verbose=args.verbose,
+                operation_speed=args.operation_speed,
+                start_time=args.start_time,
+                target_tons=args.target_tons,
                 manager=False
             )
 
     elif args.agent == "material":
         if args.type == "base":
-            agent = material_base(verbose=args.verbose)
+            agent = material_base(verbose=args.verbose, kafka_ip=args.kafka_ip)
         elif args.type == "replica":
+
+            variables = json.loads(args.variables)
+            short_term_targets = ShortTermTargets.model_validate(variables)
+            KeySearch.set_global(config_provider=short_term_targets)
+
             agent = Material(
                 topic=args.topic,
                 agent=args.agent_name,
-                kafka_ip=args.kafka_ip,
                 params=json.loads(args.params),
-                verbose=args.verbose,
+                transport_times=json.loads(args.transport_times) if args.transport_times else None,
+                coil_lengths=json.loads(args.coil_lengths) if args.coil_lengths else None,
                 manager=False
             )
     else:
@@ -213,6 +268,8 @@ def main():
 
     print("Running agent")
     # Run the topic
+    if agent is None:
+        raise RuntimeError("Failed to initialize the requested agent.")
     agent.follow_topic()
 
 

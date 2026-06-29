@@ -1,10 +1,57 @@
+"""Short-term planning agent implementation for OSS_Platform/ShortTermPlanning/dynreact/shortterm/agents/agent.
+
+The module is documented in English to make the short-term planning
+workflow easier to maintain across OSS and RAS-specific integrations.
+"""
+
+from typing import Any, cast
 import json
 import re
 import time
 import sys
-from confluent_kafka import Producer, Consumer
-from dynreact.shortterm.common import sendmsgtopic
+
+from confluent_kafka import Producer, Consumer, KafkaError
+from dynreact.shortterm.common import sendmsgtopic, KeySearch, purge_topics
 import traceback
+
+current_partitions = 0
+UNKNOWN_TOPIC_ERRORS = {-188, -191}
+
+def on_assign(consumer: Any, partitions: Any) -> None:
+    """On assign.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Args:
+        consumer: Input value for the `consumer` parameter.
+        partitions: Input value for the `partitions` parameter.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
+    global current_partitions
+    print("Partitions assigned:", partitions)
+    current_partitions = len(partitions)
+    consumer.assign(partitions)
+
+def on_revoke(consumer: Any, partitions: Any) -> None:
+    """On revoke.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Args:
+        consumer: Input value for the `consumer` parameter.
+        partitions: Input value for the `partitions` parameter.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
+    global current_partitions
+    print("Partitions revoked:", partitions)
+    current_partitions = max(0, current_partitions - len(partitions))
+    consumer.unassign()
 
 class Agent:
     """
@@ -20,20 +67,26 @@ class Agent:
        https://google.github.io/styleguide/pyguide.html
     """
 
-    def __init__(self, topic: str, agent: str, kafka_ip: str, verbose: int = 1):
+    def __init__(self, topic: str, agent: str) -> None:
         """
            Constructor function for the Log Class
 
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
-        :param str kafka_ip: IP address and TCP port of the broker.
-        :param int verbose: Level of details being saved.
         """
 
         self.topic = topic
         self.agent = agent
-        self.kafka_ip = kafka_ip
-        self.verbose = verbose
+        self.topic_callback = KeySearch.search_for_value("TOPIC_CALLBACK")
+        self.topic_gen = KeySearch.search_for_value("TOPIC_GEN")
+        raw_verbose = KeySearch.search_for_value("VB", 1)
+        try:
+            self.verbose = int(raw_verbose)
+        except (TypeError, ValueError):
+            self.verbose = 1
+        self.kafka_ip = KeySearch.search_for_value("KAFKA_IP")
+        if not isinstance(self.topic_callback, str) or not isinstance(self.topic_gen, str) or not isinstance(self.kafka_ip, str):
+            raise RuntimeError("Kafka configuration is incomplete. Expected TOPIC_CALLBACK, TOPIC_GEN, and KAFKA_IP.")
 
         self.iter_no_msg = 0
         self.min_verbose = 1
@@ -45,11 +98,16 @@ class Agent:
         # the message consumed by one AGENT can also be consumed by other AGENTs
         self.producer = Producer({"bootstrap.servers": self.kafka_ip})
         self.consumer = Consumer(
-            {"bootstrap.servers": self.kafka_ip, "group.id": self.agent, "auto.offset.reset": "earliest"}
+            {
+                "bootstrap.servers": self.kafka_ip,
+                "group.id": self.agent,
+                "auto.offset.reset": "earliest",
+                'error_cb': cast(Any, self.kafka_error_callback)
+            }
         )
-        self.consumer.subscribe([self.topic])
+        self.consumer.subscribe([self.topic], on_assign=on_assign, on_revoke=on_revoke)
 
-    def write_log(self, msg: str, identifier: str, to_stdout: bool = False):
+    def write_log(self, msg: str, identifier: str, to_stdout: bool = False) -> None:
         """
         Write the given message in the topic's LOG
 
@@ -89,7 +147,7 @@ class Agent:
         )
         return 'CONTINUE'
 
-    def handle_exit_action(self, dctmsg: dict = None) -> str:
+    def handle_exit_action(self, dctmsg: dict | None = None) -> str:
         """
         Handles the EXIT action.
 
@@ -98,7 +156,38 @@ class Agent:
         :returns: Status of the handling
         :rtype:  str
         """
+        payload = dctmsg or {}
+        exit_source = payload.get("source", self.agent)
+        exit_dest = payload.get("dest", self.agent)
+        exit_topic = payload.get("topic", self.topic)
+        exit_msg = (
+            f"Received EXIT from {exit_source} to {exit_dest} on topic {exit_topic}. "
+            "Ending agent loop."
+        )
+        print(exit_msg)
+        if self.verbose > 0:
+            self.write_log(
+                exit_msg,
+                "2eea5d7b-2539-4c3b-8dfb-d4ed8ece26b0",
+                to_stdout=True
+            )
         return 'END'
+
+    def should_purge_exit_history(self) -> bool:
+        """
+        Return whether processing ``EXIT`` should purge stale messages.
+
+        Purging too early from EQUIPMENT or MATERIAL can delete the pending
+        ``EXIT`` intended for sibling base agents. The safe point is the
+        general LOG shutdown, which clean_agents() already sends last.
+        """
+        return self.topic == self.topic_gen and str(self.agent).startswith("LOG:")
+
+    def purge_exit_history_if_needed(self) -> None:
+        """Purge stale general and callback messages when the shutdown point is safe."""
+        if not self.should_purge_exit_history():
+            return
+        purge_topics(topics=[self.topic, self.topic_callback])
 
     def process_message(self, action: str, dctmsg: dict) -> str:
         """
@@ -144,18 +233,36 @@ class Agent:
         """
         return 'CONTINUE'
 
-    def callback_on_topic_not_available(self, topic: str = None):
+    def callback_on_topic_not_available(self, topic: str | None = None) -> None:
         """
         Function executed when 'Subscribed topic not available'
         
         """
 
-    def callback_on_not_match(self, dctmsg: dict):
+    def callback_on_not_match(self, dctmsg: dict) -> None:
         """
         Function executed when the agent is not the destination of the message
         
         """
         pass
+
+    def kafka_error_callback(self, err: KafkaError) -> None:
+        """Kafka error callback.
+        
+        This function is part of the short-term planning workflow and keeps
+        the existing runtime behavior while documenting the public contract.
+        
+        Args:
+            err: Input value for the `err` parameter.
+        
+        Returns:
+            The value produced by the underlying planning, UI, or test helper logic.
+        """
+        error_code = err.code() if hasattr(err, "code") else None
+        if error_code in UNKNOWN_TOPIC_ERRORS:
+            print("WARNING: Topic or partition is temporarily unavailable", err)
+            return
+        print("WARNING: Kafka consumer callback reported an error", err)
 
     def read_message(self) -> str:
         """
@@ -174,7 +281,7 @@ class Agent:
         message_obj = self.consumer.poll(timeout=1)
 
         # If there is no message, go to the next iteration
-        if message_obj.__str__() == 'None':
+        if message_obj is None:
             #if (self.verbose > self.min_verbose) and ((self.iter_no_msg - 1) % 5 == 0):
                 #self.write_log(f"Iteration {self.iter_no_msg - 1}. No message found.")
             time.sleep(1)
@@ -209,14 +316,17 @@ class Agent:
 
         # If the message contains an error, raise it
         if message_obj.error():
+            error_obj = message_obj.error()
             # End of partition event
             if self.verbose > 1:
                 self.write_log("Error encountered.", "41e40c2f-f4fb-4903-aa32-1931e8fb0d40")
-            sys.stderr.write('%% %s [%d] reached end at offset %d\n' %
+            sys.stderr.write('%% %s [%d] reached end at offset %d with code %s\n' %
                              (message_obj.topic(), message_obj.partition(),
-                              message_obj.offset()))
+                              message_obj.offset(), error_obj.code() if error_obj is not None else "unknown"))
 
         # If the destinations of the message do not include this AGENT, go to the next iteration
+        if vals is None:
+            return 'CONTINUE'
         dctmsg = json.loads(vals)
         match = re.search(dctmsg['dest'], self.agent)
         if not match:
@@ -266,3 +376,6 @@ class Agent:
         self.consumer.close()
         if self.verbose > 1:
             self.write_log(f"Ending spawned process for agent {self.agent} in topic {self.topic}.", "8dc03f6b-dce4-4a52-a427-900547dd7a5a")
+        # Purge only after the general LOG has fully shut down so late EXIT
+        # traces from sibling base agents do not survive into the next startup.
+        self.purge_exit_history_if_needed()

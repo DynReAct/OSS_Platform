@@ -4,6 +4,7 @@
     "ltp_header": { "text": "Langzeitplanung", "title": "Tab für die Langzeitplanung öffnen"},
     "ltp-new_header": { "text": "Langzeitplanung", "title": "Tab für die Langzeitplanung öffnen"},
     "ltp-planned_header": { "text": "Resultate", "title": "Tab für die Ergebnisse der Langzeitplanung öffnen"},
+    "ltp-perf_header": {"text": "Anlagenleistung", "title": "Tab für die historische Anlagenleistung öffnen"},
     "lots_header": {"text": "Loserzeugung", "title": "Tab für die Loserzeugung öffnen"},
     "lots-planned_header": {"text": "Losplanung", "title": "Losplanung"},
     "lots-creation_header": {"text": "Loserzeugung", "title": "Tab für die Loserzeugung öffnen"},
@@ -26,8 +27,8 @@
   "ltp": {
     "title": "Langzeitplanung"
   },
-  "coa": {
-    "title": "Ring-Auftrag Zuordnung"
+  "moa": {
+    "title": "Material-Auftrag Zuordnung"
   },
   "lots": {
     "title": "Loserzeugung"

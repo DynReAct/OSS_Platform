@@ -9,12 +9,107 @@ Version History:
 """
 
 import time
-from dynreact.shortterm.common import sendmsgtopic
+from typing import Any, cast
+from datetime import datetime, timedelta, timezone
+
+from sphinx.ext.ifconfig import ifconfig
+
+from dynreact.shortterm.common import sendmsgtopic, KeySearch
 from dynreact.shortterm.common.data.data_functions import get_equipment_status
 from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
 from dynreact.shortterm.common.functions import calculate_production_cost, get_new_equipment_status
 from dynreact.shortterm.agents.agent import Agent
 from dynreact.shortterm.common.handler import DockerManager
+
+
+DEFAULT_TARGET_TONS = 150000.0
+
+
+def _coerce_float(value: object, default: float = 0.0) -> float:
+    """
+    Convert a numeric payload value to ``float``.
+
+    :param object value: Raw value received from a payload or CLI argument.
+    :param float default: Fallback used when the value is absent or invalid.
+    :return: Numeric value as a float, or the fallback value.
+    :rtype: float
+    """
+    if value in (None, ""):
+        return default
+    try:
+        return float(cast(Any, value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _coerce_optional_float(value: object) -> float | None:
+    """
+    Convert a value to ``float``.
+
+    :param object value: Raw value to convert.
+    :return: Numeric value, or ``None`` when absent or invalid.
+    :rtype: float
+    """
+    if value in (None, ""):
+        return None
+    try:
+        return float(cast(Any, value))
+    except (TypeError, ValueError):
+        return None
+
+
+def material_weight_tons(material_params: dict) -> float:
+    """
+    Extract the tonnage represented by an assigned material/order.
+
+    RAS auctions send orders as material parameters and expose their weight as
+    ``target_weight`` or ``actual_weight``. OSS material payloads may not carry a
+    weight, in which case the function returns ``0.0`` and preserves existing
+    behavior.
+
+    :param dict material_params: Material parameters received in a confirmation.
+    :return: Material/order weight in tons.
+    :rtype: float
+    """
+    if not isinstance(material_params, dict):
+        return 0.0
+
+    for key in ("target_weight", "actual_weight", "weight"):
+        weight = _coerce_optional_float(material_params.get(key))
+        if weight is not None:
+            return weight
+
+    order = material_params.get("order")
+    if isinstance(order, dict):
+        for key in ("target_weight", "actual_weight", "weight"):
+            weight = _coerce_optional_float(order.get(key))
+            if weight is not None:
+                return weight
+
+    return 0.0
+
+
+def parse_start_time(value: datetime | str | None) -> datetime | None:
+    """
+    Parse one equipment start time and normalize it as UTC.
+
+    :param datetime value: Raw start time received from CLI or Kafka payload.
+    :return: UTC datetime, or ``None`` when no start time was supplied.
+    :rtype: datetime
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        normalized = str(value).replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            parsed = datetime.strptime(str(value), '%Y-%m-%dT%H:%M:%SZ')
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 class Equipment(Agent):
@@ -25,23 +120,32 @@ class Equipment(Agent):
         topic     (str): Topic driving the relevant converstaion.
         agent     (str): Name of the agent creating the object.
         status   (dict): Status of the equipment
-        kafka_ip  (str): IP address and TCP port of the broker.
-        counterbid_wait (float): Number of seconds granted for waiting confirmation.
-        verbose   (int): Level of details being saved.
+        operation_speed (float): Operation speed of the equipment in m/s.
+        start_time (datetime): Start time of the auction for the equipment.
+        current_order_length (float): The total length of the current assigned order in meters.
+        target_tons (float): Maximum accumulated assigned tonnage before the equipment stops bidding.
+        accumulated_tons (float): Tonnage already assigned to this equipment in the auction.
 
     """
-    def __init__(self, topic: str, agent: str, status: dict, kafka_ip: str, counterbid_wait: float, verbose: int = 1, manager=True):
+    def __init__(
+            self, topic: str, agent: str, status: dict, operation_speed: float | None = None,
+            start_time: datetime | str | None = None, current_order_length: float | None = None,
+            target_tons: float = DEFAULT_TARGET_TONS, accumulated_tons: float = 0.0, manager: bool = True
+    ) -> None:
 
-        super().__init__(topic=topic, agent=agent, kafka_ip=kafka_ip, verbose=verbose)
+        super().__init__(topic=topic, agent=agent)
         """
-           Constructor function for the Equipment Class
+        Constructor function for the Equipment Class
 
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
-        :param dict status: Status of the equipment
-        :param str kafka_ip: IP address and TCP port of the broker.
-        :param float counterbid_wait: Number of seconds granted for waiting confirmation.
-        :param int verbose: Level of details being saved.
+        :param dict status: Status of the equipment.
+        :param float operation_speed: Operation speed of the equipment in m/s.
+        :param datetime start_time: Start time of the auction for the equipment.
+        :param float current_order_length: The total length of the current assigned order in meters.
+        :param float target_tons: Maximum accumulated assigned tonnage before stopping the equipment agent.
+        :param float accumulated_tons: Initial accumulated assigned tonnage.
+        :param str manager: Is this instance a base.
         """
         self.action_methods.update({
             'CREATE': self.handle_create_action, 'START': self.handle_start_action,
@@ -52,9 +156,9 @@ class Equipment(Agent):
         if manager:
             self.handler = DockerManager(tag=f"equipment{DOCKER_REPLICA}")
 
+        self.operation_speed = operation_speed
         self.round_number = 0
         self.status = status
-        self.counterbid_wait = counterbid_wait
         self.equipment = 0
         self.iter_post_bid = 0
         self.bids = []
@@ -62,19 +166,71 @@ class Equipment(Agent):
         self.bid_to_confirm = dict()
         self.previous_price = None
 
+        parsed_start_time = parse_start_time(start_time)
+        self.start_time = parsed_start_time if parsed_start_time is not None else datetime.now(timezone.utc)
+
+        self.current_order_length = current_order_length
+        self.target_tons = _coerce_float(target_tons, DEFAULT_TARGET_TONS)
+        self.accumulated_tons = _coerce_float(accumulated_tons, 0.0)
+
         if self.verbose > 1:
             self.write_log(msg=f"Finished creating the agent {self.agent} with status {self.status}.",
                            identifier="5e0e90e2-12be-4048-b70f-73917bfe947b",
                            to_stdout=True)
 
-    def move_to_next_round(self, material_params: dict):
+    def logical_equipment_id(self) -> str:
+        """Return the stable equipment identifier for this agent."""
+        parts = str(self.agent).split(":")
+        if len(parts) >= 3:
+            return str(parts[-2])
+        return str(self.equipment)
+
+    def notify_equipment_finished(self, reason: str) -> None:
+        """Inform the auction LOG that this equipment has finished bidding."""
+        sendmsgtopic(
+            producer=self.producer,
+            tsend=self.topic,
+            topic=self.topic,
+            source=self.agent,
+            dest="LOG:" + self.topic,
+            action="EQUIPMENTFINISHED",
+            payload={"equipment": self.logical_equipment_id(), "reason": reason},
+            vb=self.verbose
+        )
+
+    def has_reached_target_tons(self) -> bool:
+        """
+        Return whether the equipment has reached its assigned target tonnage.
+
+        :return: ``True`` when accumulated tonnage is greater than or equal to the target.
+        :rtype: bool
+        """
+        return self.accumulated_tons >= self.target_tons
+
+    def move_to_next_round(self, material_params: dict) -> str:
         """
         Moves the equipment to the next round by updating its status according to the assigned material's parameters,
         updating its name with the next round number, and starting the round.
 
         :param dict material_params:
+        :return: Status of the handling.
+        :rtype: str
         """
-        self.status = get_new_equipment_status(material_params=material_params, equipment_status=self.status, verbose=self.verbose)
+        assigned_tons = material_weight_tons(material_params)
+        self.accumulated_tons += assigned_tons
+        new_status = get_new_equipment_status(material_params=material_params, equipment_status=self.status, verbose=self.verbose)
+        self.status = new_status if new_status is not None else self.status
+
+        if self.has_reached_target_tons():
+            self.notify_equipment_finished("target_tons_reached")
+            self.write_log(
+                f"Equipment {self.agent} reached target tonnage "
+                f"({self.accumulated_tons:.2f}/{self.target_tons:.2f} t). Ending equipment agent.",
+                "c30f4607-46d7-40d3-8ad2-f0c2ac4763ef",
+                to_stdout=True
+            )
+            return 'END'
+
         roundless_name = self.agent[:self.agent.rfind(":")]
         self.round_number += 1
         self.agent = roundless_name + f":{self.round_number}"
@@ -86,11 +242,16 @@ class Equipment(Agent):
         self.last_bid_time = None
         self.bid_to_confirm = dict()
 
+        #if self.start_time is not None and self.current_order_length is not None and self.operation_speed > 0:
+        #    self.start_time += timedelta(seconds=self.current_order_length / self.operation_speed)
+
+        self.current_order_length = None
         full_msg = dict(
             source=self.agent, dest=self.agent, topic=self.topic, action='START',
             payload=dict(price=self.previous_price)
         )
         self.handle_start_action(full_msg)
+        return 'CONTINUE'
 
     def handle_create_action(self, dctmsg: dict) -> str:
         """
@@ -108,26 +269,38 @@ class Equipment(Agent):
 
             print("Inside the handler")
 
-            topic = dctmsg['topic']
-            payload = dctmsg['payload']
-            equipment = payload['id']
+            topic = dctmsg.get('topic', self.topic)
+            payload = dctmsg.get('payload', dict())
+            variables = payload.get('variables', dict())
+
+            KeySearch.assign_values(new_values=variables)
+
+            user_start_time = payload.get('user_start_time', None)
+            equipment = payload.get('id', 0)
             snapshot = payload['snapshot']
-            counterbid_wait = payload['counterbid_wait']
+            operation_speed = payload.get('operation_speed', 0)
+            start_time = user_start_time if user_start_time is not None else payload.get('start_time')
+            target_tons = payload.get('target_tons', DEFAULT_TARGET_TONS)
+
             agent = f"EQUIPMENT:{topic}:{equipment}:0"
             status = get_equipment_status(equipment_id=equipment, snapshot_time=snapshot)
+            if status.get("targets") is None:
+                status["targets"] = {"equipment": int(equipment)}
+
             self.equipment = equipment
-    
-    
+
             init_kwargs = {
                 "topic": topic,
                 "agent": agent,
                 "status": status,
-                "kafka-ip": self.kafka_ip,
-                "counter-wait": int(counterbid_wait),
-                "verbose": self.verbose
+                "operation_speed": float(operation_speed),
+                "target_tons": _coerce_float(target_tons, DEFAULT_TARGET_TONS),
+                "variables": KeySearch.dump_model(include_env=False),
             }
+            if start_time is not None:
+                init_kwargs["start_time"] = start_time
 
-            self.handler.launch_container(name=f"{topic}_{equipment}", agent="equipment", mode="replica", params=init_kwargs)
+            self.handler.launch_container(name=f"{topic}_{equipment}", agent="equipment", mode="replica", params=init_kwargs, auto_remove=False)
 
             if self.verbose > 1:
                 self.write_log(f"Creating equipment with configuration {init_kwargs}...", "f886d124-383b-497e-b2a1-841222a3e14d")
@@ -135,7 +308,8 @@ class Equipment(Agent):
             return 'CONTINUE'
         else:
             self.write_log(f"Refuse to create equipment replica from another replica instance.", "fe2dbc33-7dcb-486a-af35-9e485674fff2")
-            raise Exception("Replicas can't create new instances. Only managers can")
+            dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+            raise Exception(f"{dt} | ERROR: Replicas can't create new instances. Only managers can")
 
     def handle_start_action(self, dctmsg: dict) -> str:
         """
@@ -148,9 +322,13 @@ class Equipment(Agent):
         """
         topic = dctmsg['topic']
         payload = dctmsg['payload']
-        previous_price = None
-        if 'price' in payload:
-            previous_price = payload['price']
+        previous_price = payload.get('price')
+        bid_payload = dict(
+            id=self.agent,
+            status=self.status,
+            start_time=self.start_time.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            previous_price=previous_price,
+        )
 
         sendmsgtopic(
             producer=self.producer,
@@ -159,7 +337,7 @@ class Equipment(Agent):
             source=self.agent,
             dest="MATERIAL:" + topic + ":.*",
             action="BID",
-            payload=dict(id=self.agent, status=self.status, previous_price=previous_price),
+            payload=bid_payload,
             vb=self.verbose
         )
         if self.verbose > 2:
@@ -184,8 +362,12 @@ class Equipment(Agent):
         payload = dctmsg['payload']
         material_params = payload['material_params']
         bidding_price = payload['price']
+        arrival_time = parse_start_time(payload.get('arrival_time'))
+        transfer_seconds = _coerce_optional_float(payload.get('transfer_seconds'))
+        lateness_seconds = _coerce_float(payload.get('lateness_seconds'), 0.0)
 
         prod_cost = calculate_production_cost(material_params=material_params, equipment_status=self.status, verbose=self.verbose)
+
         if prod_cost is None:
             if self.verbose > 1:
                 self.write_log(
@@ -196,7 +378,16 @@ class Equipment(Agent):
             return 'CONTINUE'
 
         profit = bidding_price - prod_cost
-        bid = dict(material=payload['id'], profit=profit, price=bidding_price)
+        is_tardy = arrival_time is not None and arrival_time > self.start_time
+        bid = dict(
+            material=payload['id'],
+            profit=profit,
+            price=bidding_price,
+            arrival_time=arrival_time.strftime('%Y-%m-%dT%H:%M:%SZ') if arrival_time is not None else None,
+            transfer_seconds=transfer_seconds,
+            lateness_seconds=lateness_seconds,
+            is_tardy=is_tardy,
+        )
 
         # Reset bidding status
         self.iter_post_bid = 0
@@ -205,7 +396,16 @@ class Equipment(Agent):
         # Add the bid to the list
         self.bids.append(bid)
         if self.verbose > 1:
-            self.write_log(f"Added {bid} to the list of bids, {self.bids}", "245bb0ae-d579-4fef-a6a1-6625c97afbe1")
+            timing_msg = ""
+            if bid['arrival_time'] is not None:
+                timing_msg = (
+                    f" Arrival={bid['arrival_time']}, tardy={bid['is_tardy']}, "
+                    f"lateness={bid['lateness_seconds']:.0f}s."
+                )
+            self.write_log(
+                f"Added {bid} to the list of bids, {self.bids}.{timing_msg}",
+                "245bb0ae-d579-4fef-a6a1-6625c97afbe1"
+            )
 
         return 'CONTINUE'
 
@@ -217,6 +417,7 @@ class Equipment(Agent):
         :return: Status of the handling
         :rtype: str
         """
+
         topic = dctmsg['topic']
         material = dctmsg['payload']['id']
         sendmsgtopic(
@@ -226,7 +427,7 @@ class Equipment(Agent):
             source=self.agent,
             dest=material,
             action="ASKCONFIRM",
-            payload=dict(id=self.agent),
+            payload=dict(id=self.agent, costs=self.status["planning"]),
             vb=self.verbose
         )
         return 'CONTINUE'
@@ -244,6 +445,7 @@ class Equipment(Agent):
         payload = dctmsg['payload']
         material = payload['id']
         material_params = payload['material_params']
+        self.current_order_length = payload['order_length']
 
         if material != self.bid_to_confirm['material']:
             error_msg = (
@@ -261,8 +463,7 @@ class Equipment(Agent):
                 f"Moving to the next round...",
                 "0f906ad0-5526-45de-8a51-bc43a2a5c19d"
             )
-        self.move_to_next_round(material_params=material_params)
-        return 'CONTINUE'
+        return self.move_to_next_round(material_params=material_params)
 
     def handle_assigned_action(self, dctmsg: dict) -> str:
         """
@@ -310,11 +511,12 @@ class Equipment(Agent):
 
         # Do not proceed if not enough time has passed since the last bid or
         # the equipment is waiting for a material to confirm
-        if time_after_bid < self.counterbid_wait or self.bid_to_confirm:
+        if time_after_bid <  KeySearch.search_for_value("COUNTERBID_WAIT") or self.bid_to_confirm:
             return 'CONTINUE'
 
         # Kill this equipment child if there are no more materials to ask
         if len(self.bids) == 0:
+            self.notify_equipment_finished("no_more_bids")
             if self.verbose > 1:
                 self.write_log(
                     f"No more bids to process. The equipment will not be assigned to any material. "
@@ -324,7 +526,7 @@ class Equipment(Agent):
             return 'END'
 
         # Ask the (next) best material for confirmation
-        self.bids.sort(key=lambda item: item['profit'])
+        self.sort_bids()
         best_bid = self.bids.pop()
         if self.verbose > 1:
             self.write_log(f"Removed the best bid, {best_bid}, from the list of bids: {self.bids}", "1ea89f70-2e6c-4840-9bdb-bb89dfc7bff5")
@@ -337,3 +539,16 @@ class Equipment(Agent):
             self.write_log(f"Equipment: Asked material {best_bid['material']} for confirmation.", "8d7d38bc-00cb-486c-8efa-0e46257bf1a2")
 
         return 'CONTINUE'
+
+    def sort_bids(self) -> None:
+        """
+        Sorts the bids based on their profit in ascending order.
+        """
+
+        self.bids.sort(
+            key=lambda item: (
+                1 if not item.get('is_tardy', False) else 0,
+                -float(item.get('lateness_seconds', 0.0)),
+                float(item.get('profit', 0.0)),
+            )
+        )

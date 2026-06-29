@@ -7,11 +7,80 @@ Version History:
 - 1.0 (2024-03-09): Initial version developed by Rodrigo Castro Freibott.
 """
 
-from dynreact.shortterm.common import sendmsgtopic
+from datetime import datetime, timedelta, timezone
+from dynreact.shortterm.common import sendmsgtopic, KeySearch
 from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
-from dynreact.shortterm.common.functions import calculate_bidding_price
 from dynreact.shortterm.agents.agent import Agent
 from dynreact.shortterm.common.handler import DockerManager
+import random
+
+
+def _parse_utc_datetime(value: str | None) -> datetime | None:
+    """
+    Parse an ISO datetime and normalize it to UTC.
+
+    :param str value: Datetime value from an equipment BID payload.
+    :return: UTC datetime, or ``None`` when no usable value is provided.
+    :rtype: datetime
+    """
+    if not value:
+        return None
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _transfer_seconds(transport_times: dict[str, dict[str, int]], origin: str, destination: str) -> int | None:
+    """
+    Return the transfer duration between two equipment ids in seconds.
+
+    The normalized matrix may include a ``__default__`` entry derived from the
+    DynReAct ``TransportTimes.default`` value. A transfer from an equipment to
+    itself is treated as instantaneous.
+
+    :param dict transport_times: Nested transport-time matrix in seconds.
+    :param str origin: Source equipment id.
+    :param str destination: Target equipment id.
+    :return: Transfer duration in seconds, or ``None`` when no route is known.
+    :rtype: int
+    """
+    if origin == destination:
+        return 0
+    origin_times = transport_times.get(str(origin), {})
+    if str(destination) in origin_times:
+        return int(origin_times[str(destination)])
+    default_times = transport_times.get("__default__", {})
+    default_value = default_times.get("__default__")
+    return int(default_value) if default_value is not None else None
+
+
+def _resolve_material_origin(material_params: dict[str, object], destination: str) -> str:
+    """
+    Resolve the material origin equipment id as robustly as possible.
+
+    Some RAS payloads omit ``current_equipment`` at the top level. In that
+    case we try order-level data first and, as a last resort, assume the
+    material is already colocated with the destination equipment so the
+    auction can continue instead of failing hard.
+    """
+    current_equipment = material_params.get("current_equipment")
+    if current_equipment not in (None, ""):
+        return str(current_equipment)
+
+    order = material_params.get("order", {})
+    if isinstance(order, dict):
+        order_current_equipment = order.get("current_equipment")
+        if isinstance(order_current_equipment, list) and len(order_current_equipment) > 0:
+            return str(order_current_equipment[0])
+        if order_current_equipment not in (None, ""):
+            return str(order_current_equipment)
+
+    return str(destination)
 
 
 class Material(Agent):
@@ -22,23 +91,26 @@ class Material(Agent):
         topic     (str): Topic driving the relevant converstaion.
         agent     (str): Name of the agent creating the object.
         params   (dict): parameters relevant to the configuration of the agent.
-        kafka_ip  (str): IP address and TCP port of the broker.
-        verbose   (int): Level of details being saved.
-
-         
-
+        transport_times (dict): Nested dictionary with the transport times for each equipment expressed in seconds (origin, (destination, time)).
+        coil_lengths (list): List with the coil lengths for each equipment expressed in meters.
     """
-    def __init__(self, topic: str, agent: str, params: dict, kafka_ip: str, verbose: int = 1, manager=True):
+    def __init__(
+            self, topic: str, agent: str, params: dict,
+            transport_times: dict[str, dict[str, int]] | None = None,
+            coil_lengths: list[float] | float | None = None,
+            manager: bool = True
+    ) -> None:
 
-        super().__init__(topic=topic, agent=agent, kafka_ip=kafka_ip, verbose=verbose)
+        super().__init__(topic=topic, agent=agent)
         """
            Constructor function for the Log Class
 
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
         :param dict params: Parameters relevant to the configuration of the agent.
-        :param str kafka_ip: IP address and TCP port of the broker.
-        :param int verbose: Level of details being saved.
+        :param dict transport_times: Nested dictionary with the transport times for each equipment expressed in seconds (origin, (destination, time)).
+        :param list coil_lengths: List with the coil lengths for each equipment expressed in meters.
+        :param str manager: Is this instance a base.
         """
 
         self.action_methods.update({
@@ -52,10 +124,32 @@ class Material(Agent):
 
         self.assigned_equipment = ""
         self.params = params
+        self.transport_times = transport_times if transport_times is not None else {}
+        if coil_lengths is None:
+            self.coil_lengths = [0.0]
+        elif isinstance(coil_lengths, (int, float)):
+            self.coil_lengths = [float(coil_lengths)]
+        else:
+            self.coil_lengths = coil_lengths
         if self.verbose > 1:
             self.write_log(msg=f"Finished creating the agent {self.agent} with parameters {self.params}.",
                            identifier="ddea8374-6149-41e1-b86f-4cc147580d13",
                            to_stdout=True)
+
+    def _notify_already_assigned(self, equipment: str) -> None:
+        """
+        Inform one equipment that this material is no longer available.
+        """
+        sendmsgtopic(
+            producer=self.producer,
+            tsend=self.topic,
+            topic=self.topic,
+            source=self.agent,
+            dest=equipment,
+            action="ASSIGNED",
+            payload=dict(id=self.agent),
+            vb=self.verbose
+        )
 
     def handle_create_action(self, dctmsg: dict) -> str:
         """
@@ -67,21 +161,33 @@ class Material(Agent):
 
         if self.handler:
         
-            topic = dctmsg['topic']
-            payload = dctmsg['payload']
-            material = payload['id']
+            topic = dctmsg.get('topic', "")
+            payload = dctmsg.get('payload', {})
+            material = payload.get('id', "0")
             agent = f"MATERIAL:{topic}:{material}"
-            params = payload['params']
+            params = payload.get('params', {})
+            transport_times = payload.get('transport_times', {})
+            coil_lengths = payload.get('coil_lengths', [0.0])
+            variables = payload.get('variables', {})
+
+            KeySearch.assign_values(new_values=variables)
     
             init_kwargs = {
                 "topic": topic, 
                 "agent": agent,
                 "params": params,
-                "kafka-ip": self.kafka_ip,
-                "verbose": self.verbose
+                "transport_times": transport_times,
+                "coil_lengths": coil_lengths,
+                "variables": KeySearch.dump_model(include_env=False)
             }
 
-            self.handler.launch_container(name=f"{topic}_{material}", agent="material", mode="replica", params=init_kwargs)
+            self.handler.launch_container(
+                name=f"{topic}_{material}",
+                agent="material",
+                mode="replica",
+                params=init_kwargs,
+                auto_remove=False
+            )
 
             if self.verbose > 1:
                 self.write_log(f"Creating material with configuration {init_kwargs}...", "ffac4444-ec23-4f00-af6a-f4300e3af7a7")
@@ -90,7 +196,8 @@ class Material(Agent):
 
         else:
             self.write_log(f"Refuse to create material replica from another replica instance.", "c891fe14-041f-48b7-8de9-aa0d201e7083")
-            raise Exception("Replicas can't create new instances. Only managers can")
+            dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+            raise Exception(f"{dt} | ERROR: Replicas can't create new instances. Only managers can")
 
     def handle_bid_action(self, dctmsg: dict) -> str:
         """
@@ -105,13 +212,57 @@ class Material(Agent):
         payload = dctmsg['payload']
         equipment_id = payload['id']
         equipment_status = payload['status']
-        previous_price = payload['previous_price']
+        previous_price = payload.get('previous_price')
+        auction_start_time = _parse_utc_datetime(payload.get('start_time'))
+        destination = str(equipment_id.split(":")[2])
+        origin = _resolve_material_origin(self.params, destination)
+        print(f"Origin: {origin} Destination: {destination}")
 
-        # Calculate the bidding price based on EQUIPMENT status and MATERIAL parameters
-        bidding_price = calculate_bidding_price(
-            material_params=self.params, equipment_status=equipment_status, previous_price=previous_price
-        )
-        if bidding_price is not None:
+        if self.assigned_equipment:
+            if self.verbose > 1:
+                self.write_log(
+                    f"Rejected offer from {equipment_id}. "
+                    f"Material already committed to {self.assigned_equipment}.",
+                    "e9fcb243-2a64-440a-946f-dfd1cb753d59"
+                )
+            self._notify_already_assigned(equipment_id)
+            return 'CONTINUE'
+
+        transfer_seconds = None
+        material_start_time = None
+        lateness_seconds = 0.0
+        if self.transport_times:
+            transfer_seconds = _transfer_seconds(self.transport_times, origin, destination)
+            if transfer_seconds is None:
+                if self.verbose > 1:
+                    self.write_log(
+                        f"Rejected offer from {equipment_id}. "
+                        f"No transfer time is known from equipment {origin} to {destination}.",
+                        "991ca971-7227-4f88-8236-cd7a633faeca"
+                    )
+                return 'CONTINUE'
+            material_start_time = datetime.now(timezone.utc) + timedelta(seconds=transfer_seconds)
+            if auction_start_time is not None and material_start_time > auction_start_time and self.verbose > 1:
+                self.write_log(
+                    f"Offer from {equipment_id} arrives after equipment start "
+                    f"({material_start_time.isoformat()} > {auction_start_time.isoformat()}). "
+                    "Sending the bid anyway so the equipment can rank time and cost trade-offs.",
+                    "4a2e5658-3f55-4f2d-9b47-7737cc4f9517"
+                )
+        if auction_start_time is not None and material_start_time is not None:
+            lateness_seconds = max((material_start_time - auction_start_time).total_seconds(), 0.0)
+
+        bidding_price = self.calculate_bidding_price(material_params=self.params, equipment_status=equipment_status, previous_price=previous_price)
+        if bidding_price is not None: #TODO: reindent when de-comment
+            counterbid_payload = dict(
+                id=self.agent,
+                material_params=self.params,
+                price=bidding_price,
+                transfer_seconds=transfer_seconds,
+                lateness_seconds=lateness_seconds,
+            )
+            if material_start_time is not None:
+                counterbid_payload['arrival_time'] = material_start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
             sendmsgtopic(
                 producer=self.producer,
                 tsend=topic,
@@ -119,7 +270,7 @@ class Material(Agent):
                 source=self.agent,
                 dest=equipment_id,
                 action="COUNTERBID",
-                payload=dict(id=self.agent, material_params=self.params, price=bidding_price),
+                payload=counterbid_payload,
                 vb=self.verbose
             )
             if self.verbose > 2:
@@ -146,6 +297,19 @@ class Material(Agent):
         """
         topic = dctmsg['topic']
         equipment = dctmsg['payload']['id']
+        costs = dctmsg['payload']['costs']
+
+        if self.assigned_equipment and self.assigned_equipment != equipment:
+            if self.verbose > 1:
+                self.write_log(
+                    f"Rejected confirmation request from {equipment}. "
+                    f"Material already committed to {self.assigned_equipment}.",
+                    "2400d190-842f-4842-9875-40f6b29625e2"
+                )
+            self._notify_already_assigned(equipment)
+            return 'CONTINUE'
+
+        self.assigned_equipment = equipment
         sendmsgtopic(
             producer=self.producer,
             tsend=topic,
@@ -153,11 +317,10 @@ class Material(Agent):
             source=self.agent,
             dest=equipment,
             action="CONFIRM",
-            payload=dict(id=self.agent, material_params=self.params),
+            payload=dict(id=self.agent, material_params=self.params, order_length=self.calculate_order_length(), costs=costs),
             vb=self.verbose
         )
 
-        self.assigned_equipment = equipment
         if self.verbose > 1:
             self.write_log(
                 f"Assigned material to equipment {self.assigned_equipment}. Sending ASSIGNED message...",
@@ -200,3 +363,59 @@ class Material(Agent):
         if self.verbose > 1:
             self.write_log(f"Informed all equipments (except {self.assigned_equipment}) that {self.agent} is ASSIGNED.", "bc8c9681-f990-47e5-90ff-5b0b782ff1ac")
         return 'CONTINUE'
+
+    def calculate_order_length(self) -> float:
+        """
+        Calculates the total length of the order by summing up all the individual coil lengths.
+        """
+        return sum(self.coil_lengths)
+
+    #def calculate_bidding_price(self, material_params: dict, equipment_status: dict,
+    #                            previous_price: float | None, auction_start_time: datetime) -> float | None:
+
+    @staticmethod
+    def calculate_bidding_price(material_params: dict, equipment_status: dict, previous_price: float | None) -> float | None:
+
+        """
+        Calculates the bidding price that the MATERIAL would pay to be processed in the EQUIPMENT with the given status.
+        Returns None if the EQUIPMENT's status is not compatible with the MATERIAL's parameters.
+        Otherwise, returns the bidding price as a float, which depends on the MATERIAL's parameters and the previous
+        bidding price (but not on the EQUIPMENT's status).
+
+        :param dict equipment_status: Status of the EQUIPMENT
+        :param dict material_params: Parameters of the MATERIAL
+        :param float previous_price: Bidding price in the EQUIPMENT's previous round
+
+        :return: Bidding price, or None if the MATERIAL cannot be processed by that equipment
+        :rtype: float
+        """
+        # Reject offer is equipment is not among the allowed equipments of the material
+        # JOM 2025
+        if equipment_status['targets'] is not None and equipment_status['targets']['equipment'] not in material_params['order']['allowed_equipment']:
+            return None
+
+        # For now, the bidding price is greater when the delivery date is sooner. If due_date is not present simulate a value
+        delivery_date = None
+        if material_params['order'].get("due_date"):
+            delivery_date = _parse_utc_datetime(material_params['order']['due_date'])
+        if delivery_date is None:
+            # Calculate today's date in UTC to keep all bidding timestamps comparable.
+            today = datetime.now(timezone.utc)
+            # Calculate the date 10 days ago
+            ten_days_ago = today - timedelta(days=10)
+            # Generate a random date between today and 10 days ago
+            delivery_date = ten_days_ago + timedelta(days=random.randint(0, 10))
+
+        base_date = datetime(2020, 1, 1, tzinfo=timezone.utc)
+
+        #a = 150 / (delivery_date - base_date).days
+        #b = 90000 / (auction_start_time - base_date).seconds
+
+        #bidding_price = a / b
+        bidding_price = 150 / (delivery_date - base_date).days
+
+        # For now, the bidding price is simply increased by the previous bidding price
+        if previous_price is not None:
+            bidding_price += previous_price
+
+        return bidding_price

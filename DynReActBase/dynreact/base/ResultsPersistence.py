@@ -1,5 +1,5 @@
-from datetime import datetime
-from typing import Literal
+from datetime import datetime, date
+from typing import Literal, Sequence
 
 from dynreact.base.LotsOptimizer import LotsOptimizationState
 from dynreact.base.model import Site, MidTermTargets, StorageLevel
@@ -34,20 +34,31 @@ class ResultsPersistence:
     # Long term planning
     # ====================
 
-    def store_ltp(self, solution_id: str, results: MidTermTargets, storage_levels: list[dict[str, StorageLevel]]|None=None) -> str:
+    def store_ltp(self, solution_id: str, results: MidTermTargets, storage_levels: Sequence[dict[str, StorageLevel]]|None=None) -> str:
         raise Exception("not implemented")
 
     def delete_ltp(self, start_time: datetime, solution_id: str) -> bool:
         raise Exception("not implemented")
 
-    def load_ltp(self, start_time: datetime, solution_id: str) -> tuple[MidTermTargets, list[dict[str, StorageLevel]]|None]:
+    def load_ltp(self, start_time: datetime, solution_id: str) -> tuple[MidTermTargets, Sequence[dict[str, StorageLevel]]|None]:
         raise Exception("not implemented")
 
-    def solutions_ltp(self, start_time: datetime) -> list[str]:
+    def solutions_ltp(self, start_time: datetime) -> Sequence[str]:
         raise Exception("not implemented")
 
-    def start_times_ltp(self, start: datetime|None=None, end: datetime|None=None, sort: Literal["asc", "desc"]="asc", limit: int=100) -> list[datetime]:
+    def start_times_ltp(self, start: datetime|None=None, end: datetime|None=None, sort: Literal["asc", "desc"]="asc", limit: int=100) -> Sequence[datetime]:
         raise Exception("not implemented")
 
     def has_solution_ltp(self, start_time: datetime, solution_id: str) -> bool:
         raise Exception("not implemented")
+
+    def start_months_ltp(self, start: date|None=None, end: date|None=None, sort: Literal["asc", "desc"]="asc", limit: int=100) -> Sequence[date]:
+        start_dt = datetime(year=start.year, month=start.month, day=start.day).astimezone() if start is not None else None
+        end_dt = datetime(year=end.year, month=end.month, day=end.day).astimezone() if end is not None else None
+        results = self.start_times_ltp(start=start_dt, end=end_dt, sort=sort, limit=30*limit if limit is not None else None)
+        months = []
+        for result in results:
+            month = result.date().replace(day=1)
+            if month not in months:
+                months.append(month)
+        return months

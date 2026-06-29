@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone, date
 from numbers import Number
 from typing import Any, TypeVar, Generic, Literal, Sequence, Mapping
 
-from pydantic import BaseModel, Field, ConfigDict, model_validator
+from pydantic import BaseModel, Field, ConfigDict, model_validator, PrivateAttr
 
 
 class Model(BaseModel):
@@ -40,7 +40,7 @@ class ProcessInformation(Model):
 
 class Process(LabeledItem, ProcessInformation):
     name_short: str = Field(..., examples=["VA", "BZ"], min_length=1)
-    "Short name uniquely identifying the process2."
+    "Short name uniquely identifying the process."
     process_ids: list[int]
     "Internal process id(s)"
     synonyms: list[str]|None = Field(None, examples=["VEA"], min_length=1)
@@ -59,11 +59,18 @@ class Equipment(LabeledItem, ProcessInformation):
     id: int
     name_short: str
     process: str
-
     storage_in: str = None
     "Default storage location of material waiting to be processed by this equipment"
-    storage_out: str = None
+    storage_out: str|None = None
     "Default storage locations of material processed by this equipment"
+    storages_out: tuple[str|dict[str, tuple[str, ...]], ...]|None = None
+    """
+    Default storage locations of material processed by this equipment; may be more than one.
+    If a dictionary is provided, the keys are storage ids and the values are material class ids. This represents
+    constraints on the type of material that can take this path.
+    """
+    material_constraints: MaterialConstraint | None = None
+    "Constraints on the type of material that can be processed by this equipment."
 
     def get_equipment_name(self, idp: int):
         return self.name_short
@@ -71,10 +78,21 @@ class Equipment(LabeledItem, ProcessInformation):
     def get_equipment_id(self):
         return self.id
 
+    @model_validator(mode="after")
+    def _set_storages(self):
+        if self.storages_out is None and self.storage_out is not None:
+            self.storages_out = (self.storage_out, )
+        elif self.storage_out is None and self.storages_out is not None and len(self.storages_out) > 0:
+            storage_0 = self.storages_out[0]
+            if isinstance(storage_0, Mapping):
+                storage_0 = next(iter(storage_0.keys()))
+            self.storage_out = storage_0
+        return self
+
 
 class MaterialConstraint(Model):
 
-    excluded: list[str]
+    excluded: Sequence[str]
     "Material class ids"
 
 
@@ -86,14 +104,13 @@ class Storage(LabeledItem):
     name_short: str
     equipment: list[int]
     "Equipment served by this storage primarily."
-    #secondary_plants: list[int]|None = Field(None, description="Plants served by this storage.")
     capacity_weight: float|None = None
     "Capacity in t."
     capacity_items: int|None = None
     "Capacity in items / material."
     target_filling_level: float|None = None  # TODO rather need a range
     "A number between 0 and 1"
-    #target_filling_range: tuple[float, float]|None = Field(None, description="Numbers between 0 and 1")
+    # target_filling_range: tuple[float, float]|None = Field(None, description="Numbers between 0 and 1")
     material_constraints: MaterialConstraint|None=None
     "Constraints on the type of material supported by this storage."
 
@@ -127,7 +144,7 @@ class EquipmentAvailability(Model):
 PROPERTIES = TypeVar("PROPERTIES", bound=Model)  # Material-specific properties, not matching the MATERIAL parameter in the Order class
 
 
-class Material(Model):
+class Material(Model, Generic[PROPERTIES]):
     model_config = ConfigDict(extra="allow")
 
     id: str
@@ -147,6 +164,8 @@ class Material(Model):
     "Process id, cf. field Process#process_ids"
     current_process_name: str|None = None
     "Process stage"
+    quality_lock: bool = False
+    "Indicates that the material cannot be further processed for the time being."
     properties: PROPERTIES|None = None
     "Material-specific properties."
 
@@ -173,46 +192,74 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
     "Sum of individual material weights in t"
     material_count: int = 0
     "Number of units in this order"
-    material_classes: dict[str, str] = {}
+    quality_locks: int = 0
+    "Number of units with quality locks in this order"
+    material_classes: Mapping[str, str] = {}
     "Keys: material category id, values: material class ids"
-    allowed_equipment: list[int]   # TODO dict[process, list[int]]?
-    current_equipment: list[int] | None = None
+    allowed_equipment: Sequence[int]   # TODO dict[process, list[int]]?
+    current_equipment: Sequence[int] | None = None
     # @deprecated
-    current_processes: list[int]
-    active_processes: dict[int, Literal["PENDING", "STARTED", "FINISHED"]]
+    current_processes: Sequence[int]
+    active_processes: Mapping[int, Literal["PENDING", "STARTED", "FINISHED"]]
     # FIXME a single order can be assigned to multiple orders at different process steps!
     # @deprecated
     lot: str|None = Field(None, deprecated=True)
     "DEPRECATED, use lots field instead"
-    lots: dict[str, str]|None = None
+    lots: Mapping[str, str]|None = None
     "Lot ids by process steps"
     # @deprecated
     lot_position: int|None = Field(None, deprecated=True)
     "DEPRECATED: use lot_positions instead. (1-based index of order in lot)"
-    lot_positions: dict[str, int]|None = None
+    lot_positions: Mapping[str, int]|None = None
     "1-based index of order in lots, by process step"
+    lot_start_end_times: Mapping[str, tuple[datetime, datetime]]|None=None
+    "Scheduled start and end times by process step; typically, these will only be present if there is a corresponding entry in the lots field."
     # FIXME this dict type with arbitrary_types_allowed is just a temporary workaround, need to find a better solution...
-    material_properties: dict[str, Any] | MATERIAL_PROPERTIES
+    material_properties: Mapping[str, Any] | MATERIAL_PROPERTIES
     "Use-case specific material characteristics."
     priority: int = 0
     "Order priority"
 
 
 class Lot(Model):
+    """
+    A lot contains the production schedule for specific equipment, consisting of a list of production
+    orders to be produced in a sequence. Usually, within a lot no excessive setup operations should be
+    necessary between orders, otherwise the lot should be split into two.
+    """
     id: str
     equipment: int
     active: bool
     status: int
-    "1: created; 2: blocked; 3: released; 4: in progress; 5: completed"
+    "1: created; 2: blocked; 3: released; 4: in progress; 5: deleted"
     orders: list[str]
     processing_status: Literal["PENDING", "STARTED", "FINISHED"]|None = None
     comment: str|None = None
     weight: float|None = None
     "Convenience field for storing the total lot weight. Must be equal to the sum of the order weights. In tons."
+    material_weights: dict[str, float]|None = None
+    "Convenience field for storing the weight per material class. In tons."
     start_time: datetime|None = None
     "Planned start time for lot processing."
     end_time: datetime|None = None
     "Planned end time for lot processing."
+
+
+class LotTimes(Model):
+    """
+    Provides information about the estimated processing time for an order or material at a specific processing stage.
+    """
+
+    id: str
+    "Either an order id or a material id"
+    process: str
+    "Process id"
+    start: datetime
+    "Estimated processing start time for order or material"
+    end: datetime
+    "Estimated processing end time for order or material"
+    processing_time: timedelta|None=None
+    "Processing duration"
 
 
 class MaterialOrderData(Model):
@@ -222,13 +269,12 @@ class MaterialOrderData(Model):
             
 class PlanningData(Model):
     """
-    This class holds the internal state of the optimization algorithm
+    This class holds the internal state of the lot creation/mid-term planning optimization algorithm
     """
     model_config = ConfigDict(extra="allow", use_attribute_docstrings=True)
 
     target_fct: float = 0.0
     "Current value of the target function"
-    # lots: list[list[str]] TODO?
     transition_costs: float = 0.0
     logistic_costs: float = 0.0
     assignment_costs: float = 0.0
@@ -239,13 +285,15 @@ class PlanningData(Model):
     delta_weight: float = 0.0
     "Deviation from target weight in t. Positive for missing tonnage."
     material_structure: dict[str, dict[str, float]]|None = None
-    "Keep track of material classes. Outer key: category id, inner key: class id; special keys \"_sum\" represent the total/aggregated values"
+    """Keep track of material classes. Outer key: category id, inner key: class id; 
+    special keys \"_sum\" represent the total/aggregated values"""
     main_category: str|None = None
     "For nested structure planning, the main category."
     nested_material_structure: dict[str, dict[str, dict[str, float]]]|None = None
     """
     Keep track of nested material classes. Only used in case of nested structure targets. 
-    Outermost key: class id for main category, middle key: sub category id, innermost key: class id; special keys \"_sum\" represent the total/aggregated values.
+    Outermost key: class id for main category, middle key: sub category id, innermost key: class id; 
+    special keys \"_sum\" represent the total/aggregated values.
     """
     min_due_date: datetime|None = None
     assigned_priority: int = 0
@@ -283,6 +331,8 @@ class EquipmentProduction(Model):
     total_weight: float
     lot_weight_range: tuple[float, float] | None = None
     "Weight restriction for lots in t"
+    material_weights: dict[str, float]|None = None
+    "Optional target weights per material class in t"
 
 
 class ObjectiveFunction(Model, extra="allow"):
@@ -335,7 +385,8 @@ class ProductionTargets(Model):
     "Target production by equipment id"
     period: tuple[datetime, datetime]
     material_weights: dict[str, float|dict[str, float]] | None = None
-    "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed. The special value \"_sum\" represents the total weight."
+    """Produced quantity by material class id, in t. This may be a nested model, 
+    in case a hierarchical structure is needed. The special value \"_sum\" represents the total weight."""
 
 
 class StorageLevel(Model):
@@ -347,10 +398,11 @@ class StorageLevel(Model):
     timestamp: datetime|None = None
     "The timestamp when the level was recorded or for which it is predicted."
     material_levels: dict[str, float]|None = None
-    "Material-specific filling levels in the range 0 - 1, referring to the total storage capacity. Keys: material class ids."
+    """Material-specific filling levels in the range 0 - 1, referring to the total 
+    storage capacity. Keys: material class ids."""
 
 
-class OrderAssignment(Model):  # base for SolutionElement
+class OrderAssignment(Model):
     """
     "Unassigned" is realized in terms of equipment=-1, lot="", lot_idx=-1
     """
@@ -360,19 +412,19 @@ class OrderAssignment(Model):  # base for SolutionElement
     lot_idx: int
 
 
-# TODO add lot weight targets to get_targets() return value
 class ProductionPlanning(Model, Generic[P]):
     """
     The optimization needs to generate an object of this type
     """
 
     process: str
-    order_assignments: dict[str, OrderAssignment]   # "sbest"
+    order_assignments: dict[str, OrderAssignment]
     "keys: order ids"
-    equipment_status: dict[int, EquipmentStatus[P]]                  # "vbest"
+    equipment_status: dict[int, EquipmentStatus[P]]
     "keys: equipment ids"
     target_structure: dict[str, float|dict[str, float]] | None = None
-    "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed. Special key \"_sum\" represents the total/aggregated value."
+    """Produced quantity by material class id, in t. This may be a nested model, in case a 
+    hierarchical structure is needed. Special key \"_sum\" represents the total/aggregated value."""
     total_priority: int = 0
     "Sum priority orders"
     previous_orders: dict[int, str] | None = None
@@ -449,12 +501,12 @@ class MaterialCategory(Model):
     name: str|None = None
     name_de: str | None = None
     description: str|None = None
-    classes: list[MaterialClass]
+    classes: Sequence[MaterialClass]
     """
     Mutually exclusive material classes. It is assumed
     that every material and order can be assigned to exactly one class within the category.
     """
-    process_steps: list[str]|None = None
+    process_steps: Sequence[str]|None = None
     "Optional list of process steps for which the category is potentially relevant in the mid-term planning."
 
 
@@ -512,6 +564,31 @@ class LotCreationSettings(Model):
     "Settings per process step"
     default_iterations: int | None = None
     "Default number of iterations if no process-specific number is specified"
+    duration: timedelta = timedelta(days=1)
+    "The reference duration these settings apply to. E.g., one shift of eight hours, or one day."
+
+
+class ProcessLtpSettings(Model):
+    ignore_capacity: bool = False
+    "If set to true, the process step is ignored in the capacity consideration"
+
+
+class LongTermPlanningSettings(Model):
+    processes: dict[str, ProcessLtpSettings]
+    "Settings per process step"
+
+
+class TransportTimes(Model):
+    equipment_matrix: dict[int, dict[int, float]]|None = None
+    default: float|None=None
+    unit: timedelta = timedelta(hours=1)
+
+    def transport_times(self, equipment1: int, equipment2: int) -> timedelta|None:
+        if self.equipment_matrix is not None and equipment1 in self.equipment_matrix:
+            dur = self.equipment_matrix[equipment1].get(equipment2, self.default)
+        else:
+            dur = self.default
+        return dur * self.unit if dur is not None else None
 
 
 class Site(LabeledItem):
@@ -520,12 +597,13 @@ class Site(LabeledItem):
     storages: list[Storage]
     material_categories: list[MaterialCategory]
     logistic_costs: dict[int, dict[int, float]]|None = None
-    """
-    Logistic costs for transfer of a complete order(?) from one plant to another (only within a single process stage, not considering
-    transfer costs between processes)
-    """
-    #structure_planning: dict[str, StructurePlanningSettings]|None = None
+    "Logistic costs for transfer of a complete order from one plant to another."
+    transport_times: TransportTimes|None = None
+    "Information about transport times between equipment, relevant for the mid-term and short-term planning."
     lot_creation: LotCreationSettings|None=None
+    "Settings for lot creation"
+    long_term_planning: LongTermPlanningSettings|None=None
+    "Settings for long term planning"
 
 
     def get_process(self, process: str, do_raise: bool=False) -> Process|None:
@@ -564,7 +642,7 @@ class Site(LabeledItem):
 
     def get_process_equipment(self, process: str, do_raise: bool=False) -> list[Equipment]:
         proc = self.get_process(process, do_raise=do_raise)
-        process = process.upper() if proc is None else proc.name_short.upper()
+        process = (process.upper() if process is not None else None) if proc is None else proc.name_short.upper()
         return [p for p in self.equipment if p.process.upper() == process]
 
     def get_storage(self, storage: str, do_raise: bool=False) -> Storage|None:
@@ -580,7 +658,6 @@ class Site(LabeledItem):
         return [p for p in self.equipment]
 
 
-# Some changes in methods made by JOM / UPM)
 class Snapshot(Model, Generic[MATERIAL_PROPERTIES]):
     timestamp: datetime
     "The timestamp serves as the unique snapshot id"
@@ -590,18 +667,22 @@ class Snapshot(Model, Generic[MATERIAL_PROPERTIES]):
     "Material ids currently being processed. Keys: plant ids, values: list of materials references."
     lots: dict[int, list[Lot]] = Field(..., examples=[{1: [{"id": "PLANT1.01", "equipment": 1, "active": True, "status": 1, "orders": ["1", "2", "3"]}]}])
     "Lots by plant ids. Keys: plant id, values: Lots"
+    _orders_by_id: dict[str, Order]|None = PrivateAttr(None)
+    _mat_by_id: dict[str, Material] | None = PrivateAttr(None)
 
     def get_order(self, order_id: str, do_raise: bool=False) -> Order[MATERIAL_PROPERTIES]|None:
-        order = next((o for o in self.orders if o.id == order_id), None)
-        if order is None and do_raise:
-            raise Exception("Order " + str(order_id) + " not found")
-        return order
+        if self._orders_by_id is None:
+            self._orders_by_id = {o.id: o for o in self.orders}
+        if order_id not in self._orders_by_id and do_raise:
+            raise Exception(f"Order {order_id} not found")
+        return self._orders_by_id.get(order_id)
 
     def get_material(self, material_id: str, do_raise: bool=False) -> Material | None:
-        material = next((c for c in self.material if c.id == material_id), None)
-        if material is None and do_raise:
-            raise Exception("Material " + str(material_id) + " not found")
-        return material
+        if self._mat_by_id is None:
+            self._mat_by_id = {m.id: m for m in self.material}
+        if material_id not in self._mat_by_id and do_raise:
+            raise Exception(f"Material {material_id} not found")
+        return self._mat_by_id.get(material_id)
 
     def get_order_lot(self, site: Site, order_id: str, process: str) -> Lot|None:
         if self.lots is None:
@@ -630,6 +711,15 @@ class Snapshot(Model, Generic[MATERIAL_PROPERTIES]):
                             and coil.current_storage == storage and \
                                 coil.current_equipment is not None and \
                                 coil.current_equipment_name != equipment_name])
+
+    def get_material_current_equipment(self, equipment_name: str) -> list[str]:
+        """
+        Get materials currently assigned to the specified equipment.
+        """
+        return [
+            coil.id for coil in self.material
+            if coil.current_equipment_name == equipment_name
+        ]
 
     def get_orders_equipment(self, site: Site, equipment_name: str, \
                              storage:str, assigned:int=-1) -> list[str]:
@@ -669,6 +759,22 @@ class Snapshot(Model, Generic[MATERIAL_PROPERTIES]):
                 result_list.append(order)
 
         return result_list
+
+    def get_orders_current_equipment(self, equipment_name: str) -> list[str]:
+        """
+        Get orders that currently have at least one material assigned to the
+        specified equipment.
+        """
+        unique_orders: list[str] = []
+        seen: set[str] = set()
+        for coil in self.material:
+            if coil.current_equipment_name != equipment_name:
+                continue
+            if coil.order in seen:
+                continue
+            seen.add(coil.order)
+            unique_orders.append(coil.order)
+        return unique_orders
     #
     def get_material_selected_orders(self, orders: list[str], plant_names: list[str], \
                                     site: Site) -> list[str]:
@@ -736,7 +842,8 @@ class MidTermTargets(LongTermTargets):
     typically corresponding to production shifts.
     """
     production_sub_targets: dict[str, list[ProductionTargets]]
-    "Production targets for the planning sub periods. Keys: process ids, values: list of production targets, covering all planning sub periods chronologically."
+    """Production targets for the planning sub periods. Keys: process ids, values: 
+    list of production targets, covering all planning sub periods chronologically."""
 
 
 class AggregatedMaterial(Model):
@@ -760,33 +867,3 @@ class AggregatedStorageContent(Model):
     content_by_storage: dict[str, AggregatedMaterial]
     content_by_process: dict[str, AggregatedMaterial]
     content_by_equipment: dict[int, AggregatedMaterial]
-
-
-class ServiceHealth(Model):
-
-    status: int
-    "0: ok"
-    running_since: datetime|None=None
-
-
-class Metric(Model):
-    id: str
-    labels: dict[str, str]|None=None
-
-
-class PrimitiveMetric(Metric):
-    value: float|int
-
-
-class Histogram(Metric):
-    data: list[float]
-    buckets: list[float]
-    include_infinity: bool=True
-
-
-class ServiceMetrics(Model):
-    service_id: str
-    metrics: Sequence[Metric]
-
-
-

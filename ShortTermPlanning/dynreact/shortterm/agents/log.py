@@ -11,21 +11,79 @@ Version History:
 
 """
 
+from typing import Any
 import time
 import json
 
 import multiprocessing
 import logging
+import re
 
-from confluent_kafka.admin import AdminClient, NewTopic
+from confluent_kafka.admin import AdminClient
+from confluent_kafka.cimpl import NewTopic
 from datetime import datetime
 from pathlib import Path
 
-from dynreact.shortterm.common import sendmsgtopic, TOPIC_CALLBACK
+from dynreact.shortterm.common import sendmsgtopic, KeySearch
 from dynreact.shortterm.agents.agent import Agent
 from dynreact.shortterm.common.data.data_functions import end_auction
 from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
 from dynreact.shortterm.common.handler import DockerManager
+
+import os
+from logging.handlers import TimedRotatingFileHandler
+
+class LogWithExtensionHandler(TimedRotatingFileHandler):
+    """
+    Class holding the methods relevant for the operation of the Log agent,
+    which is in charge of storing all the messages exchanged between the
+    different agents through a Kafka brokering system.
+
+    This class extends Python's TimedRotatingFileHandler to allow log
+    rotation every day with the `.log` extension at the end of rotated
+    files (e.g., <<PREFIX>>.2025-07-03.log).
+
+    .. _Google Python Style Guide:
+       https://google.github.io/styleguide/pyguide.html
+    """
+
+    def __init__(self, filename: Any, *args: Any, **kwargs: Any) -> None:
+        """
+        Constructor function for the LogWithExtensionHandler Class
+        """
+        # Remove .log for internal handling to avoid double extensions
+        base, ext = os.path.splitext(filename)
+        self._real_base_filename = base
+        self._log_extension = ext or ".log"
+        super().__init__(filename, when="midnight", interval=1, *args, **kwargs)
+        self.suffix = "%Y-%m-%d" + self._log_extension  # e.g., .2025-07-03.log
+
+
+    def rotation_filename(self, default_name: str) -> Any:
+        """
+        Function to rotate the filename
+
+        :param str default_name: Default file name.
+
+        :returns: New log file
+        :rtype:  str
+        """
+        # Custom filename format with extension at the end
+        base_filename = self._real_base_filename
+        time_tuple = self.rolloverAt - self.interval
+        dfn = base_filename + "." + self.rotation_time_format(time_tuple) + self._log_extension
+        return dfn
+
+    def rotation_time_format(self, timestamp: float) -> Any:
+        """
+        Compute file time format
+
+        :param float timestamp: Current timestamp
+
+        :returns: New timestamp
+        :rtype:  str
+        """
+        return time.strftime(self.suffix[:-len(self._log_extension)], time.gmtime(timestamp))
 
 class Log(Agent):
     """
@@ -36,38 +94,38 @@ class Log(Agent):
     Attributes:
         topic     (str): Topic driving the relevant converstaion.
         agent     (str): Name of the agent creating the object.
-        kafka_ip  (str): IP address and TCP port of the broker.
-        left_path (str): Path to place the log file.
         log_file  (str): Name of the log file.
-        verbose   (int): Level of details being saved.
 
     .. _Google Python Style Guide:
        https://google.github.io/styleguide/pyguide.html
     """
 
-    def __init__(self, topic: str, agent: str, kafka_ip: str, left_path: str, log_file: str, verbose: int = 1, manager=True):
-        super().__init__(topic=topic, agent=agent, kafka_ip=kafka_ip, verbose=verbose)
+    def __init__(self, topic: str, agent: str, log_file: str, manager: Any=True) -> None:
+        super().__init__(topic=topic, agent=agent)
         """
-           Constructor function for the Log Class
+        Constructor function for the Log Class
 
         :param str topic: Topic driving the relevant converstaion.
         :param str agent: Name of the agent creating the object.
-        :param str kafka_ip: IP address and TCP port of the broker.
-        :param str left_path: Path to place the log file.
         :param str log_file: Name of the log file.
-        :param int verbose: Level of details being saved.
+        :param str manager: Is this instance a base.
         """
 
         self.action_methods.update({
             'CREATE': self.handle_create_action, 'CHECK': self.handle_check_action, 'WRITE': self.handle_write_action,
             'PINGANSWER': self.handle_pinganswer_action, "ASKRESULTS": self.handle_askresults_action,
-            "ISAUCTIONACTIVE": self.handle_is_auction_started_action, "RECIEVEERROR": self.handle_receive_error_action
+            "ISAUCTIONACTIVE": self.handle_is_auction_started_action, "RECIEVEERROR": self.handle_receive_error_action,
+            "EQUIPMENTFINISHED": self.handle_equipmentfinished_action
         })
 
         # To handle the start of the auction
         self.present_agents = set()
         self.auction_start = False
         self.total_num_agents = None
+        self.expected_equipments = set()
+        self.finished_equipments = set()
+        self.auction_end_requested = False
+        self.auction_completed = False
 
         if manager:
             self.handler = DockerManager(tag=f"log{DOCKER_REPLICA}")
@@ -76,7 +134,6 @@ class Log(Agent):
         self.results = dict()
 
         # Log file
-        self.left_path = left_path
         self.log_file = log_file
         self.formatter = logging.Formatter('%(asctime)s;%(levelname)s;%(name)s;%(message)s')
         self.logger = self.setup_logger()
@@ -96,7 +153,15 @@ class Log(Agent):
             self.write_log(f"ERROR: {self.log_file} does not exist", "b82f31ef-1750-4f33-8b2c-7bba4ed408de", action='CREATE')
         self.write_log(f"New log file created for topic {self.topic}.", "1a40e14a-845a-489a-8bea-5768c8940f1f", action='CREATE')
 
-    def write_log(self, msg: str, identifier: str, action: str = 'WRITE', verbose: float = float("inf")):
+    @staticmethod
+    def _extract_equipment_id(agent_name: str) -> str | None:
+        """Extract the stable equipment id from one equipment agent name."""
+        parts = str(agent_name).split(":")
+        if len(parts) >= 4 and parts[0] == "EQUIPMENT":
+            return str(parts[-2])
+        return None
+
+    def write_log(self, msg: str, identifier: str, to_stdout: bool = False, action: str = 'WRITE', verbose: float = float("inf")) -> None:
         """
         Function writing a message to the log itself
 
@@ -107,9 +172,11 @@ class Log(Agent):
         full_msg = dict(
             source=self.agent, dest=self.agent, action=action, payload=dict(msg=msg, identifier=identifier)
         )
+        if to_stdout:
+            print(msg)
         self.handle_write_action(full_msg, verbose)
 
-    def callback_on_topic_not_available(self, topic: str = None):
+    def callback_on_topic_not_available(self, topic: str | None = None) -> None:
         """
         Function executed when 'Subscribed topic not available'
 
@@ -130,7 +197,7 @@ class Log(Agent):
             self.write_log(f"Created topic {self.topic}.", "762baef6-e85d-4a35-83d3-6298b6970b8c")
         time.sleep(2)
 
-    def callback_on_not_match(self, dctmsg: dict):
+    def callback_on_not_match(self, dctmsg: dict) -> None:
         """
         When the LOG is not the destination, write the message in the log file and record the results.
         This allows the LOG to record all the messages exchanged within the topic.
@@ -150,9 +217,11 @@ class Log(Agent):
             equipment_name = dctmsg['dest'].split(':')[-2]  # EQUIPMENT:DynReact-UE9L5LJASTQ1:14:0 -> 14
             round_number = dctmsg['dest'].split(':')[-1]  # EQUIPMENT:DynReact-UE9L5LJASTQ1:14:0 -> 0
             stdat = dctmsg['payload']['material_params']['order']
+            costs = dctmsg['payload']['costs']
             stdat.pop('material', None)
             stdat['round'] = round_number
-            stdat['mat'] = equipment_name
+            stdat['equipment'] = equipment_name
+            stdat['costs'] = costs
 
             if self.verbose > 1:
                 self.write_log(
@@ -176,7 +245,12 @@ class Log(Agent):
         :rtype:  Logger object
         """
 
-        handler = logging.FileHandler(self.log_file, mode="a")
+        handler = LogWithExtensionHandler(
+            filename=self.log_file,  # Required: base log file
+            encoding="utf-8",  # Optional: file encoding
+            utc=True  # Optional: rotate based on UTC time (set to False for local time)
+        )
+
         handler.setFormatter(self.formatter)
 
         logger = logging.getLogger(self.topic)
@@ -211,7 +285,7 @@ class Log(Agent):
 
         return 'CONTINUE'
 
-    def handle_exit_action(self, dctmsg: dict) -> str:
+    def handle_exit_action(self, dctmsg: dict | None = None) -> str:
         """
         Handles the EXIT action.
 
@@ -220,8 +294,9 @@ class Log(Agent):
         :returns: Status of the handling
         :rtype:  str
         """
+        payload = dctmsg or {"source": self.agent, "dest": self.agent}
         full_msg = dict(
-            source=dctmsg['source'], dest=dctmsg['dest'], action='EXIT',
+            source=payload['source'], dest=payload['dest'], action='EXIT',
             payload=dict(msg=f"Requested Exit")
         )
         self.handle_write_action(full_msg)
@@ -242,7 +317,7 @@ class Log(Agent):
         self.results = {}
 
         # Force auction to crash due to error
-        end_auction(topic=self.topic, producer=self.producer, verbose=self.verbose)
+        end_auction(topic=self.topic, producer=self.producer, verbose=self.verbose, wait_time=KeySearch.search_for_value("SMALL_WAIT"))
 
         return 'CONTINUE'
 
@@ -258,19 +333,28 @@ class Log(Agent):
 
         if self.handler:
             topic = dctmsg['topic']
+            payload = dctmsg['payload']
+            variables = payload['variables']
+
+            KeySearch.assign_values(new_values=variables)
+
             agent = f"LOG:{topic}"
-            log_file = f"{self.left_path}{topic}.log"
+            log_file = os.path.join(KeySearch.search_for_value("LOG_FILE_PATH"), f"{topic}.log")
 
             init_kwargs = {
                 "topic": topic, 
                 "agent-name": agent,
-                "kafka-ip": self.kafka_ip,
-                "verbose": self.verbose,
-                "left-path": self.left_path,
-                "log-file": log_file
+                "log-file": log_file,
+                "variables": KeySearch.dump_model(include_env=False)
             }
 
-            self.handler.launch_container(name=topic, agent="log", mode="replica", params=init_kwargs)
+            self.handler.launch_container(
+                name=topic,
+                agent="log",
+                mode="replica",
+                params=init_kwargs,
+                auto_remove=False
+            )
 
             if self.verbose > 1:
                 self.write_log(f"Creating log with configuration {init_kwargs}...", "be68d495-4b5b-4a06-b5bf-eff1151d7c6b")
@@ -278,7 +362,8 @@ class Log(Agent):
             return 'CONTINUE'
         else:
             self.write_log(f"Refuse to create log replica from another replica instance.", "99848564-684c-4eef-b3fa-efce3a667d25")
-            raise Exception("Replicas can't create new instances. Only managers can")
+            dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+            raise Exception(f"{dt} | ERROR: Replicas can't create new instances. Only managers can")
 
     def handle_check_action(self, dctmsg: dict) -> str:
         """
@@ -302,7 +387,7 @@ class Log(Agent):
             tsend=topic,
             topic=topic,
             source=self.agent,
-            dest=".*",
+            dest=rf"(MATERIAL|EQUIPMENT|LOG):{topic}:?(\w*)(:\d)?",
             action="PING",
             vb=self.verbose
         )
@@ -323,6 +408,9 @@ class Log(Agent):
         agent = dctmsg['source']
         if agent not in self.present_agents:
             self.present_agents.add(agent)
+            equipment_id = self._extract_equipment_id(agent)
+            if equipment_id is not None:
+                self.expected_equipments.add(equipment_id)
             if self.verbose > 1:
                 self.write_log(
                     f"Added agent {agent} to the list of present agents. "
@@ -330,6 +418,54 @@ class Log(Agent):
                     "87a353b2-de86-4c4b-bc6b-1f25768094a2"
                 )
         return 'CONTINUE'
+
+    def handle_equipmentfinished_action(self, dctmsg: dict) -> str:
+        """Record one finished equipment and close the auction when all are done."""
+        payload = dctmsg.get("payload", {})
+        equipment_id = payload.get("equipment")
+        if equipment_id is None:
+            equipment_id = self._extract_equipment_id(dctmsg.get("source", ""))
+        if equipment_id is None:
+            self.write_log(
+                f"Ignoring EQUIPMENTFINISHED without a valid equipment id: {dctmsg}",
+                "0a0cf4ab-8df7-40b4-9bc0-7869fc19dadd"
+            )
+            return 'CONTINUE'
+
+        equipment_key = str(equipment_id)
+        self.finished_equipments.add(equipment_key)
+        if self.verbose > 1:
+            self.write_log(
+                f"Equipment {equipment_key} finished. Progress: "
+                f"{len(self.finished_equipments)} / {len(self.expected_equipments)}.",
+                "3ca0c034-fb34-4c06-a576-d9e0f146d3d0"
+            )
+
+        should_mark_complete = (
+            self.auction_start
+            and not self.auction_completed
+            and len(self.expected_equipments) > 0
+            and self.finished_equipments >= self.expected_equipments
+        )
+        if should_mark_complete:
+            self.auction_completed = True
+            self.write_log(
+                "All participating equipments finished. Waiting for results retrieval before shutdown.",
+                "85a1f6ff-57db-4dcb-a246-44734201e175"
+            )
+        return 'CONTINUE'
+
+    def count_agents(self, agent_type: str) -> Any:
+        """
+        Count the number of a specific present agent
+
+        :param dict agent_type: Agent to count
+
+        :returns: Number of present agents
+        :rtype:  int
+        """
+        pattern = re.compile(rf'^{re.escape(agent_type)}\b')
+        return len({item for item in self.present_agents if pattern.match(item)})
 
     def handle_is_auction_started_action(self, dctmsg: dict) -> str:
         """
@@ -347,42 +483,31 @@ class Log(Agent):
         self.write_log(f"Checking if auction has already started...", "ce438bc1-37ee-4e87-a5d4-7b17b10acbf7")
 
         start_conditions = [self.total_num_agents is not None, self.auction_start]
+        has_started = all(start_conditions) and len(self.present_agents) == self.total_num_agents
 
-        if all(start_conditions) and len(self.present_agents) == self.total_num_agents:
-
-            sendmsgtopic(
-                producer=self.producer,
-                tsend=TOPIC_CALLBACK,
-                topic=TOPIC_CALLBACK,
-                source=self.agent,
-                dest=sender,
-                action="AUCTIONSTARTED",
-                payload={
-                    "present_agents": len(self.present_agents),
-                    "total_num_agents": self.total_num_agents or 0,
-                    "is_auction_started": True
+        sendmsgtopic(
+            producer=self.producer,
+            tsend=self.topic_callback,
+            topic=self.topic_callback,
+            source=self.agent,
+            dest=sender,
+            action="AUCTIONSTARTED",
+            payload={
+                "total_num_agents": self.total_num_agents or 0,
+                "present_agents": {
+                    "log": self.count_agents("LOG"),
+                    "material": self.count_agents("MATERIAL"),
+                    "equipment": self.count_agents("EQUIPMENT"),
+                    "total": len(self.present_agents)
                 },
-                vb=self.verbose
-            )
+                "is_auction_started": has_started
+            },
+            vb=self.verbose
+        )
 
-            if self.verbose > 1:
-                self.write_log(f"Answered {sender} with the current status of the auction.", "d7f95814-1932-4d89-ace6-618f50a725bd")
+        if self.verbose > 1:
+            self.write_log(f"Answered {sender} with the current status of the auction.", "d7f95814-1932-4d89-ace6-618f50a725bd")
 
-        else:
-            sendmsgtopic(
-                producer=self.producer,
-                tsend=TOPIC_CALLBACK,
-                topic=TOPIC_CALLBACK,
-                source=self.agent,
-                dest=sender,
-                action="AUCTIONSTARTED",
-                payload={
-                    "present_agents": len(self.present_agents),
-                    "total_num_agents": self.total_num_agents or 0,
-                    "is_auction_started": False
-                },
-                vb=self.verbose
-            )
 
         return 'CONTINUE'
 
@@ -423,8 +548,8 @@ class Log(Agent):
         sender = dctmsg['source']
         sendmsgtopic(
             producer=self.producer,
-            tsend=TOPIC_CALLBACK,
-            topic=TOPIC_CALLBACK,
+            tsend=self.topic_callback,
+            topic=self.topic_callback,
             source=self.agent,
             dest=sender,
             action="RESULTS",
@@ -433,6 +558,19 @@ class Log(Agent):
         )
         if self.verbose > 1:
             self.write_log(f"Answered {sender} with the current results of the auction: {self.results}", "b49a876b-8bf2-4677-8142-b32f8b2e5df5")
+
+        if self.auction_completed and not self.auction_end_requested:
+            self.auction_end_requested = True
+            self.write_log(
+                "Results served after all equipments finished. Requesting auction shutdown.",
+                "5efceaf8-b7f2-44f3-a19a-c8700efbc677"
+            )
+            end_auction(
+                topic=self.topic,
+                producer=self.producer,
+                verbose=self.verbose,
+                wait_time=KeySearch.search_for_value("SMALL_WAIT")
+            )
         return 'CONTINUE'
 
     def callback_before_message(self) -> str:

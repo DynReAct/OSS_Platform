@@ -1,28 +1,30 @@
+import logging
 import threading
 import traceback
-from datetime import datetime, date
-from typing import Iterable, Any, Literal
+from datetime import datetime, date, timezone, timedelta
+from typing import Iterable, Any, Literal, Sequence
 import uuid
 
 import dash
 from dash import html, callback, Input, Output, dcc, State, clientside_callback, ClientsideFunction
 import dash_ag_grid as dash_ag
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 from pydantic.fields import FieldInfo
 
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationState
+from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.impl.Scenarios import MidTermScenario
 from dynreact.base.model import ProductionPlanning, EquipmentStatus, Lot, Order, Material, Snapshot, Equipment, \
-    ObjectiveFunction, MaterialCategory, ProductionTargets
+    ObjectiveFunction, MaterialCategory, ProductionTargets, PlannedWorkingShift, Site
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated, get_current_user
 from dynreact.gui.gui_utils import GuiUtils
-from dynreact.gui.pages.components import lots_view
-#from dynreact.gui.pages.session_state import selected_process, selected_snapshot
+from dynreact.gui.pages.components import lots_view, prepare_lots_for_lot_view
+
 
 dash.register_page(__name__, path="/lots/planned")
 translations_key = "lotsplanning"
@@ -46,16 +48,14 @@ def layout(*args, **kwargs):
     process: str|None = kwargs.get("process")
     lot_size: str|None = kwargs.get("lotsize", "weight")   # constant, weight, orders, coils are allowed values
     site = state.get_site()
-    snap = GuiUtils.format_snapshot(kwargs["snapshot"], None) if "snapshot" in kwargs else None
+    snap = GuiUtils.format_snapshot(kwargs["snapshot"], None, state=state) if "snapshot" in kwargs else None
     return html.Div([
         html.H1("Lots planning", id="lotsplanning-title"),
         html.Div([
             html.Div([html.Div("Snapshot: "), html.Div(snap, id="current_snapshot_lotplanning")]),
             html.Div([html.Div("Process: "), dcc.Dropdown(id="process-selector-lotplanning",
-                                                          options=[{"value": p.name_short, "label": p.name_short,
-                                                                    "title": p.name if p.name is not None else p.name_short}
-                                                                   for p in site.processes],
-                                                          value=process, className="process-selector", persistence=True)]),
+                            options=[{"value": p.name_short, "label": p.name_short, "title": p.name if p.name is not None else p.name_short} for p in site.processes],
+                            value=process, className="process-selector", persistence=True)]),
             html.Div([
                 dcc.Link(html.Button("Open lot creation", className="dynreact-button"), id="plan-link-create",
                          href="/dash/lots/create2", target="_blank")
@@ -123,6 +123,11 @@ def layout(*args, **kwargs):
                             "then \"Query options\" -> \"Current workbook\" - \"Regional settings\" -> Select \"English (Europe)\". Then import data \"From text/csv\" and select the downloaded file. " +
                             "Otherwise Excel will transform fractional numbers into dates and other strange objects.")], className="lotplanning-button-info-row"),
             html.Br(),
+            html.Div([
+                html.Span("Show cost relevant columns only?"), # unchecked
+                html.Div(dcc.Checklist(id="lotplanning-relevant-fields-check", options= [{"value": ""}] , value=[], className="lots2-checkbox"))],
+                className="lots2-use-range-checkbox"
+            ),
             # this button is hidden, it needs to be activated via the browser console. Command:
             # document.querySelector("#lotplanning-download-scenario").hidden=false
             html.Button("Download scenario", id="lotplanning-download-scenario", className="dynreact-button", hidden=True),
@@ -157,17 +162,19 @@ def layout(*args, **kwargs):
             )
         ], id="planning-lots-table-wrapper", hidden=True),
         transfer_popup(),
-        dcc.Store(id="planning-initial_solution", data=initial_solution),  # str|None
-        dcc.Store(id="planning-selected-solution"),  # str
-        dcc.Store(id="planning-solution-data"),      # rowData, list of dicts, one row per lot
-        dcc.Store(id="planning-selected-lot"),       # lot id; selected by clicking a row in the lots table
+        dcc.Store(id="planning-initial_solution", data=initial_solution, storage_type="memory"),  # str|None
+        dcc.Store(id="planning-selected-solution", storage_type="memory"),  # str
+        dcc.Store(id="planning-solution-data", storage_type="memory"),      # rowData, list of dicts, one row per lot
+        dcc.Store(id="planning-selected-lot", storage_type="memory"),       # lot id; selected by clicking a row in the lots table
         # opaque lot identifier
-        dcc.Store(id="lotplanning-transferred-lot"),
-        dcc.Store(id="lotplanning-transfer-message"),
-        dcc.Store(id="lotplanning-transfer-type"),
-        dcc.Store(id="lotplanning-material-structure"),   # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
-        dcc.Store(id="lotplanning-material-targets"),     # dict[str, float]
-        dcc.Store(id="lotplanning-scenario-json"),        # for scenario download
+        dcc.Store(id="lotplanning-transferred-lot", storage_type="memory"),
+        dcc.Store(id="lotplanning-transfer-message", storage_type="memory"),
+        dcc.Store(id="lotplanning-transfer-type", storage_type="memory"),
+        dcc.Store(id="lotplanning-material-structure", storage_type="memory"),   # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
+        dcc.Store(id="lotplanning-material-targets", storage_type="memory"),     # dict[str, float]
+        dcc.Store(id="lotplanning-scenario-json", storage_type="memory"),        # for scenario download
+
+        dcc.Store(id="lotplanning-shifts", storage_type="memory"),
 
         dcc.Interval(id="planning-interval", n_intervals=3_600_000),  # for polling when lot transfer is running
         dcc.Interval(id="lotplanning-process-init", interval=100),
@@ -195,12 +202,32 @@ def transfer_popup():
                 html.Div("Update snapshot:", title="Update the current snapshot (in memory only/until software restart)?"),
                 html.Div(dcc.Checklist(id="lotplanning-transfer-snapupdate", options= [{"value": ""}], value=[""], className="lots2-checkbox"), title="Update the current snapshot (in memory only/until software restart)?"),
             ], className="lotplanning-transfer-grid", id="lotplanning-transfer-grid"),
-
+            html.H3("Orders overview"),
+            dash_ag.AgGrid(
+                id="lotplanning-transfer-orders-table",
+                columnDefs=[{"field": "order", "pinned": True},
+                            {"field": "quality_locks", "filter": "agNumberColumnFilter", "headerName": "Quality locks"},
+                            {"field": "material_units", "filter": "agNumberColumnFilter", "headerName": "Material units"},
+                            {"field": "equipment", "headerTooltip": "Current equipment location of the order"},
+                            {"field": "previous_lot", "headerTooltip": "The lot at the previous process stage, if any.", "headerName": "Previous lot"},
+                            {"field": "availability", "headerTooltip": "Order availability, determined by the lot at the previous process stage."},
+                            {"field": "existing_lot", "headerTooltip": "The existing lot at the planned process stage, if any.", "headerName": "Existing lot"},
+                            {"field": "due_date", "headerTooltip": "Order due date.", "headerName": "Due date"}],
+                defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
+                rowData=[],
+                getRowId="params.data.order",
+                className="ag-theme-alpine",  # ag-theme-alpine-dark
+                # style={"height": "70vh", "width": "100%", "margin-bottom": "5em"},
+                columnSizeOptions={"defaultMinWidth": 125},
+                columnSize="responsiveSizeToFit",
+                dashGridOptions={"rowSelection": "single", "domLayout": "autoHeight"},
+                style={"height": None},
+            ),
             html.Div([
                 html.Button("Transfer", id="lotplanning-transfer-start", className="dynreact-button"),
                 html.Button("Cancel", id="lotplanning-transfer-cancel", className="dynreact-button")
             ], className="lotplanning-transfer-buttons")
-        ]),
+        ], title=""),
         id="lotplanning-transfer-dialog", className="dialog-filled lotplanning-transfer-dialog", open=False)
 
 
@@ -227,19 +254,21 @@ def proc_changed2(process: str|None) -> str:
 
 
 @callback(Output("current_snapshot_lotplanning", "children"),
-          Input("selected-snapshot", "data"),
-          Input("client-tz", "data")  # client timezone, global store
+          Input("selected-snapshot", "data")
+          #Input("client-tz", "data")  # client timezone, global store
 )
-def snapshot_changed(snapshot: datetime|str|None, tz: str|None) -> str:
-    return GuiUtils.format_snapshot(snapshot, tz)
+def snapshot_changed(snapshot: datetime|str|None) -> str:  #, tz: str|None
+    return GuiUtils.format_snapshot(snapshot, None, state=state)
+
 
 @callback(
     Output("plan-link-create", "href"),
-    State("selected-snapshot", "data"),
+    Output("lotplanning-shifts", "data"),
     Input("process-selector-lotplanning", "value"),
+    Input("selected-snapshot", "data"),
     #Input("create-existing-sols", "value"),
 )
-def update_link(snapshot: str|datetime|None, process: str|None) -> str:
+def update_link(process: str|None, snapshot: str|datetime|None):
     url = "/dash/lots/create2"
     if not dash_authenticated(config):
         return url
@@ -250,7 +279,10 @@ def update_link(snapshot: str|datetime|None, process: str|None) -> str:
         added = True
     if process is not None:
         url += ("?" if not added else "&") + "process=" + process
-    return url
+    shifts: dict[int, Sequence[PlannedWorkingShift]] = \
+        state.get_shifts_provider().load_all(snapshot, end=(snapshot or DatetimeUtils.now()) + timedelta(days=8), equipments=[e.id for e in state.get_site().get_process_equipment(process, do_raise=True)])
+    shifts_serialized = {e: TypeAdapter(Sequence[PlannedWorkingShift]).dump_python(eq_shifts, exclude_unset=True, exclude_none=True, mode="json") for e, eq_shifts in shifts.items()}
+    return url, shifts_serialized
 
 
 @callback(
@@ -284,7 +316,7 @@ def solutions_table(snapshot: str|datetime|None, process: str|None, preselected_
     ]
     if snapshot is None or process is None:
         return col_defs, [], []
-    persistence = state.get_results_persistence()
+    persistence = state.get_results_persistence_aggregate()
     solutions: list[str] = sorted(persistence.solutions(snapshot, process), reverse=True)
     sol_objects: dict[str, LotsOptimizationState] = {sol: persistence.load(snapshot, process, sol) for sol in solutions}
     snap_planning, snap_targets = state.get_snapshot_solution(process, snapshot)
@@ -320,22 +352,28 @@ def solutions_table(snapshot: str|datetime|None, process: str|None, preselected_
     def merge_dicts(d1: dict, d2: dict) -> dict:
         d1.update(d2)
         return d1
-    row_data = [merge_dicts({
-        "id": sol_id,
-        "comment": params[sol_id].get("comment"),
-        "target_production": params[sol_id].get("target_production"),
-        "initialization": params[sol_id].get("initialization"),
-        "target_fct": solution.best_objective_value.total_value,
-        "iterations": len(solution.history),
-        "orders_considered": len(best_planning[sol_id].order_assignments),
-        "lots": sum(status.planning.lots_count if status.planning is not None else 0 for status in plant_statuses[sol_id]),
-        "plants": [site.get_equipment(status.targets.equipment).name_short for status in plant_statuses[sol_id]],
-        #"transition_costs": sum(status.planning.transition_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
-        #"weight_costs": sum(status.planning.delta_weight * delta_weight_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
-        "performance_models": params[sol_id].get("performance_models")
-    },
-       {key: (getattr(solution.best_objective_value, key) if hasattr(solution.best_objective_value, key) else 0) or 0 for key in objective_keys })
-                for sol_id, solution in sol_objects.items()]
+
+    def solution_to_dict(sol_id: str, solution: LotsOptimizationState):
+        try:
+            return {
+                "id": sol_id,
+                "comment": params[sol_id].get("comment"),
+                "target_production": params[sol_id].get("target_production"),
+                "initialization": params[sol_id].get("initialization"),
+                "target_fct": solution.best_objective_value.total_value,
+                "iterations": len(solution.history),
+                "orders_considered": len(best_planning[sol_id].order_assignments),
+                "lots": sum(status.planning.lots_count if status.planning is not None else 0 for status in plant_statuses[sol_id]),
+                "plants": [site.get_equipment(status.targets.equipment).name_short for status in plant_statuses[sol_id]],
+                #"transition_costs": sum(status.planning.transition_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
+                #"weight_costs": sum(status.planning.delta_weight * delta_weight_costs if status.planning is not None else 0 for status in plant_statuses[sol_id]),
+                "performance_models": params[sol_id].get("performance_models")
+            } | {key: (getattr(solution.best_objective_value, key) if hasattr(solution.best_objective_value, key) else 0) or 0 for key in objective_keys }
+        except:
+            logging.exception(f"Failed to parse solution {sol_id}")
+            return None
+
+    row_data = [s for s in (solution_to_dict(sol_id, solution) for sol_id, solution in sol_objects.items()) if s is not None]
     selected_rows = []
     if preselected_solution is not None and preselected_solution in sol_objects:
         selected_rows.append({"id": preselected_solution})
@@ -364,44 +402,46 @@ def solution_selected(selected_rows: list[dict[str, any]]|None) -> str|None:
     Output("lotplanning-material-targets", "data"),
     Output("lotplanning-structure-container", "hidden"),
     State("selected-snapshot", "data"),
-    State("process-selector-lotplanning", "value"),
+    Input("process-selector-lotplanning", "value"),
     Input("planning-selected-solution", "data"),
+    Input("lotplanning-relevant-fields-check", "value")
 )
-def solution_changed(snapshot: str|datetime|None, process: str|None, solution: str|None):
+def solution_changed(snapshot: str|datetime|None, process: str|None, solution: str|None, relevant_fields_only0: list[Literal[""]]):
     snapshot = DatetimeUtils.parse_date(snapshot)
-    if not dash_authenticated(config) or process is None or snapshot is None or solution is None:
+    if not dash_authenticated(config) or process is None or snapshot is None:
         return True, None, None, True, None, None, None, None, True
+    relevant_fields_only: bool = len(relevant_fields_only0) > 0
     best_result: ProductionPlanning
-    if solution == "_SNAPSHOT_":
+    is_snap_solution: bool = solution == "_SNAPSHOT_" or solution is None
+    is_optimized_solution: bool = False
+    if is_snap_solution:
         best_result = state.get_snapshot_solution(process, snapshot)[0]
     elif solution == "_DUE_DATE_":
         best_result = state.get_due_date_solution(process, snapshot)[0]
     else:
-        result: LotsOptimizationState = state.get_results_persistence().load(snapshot, process, solution)
+        is_optimized_solution = True
+        result: LotsOptimizationState = state.get_results_persistence_aggregate().load(snapshot, process, solution)
         if result is None or result.best_solution is None:
             return True, None, None, True, None, None, None, None, True
         best_result = result.best_solution
     site = state.get_site()
-    plants = {p.id: p for p in site.equipment}
-    lots: list[Lot] = sorted([lot for plant_lots in best_result.get_lots().values() for lot in plant_lots],
+    sp = state.get_snapshot_provider()
+    plants: dict[int, Equipment] = {p.id: p for p in site.equipment}
+    process_plants: list[int] = [p.id for p in site.get_process_equipment(process) if p.id in best_result.equipment_status]
+    previous_processes: list[str] = [proc.name_short for proc in site.processes if proc.next_steps is not None and process in proc.next_steps]
+    prev_proc_plants: list[int] = [p.id for p in site.equipment if p.process in previous_processes]
+    # these lots lost time information
+    lots: list[Lot] = sorted([lot for eq, plant_lots in best_result.get_lots().items() if eq in process_plants for lot in plant_lots],
                              key=lambda lot: (plants.get(lot.equipment).name_short if lot.equipment in plants else "ZZ", lot.id))
+    lots_dict = prepare_lots_for_lot_view(snapshot, process, best_result, is_snap_solution or solution == "_DUE_DATE_", is_optimized_solution)
+
     unassigned_order_ids: list[str] = [ass.order for ass in best_result.order_assignments.values() if ass.lot == ""]
     snap_obj = state.get_snapshot(snapshot)
     orders_by_lot: dict[str, list[Order|None]] = {}
     predecessor_orders: dict[int, str]|None = best_result.previous_orders
     last_plant: int | None = None
     for lot in lots:
-        lot_orders = [None for order in lot.orders]
-        for order in snap_obj.orders:
-            try:
-                idx = lot.orders.index(order.id)
-                lot_orders[idx] = order
-                try:
-                    lot_orders.index(None)
-                except ValueError:
-                    break
-            except ValueError:
-                continue
+        lot_orders = [snap_obj.get_order(order) for order in lot.orders]
         if lot.equipment != last_plant:   # if known, prepend the start order for the lot
             last_plant = lot.equipment
             if predecessor_orders is not None and last_plant in predecessor_orders:
@@ -416,27 +456,10 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
             unassigned_orders[order.id] = order
             if len(unassigned_orders) == len(unassigned_order_ids):
                 break
-    all_due_dates = {lot: [o.due_date for o in orders if o is not None] for lot, orders in orders_by_lot.items()}
-    first_due_dates = {lot: min((o.due_date for o in orders if o is not None and o.due_date is not None), default=DatetimeUtils.to_datetime(0)) for lot, orders in orders_by_lot.items()}
-    total_weights = {lot: sum(o.actual_weight if o.actual_weight is not None else (o.target_weight if o.target_weight is not None else 0)
-                for o in orders if o is not None) for lot, orders in orders_by_lot.items()}
-    all_coils_by_orders: dict[str, list[Material]] = state.get_coils_by_order(snapshot)
-    num_coils = {lot: sum(len(all_coils_by_orders[o.id]) if o.id in all_coils_by_orders else 0 for o in orders if o is not None) for lot, orders in orders_by_lot.items()}
 
-    def row_for_lot(lot: Lot) -> dict[str, any]:
-        return {
-            "id": lot.id,
-            "plant_id": lot.equipment,
-            "plant": plants[lot.equipment].name_short if lot.equipment in plants and plants[lot.equipment].name_short is not None else str(lot.equipment),
-            "active": lot.active,
-            "num_orders": len(lot.orders),
-            "num_coils": num_coils[lot.id],
-            "order_ids": lot.orders, #", ".join(lot.orders),
-            "first_due_date": first_due_dates[lot.id],
-            "all_due_dates": all_due_dates[lot.id],
-            "total_weight": total_weights[lot.id]
-        }
-    data = sorted([row_for_lot(lot) for lot in lots], key=lambda lot: lot["id"])
+    data = lots_dict
+    table_data = [dt for dt in data if dt["equipment"] not in snap_obj.lots or all(lt.id != dt["id"] for lt in snap_obj.lots[dt["equipment"]])]
+    table_data = sorted(table_data, key=lambda dt: (dt["equipment"], dt["id"]))
 
     def column_def_for_field(field: str, info: FieldInfo):
         if isinstance(info, FieldInfo):
@@ -449,8 +472,8 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         return col_def
 
     props = snap_obj.orders[0].material_properties
-    if props is None:
-        return False, data, data, False, None, None, None, None, True
+    if props is None or solution is None:
+        return False, table_data, data, False, None, None, None, None, True
 
     costs = state.get_cost_provider()
     relevant_fields = costs.relevant_fields(plants[lots[0].equipment]) if len(lots) > 0 else None
@@ -464,40 +487,51 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
                       if relevant_fields is not None else props.model_fields
 
     value_formatter_object = {"function": "formatCell(params.value, 2, 4)"}
-    fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True, "filter": "agTextColumnFilter"},
+    if not relevant_fields_only or not relevant_fields:
+        fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True, "filter": "agTextColumnFilter"},
                 {"field": "equipment", "headerTooltip": "Current equipment location of the order"},
+                {"field": "previous_lot", "headerTooltip": "The lot at the previous process stage, if any."},
+                {"field": "availability", "headerTooltip": "Order availability, determined by the lot at the previous process stage."},
+                {"field": "existing_lot", "headerTooltip": "The existing lot at the planned process stage, if any."},
                 {"field": "costs", "headerTooltip": "Transition costs from previous order.", "valueFormatter": value_formatter_object},
                 {"field": "weight", "headerTooltip": "Order weight in tons.", "valueFormatter": value_formatter_object },
                 {"field": "due_date", "headerTooltip": "Order due date." },
                 {"field": "priority", "headerTooltip": "Order priority."}] + \
              [column_def_for_field(key, info) for key, info in fields_0.items()]
+    else:
+        fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True, "filter": "agTextColumnFilter"},
+                  {"field": "costs", "headerTooltip": "Transition costs from previous order.", "valueFormatter": value_formatter_object},] + \
+                 [column_def_for_field(key, info) for key, info in fields_0.items() if key in relevant_fields]
 
     last_plant = None
     last_order: Order | None = None
+    last_lot_obj: Lot|None = None
     plant_obj: Equipment|None = None
 
     def order_to_json(o: Order, lot: str|None):
         nonlocal last_plant
         nonlocal last_order
         nonlocal plant_obj
+        nonlocal last_lot_obj
         as_dict = o.material_properties.model_dump(exclude_none=True, exclude_unset=True) if isinstance(o.material_properties, BaseModel) \
             else o.material_properties
         as_dict["order"] = o.id
         as_dict["lot"] = lot or ""
         as_dict["weight"] = o.actual_weight
-        as_dict["due_date"] = o.due_date
         as_dict["priority"] = o.priority
-        if o.current_equipment is not None:
-            as_dict["equipment"] = ", ".join([plants[p].name_short or str(plants[p]) for p in o.current_equipment])
+
         if lot is None:
             as_dict["unassigned"] = True
             return as_dict
         lot_obj = next((l for l in lots if l.id == lot), None)
+        target_plant = None
         if lot_obj is not None:  # none for predecessor orders added above
             plant: int = lot_obj.equipment
             if plant == last_plant:
                 tr_costs = costs.transition_costs(plant_obj, last_order, o)
                 as_dict["costs"] = tr_costs
+                if lot_obj != last_lot_obj:
+                    as_dict["lotStart"] = True
             else:
                 as_dict["lotStart"] = True
                 plant_obj = plants[plant]
@@ -508,8 +542,11 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
                         tr_costs = costs.transition_costs(plant_obj, start_order, o)
                         as_dict["costs"] = tr_costs
             last_plant = plant
+            last_lot_obj = lot_obj
+            target_plant = plant
         else:
             as_dict["predecessorLot"] = True
+        _append_lot_info_for_order(as_dict, o, process, snap_obj, sp, site, process_plants, previous_processes, prev_proc_plants, target_plant=target_plant)
         last_order = o
         return as_dict
 
@@ -527,7 +564,40 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         structure = {cat.id: {"name": cat.name or cat.id, "classes": {cl.id: {"name": cl.name or cl.id, "weight": structure0[cat.id][cl.id]} for cl in cat.classes if cl.id in structure0[cat.id] }}
                                                         for cat in all_cats if cat.id in structure0}
         structure_targets = best_result.target_structure  # dict[str, float]
-    return False, data, data, False, fields, order_rows, structure, structure_targets, not show_structure
+    return False, table_data, data, False, fields, order_rows, structure, structure_targets, not show_structure
+
+
+def _append_lot_info_for_order(row: dict[str, Any], o: Order, process: str, snap_obj: Snapshot, sp: SnapshotProvider, site: Site, process_plants: list[int],
+                               previous_processes: list[str], prev_proc_plants: list[int], target_plant: int|None=None):
+    plants = [p for p in (site.get_equipment(e) for e in o.current_equipment) if p is not None] if o.current_equipment is not None else []
+    if len(plants) > 0:
+        row["equipment"] = ", ".join([p.name_short or p.name or str(p.id) for p in plants])
+    if o.due_date:
+        row["due_date"] = DatetimeUtils.format(state.as_timezone(o.due_date), use_zone=False).replace("T", " ")
+    if o.lots is None:
+        return
+    all_lots = snap_obj.lots
+    if process in o.lots:
+        lt = o.lots[process]
+        existing_lt_obj = next((lt_obj for plant in process_plants if plant in all_lots for lt_obj in all_lots[plant] if lt_obj.id == lt), None)
+        row["existing_lot"] = _lot_info(existing_lt_obj) if existing_lt_obj is not None else lt
+    all_prev_lots: list[str] = [o.lots[proc] for proc in previous_processes if proc in o.lots]
+    all_prev_lot_objs: list[Lot] = [lt_obj for plant in prev_proc_plants if plant in all_lots for lt_obj in all_lots[plant] if lt_obj.id in all_prev_lots]
+    now = DatetimeUtils.now()
+    lot_entries: list[tuple[Lot, bool, datetime | None]] = sorted([(lot, lot.active, lot.end_time) for lot in all_prev_lot_objs],  # sp.is_lot_complete(lot)
+                        key=lambda tp: (-1 if tp[1] else 0, now - tp[2] if tp[2] is not None else datetime(year=3000, month=1, day=1, tzinfo=timezone.utc)))
+    last_lot = lot_entries[0][0] if len(lot_entries) > 0 and lot_entries[0][1] else None  # preselect the last complete lot
+    if last_lot is not None:
+        prev_proc = site.get_equipment(last_lot.equipment, do_raise=True).process
+        row["previous_lot"] = _lot_info(last_lot)
+        timings = sp.get_order_lot_times(snap_obj.timestamp, o.id)
+        if timings is not None and len(timings) > 0 and prev_proc in timings.get(o.id, {}):
+            end_prev_lot = state.as_timezone(timings.get(o.id).get(prev_proc).end)
+            if site.transport_times is not None and target_plant is not None:
+                transport: timedelta|None = site.transport_times.transport_times(last_lot.equipment, target_plant)
+                if transport is not None:
+                    end_prev_lot = end_prev_lot + transport
+            row["availability"] = DatetimeUtils.format(end_prev_lot, use_zone=False).replace("T", " ")
 
 
 # Lots export
@@ -580,9 +650,10 @@ clientside_callback(
     ),
     Output("planning-lots-swimlane", "title"),
     Input("planning-solution-data", "data"),
+    Input("lotplanning-shifts", "data"),
     State("planning-lots-swimlane", "id"),
     State("process-selector-lotplanning", "value"),
-    State("planning-swimlane-mode", "value")
+    State("planning-swimlane-mode", "value"),
 )
 
 clientside_callback(
@@ -591,7 +662,8 @@ clientside_callback(
         function_name="setLotsSwimlaneMode"
     ),
     Output("planning-lotsview-header", "title"),
-    Input("planning-swimlane-mode", "value")
+    Input("planning-swimlane-mode", "value"),
+    State("planning-lots-swimlane", "id")
 )
 
 clientside_callback(
@@ -613,30 +685,57 @@ clientside_callback(
     Output("lotplanning-transfer-lotname", "value"),
     Output("lotplanning-transfer-oders", "options"),
     Output("lotplanning-transfer-oders", "value"),
+    Output("lotplanning-transfer-orders-table", "rowData"),
     Input("planning-lots-table", "selectedRows"),
     State("planning-selected-solution", "data"),
     State("lotplanning-transferred-lot", "data"),
+    State("selected-snapshot", "data"),
+    State("process-selector-lotplanning", "value"),
     prevent_initial_call=True,
 )
-def lot_row_selected(rows, solution_id: str, last_transferred_solution: str|None):
+def lot_row_selected(rows, solution_id: str, last_transferred_solution: str|None, snapshot: str|None, process: str|None):
     global lottransfer_results
+    snapshot = DatetimeUtils.parse_date(snapshot)
     # clear last transfer result so the alert does not show up immediately
     if last_transferred_solution is not None and last_transferred_solution in lottransfer_results:
         lottransfer_results.pop(last_transferred_solution)
     if rows is None or len(rows) == 0 or solution_id == "_SNAPSHOT_":
-        return dash.no_update, "", "", [], []
+        return dash.no_update, "", "", [], [], []
     sinks = state.get_lot_sinks()
     if len(sinks) == 0:
-        return dash.no_update, "", "", [], []
+        return dash.no_update, "", "", [], [], []
     lot = rows[0].get("id")
     orders = rows[0].get("order_ids")
+    target_plant = rows[0].get("equipment")
     if isinstance(orders, str):
         orders = [o for o in (o.strip() for o in orders.split(",")) if o != ""]
     options = []
     if isinstance(orders, Iterable):
         options = [{"value": o, "label": o} for o in orders]
-    return lot if lot is not None else dash.no_update, lot if lot is not None else "", lot, options, orders
-
+    orders_table: list[dict[str, Any]] = []
+    if isinstance(orders, Iterable) and len(orders) > 0 and snapshot is not None:
+        snap_obj = state.get_snapshot(time=snapshot)
+        sp = state.get_snapshot_provider()
+        site = state.get_site()
+        process_plants = None
+        previous_processes = None
+        prev_proc_plants = None
+        if process is not None:
+            process_plants = [p.id for p in site.get_process_equipment(process)]
+            previous_processes = [proc.name_short for proc in site.processes if proc.next_steps is not None and process in proc.next_steps]
+            prev_proc_plants = [p.id for p in site.equipment if p.process in previous_processes]
+        for order in orders:
+            order_obj = snap_obj.get_order(order)
+            if order_obj is not None:
+                row = {
+                    "order": order,
+                    "quality_locks": order_obj.quality_locks,
+                    "material_units": order_obj.material_count
+                }
+                if process is not None:
+                    _append_lot_info_for_order(row, order_obj, process, snap_obj, sp, site, process_plants, previous_processes, prev_proc_plants, target_plant=target_plant)
+                orders_table.append(row)
+    return lot if lot is not None else dash.no_update, lot if lot is not None else "", lot, options, orders, orders_table
 
 clientside_callback(
     ClientsideFunction(
@@ -670,7 +769,7 @@ def extract_scenario_json(_, snapshot: str|datetime|None, process: str|None, sol
     snapshot = DatetimeUtils.parse_date(snapshot)
     if not dash_authenticated(config) or process is None or snapshot is None or solution is None or solution in ("_SNAPSHOT_", "_DUE_DATE_"):
         return None
-    result: LotsOptimizationState = state.get_results_persistence().load(snapshot, process, solution)
+    result: LotsOptimizationState = state.get_results_persistence_aggregate().load(snapshot, process, solution)
     if result is None or result.best_solution is None:
         return None
     site = state.get_site()
@@ -811,7 +910,7 @@ def check_start_transfer(_, __, lot: str, new_lotname: str, orders: list[str] | 
 
 def start_transfer0(lot_id: str, new_lotname: str, orders: list[str], snapshot: datetime, process: str, solution: str, transfer_target: str, update_snap: bool, user: str|None) -> str|None:
     best_result: ProductionPlanning
-    result: LotsOptimizationState = state.get_results_persistence().load(snapshot, process, solution)
+    result: LotsOptimizationState = state.get_results_persistence_aggregate().load(snapshot, process, solution)
     if result is None or result.best_solution is None:  # TODO error msg
         return None
     best_result: ProductionPlanning = result.best_solution
@@ -824,8 +923,11 @@ def start_transfer0(lot_id: str, new_lotname: str, orders: list[str], snapshot: 
     if snapshot_obj is None:
         print("Snapshot object not found for lot transfer", snapshot)
         return None
+    # active True means the lot will not be considered as reschedulable
+    lot_update = {"status": 1, "active": True}
     if len(orders) != len(lot_obj.orders):
-        lot_obj = lot_obj.copy(update={"orders": orders})
+        lot_update["orders"] = orders
+    lot_obj = lot_obj.copy(update=lot_update)
     return transfer_internal(lot_obj, snapshot_obj, new_lotname, sink, update_snap, user)
 
 
@@ -849,7 +951,7 @@ def check_running_transfer(last_transferred_lot: str|None) -> tuple[bool, any]:
             err = lottransfer_thread.error()
             result = err if err is not None else lottransfer_thread.result()
             while len(lottransfer_results) > 10:
-                key = iter(lottransfer_results)
+                key = next(iter(lottransfer_results))
                 lottransfer_results.pop(key)
             lottransfer_results[lottransfer_thread.identifier()] = result
             lottransfer_thread = None
@@ -868,6 +970,20 @@ clientside_callback(
     Input("lotplanning-transfer-type", "data"),
     State("lotplanning-transfer-grid", "id"),
 )
+
+
+def _lot_info(lot: Lot) -> str:
+    result = f"{lot.id} [status={lot.status}, active={lot.active}"
+    if lot.status > 1 and lot.end_time is not None:
+        result += f", ends={DatetimeUtils.format(lot.end_time.astimezone(), use_zone=False)}"
+    if hasattr(lot, "priority"):
+        result += f", priority={getattr(lot, 'priority')}"
+    if lot.weight is not None:
+        result += f", weight={lot.weight:.2f} t"
+    if lot.comment is not None:
+        result += f", comment={lot.comment}"
+    result += "]"
+    return result
 
 
 class LotTransferThread(threading.Thread):

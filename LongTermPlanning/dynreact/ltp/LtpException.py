@@ -1,0 +1,2 @@
+class LtpException(BaseException):
+    pass

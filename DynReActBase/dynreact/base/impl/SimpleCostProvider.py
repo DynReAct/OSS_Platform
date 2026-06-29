@@ -49,13 +49,13 @@ class SimpleCostProvider(CostProvider):
 
     def update_transition_costs(self, plant: Equipment, current: Order | None, next: Order, status: EquipmentStatus, snapshot: Snapshot,
                                 new_lot: bool, current_material: Material | None = None, next_material: Material | None = None,
-                                orders_custom_priority: dict[str, int]|None=None) -> tuple[EquipmentStatus, float]:
+                                orders_custom_priority: dict[str, int]|None=None) -> tuple[EquipmentStatus, ObjectiveFunction]:
         current_id: str|None = None if current is None else current.id
         if status.current_order == "":
             status.current_order = None
         if (current is None and status.current_order is not None) or (current is not None and status.current_order != current_id):
             raise Exception("Invalid current order; expected " + str(status.current_order) + ", got " + str(current_id))
-        new_status = deepcopy(status)
+        new_status = deepcopy(status)   # FIXME use model_copy instead
         if current is not None:
             new_status.previous_order = current.id
         if current is None and status.previous_order is not None:
@@ -84,7 +84,8 @@ class SimpleCostProvider(CostProvider):
         new_status.planning.delta_weight = new_delta_weight
         new_status.planning.target_fct = new_status.planning.target_fct - self._weight_deviation_costs(status.planning.delta_weight) \
                 + self._weight_deviation_costs(new_delta_weight)
-        return new_status, new_status.planning.target_fct
+        costs = self.objective_function(new_status)
+        return new_status, costs
 
     def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment], snapshot: Snapshot,
                                        planning_period: tuple[datetime, datetime], min_due_date: datetime|None=None, current_material: list[Material] | None=None,

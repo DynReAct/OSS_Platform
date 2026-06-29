@@ -1,15 +1,18 @@
 import os
+from typing import Sequence
 
 from dynreact.base.LotSink import LotSink
 from dynreact.base.NotApplicableException import NotApplicableException
+from dynreact.base.PermissionManager import PermissionManager
 from dynreact.base.impl.PathUtils import PathUtils
-from dynreact.base.model import Site, Lot, Snapshot, ServiceMetrics, PrimitiveMetric
+from dynreact.base.model import Site, Lot, Snapshot
+from dynreact.base.monitoring import ServiceMetrics, PrimitiveMetric
 
 
 class FileLotSink(LotSink):
 
-    def __init__(self, uri: str, site: Site):
-        super().__init__(uri, site)
+    def __init__(self, uri: str, site: Site, permissions: PermissionManager):
+        super().__init__(uri, site, permissions)
         uri_lower = uri.lower()
         if not uri_lower.startswith("default+file:"):
             raise NotApplicableException("Unexpected URI for file file lot sink: " + str(uri))
@@ -39,6 +42,7 @@ class FileLotSink(LotSink):
 
     def transfer_new(self, lot: Lot,
                  snapshot: Snapshot,
+                 material: dict[str, Sequence[str]] | None = None,
                  external_id: str|None = None,
                  comment: str|None = None,
                  user: str|None = None):
@@ -62,6 +66,7 @@ class FileLotSink(LotSink):
     def transfer_append(self, lot: Lot,
                         start_order: str,
                         snapshot: Snapshot,
+                        material: dict[str, Sequence[str]] | None = None,
                         user: str|None = None):
         process = self._site.get_equipment(lot.equipment, do_raise=True).process
         FileLotSink._increase_stat(process, self._transfers)

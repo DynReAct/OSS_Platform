@@ -25,7 +25,7 @@ Issues = "https://github.com/DynReAct/OSS_Platform/issues"
 
 # See https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#setuptools-specific-configuration
 [tool.setuptools]
-packages = ["dynreact.lotcreation"]
+packages = ["dynreact.lotcreation", "dynreact.lotcreation.globaltsp"]
 package-dir = {"" = "."}
 
 [tool.setuptools.dynamic]

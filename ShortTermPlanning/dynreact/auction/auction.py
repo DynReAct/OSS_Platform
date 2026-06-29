@@ -1,57 +1,170 @@
-import sys, os
+"""Auction orchestration models and helpers for OSS_Platform/ShortTermPlanning/dynreact/auction/auction.
 
-class Auction:
+The module is documented in English to make the short-term planning
+workflow easier to maintain across OSS and RAS-specific integrations.
+"""
+
+from typing import Any, Dict, List
+
+from pydantic import BaseModel, Field
+from enum import Enum
+import sys, os
+import json, hashlib
+
+class JobStatus(str, Enum):
+    """Job status.
+    
+    This class belongs to the short-term planning integration layer. It
+    encapsulates state, configuration, or UI behavior used by the planning
+    workflow without changing the runtime semantics of the original module.
     """
-       This class is responsible of storing and handling information
-       related to the auction requested by the GUI system.
+    I = "Idle"
+    L = "Launched"
+    G = "Started"
+    R = "Running"
+    F = "Finished"
+    E = "Error"
+
+def hash_object(obj: Any) -> str:
+    """Serialize an object and return a stable SHA-256 hash string."""
+    obj_str = json.dumps(obj, sort_keys=True)
+    return hashlib.sha256(obj_str.encode()).hexdigest()
+
+class Auction(BaseModel):
+    """
+    Stores and handles information related to an auction requested by the GUI system.
+
+    This class manages the state of the auction, including selected materials,
+    equipment, job status, and calculation results.
 
     Attributes:
-       CodeId (str): String identifying a single auction reference.
-                     Any string with less of 15 characters is valid.
-                     However, better if white spaces are avoided.
+        code (str): Unique identifier for the auction reference.
+        snapshot (str): Snapshot identifier for the current state.
+        helper_text (str): UI display text indicating the current status.
+        auction_status (JobStatus): Current state of the job (Idle, Running, etc.).
+        msg (str): generic message or error string associated with the auction.
+        matype (str): Material type category (e.g., "Orders", "Coils").
+        mat_ass_type (str): Material assignment type category.
+        equip (List[str]): List of currently selected equipment/plant identifiers.
+        all_equip (List[Union[str, dict]]): List of all available equipment options.
+        all_objs (List[Union[str, dict]]): List of all available material objects.
+        smats (List[str]): List of selected materials (IDs).
+        lmats (List[str]): List of available 'Coil' materials (calculated).
+        omats (List[str]): List of available 'Order' materials (calculated).
+        anmats (List[Union[str, dict]]): List of 'no-resource' material options.
+        ass_n_mats (List[str]): Selected 'no-resource' materials.
+        amats (List[Union[str, dict]]): List of available assignment materials.
+        ass_mats (List[str]): Selected assignment materials.
+        resul (Dict[str, List[dict]]): Dictionary storing results keyed by equipment ID.
 
-    .. _Google Python Style Guide:
-       https://google.github.io/styleguide/pyguide.html
+    Reference:
+        Google Python Style Guide: https://google.github.io/styleguide/pyguide.html
     """
 
+    code: str = ""
+    snapshot: str = ""
+    helper_text: str = "Status of the auction: Not started."
+    auction_status: JobStatus = JobStatus.I
+    msg: str = ""
 
-    def __init__(self,CodeId:str):
-        """ 
-        Constructor function for the Auction class
+    matype: str = "Orders"
+    mat_ass_type: str = ""
 
-        :param str CodeId: Auction Identification String.
+    equip: List[str] = Field(default_factory=list)
+    all_equip: List[Any] = Field(default_factory=list)
 
-        :returns: None
+    all_objs: List[Any] = Field(default_factory=list)
+    smats: List[str] = Field(default_factory=list)
 
+    lmats: List[str] = Field(default_factory=list)
+    omats: List[str] = Field(default_factory=list)
+
+    anmats: List[Any] = Field(default_factory=list)
+    ass_n_mats: List[str] = Field(default_factory=list)
+
+    amats: List[Any] = Field(default_factory=list)
+    ass_mats: List[str] = Field(default_factory=list)
+
+    resul: Dict[str, List[dict[str, Any]]] = Field(default_factory=dict)
+
+    class Config:
+        """Config.
+        
+        This class belongs to the short-term planning integration layer. It
+        encapsulates state, configuration, or UI behavior used by the planning
+        workflow without changing the runtime semantics of the original module.
         """
-        self._launched     = 0
-        self._started      = 0
-        self._ended        = 0
-        self.code          = CodeId
-        self.matype        = 'Orders'
-        self._equip       = []
-        self._all_equip   = []
-        self._all_objs     = []
-        self._smats        = []
-        self._lmats        = self._omats = []
-        self._mat_ass_type = ''
-        self._amats        = []
-        self._ass_mats     = []
-        self._resul        = {}
+        use_enum_values = True
+        validate_assignment = True
 
-    def get_codeid(self):
-        """ 
-        Function returning the CodeId for the auction.
-
-        :returns: Auction Identification String.
-
-        :rtype: str
+    def set_params(self, htmscr: Any) -> None:
         """
+        Function parsing the html into UI attributes.
 
-        return(self.code)
+        :param obj htmscr: The html object with the settings selected by the user.
+        """
+        self.equip = htmscr.__getitem__('ag-resources').value
+        if len(htmscr.__getitem__('ag-resources').options) > 0:
+            self.all_equip = [j['value'] if isinstance(j, dict) else j for j in htmscr.__getitem__('ag-resources').options]
 
-    def set_materials(self,matype:str, plants:list):
-        """ 
+        if 'ag-matypes' in htmscr:
+            self.matype = htmscr.__getitem__('ag-matypes').value
+        if 'ag-ass-matypes' in htmscr:
+            self.mat_ass_type = htmscr.__getitem__('ag-ass-matypes').value
+
+        if len(htmscr.__getitem__('ag-materials').options) > 0:
+            self.all_objs = [j['value'] if isinstance(j, dict) else j for j in htmscr.__getitem__('ag-materials').options]
+        if len(htmscr.__getitem__('ag-materials').value) > 0:
+            self.smats = htmscr.__getitem__('ag-materials').value
+
+        if 'ag-no-resources' in htmscr:
+            if len(htmscr.__getitem__('ag-no-resources').options) > 0:
+                self.anmats = htmscr.__getitem__('ag-no-resources').options
+            if len(htmscr.__getitem__('ag-no-resources').value) > 0:
+                self.ass_n_mats = htmscr.__getitem__('ag-no-resources').value
+
+        if len(htmscr.__getitem__('ag-ass-materials').options) > 0:
+            self.amats = [j['value'] if isinstance(j, dict) else j for j in htmscr.__getitem__('ag-ass-materials').options]
+        if len(htmscr.__getitem__('ag-ass-materials').value) > 0:
+            self.ass_mats = htmscr.__getitem__('ag-ass-materials').value
+
+        self.lmats = []
+        self.omats = []
+
+        clean_all_objs = [x if isinstance(x, str) else str(x) for x in self.all_objs]
+
+        if self.matype == 'Coils':
+            self.lmats = list(set(clean_all_objs) - set(self.smats))
+        else:
+            self.omats = list(set(clean_all_objs) - set(self.smats))
+
+        vtxt = htmscr.__getitem__('ag-ref')
+        if 'value' in vtxt:
+            self.code = vtxt.value
+
+    def set_lists(self, rftxt: str, lmats: list[str], mtyp: str, smats: list[str]) -> None:
+        """
+        Function setting up the list of materials and plants relevant
+        for the auction.
+
+        :param str rftxt: Auction Identification String
+        :param list lmats: List of materials interesting to the Auction
+        :param str mtyp: Type of object being processed Coils/Orders
+        :param list smats: List of equipments interesting to the Auction
+        """
+        self.code = rftxt
+        self.matype = mtyp
+        self.smats = smats
+
+        if self.matype == 'Coils':
+            self.lmats = lmats
+            self.omats = []
+        else:
+            self.lmats = []
+            self.omats = lmats
+
+    def set_materials(self, matype: str, plants: list[str]) -> None:
+        """
         Function establishing the Auction parameters of
         materials and equipments.
 
@@ -59,221 +172,182 @@ class Auction:
         :param list plants: List of equipments involved in the Auction
         """
         self.matype = matype
-        self._equip = plants
-        return(None)
+        self.equip = plants
 
-    def set_ass_materials(self,matype:str, plants:list, ass_mats: str, amats:list):
-        """ 
+    def set_ass_materials(self, matype: str, plants: list[str], ass_mats: str, amats: list[Any]) -> None:
+        """
         Function establishing the Auction parameters of
         assigned materials and equipments.
 
         :param str matype: Either Coils or Orders
-        :param list rescs: List of equipments involved in the Auction
+        :param list plants: List of equipments involved in the Auction
         :param str ass_mats: To include assigned materials Yes/No
         :param list amats: List of assigned materials to be included
         """
         self.matype = matype
-        self._equip= plants
-        self._mat_ass_type = ass_mats
-        self._amats = amats
-        return(None)
+        self.equip = plants
+        self.mat_ass_type = ass_mats
+        self.amats = amats
 
-    def get_materials(self):
-        """ 
-        Function returning the Auction parameters of materials and equipments
-
-        :returns: Struct of matype (str): Either Coils or Orders, 
-            _equip (list): List of equipments involved in the Auction
-
-        :rtype: struct
+    def set_resul(self, results: Dict[str, List[dict[str, Any]]]) -> None:
         """
-        return({self.matype,self._equip})
+        Function establising the auction results
 
-    def set_params(self, htmscr):
+        :param dict results: Auction results.
         """
-        Function parsing the html into UI attributes.
+        normalized_results: Dict[str, List[dict[str, Any]]] = {}
 
-        :param obj htmscr: The html object with the settings selected by the user.
+        for equipment, jobs in results.items():
+            merged = {}
+            for job in jobs:
+                hash_job = hash_object(job)
+                if merged.get(hash_job) is None:
+                    merged[hash_job] = job
+            normalized_results[equipment] = list(merged.values())
+
+        self.resul = normalized_results
+
+    def set_status(self, job_status: JobStatus) -> None:
         """
-        self.matype = htmscr.__getitem__('ag-matypes').value
-        self._mat_ass_type = htmscr.__getitem__('ag-ass-matypes').value
-        self._equip= htmscr.__getitem__('ag-resources').value
-        if len(htmscr.__getitem__('ag-resources').options) > 0:
-            self._all_equip = [j['value'] for j in htmscr.__getitem__('ag-resources').options]
-        if len(htmscr.__getitem__('ag-materials').options) > 0:
-            self._all_objs = [j['value'] for j in htmscr.__getitem__('ag-materials').options]
-        if len(htmscr.__getitem__('ag-materials').value)>0:
-            self._smats   = htmscr.__getitem__('ag-materials').value
-        if len(htmscr.__getitem__('ag-ass-materials').options) > 0:
-            self._amats = [j['value'] for j in htmscr.__getitem__('ag-ass-materials').options]
-        if len(htmscr.__getitem__('ag-ass-materials').value)>0:
-            self._ass_mats   = htmscr.__getitem__('ag-ass-materials').value
-        vtxt         = htmscr.__getitem__('ag-ref')
-        self._lmats  = self._omats = []
-        if self.matype == 'Coils':
-            self._lmats  = list(set(self._all_objs) - set(self._smats))
-        else:
-            self._omats  = list(set(self._all_objs) - set(self._smats))
-        if 'value' in vtxt:
-            self.code= vtxt.value
-        return(None)
+        Function establising the current status for the auction
 
-    def get_params(self):
+        :param JobStatus job_status: Auction status according to the code
+        """
+        self.auction_status = job_status
+
+    def set_message(self,msg: Any) -> None:
+        """
+        Function establishing the message describing the current status
+
+        :param str msg: Status message.
+        """
+        self.msg = msg
+
+    def set_codeid(self, code: str) -> None:
+        """
+        Function to setup the code when it requires update
+
+        :param str code: Auction Identification String.
+        """
+        self.code = code
+
+    def get_params(self) -> Any:
         """
         Function recovering auction's parameters.
 
-        :returns: tuple(matype,plnts,all_plnts,objs,all_objs,reftxt,mat_ass_type)
+        :returns: tuple(matype,equip,all_equip,smats,all_objs,code,mat_ass_type,amats,ass_mats)
            WHERE
-           str     matype    is the type of object being processed Coils/Orders.
-           list    _equip    is the list of selected equipments.
-           list    all_equip is the list of all equipments.
-           list    objs      is the list of selected materials to be discarded.
-           list    allobjs   is the list of all materials.
-           str     reftxt    is the auction codeId.
-           str     mat_ass_type is the reference Yes/No for assigned materials
-           list    amats     is the list of assigned materials
-           list    ass_mats  is the list of selected assigned materials
+           str      matype    is the type of object being processed Coils/Orders.
+           list     equip     is the list of selected equipments.
+           list     all_equip is the list of all equipments.
+           list     smats     is the list of selected materials.
+           list     all_objs  is the list of all materials.
+           str      code      is the auction codeId.
+           str      mat_ass_type is the reference Yes/No for assigned materials.
+           list     amats     is the list of assigned materials.
+           list     ass_mats  is the list of selected assigned materials.
         """
-        res = (self.matype,self._equip,self._all_equip,self._smats, \
-                self._all_objs,self.code, self._mat_ass_type,self._amats,self._ass_mats)
-        return(res)
+        return (self.matype, self.equip, self.all_equip, self.smats, self.all_objs, self.code, self.mat_ass_type, self.amats, self.ass_mats)
 
-
-    def set_codeid(self,code: str):
-        """ 
-        Function to setup the code when it requires update
-
-        :param str CodeId: Auction Identification String.
+    def get_lmats(self) -> List[str]:
         """
-        self.code = code
-        return(None)
-
-    def set_lists(self,rftxt:str, lmats:list,mtyp:str, smats:list):
-        """ 
-        Function setting up the list of materials and plants relevant
-        for the auction.
-
-        :param list lmats: List of materials interesting to the Auction
-        :param list omats: List of materials' orders interesting to the Auction
-        :param list smats: List of equipments interesting to the Auction
-        """
-        self.code = rftxt
-        self.matype = mtyp
-        if self.matype == 'Coils':
-            self._lmats = lmats
-            self._omats = []
-        else:
-            self._omats = lmats
-            self._lmats = []
-        self._smats = smats
-        return(None)
-
-    def get_lmats(self):
-        """ 
         Function returning the list of materials of interest for this Auction
 
         :returns: List of materials interesting the Auction.
 
         :rtype: list
         """
-        return(self._lmats)
+        return self.lmats
 
-    def get_omats(self):
-        """ 
-        Function returning the list of materials' orders of interest 
+    def get_omats(self) -> List[str]:
+        """
+        Function returning the list of materials' orders of interest
         for this Auction.
 
         :returns: List of materials' orders interesting the Auction.
 
         :rtype: list
         """
-        return(self._omats)
+        return self.omats
 
-    def get_smats(self):
-        """ 
-        Function returning the list of equipments of interest for this Auction
+    def get_smats(self) -> List[str]:
+        """
+        Function returning the list of materials' orders of interest
+        for this Auction.
 
-        :returns: List of equipments interesting the Auction.
+        :returns: List of materials' orders interesting the Auction.
 
         :rtype: list
         """
-        return(self._smats)
-    
-    def get_amats(self):
-        """ 
+        return self.smats
+
+    def get_amats(self) -> List[Any]:
+        """
         Function returning the list of equipments of interest already assigned for this Auction
 
         :returns: List of equipments already assigned interesting the Auction.
 
         :rtype: list
         """
-        return(self._amats)        
+        return self.amats
 
-    def get_equipments(self):
-        """ 
-        Function returning the list of equipments 
+    def get_equipments(self) -> List[str]:
+        """
+        Function returning the list of equipments
 
         :returns: List of equipments
         :rtype: list
         """
-        return(self._all_equip)
+        return self.equip
 
+    def get_codeid(self) -> Any:
+        """
+        Function returning the CodeId for the auction.
 
-    def get_resul(self):
-        """ 
+        :returns: Auction Identification String.
+
+        :rtype: str
+        """
+        return self.code
+
+    def get_resul(self) -> Any:
+        """
         Function returning the results
 
-        :returns: Return the resutls
+        :returns: Return the results
         :rtype: dict
         """
-        return(self._resul)
+        return self.resul
 
-
-    def set_status(self,start):
-        """ 
-        Function establising the current status for the auction
-
-        :param str start: Auction status according to the following code
-                         'L' => Launched, 'G' => Started, 'E' => Ended.
+    def get_status(self) -> Any:
         """
-        if start == 'L':
-           self._launched = 1
-        if start == 'G':
-           self._started  = 1
-        if start == 'E':
-           self._ended    = 1
-        return(None)
-
-
-    def get_status(self):
-        """ 
         Function returning the status according to a scale
         distinguishing when the auction is not launched, launched,
         started or ended.
 
-        :returns: Status on base 10.
+        :returns: JobStatus according to the code
 
-        :rtype: int
+        :rtype: JobStatus
         """
-        return(100*self._ended+10*self._started+self._launched)
+        return self.auction_status
 
-
-    def set_message(self,msg):
-        """ 
-        Function establishing the message describing the current status
-
-        :param str msg: Status message.
+    def get_message(self) -> Any:
         """
-        self._msg = msg
-        return(None)
-
-
-    def get_message(self):
-        """ 
         Function recovering the message describing the current status
 
         :returns: message to be returned.
 
         :rtype: str
         """
-        return(self._msg)
+        return self.msg
+
+    def get_materials(self) -> Any:
+        """
+        Function returning the Auction parameters of materials and equipments
+
+        :returns: Struct of matype (str): Either Coils or Orders,
+            equip (list): List of equipments involved in the Auction
+
+        :rtype: struct
+        """
+        return {"matype": self.matype, "equip": self.equip}

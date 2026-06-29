@@ -14,6 +14,8 @@ class TabuParams:
     "Number of TabuSearch Iterations, if not explicitly specified via the run(max_iterations=...) parameter."
     Expiration: int = 10
     "Tabu List expiration"
+    ExpirationAfterShuffle: int = 4
+    "Tabu List expiration after reshuffle"
     NMinUntilShuffle: int = 5
     "number of local minima to be reached until shuffeling"
     NParallel: int = min(mp.cpu_count(), 8)
@@ -22,6 +24,8 @@ class TabuParams:
     "Maximum transition cost within lot; cf. new lot costs in cost provider (default: 3, for SimpleCostProvider)"
     CostNaN: float = 50.0
     "default if cost can not be calculated"
+    init_order_on_start: bool = True
+    "Test setting"
     tsp_solver_global_costs: Literal["ortools", "globalbb", "default"] = "default"
     """
     The algorithm to be used for sorting of orders assigned to one equipment. This is a traveling salesman problem,
@@ -69,14 +73,20 @@ class TabuParams:
     """
     Pseudo-random seed for tests.  
     """
+    strict: bool = False
+    """
+    In strict mode solutions are checked for consistency in every iteration
+    """
 
     def __init__(self,
                  ntotal: int|None = None,
                  Expiration: int|None = None,
+                 ExpirationAfterShuffle: int|None = None,
                  NMinUntilShuffle: int|None = None,
                  NParallel: int|None = None,
                  TAllowed: float|None = None,
                  CostNaN: float|None = None,
+                 init_order_on_start: bool|None=None,
                  tsp_solver_global_costs: Literal["ortools", "globalbb", "default"]|None = None,
                  tsp_solver_global_bound_factor: float | None = None,
                  tsp_solver_global_timeout: float|None = None,
@@ -84,7 +94,8 @@ class TabuParams:
                  tsp_solver_final_timeout: float|None = None,
                  tsp_solver_ortools_timeout: int|None = None,
                  max_tsps_per_worker: int|None = None,
-                 rand_seed: int|None = None
+                 rand_seed: int|None = None,
+                 strict: bool|None = None
     ):
         dotenv.load_dotenv()
         if ntotal is None:
@@ -95,6 +106,9 @@ class TabuParams:
             Expiration = int(os.getenv("TABU_LIST_EXPIRATION", TabuParams.Expiration))
         self.Expiration = Expiration
         "Tabu List expiration"
+        if ExpirationAfterShuffle is None:
+            ExpirationAfterShuffle = int(os.getenv("TABU_LIST_EXPIRATION_AFTER_SHUFFLE", TabuParams.ExpirationAfterShuffle))
+        self.ExpirationAfterShuffle = ExpirationAfterShuffle
         if NMinUntilShuffle is None:
             NMinUntilShuffle = int(os.getenv("TABU_LOCAL_MIN_UNTIL_SHUFFEL") or os.getenv("TABU_LOCAL_MIN_UNTIL_SHUFFLE") or TabuParams.NMinUntilShuffle)
         self.NMinUntilShuffle = NMinUntilShuffle
@@ -111,6 +125,18 @@ class TabuParams:
             CostNaN = float(os.getenv("TABU_COST_NAN", TabuParams.CostNaN))
         self.CostNaN = CostNaN
         "default if cost cannot be calculated"
+        if init_order_on_start is None:
+            init_order_on_start0 = os.getenv("INIT_ORDER_ON_START")
+            if init_order_on_start0 is not None:
+                init_order_on_start0 = init_order_on_start0.lower()
+                init_order_on_start = init_order_on_start0 != "0" and init_order_on_start0 != "false"
+            else:
+                init_order_on_start = TabuParams.init_order_on_start
+        self.init_order_on_start = init_order_on_start
+        if strict is None:
+            strict0 = os.getenv("TABU_STRICT_MODE")
+            strict = strict0 is not None and len(strict0.strip()) > 0
+        self.strict = strict
         if tsp_solver_global_costs is None:
             tsp_solver_global_costs = os.getenv("TABU_GLOBAL_COSTS_SOLVER", TabuParams.tsp_solver_global_costs).lower().strip()
             if tsp_solver_global_costs not in ("ortools", "globalbb", "default"):

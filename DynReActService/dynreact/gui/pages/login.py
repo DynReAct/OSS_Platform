@@ -1,7 +1,7 @@
 import dash
 from dash import html, dcc, callback, Input, Output, State
 
-from dynreact.app import config
+from dynreact.app import config, state
 from dynreact.auth.authentication import authenticate
 from dynreact.gui.localization import Localization
 
@@ -33,13 +33,25 @@ def layout(*args, **kwargs):
     prevent_initial_call=True,  # is this a problem maybe?
 )
 def login_button_click(n_clicks, username: str, password: str, lang: str):
+    login_failed_msg = None
     if username is not None and authenticate(config, username, password):
-        from flask_login import login_user
-        from dynreact.gui.pages.session_state import User
-        login_user(User(username))
-        # redirect
-        return None, "/dash"  # "Login successful", "/dash"
-    translation: dict[str, str] | None = Localization.get_translation(lang, translations_key)
-    login_failed_msg = Localization.get_value(translation, "login_failed", "Login failed")
+        success = True
+        if config.auth_view_permission is not None:
+            perm = config.auth_view_permission
+            if isinstance(perm, str):
+                perm = [perm]
+            success = any(state.get_permission_manager().check_permission(p, user=username) for p in perm)
+            if not success:
+                login_failed_msg = f"User {username} does not have the view permission."
+        if success:
+            from flask_login import login_user
+            from dynreact.gui.pages.session_state import User
+            success = login_user(User(username))
+            # redirect
+            if success:
+                return None, "/dash"  # "Login successful", "/dash"
+    if login_failed_msg is None:
+        translation: dict[str, str] | None = Localization.get_translation(lang, translations_key)
+        login_failed_msg = Localization.get_value(translation, "login_failed", "Login failed")
     return login_failed_msg, None
 

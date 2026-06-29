@@ -54,6 +54,84 @@ class JsUtils {
          return Number.isFinite(parsed) ? (isMinus ? -parsed : parsed) : defaultHours;
     }
 
+    // FIXME copied from DynReActViz, targeted for removal
+    static parseDuration(duration) {
+        let state = -1;
+        const dur = {};
+        let currentValue = "";
+        for (let idx=0; idx<duration.length; idx++) {
+            const char = duration.charAt(idx);
+            if (char.trim() === "")  // ignore whitespace
+                continue;
+            if (state === -1) {
+                if (char !== "P")
+                    throw new Error("Unexpected character at position " + idx + " in duration string " + duration);
+                state += 1;
+                continue;
+            }
+            const isNumber = char >= "0" && char <= "9";
+            if (!isNumber) {
+                if (state <= 0 && char !== "T") {
+                    throw new Error("Invalid duration " + duration);
+                }
+                const newState = char in JsUtils.#DURATION_CODES ? JsUtils.#DURATION_CODES[char] : char === "M" ? (state >= 8 ? 12 : 4) : undefined;
+                if (newState === undefined)
+                    throw new Error("Invalid duration " + duration + "; unknown code \"" + char + "\"");
+                if (newState <= state)
+                    throw new Error("Invalid duration " + duration + "; invalid order");
+                if (char === "T") { // special character
+                    if (currentValue !== "")
+                        throw new Error("Invalid duration " + duration);
+                    state = newState;
+                    continue;
+                }
+                if (currentValue === "")
+                    throw new Error("No duration provided for key " + char + " in " + duration);
+                const value = parseInt(currentValue);
+                const field = char in JsUtils.#DURATION_FIELDS ? JsUtils.#DURATION_FIELDS[char] : state >= 8 ? "minutes" : "months";  // "M" is duplicate
+                dur[field] = value;
+                state = newState;
+                currentValue = "";
+            } else {
+                if (currentValue === "")
+                    state += 1;
+                currentValue += char;
+
+            }
+        }
+        if (currentValue !== "")
+            throw new Error("Invalid duration " + duration + ", missing closing character");
+        return dur;
+    }
+
+    // FIXME copied from DynReActViz, targeted for removal
+    static #DURATION_CODES = Object.freeze({Y: 2, D: 6, T: 8, H: 10, S: 14});
+    static #DURATION_FIELDS = Object.freeze({Y: "years", D: "days", H: "hours", S: "seconds"});
+    static #DURATION_KEYS = Object.freeze(["years", "months", "days", "hours", "minutes", "seconds"]);
+    static toMillis(duration) {
+        if (typeof duration === "string")
+            duration = JsUtils.parseDuration(duration);
+        let days = 0;
+        if (duration.years !== undefined)
+            days += 365 * duration.years;
+        if (duration.months !== undefined)
+            days += 30 * duration.months;
+        if (duration.weeks !== undefined)
+            days += 7 * duration.weeks;
+        if (duration.days !== undefined)
+            days += duration.days;
+        let millis = days * 86400000;
+        if (duration.hours !== undefined)
+            millis += 3_600_000 * duration.hours;
+        if (duration.minutes !== undefined)
+            millis += 60_000 * duration.minutes;
+        if (duration.seconds !== undefined)
+            millis += 1000 * duration.seconds;
+        if (duration.millis !== undefined)
+            millis += duration.millis;
+        return millis;
+    }
+
     static clear(element) {
         while (element?.firstChild)
             element.firstChild.remove();
@@ -100,6 +178,40 @@ class JsUtils {
         a.setAttribute("download", fileName);
         a.click();
         URL.revokeObjectURL(url);
+    }
+
+    /**
+    * Sets the default_share attribute for material classes, potentially adjusted for excluded material
+    */
+    static defaultMaterialSharesByCategory(cats /*: Array<MaterialCategory> */, excludedMaterial /*: Array<MaterialClass>|undefined */) /* => Array<MaterialCategory> */ {
+        const results /*: Array<MaterialCategory> */ = [];
+        for (const cat of catsIncluded) {
+            const shareByMat = Object.fromEntries(cat.classes.filter(cl => cl.default_share > 0).map(cl => [cl.id, cl.default_share]));
+            const sumShares = Object.values(shareByMat).reduce((a,b) => a+b, 0);
+            const defaultClass = cat.classes.find(cl => cl.is_default && !(cl.default_share > 0));
+            if (defaultClass)
+                shareByMat[defaultClass.id] = Math.max(1-sumShares, 0);
+            if (excludedMaterial) {
+                missingShare = Object.entries(shareByMat).filter(([mat, share]) => excludedMaterial.indexOf(mat) >= 0).reduce((a,b)=>a+b, 0);
+                if (missingShare > 0) {
+                    if (missingShare >= 1-1e-4) {
+                         allMats = cat.classes.filter(cl => excludedMaterial.indexOf(cl.id) < 0);
+                         if (allMats.length === 0) {
+                            shareByMat = {};
+                         } else {
+                            shareByMat = Object.fromEntries(allMats.map(mat => [mat, 1/allMats.length]));
+                         }
+                    } else {
+                        shareByMat = Object.fromEntries(Object.entries(shareByMat)
+                            .filter(([mat, value]) => excludedMaterial.indexOf(mat) < 0)
+                            .map(([mat, value]) => [mat, value / (1-missingShare)]));
+                    }
+                }
+            }
+            const newCat = {...cat, classes: cat.classes.filter(cl => excludedMaterial.indexOf(cl.id) < 0).map(cl => { return {...cl, default_share: shareByMat[cl.id] || 0}; })};
+            results.push(newCat);
+        }
+        return results;
     }
 
 }

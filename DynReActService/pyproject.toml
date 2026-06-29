@@ -32,26 +32,31 @@ auth-test = "dynreact.cli:auth_test"
 create-lots = "dynreact.cli:create_lots"
 eligible-orders = "dynreact.cli:eligible_orders"
 evaluate-lot = "dynreact.cli:evaluate_lot"
+evaluate-split-orders = "dynreact.cli:evaluate_split_orders"
 mtp-benchmark = "dynreact.cli:mtp_benchmark"
 mtp-scenario = "dynreact.cli:mtp_scenario"
 lot-sinks = "dynreact.cli:lot_sinks"
+planned-processing-time = "dynreact.cli:planned_processing_time"
 planning-horizon = "dynreact.cli:planning_horizon"
-run-ltp = "dynreact.cli:run-ltp"
+read-history = "dynreact.cli:read_history"
+run-ltp = "dynreact.cli:run_ltp"
+run-mtp = "dynreact.cli:run_mtp"
 show-gantt = "dynreact.cli:show_gantt"
 show-material = "dynreact.cli:show_material"
 show-orders = "dynreact.cli:show_orders"
 show-shifts = "dynreact.cli:show_shifts"
+show-snapshots = "dynreact.cli:show_snapshots"
 transition-costs = "dynreact.cli:transition_costs"
 transfer-lot = "dynreact.cli:transfer_lot"
 
 # See https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#setuptools-specific-configuration
 [tool.setuptools]
-packages = ["dynreact", "dynreact.auth", "dynreact.service", "dynreact.gui", "dynreact.gui.pages"]
-# JOM addin 20241101 # TODO
-#packages = ["dynreact", "dynreact.auth", "dynreact.service", "dynreact.gui", "dynreact.gui.pages", "dynreact.gui.pages.auction"]
+packages = ["dynreact", "dynreact.auth", "dynreact.cost", "dynreact.service", "dynreact.gui", "dynreact.gui.pages"]
 package-dir = {"" = "."}
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
-optional-dependencies = { file = ["requirements-dev.txt"]}
+# optional-dependencies = { file = ["requirements-dev.txt"]}
 
+[tool.setuptools.dynamic.optional-dependencies]
+dev = {file = ["requirements-dev.txt"]}

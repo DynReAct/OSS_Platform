@@ -61,7 +61,8 @@ class SampleCostProvider(CostProvider):
         self._plant_ids: list[int] = [p.id for p in site.equipment]
         self._config = config if config is not None else CostConfig()
 
-    def transition_costs(self, plant: Equipment, current: Order[SampleMaterial], next: [SampleMaterial], current_material: Material | None = None, next_material: Material | None = None) -> float:
+    def transition_costs(self, plant: Equipment, current: Order[SampleMaterial], next: [SampleMaterial], current_material: Material | None = None,
+                         next_material: Material | None = None) -> float:
         process: str = plant.process
         if current is None or next is None or current == next:
             return 0
@@ -105,7 +106,7 @@ class SampleCostProvider(CostProvider):
 
     # This cannot be determined by the cost service only, because it requires the re-calculation of lots
     def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot, new_lot: bool,
-                                current_material: Material | None = None, next_material: Material | None = None) -> tuple[EquipmentStatus, ObjectiveFunction]:
+                                current_material: Material | None = None, next_material: Material | None = None, **kwargs) -> tuple[EquipmentStatus, ObjectiveFunction]:
         """
         Calculate an incremental update to the cost function
         """
@@ -195,7 +196,7 @@ class SampleCostProvider(CostProvider):
     def evaluate_equipment_assignments(self, equipment_targets: EquipmentProduction, process: str, assignments: dict[str, OrderAssignment],
                                        snapshot: Snapshot, planning_period: tuple[datetime, datetime],
                                        min_due_date: datetime|None=None, current_material: list[Material] | None=None,
-                                       track_structure: bool=False) -> EquipmentStatus:
+                                       track_structure: bool=False, **kwargs) -> EquipmentStatus:
         plant_id = equipment_targets.equipment
         target_weight=equipment_targets.total_weight
         target_lot_size = equipment_targets.lot_weight_range

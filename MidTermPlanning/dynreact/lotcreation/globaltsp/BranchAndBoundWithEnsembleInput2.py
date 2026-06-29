@@ -283,7 +283,7 @@ class _BBEnsembleScenario2(Generic[T]):
         start_time = time.time()
         generators = [s.run(self._batch_size, self._best_costs) for s in self._sub_solvers]
         start = True
-        costs_by_solver = list(self._init_costs)
+        costs_by_solver = [max(c, 0.01) for c in self._init_costs]
         while len(generators) > 0:
             for_removal = []
             # update batch size in each iteration

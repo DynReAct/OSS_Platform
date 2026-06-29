@@ -1,24 +1,84 @@
+"""Common short-term planning utilities for OSS_Platform/ShortTermPlanning/dynreact/shortterm/common/handler.
+
+The module is documented in English to make the short-term planning
+workflow easier to maintain across OSS and RAS-specific integrations.
+"""
+
+from typing import Any
 import json
 import os
 import shlex
 import docker
+from datetime import datetime
 
-from dynreact.shortterm.common import TOPIC_CALLBACK, TOPIC_GEN
+from dynreact.shortterm.common import KeySearch
+
+
+def _namespaced_tag(tag: str | None) -> str | None:
+    """Scope Docker owner labels to the active Jenkins/runtime context when available."""
+    if not tag:
+        return tag
+    context_prefix = (os.environ.get("CONTAINER_NAME_PREFIX") or "").strip()
+    if not context_prefix:
+        return tag
+    return f"{context_prefix}:{tag}"
+
+
+def _container_state_details(container: Any) -> dict[str, Any]:
+    """Extract the most relevant Docker state details for diagnostics."""
+    state = getattr(container, "attrs", {}).get("State", {}) or {}
+    exit_code = state.get("ExitCode")
+    return {
+        "exit_code": exit_code if exit_code not in (None, "") else None,
+        "oom_killed": bool(state.get("OOMKilled", False)),
+        "error": state.get("Error") or None,
+        "started_at": state.get("StartedAt") or None,
+        "finished_at": state.get("FinishedAt") or None,
+    }
+
+
+def _container_status_reason(container_info: dict[str, Any]) -> str:
+    """Render a short human-readable explanation for one tracked container."""
+    reason_bits = []
+    if container_info.get("oom_killed"):
+        reason_bits.append("oom-killed")
+    exit_code = container_info.get("exit_code")
+    if exit_code is not None:
+        reason_bits.append(f"exit_code={exit_code}")
+    error = container_info.get("error")
+    if error:
+        reason_bits.append(f"error={error}")
+    finished_at = container_info.get("finished_at")
+    if finished_at and finished_at != "0001-01-01T00:00:00Z":
+        reason_bits.append(f"finished_at={finished_at}")
+    if not reason_bits:
+        return container_info.get("status", "unknown")
+    return f"{container_info.get('status', 'unknown')}: " + ", ".join(reason_bits)
 
 
 class DockerManager:
-    def __init__(self, tag="default_tag", max_allowed = -1):
+    """Docker manager.
+    
+    This class belongs to the short-term planning integration layer. It
+    encapsulates state, configuration, or UI behavior used by the planning
+    workflow without changing the runtime semantics of the original module.
+    """
+    def __init__(self, tag: Any="default_tag", max_allowed: Any = -1) -> None:
         """
         Initialize Docker client and set a tag to track owned containers.
 
         :param tag: Unique tag to identify containers launched by this instance.
         """
         self.client = docker.from_env()
-        self.tag = tag
+        self.tag = _namespaced_tag(tag)
         self.max_allowed = max_allowed
         self.tracked_containers = []
 
-    def launch_container(self, name:str, agent:str, mode:str, params:dict, auto_remove=False):
+    @staticmethod
+    def _normalize_container_name(name: str) -> str:
+        return name[1:] if name.startswith("/") else name
+
+    def launch_container(self, name:str, agent:str, mode:str, params:dict, envs: dict[str, str] | None = None, auto_remove: Any=False) -> Any:
         """
         Launch a new Docker container and tag it with the instance's unique identifier.
 
@@ -26,6 +86,7 @@ class DockerManager:
         :param agent: Name of the agent (log, equipment, material9.
         :param mode: Is the agent running a replica or the manager.
         :param params: Dictionary of python params.
+        :param envs: Dictionary of environment variables.
         :param auto_remove: Remove container after execution
         :return: The container object.
         """
@@ -35,46 +96,100 @@ class DockerManager:
         try:
 
             # Get updated list of containers before launching
-            self.list_tracked_containers()
+            all_containers = self.list_tracked_containers()
 
-            command_str = f"python -m shortterm {agent} {mode} {dict_to_cli_params(params)}".strip()
+            # command_str = f"python -m shortterm {agent} {mode} {dict_to_cli_params(params)}".strip()  # Replaced by JOM 20/02/2026
+            command_str = f"python -m dynreact.shortterm.agents {agent} {mode} {dict_to_cli_params(params)}".strip()
 
             print(f"Launching with {command_str}")
 
+            container_prefix = os.environ.get('CONTAINER_NAME_PREFIX')
+
             if self.max_allowed == -1 or (len(self.tracked_containers) + 1) <= self.max_allowed:
-                container = self.client.containers.run(
-                    image=f"{os.environ.get("LOCAL_REGISTRY", "")}dynreact-shortterm:{os.environ.get("IMAGE_TAG", "latest")}",
-                    name=f"{agent.upper()}_{name}",
+
+                environment_variables = {
+                  "IS_DOCKER": "true",
+                  "KAFKA_TOPIC_PREFIX": KeySearch.search_for_value("KAFKA_TOPIC_PREFIX"),
+                  "TOPIC_GEN": KeySearch.search_for_value("TOPIC_GEN"),
+                  "TOPIC_CALLBACK": KeySearch.search_for_value("TOPIC_CALLBACK")
+                }
+
+                inherited_env_keys = (
+                    "CONTAINER_NAME_PREFIX",
+                    "DOCKER_NETWORK",
+                    "IMAGE_NAME",
+                    "IMAGE_TAG",
+                    "KAFKA_IP",
+                    "KAFKA_TOPIC_PREFIX",
+                    "LOCAL_REGISTRY",
+                    "LOG_FILE_PATH",
+                    "PERF_URL",
+                    "REST_URL",
+                    "SHORT_TERM_PLANNING_PARAMS",
+                    "SNAPSHOT_VERSION",
+                    "TRANSPORT_TIMES_URL",
+                )
+
+                for key in inherited_env_keys:
+                    value = os.environ.get(key)
+                    if value:
+                        environment_variables[key] = value
+
+                replica_variables = params.get("variables") if isinstance(params, dict) else None
+                if isinstance(replica_variables, dict):
+                    for key in inherited_env_keys:
+                        value = replica_variables.get(key)
+                        if value not in (None, ""):
+                            environment_variables[key] = str(value)
+
+                if envs:
+                    environment_variables.update(envs)
+
+                name = f"{container_prefix + '_' if container_prefix else ''}{agent.upper()}_{name}"
+                docker_network = os.environ.get("DOCKER_NETWORK")
+
+                if any(d.get('name') == name for d in all_containers):
+                    print("Container with the same name found, replacing it")
+                    self.clean_container(name)
+
+                run_kwargs = dict(
+                    image=f"{os.environ.get('LOCAL_REGISTRY', '')}{os.environ.get('IMAGE_NAME', 'dynreact-oss-shortterm')}:{os.environ.get('IMAGE_TAG', 'latest')}",
+                    name=name,
                     detach=True,
                     auto_remove=auto_remove,
                     command=command_str,
-                    environment={
-                      "IS_DOCKER": "true",
-                      "TOPIC_GEN": TOPIC_GEN,
-                      "TOPIC_CALLBACK": TOPIC_CALLBACK
-                    },
-                    entrypoint="/usr/local/bin/entrypoint.sh",
+                    environment=environment_variables,
                     volumes={
                         "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
                         "/var/log/dynreact-logs": {
                             "bind": "/var/log/dynreact-logs",
-                            "mode": "rw,rshared",
+                            "mode": "rw",
                         }
                     },
-                    labels={"owner": self.tag} if self.tag else []  # Use a label to track ownership
+                    labels={"owner": self.tag} if self.tag else {}  # Use a label to track ownership
                 )
-                self.tracked_containers.append({
+
+                if docker_network:
+                    run_kwargs["network"] = docker_network
+
+                container = self.client.containers.run(**run_kwargs)
+                container.reload()
+                container_info = {
                     "id": container.id,
                     "status": container.status,
-                })
+                    "name": container.name,
+                }
+                container_info.update(_container_state_details(container))
+                self.tracked_containers.append(container_info)
                 print(f"Container '{container.name if name else container.short_id}' launched successfully!")
                 return container
             else:
                 print("Unable to provision container, container limit reached!")
         except Exception as e:
-            raise Exception(f"Error launching container: {e}")
+            dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
+            raise Exception(f"{dt} | ERROR: Error launching container: {e}")
 
-    def stop_tracked_containers(self):
+    def stop_tracked_containers(self) -> None:
         """
         Stop and remove all containers launched by this instance (using the tag).
         """
@@ -94,25 +209,71 @@ class DockerManager:
         except Exception as e:
             print(f"Error stopping tracked containers: {e}")
 
-    def clean_containers(self):
+    def clean_containers(self) -> None:
         """
         Stop and remove all containers launched by this instance (using the tag).
         """
         try:
-            result  = self.client.containers.prune(filters={"label": f"owner={self.tag}"} if self.tag else {})
-            deleted_containers = result.get("ContainersDeleted", [])
+            containers = self.client.containers.list(
+                filters={"label": f"owner={self.tag}"} if self.tag else {},
+                all=True
+            )
 
-            if not deleted_containers:
+            if not containers:
                 print("No tracked containers found.")
                 return
 
-            for container_id in deleted_containers:
-                print(f"Container '{container_id}' removed.")
+            for container in containers:
+                container.reload()
+                container_info = {
+                    "id": container.id,
+                    "status": container.status,
+                    "name": container.name,
+                }
+                container_info.update(_container_state_details(container))
+                if container.status == "running":
+                    container.stop()
+                container.remove(force=True)
+                print(f"Container '{container.name}' removed ({_container_status_reason(container_info)}).")
 
         except Exception as e:
             print(f"Error cleaning containers: {e}")
 
-    def stop_tracked_container(self, container_id: str):
+    def clean_container(self, container_name: str) -> None:
+        """
+        Stop and remove all containers launched by this instance (using the tag).
+
+        :param container_name: Container name
+        :return: The container object.
+        """
+        try:
+            normalized_name = self._normalize_container_name(container_name)
+            matched_containers = [
+                container for container in self.client.containers.list(all=True)
+                if container.name is not None and self._normalize_container_name(container.name) == normalized_name
+            ]
+
+            if not matched_containers:
+                print("No tracked containers found.")
+                return
+
+            for container in matched_containers:
+                container.reload()
+                container_info = {
+                    "id": container.id,
+                    "status": container.status,
+                    "name": container.name,
+                }
+                container_info.update(_container_state_details(container))
+                if container.status == "running":
+                    container.stop()
+                container.remove(force=True)
+                print(f"Container '{container.name}' removed ({_container_status_reason(container_info)}).")
+
+        except Exception as e:
+            print(f"Error cleaning containers: {e}")
+
+    def stop_tracked_container(self, container_id: str) -> None:
         """
         Stop and remove one container by container ID.
         """
@@ -131,7 +292,7 @@ class DockerManager:
         except Exception as e:
             print(f"Error stopping tracked container: {e}")
 
-    def list_tracked_containers(self):
+    def list_tracked_containers(self) -> Any:
         """
         List all running containers that belong to this instance.
 
@@ -147,22 +308,40 @@ class DockerManager:
         else:
             print(f"\nTracked Containers for tag '{self.tag}':")
             for container in containers:
-                self.tracked_containers.append({
+                container.reload()
+                container_info = {
                     "id": container.id,
                     "status": container.status,
-                })
-                print(f"ID: {container.short_id} | Name: {container.name} | Status: {container.status}")
+                    "name": container.name
+                }
+                container_info.update(_container_state_details(container))
+                self.tracked_containers.append(container_info)
+                print(
+                    f"ID: {container.short_id} | Name: {container.name} | "
+                    f"Status: {_container_status_reason(container_info)}"
+                )
 
         return self.tracked_containers
 
-def dict_to_cli_params(params):
+def dict_to_cli_params(params: Any) -> Any:
+    """Dict to cli params.
+    
+    This function is part of the short-term planning workflow and keeps
+    the existing runtime behavior while documenting the public contract.
+    
+    Args:
+        params: Input value for the `params` parameter.
+    
+    Returns:
+        The value produced by the underlying planning, UI, or test helper logic.
+    """
     cli_params = []
     for key, value in params.items():
         if isinstance(value, bool):
             if value:  # Include flag only if True
                 cli_params.append(f"--{key}")
         elif isinstance(value, list):  # Handle list values
-            cli_params.append(f"--{key} {" ".join(value)}")
+            cli_params.append(f"--{key} {' '.join(map(str, value))}")
         elif isinstance(value, dict):  # Handle dict values
             json_string = json.dumps(value)
             cli_params.append(f"--{key} {shlex.quote(json_string)}")

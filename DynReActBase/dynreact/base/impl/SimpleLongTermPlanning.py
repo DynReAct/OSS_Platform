@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta
+from typing import Sequence
 
 from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import LongTermTargets, MidTermTargets, Site, Equipment, ProductionTargets, EquipmentProduction, \
-    StorageLevel, EquipmentAvailability
+from dynreact.base.model import LongTermTargets, MidTermTargets, Site, Equipment, ProductionTargets, \
+    EquipmentProduction, StorageLevel, EquipmentAvailability, Lot
 
 
 class SimpleLongTermPlanning(LongTermPlanning):
@@ -16,9 +17,9 @@ class SimpleLongTermPlanning(LongTermPlanning):
 
     def __init__(self, uri: str, site: Site):
         super().__init__(uri, site)
-        if not uri.startswith("default:"):
+        if not uri.startswith("simple:"):
             raise NotApplicableException("Unexpected URI for simple long term planning provider: " + str(uri))
-        props: dict[str, str] = {pair[0]: pair[1] for pair in (prop.split("=") for prop in uri[len("default:"):].split(",")) if len(pair) == 2}
+        props: dict[str, str] = {pair[0]: pair[1] for pair in (prop.split("=") for prop in uri[len("simple:"):].split(",")) if len(pair) == 2}
         self._shift_duration: str = props.get("shiftDuration", "8h")
         duration: timedelta | None = DatetimeUtils.parse_duration(self._shift_duration)
         if duration is None:
@@ -29,7 +30,8 @@ class SimpleLongTermPlanning(LongTermPlanning):
             structure: LongTermTargets,
             initial_storage_levels: dict[str, StorageLevel]|None=None,
             shifts: list[tuple[datetime, datetime]]|None=None,
-            plant_availabilities: dict[int, EquipmentAvailability] | None=None) -> tuple[MidTermTargets, list[dict[str, StorageLevel]]]:
+            plant_availabilities: dict[int, EquipmentAvailability] | None=None,
+            frozen_lots: dict[int, Sequence[Lot]]|None=None) -> tuple[MidTermTargets, list[dict[str, StorageLevel]]]:
         shifts = shifts if shifts is not None else SimpleLongTermPlanning._default_shifts(structure.period, self._duration)
         if len(shifts) == 0:
             raise ValueError("No shifts provided/possible")

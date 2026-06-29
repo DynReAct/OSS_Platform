@@ -119,9 +119,13 @@
 .lots2-target-buttons2 {
     display: flex;
     column-gap: 1em;
-    padding-bottom: 0.5em;
+    padding-bottom: 1em;
     padding-top: 0.5em;
-    margin-top: 1.5em;
+    margin-top: 0.5em;
+}
+
+.lots2-ltp-summary-item {
+    padding-bottom: 0.5em;
 }
 
 .lots2-plants-targets {
@@ -132,6 +136,7 @@
     justify-content: start;
     align-items: center;
     padding-top: 1.5em;
+    padding-bottom: 0.5em;
 }
 
 .grid-items-4 {
@@ -201,6 +206,12 @@
     max-width: 5em;
 }
 
+.lot2-planning-start {
+    display: flex;
+    column-gap: 0.5em;
+
+}
+
 /* In structure portfolio popup */
 
 .lots2-weight-total2 {
@@ -259,6 +270,14 @@
     display: flex;
     column-gap: 1em;
     align-items: center;
+}
+
+.lots2-orders-init-menu2 {
+    display: grid;
+    column-gap: 1em;
+    row-gap: 0.5em;
+    justify-items: start;
+    grid-template-columns: auto auto 1fr;
 }
 
 .lots2-orders-init-method {
@@ -355,11 +374,14 @@
     display: flex;
     column-gap: 0.2em;
 }
-.lots2-message-field {
-    display: flex;
+.lots2-message-severe {
     margin-top: 1.5em;
-    column-gap: 0.2em;
     color: red
+}
+
+.lots2-message-warn {
+    margin-top: 1.5em;
+    color: orange;
 }
 
 /* Control row (tabs + graph) */
@@ -386,3 +408,8 @@
     margin-top: 0.5em;
 }
 
+.lots2-structure-toggle {
+    display: flex;
+    column-gap: 1em;
+    padding-top: 1em;
+}

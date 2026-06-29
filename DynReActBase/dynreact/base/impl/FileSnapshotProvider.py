@@ -24,34 +24,66 @@ class FileSnapshotProvider(SnapshotProvider):
     def __init__(self, uri: str, site: Site,
                  file_type: Literal["csv", "json", "pickle"] = "csv"):  # TODO how to pass parameters?
         super().__init__(uri, site)
-        uri = uri.lower()
-        if not uri.startswith("default+file:"):
+        # Only lowercase the scheme part, NOT the file path (which is case-sensitive)
+        scheme_part = "default+file:"
+        if uri.lower().startswith(scheme_part):
+            # Extract path preserving its original case
+            folder = uri[len(scheme_part):]
+        else:
             raise NotApplicableException("Unexpected URI for file snapshot provider: " + str(uri))
-        self._folder = uri[len("default+file:"):]
+        
+        self._folder = folder
         self._file_type: Literal["csv", "json", "pickle"] = file_type
         Path(self._folder).mkdir(parents=True, exist_ok=True)
         self._snapshot_ids: dict[str, datetime] = {}
         self._snapshots: dict[datetime, Snapshot] = {}
+        self._snapshot_index_complete: bool = False
+        self._latest_snapshot_file: str | None = None
+        self._latest_snapshot_id: datetime | None = None
 
     @staticmethod
     def _extract_timestamp(fl: str) -> datetime | None:
-        last_sep = fl.rindex("/")
+        last_sep = fl.rfind("/")
         file0 = (fl if last_sep < 0 else fl[last_sep + 1:]).lower()
-        dot = file0.rindex(".")
+        dot = file0.rfind(".")
         if dot < 0 or not file0.startswith("snapshot_"):
             return None
-        file0 = file0[len("snapshot_"):dot]
+        
+        # Extract the part between "snapshot_" and the file extension
+        file_middle = file0[len("snapshot_"):dot]
+        
+        # Try format: snapshot_YYYY-MM-DDTHH_MM (old format with dashes/underscores)
         try:
-            return datetime.strptime(file0, FileSnapshotProvider._DATETIME_FORMAT).astimezone(tz=timezone.utc)
+            return datetime.strptime(file_middle, FileSnapshotProvider._DATETIME_FORMAT).astimezone(tz=timezone.utc)
         except (ValueError, TypeError):
-            return None
+            pass
+        
+        # Try format: snapshot_N6179_8_20250201000000 (new format with equipment ID + YYYYMMDDHHMMSS)
+        # Extract the last 14 characters which should be YYYYMMDDHHMMSS
+        if len(file_middle) >= 14:
+            timestamp_str = file_middle[-14:]  # Last 14 chars: YYYYMMDDHHMMSS
+            try:
+                return datetime.strptime(timestamp_str, "%Y%m%d%H%M%S").astimezone(tz=timezone.utc)
+            except (ValueError, TypeError):
+                pass
 
-    def snapshots(self, start_time: datetime, end_time: datetime, order: Literal["asc", "desc"] = "asc") -> Iterator[
-        datetime]:
-        if len(self._snapshot_ids) > 0:
+        # Try format: snapshot_YYYYMMDDHHMM (compact format without seconds)
+        if len(file_middle) >= 12:
+            timestamp_str = file_middle[-12:]  # Last 12 chars: YYYYMMDDHHMM
+            try:
+                return datetime.strptime(timestamp_str, "%Y%m%d%H%M").astimezone(tz=timezone.utc)
+            except (ValueError, TypeError):
+                pass
+
+        return None
+
+    def snapshots(self, start_time: datetime, end_time: datetime, order: Literal["asc", "desc"] = "asc") -> Iterator[datetime]:
+        if self._snapshot_index_complete and len(self._snapshot_ids) > 0:
             return iter(self._snapshot_ids.values())
-        matches = [f for f in (f.replace("\\", "/") for f in  sorted(glob.glob(os.path.join(self._folder, "*.[json,pickle]*"), recursive=False),
-                                      reverse=order == "desc")) if "snapshot" in f and ("/" not in f or f.rindex("/") < f.rindex("snapshot"))]
+        file_types = ",".join(FileSnapshotProvider._FILE_TYPES)
+        glob_pattern = os.path.join(self._folder, f"*.[{file_types}]*")
+        glob_matches = sorted(glob.glob(glob_pattern, recursive=False), reverse=order == "desc")
+        matches = [f for f in (f.replace("\\", "/") for f in glob_matches) if "snapshot" in f and ("/" not in f or f.rindex("/") < f.rindex("snapshot"))]
         num_matches: int = len(matches)
         if num_matches == 1:
             ts: datetime | None = FileSnapshotProvider._extract_timestamp(matches[0])
@@ -64,10 +96,45 @@ class FileSnapshotProvider(SnapshotProvider):
                 if ts is None:
                     continue
                 self._snapshot_ids[file] = ts
+        self._snapshot_index_complete = True
         return iter(self._snapshot_ids.values())
 
+    def current_snapshot_id(self) -> datetime | None:
+        if self._latest_snapshot_id is not None:
+            return self._latest_snapshot_id
+
+        file_types = tuple(f".{ext}" for ext in FileSnapshotProvider._FILE_TYPES)
+        latest_ts: datetime | None = None
+        latest_file: str | None = None
+
+        try:
+            with os.scandir(self._folder) as entries:
+                for entry in entries:
+                    if not entry.is_file():
+                        continue
+                    name = entry.name.lower()
+                    if not name.startswith("snapshot_") or not name.endswith(file_types):
+                        continue
+                    file_path = entry.path.replace("\\", "/")
+                    ts = FileSnapshotProvider._extract_timestamp(file_path)
+                    if ts is None:
+                        continue
+                    if latest_ts is None or ts > latest_ts:
+                        latest_ts = ts
+                        latest_file = file_path
+        except FileNotFoundError:
+            return None
+
+        self._latest_snapshot_id = latest_ts
+        self._latest_snapshot_file = latest_file
+        if latest_ts is not None and latest_file is not None:
+            self._snapshot_ids.setdefault(latest_file, latest_ts)
+        return latest_ts
+
     def load(self, *args, time: datetime | None = None, **kwargs) -> Snapshot | None:
-        timestamp = self.previous(time=time) if time is not None else self.previous()
+        timestamp = time
+        if timestamp is None:
+            timestamp = self.previous(time=time)
         if timestamp is None:
             return None
         if len(self._snapshots) > 0:
@@ -80,6 +147,24 @@ class FileSnapshotProvider(SnapshotProvider):
                 if snap is not None:
                     self._snapshots[ts] = snap
                     return snap
+        if timestamp == self._latest_snapshot_id and self._latest_snapshot_file is not None:
+            snap = self._read_file(self._latest_snapshot_file, timestamp, *args, **kwargs)
+            if snap is not None:
+                self._snapshots[timestamp] = snap
+                self._snapshot_ids.setdefault(self._latest_snapshot_file, timestamp)
+                return snap
+        if not self._snapshot_index_complete:
+            list(self.snapshots(
+                start_time=datetime.fromtimestamp(0, tz=timezone.utc),
+                end_time=datetime(year=3000, month=1, day=1, tzinfo=timezone.utc),
+                order="desc",
+            ))
+            for file, ts in self._snapshot_ids.items():
+                if timestamp == ts:
+                    snap = self._read_file(file, timestamp, *args, **kwargs)
+                    if snap is not None:
+                        self._snapshots[ts] = snap
+                        return snap
         return None
 
     def _read_file(self, fl: str, timestamp: datetime, *args, **kwargs) -> Snapshot | None:
@@ -91,11 +176,9 @@ class FileSnapshotProvider(SnapshotProvider):
         return snapshot
 
     def _read_csv(self, file: str, timestamp: datetime) -> Snapshot:
-        frame: pd.DataFrame = pd.read_csv(file, sep=";", dtype={"id": str, "order": str,
-                                                "process": "Int64", "order_position": "Int64"})
+        frame: pd.DataFrame = pd.read_csv(file, sep=";", dtype={"id": str, "order": str, "process": "Int64", "order_position": "Int64"})
         col_names = frame.columns
-        material_cols: dict[str, int] = {c[len("material_"):]: idx for idx, c in enumerate(col_names) \
-                                         if c.startswith("material_")}
+        material_cols: dict[str, int] = {c[len("material_"):]: idx for idx, c in enumerate(col_names) if c.startswith("material_")}
         plants: dict[str, Equipment] = {p.name_short: p for p in self._site.equipment}
         processes: list[Process] = self._site.processes
         coils: list[Material] = []
@@ -178,4 +261,3 @@ class FileSnapshotProvider(SnapshotProvider):
 if __name__ == "__main__":
     provider = FileSnapshotProvider("default+file:./data/sample", None)
     print(list(provider.snapshots(datetime.fromtimestamp(0, tz=timezone.utc), datetime.fromtimestamp(999_999_999, tz=timezone.utc))))
-

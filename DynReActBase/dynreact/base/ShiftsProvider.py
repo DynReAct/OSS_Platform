@@ -17,6 +17,16 @@ class ShiftsProvider:
         return self._url
 
     def load_all(self, start: datetime, end: datetime|None=None, limit: int|None=100, equipments: Sequence[int]|None=None) -> dict[int, Sequence[PlannedWorkingShift]]:
+        """
+        Parameters:
+            start:
+            end:
+            limit:
+            equipments: equipment ids to be included
+
+        Returns:
+            A dictionary plant id -> shifts
+        """
         raise Exception("not implemented")
 
     def load(self, equipment: int, start: datetime, end: datetime|None=None, limit: int|None=100) -> Sequence[PlannedWorkingShift]:

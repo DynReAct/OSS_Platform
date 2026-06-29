@@ -5,12 +5,12 @@ for more complex use cases.
 """
 
 import enum
-from datetime import datetime, timezone
-from typing import Iterator, Literal, Iterable, Any, Sequence
+from datetime import datetime, timezone, timedelta
+from typing import Iterator, Literal, Iterable, Any, Sequence, Callable
 
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import Snapshot, Site, Lot, Process, Material, Order, MaterialCategory, MaterialClass, \
-    ServiceMetrics
+from dynreact.base.model import Snapshot, Site, Lot, Process, Material, Order, MaterialCategory, MaterialClass, LotTimes
+from dynreact.base.monitoring import ServiceMetrics
 
 
 # Note: requires Python >= 3.11
@@ -287,17 +287,29 @@ class SnapshotProvider:
         horizons = [self.planning_horizon(snapshot, p.id, lots=[lt for lt in lots if lt.equipment == p.id] if lots is not None else None) for p in self._site.get_process_equipment(process)]
         return min(horizons)
 
+    def get_order_lot_times(self, snapshot: datetime | None = None, order: str|Sequence[str]|None=None) -> dict[str, dict[str, LotTimes]]|None:
+        """Returns a dictionary order id -> process id -> lot data"""
+        raise Exception("not implemented")
+
+    def get_material_lot_times(self, snapshot: datetime | None = None, material: str|Sequence[str]|None=None) -> dict[str, dict[str, LotTimes]]|None:
+        """Returns a dictionary material id -> process id -> lot data"""
+        raise Exception("not implemented")
+
     def eligible_orders2(self,
                          snapshot: Snapshot,
                          process: str,
                          planning_horizon: tuple[datetime, datetime],
-                         equipment: list[int]|None=None) -> list[str]:
+                         equipment: Sequence[int]|None=None,
+                         transport_times: Callable[[int, int], timedelta]|None=None) -> list[str]:
         """
         Determine the orders eligible for planning/lot creation for a specific process.
         This method can be overridden in a derived implementation.
         :param snapshot:
         :param process:
         :param planning_horizon:
+        :param transport_times: a function that determines the minimum transport time between equipment that needs to be respected
+                after processing of any material at some equipment before it can be scheduled at the next equipment. Signature:
+                    (previous_equipment: int, next_equipment: int) -> timedelta
         :return: list of eligible order ids
         """
         all_lots = snapshot.lots
@@ -309,12 +321,13 @@ class SnapshotProvider:
         previous_process_names = [p.name_short for p in previous_steps]
         proc = self._site.get_process(process, do_raise=True)
         current_process_ids = proc.process_ids
-        next_processes = [p for p in self._site.processes if p in proc.next_steps] if proc.next_steps is not None else []
+        next_processes = [p for p in self._site.processes if p.name_short in proc.next_steps] if proc.next_steps is not None else []
         next_process_ids = [pid for p in next_processes for pid in p.process_ids]
         applicable_orders: list[str] = []
         for order in snapshot.orders:
             # step 0: any equipment allowed at all?
-            if not any(e in equipment for e in order.allowed_equipment):
+            order_equipment = [e for e in equipment if e in order.allowed_equipment]
+            if len(order_equipment) == 0:
                 continue
             # step 1: check if order is already scheduled at the considered process stage
             lot: Lot|None = None
@@ -330,13 +343,30 @@ class SnapshotProvider:
                 prev_lot: str|None = order.lots.get(prev_proc, None)
                 if prev_lot is not None:
                     lt = lots_by_ids.get(prev_lot)
-                    if lt is None or lt.status < 3:  # not definitely scheduled yet
+                    if lt is None or not self.is_lot_complete(lt):  # not definitely scheduled yet
                         continue
-                    if lt.end_time is not None and lt.end_time < planning_horizon[0]:  # TODO account for transport times?
-                        applicable_orders.append(order.id)
-                    continue
+                    first_start_time = lt.end_time   # first we check the overall lot time
+                    if first_start_time is not None:
+                        trsp = max(transport_times(lt.equipment, e) for e in order_equipment) if transport_times is not None else timedelta()
+                        first_start_time = first_start_time + trsp
+                        if first_start_time <= planning_horizon[0]:   # case 1: the complete lot is expected to be done
+                            applicable_orders.append(order.id)
+                        elif lt.start_time is not None and lt.start_time + trsp < planning_horizon[0]:  # case 2: look at order-specific execution time, if the lot starts in time to be considered, at least
+                            try:
+                                times_dct = self.get_order_lot_times(snapshot=snapshot.timestamp, order=order.id)
+                                if times_dct is not None and len(times_dct) > 0:
+                                    times: LotTimes = times_dct.get(order.id).get(prev_proc)
+                                    first_start_time = times.end + trsp
+                                    if first_start_time <= planning_horizon[0]:
+                                        applicable_orders.append(order.id)
+                            except:
+                                pass  # method not implemented or order data not available
+
+                        continue
             # step 3: check if order is available already at the considered process stage and not already at the next
             if not any(p in current_process_ids for p in order.current_processes) or any(p in next_process_ids for p in order.current_processes):
+                continue
+            if any(p in order.active_processes and order.active_processes[p] != "PENDING" for p in current_process_ids):
                 continue
             applicable_orders.append(order.id)
         return applicable_orders

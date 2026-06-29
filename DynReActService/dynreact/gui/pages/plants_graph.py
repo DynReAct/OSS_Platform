@@ -71,7 +71,7 @@ def plants_graph(element_id: str, style={'width': '100%', 'height': '500px'}, st
     storage_elements = [{"data": {"id": f"storage_{storage.name_short}", "label": str(storage.name_short), "size": 50}, "classes": "storage-node",
             "position": _position_for_storage(storage, processes, follow_up_process_per_storage, storages_per_process, process_graph_dict)} for storage in site.storages]
     edges_in = [{"data": {"id": f"storage_{plant.storage_in}_plant_{plant.id}", "source": f"storage_{plant.storage_in}", "target": f"plant_{plant.id}"}} for plant in site.equipment if plant.storage_in is not None]
-    edges_out = [{"data": {"id": f"plant_{plant.id}_storage_{plant.storage_out}", "target": f"storage_{plant.storage_out}", "source": f"plant_{plant.id}"}} for plant in site.equipment if plant.storage_out is not None]
+    edges_out = [{"data": {"id": f"plant_{plant.id}_storage_{stg}", "target": f"storage_{stg}", "source": f"plant_{plant.id}"}} for plant in site.equipment if plant.storages_out is not None for stg in plant.storages_out if isinstance(stg, str)]
     elements = plant_elements + storage_elements + edges_in + edges_out
     return cyto.Cytoscape(
             id=element_id,

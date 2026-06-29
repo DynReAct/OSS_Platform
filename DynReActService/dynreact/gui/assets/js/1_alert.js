@@ -2,7 +2,9 @@ class BasicAlert extends HTMLElement {
 
     #alertContainer;
     #textContainer;
+    #linkContainer;
     #hidingTimer;
+    #linkActive = false;
 
     constructor() {
         super();
@@ -13,7 +15,8 @@ class BasicAlert extends HTMLElement {
                             ".error { background-color: red; }\n" +
                             ".warn { background-color: orange; }\n" +
                             ".success { background-color: green; }\n" +
-                            ".info { background-color: blue;}";
+                            ".info { background-color: blue;}\n" +
+                            ".plain-link {text-decoration:none;}";
         shadow.append(style);
         const alertContainer = document.createElement("div");
         alertContainer.classList.add("alert-container");
@@ -21,9 +24,15 @@ class BasicAlert extends HTMLElement {
         shadow.appendChild(alertContainer);
         const textContainer = document.createElement("div");
         alertContainer.appendChild(textContainer);
+        const linkContainer = document.createElement("a");
+        linkContainer.setAttribute("target", "_blank");
+        linkContainer.classList.add("plain-link");
+        linkContainer.hidden = true;
+        shadow.appendChild(linkContainer);
 
         this.#alertContainer = alertContainer;
         this.#textContainer = textContainer;
+        this.#linkContainer = linkContainer;
     }
 
     #closeInternal() {
@@ -45,7 +54,7 @@ class BasicAlert extends HTMLElement {
             return;
         }
         this.#clearTimeout();
-        this.#textContainer.innerText = msg;
+        this.#textContainer.textContent = msg;
         type = type?.toLowerCase();
         const existingClasses = Array.from(this.#alertContainer.classList);
         const classesForRemoval = existingClasses.filter(cl => cl !== type && cl !== "alert-container");
@@ -54,6 +63,20 @@ class BasicAlert extends HTMLElement {
             this.#alertContainer.classList.add(type);
         if (options?.timeout > 0)
             this.close(options?.timeout);
+        this.#alertContainer.title = options?.title || "";
+        if (options?.href)
+            this.#linkContainer.href = options.href;
+        const linkWasActive = this.#linkActive;
+        const linkActive = !!options?.href;
+        if (linkActive && !linkWasActive) {
+            this.#linkContainer.appendChild(this.#alertContainer);
+            this.#linkContainer.hidden = false;
+        } else if (!linkActive && linkWasActive) {
+            this.shadowRoot.appendChild(this.#alertContainer);
+            this.#linkContainer.removeAttribute("href");
+            this.#linkContainer.hidden = true;
+        }
+        this.#linkActive = linkActive;
         this.#alertContainer.hidden = false;
     }
 

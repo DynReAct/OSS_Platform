@@ -1,26 +1,48 @@
 node {
-    def IMAGE_NAME = "dynreact-shortterm"
+    def IMAGE_NAME = "dynreact-oss-shortterm"
     def IMAGE_TAG = "latest"
     def LOCAL_REGISTRY = "192.168.110.176:5000/"
 
+    env.IMAGE_NAME = IMAGE_NAME
     env.LOCAL_REGISTRY = LOCAL_REGISTRY
-    env.TOPIC_CALLBACK = "DynReact-TEST-Callback"
-    env.TOPIC_GEN = "DynReact-TEST-Gen"
+    env.IMAGE_TAG = IMAGE_TAG
+    env.SHORT_TERM_PLANNING_PARAMS = "default+file:/repo/ShortTermPlanning/tests/stp_context_oss_test.json"
+    env.EXPECTED_STP_PROFILE = "oss"
+    env.CONTAINER_NAME_PREFIX = "JENKINS_OSS_TEST_${env.BUILD_ID}"
+    env.TEST_KAFKA_TOPIC_PREFIX = "Dynreact_OSS"
+    env.TEST_TOPIC_GEN = "DynReact-OSS-TEST-Gen"
+    env.TEST_TOPIC_CALLBACK = "DynReact-OSS-TEST-Callback"
+    env.DOCKER_NETWORK = "host"
+    env.PERF_URL = "http://192.168.111.11:5027"
+    env.TRANSPORT_TIMES_URL = "default+file:/repo/DynReActService/data/site.json"
 
     env.SNAPSHOT_VERSION = "2025-01-18T08:00:00Z"
-    env.SCENARIO_4_5_EQUIPMENT = "9" // One Equipment, One Material
-    env.SCENARIO_6_EQUIPMENT = "9" // One Equipment, Two Material
-    env.SCENARIO_7_EQUIPMENTS = "9 10" // Two Equipments, One Material
-    env.SCENARIO_8_EQUIPMENTS = "9 11" // Two Equipments, shared material
-    env.SCENARIO_8_ORDER_ID = "1193611"
+    env.SCENARIO_4_5_EQUIPMENT = "7" // One Equipment, One Material
+    env.SCENARIO_6_EQUIPMENT = "7" // One Equipment, Two Material
+    env.SCENARIO_7_EQUIPMENTS = "6 7" // Two Equipments, One Material
+    env.SCENARIO_8_EQUIPMENTS = "6 7" // Two Equipments, shared material
+    env.SCENARIO_8_ORDER_ID = "1193611" 
+
+     // Wrap all secret text credentials at once
+    withCredentials([
+        string(credentialsId: 'LOCAL_REGISTRY', variable: 'REGISTRY'),
+        string(credentialsId: 'KAFKA_IP', variable: 'KAFKA_IP_SECRET'),
+        string(credentialsId: 'LOG_FILE_PATH', variable: 'LOG_FILE_PATH_SECRET'),
+        string(credentialsId: 'REST_URL', variable: 'REST_URL_SECRET')
+    ]) {
+
+        env.KAFKA_IP = KAFKA_IP_SECRET
+        env.LOG_FILE_PATH = LOG_FILE_PATH_SECRET
+        env.REST_URL = REST_URL_SECRET
+        env.LOCAL_REGISTRY = REGISTRY
+
 
     def runStageWithCleanup = { stageName, body ->
         stage(stageName) {
             sh '''
-                echo "[PRE] Cleaning up dynreact-shortterm containers..."
-                docker ps -a --filter ancestor=dynreact-shortterm -q | xargs -r docker stop
-                docker ps -a --filter ancestor=dynreact-shortterm -q | xargs -r docker rm
-                docker system prune -f
+                echo "[PRE] Cleaning up containers with prefix $CONTAINER_NAME_PREFIX..."
+                docker ps -a --filter "name=$CONTAINER_NAME_PREFIX_" -q | xargs -r docker rm -f
+                docker system prune -f || echo "[WARN] docker system prune failed; continuing because cleanup is non-blocking."
             '''
             body()
         }
@@ -31,219 +53,383 @@ node {
     }
 
     stage('Build Docker Image') {
-        sh """
+    sh '''
         cd ShortTermPlanning
-        docker build --build-arg DOCKER_REGISTRY=${LOCAL_REGISTRY} -t ${IMAGE_NAME}:${IMAGE_TAG} .
-        """
+        docker build \\
+            --build-arg DOCKER_REGISTRY="$LOCAL_REGISTRY" \\
+            --build-arg BUILD_DATE="\$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \\
+            --build-arg JENKINS_BUILD_ID="$BUILD_ID" \\
+            -t "$IMAGE_NAME:$IMAGE_TAG" .
+    '''
     }
 
     stage('Tag & Push Image') {
-        sh """
-        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}
-        docker push ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}
-        """
+        sh '''
+        docker tag "$IMAGE_NAME:$IMAGE_TAG" "$LOCAL_REGISTRY$IMAGE_NAME:$IMAGE_TAG"
+        docker push "$LOCAL_REGISTRY$IMAGE_NAME:$IMAGE_TAG"
+        '''
     }
 
-    runStageWithCleanup('Run Scenario 0') {
-        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
-        def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
-        sh """
-        # Run container to execute tests
+    stage('Replace BASE agents') {
+        sh '''
+        docker rm -f \
+          "${CONTAINER_NAME_PREFIX}_LOG_Base" \
+          "${CONTAINER_NAME_PREFIX}_EQUIPMENT_Base" \
+          "${CONTAINER_NAME_PREFIX}_MATERIAL_Base" >/dev/null 2>&1 || true
+
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
-          -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
-          ${envArgs} \\
-          --user root \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_00"
-        """
+          -v ${WORKSPACE}:/repo:ro \\
+          -v /var/log/dynreact-logs:/var/log/dynreact-logs:rw,rshared \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
+          -e KAFKA_IP="$KAFKA_IP" \\
+          -e LOG_FILE_PATH="$LOG_FILE_PATH" \\
+          -e REST_URL="$REST_URL" \\
+          -e PERF_URL="$PERF_URL" \\
+          -e TRANSPORT_TIMES_URL="$TRANSPORT_TIMES_URL" \\
+          -e SHORT_TERM_PLANNING_PARAMS="$SHORT_TERM_PLANNING_PARAMS" \\
+          -e EXPECTED_STP_PROFILE="$EXPECTED_STP_PROFILE" \\
+          -e CONTAINER_NAME_PREFIX="$CONTAINER_NAME_PREFIX" \\
+          -e LOCAL_REGISTRY="$LOCAL_REGISTRY" \\
+          -e IMAGE_NAME="$IMAGE_NAME" \\
+          -e IMAGE_TAG="$IMAGE_TAG" \\
+          -e DOCKER_NETWORK="$DOCKER_NETWORK" \\
+          --user "0:0" \\
+          "$LOCAL_REGISTRY$IMAGE_NAME:$IMAGE_TAG" \\
+          python -m dynreact.shortterm.replace_base -v 3 -g 111
+        '''
     }
+
+runStageWithCleanup('Run Scenario 0') {
+    def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+    def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
+
+    sh """
+        docker run --rm \\
+          --network host \\
+          -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v ${WORKSPACE}:/repo:ro \\
+          -v ${WORKSPACE}/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro \\
+          -v ${WORKSPACE}/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
+          -e PIP_CACHE_DIR=/tmp/pip-cache \\
+          --user "0:0" \\
+          ${envArgs} \\
+          ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG} \\
+          bash -lc 'set -euo pipefail
+                source .venv/bin/activate
+                COMP=DynReActService
+
+                python -m venv /tmp/venv
+                . /tmp/venv/bin/activate
+
+                python -m pip install -U pip setuptools wheel
+                python -m pip install -r "/repo/DynReActBase/requirements.txt"
+                python -m pip install -r "/repo/\$COMP/requirements.txt"
+                [ -f "/repo/\$COMP/requirements_local.txt" ] && python -m pip install -r "/repo/\$COMP/requirements_local.txt" || true
+                [ -f "/repo/\$COMP/requirements-dev.txt" ] && python -m pip install -r "/repo/\$COMP/requirements-dev.txt" || true
+                python -m pip install -r "/repo/ShortTermPlanning/requirements.txt"
+
+                command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                cd /app/shortterm/dynreact/tests/integration_test
+                pytest -s -p no:cacheprovider test_auction.py::test_scenario_00
+      '
+    """
+    }
+
 
     runStageWithCleanup('Run Scenario 1') {
-        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'EXPECTED_STP_PROFILE', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
-          -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
           -v "/var/log/dynreact-logs:/var/log/dynreact-logs:rw,rshared" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
+          --user "0:0" \\
           ${envArgs} \\
-          --user root \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_01"
+          bash -lc 'set -euo pipefail
+                   python -m venv /tmp/venv
+                   source .venv/bin/activate 
+                   COMP='ShortTermPlanning' 
+                   pip install -r /repo/\$COMP/requirements.txt
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
+
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   cd /app/shortterm/dynreact/tests/integration_test 
+                   pytest -s  -p no:cacheprovider test_auction.py::test_scenario_01
+         '
         """
     }
 
     runStageWithCleanup('Run Scenario 2') {
-        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
-          -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
+          --user "0:0" \\
           ${envArgs} \\
-          --user root \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_02"
+          bash -lc 'set -euo pipefail
+                   python -m venv /tmp/venv
+                   source .venv/bin/activate 
+                   COMP='ShortTermPlanning' 
+                   pip install -r /repo/\$COMP/requirements.txt 
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
+
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   cd /app/shortterm/dynreact/tests/integration_test 
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_02
+         '
         """
     }
 
     runStageWithCleanup('Run Scenario 3') {
-        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           ${envArgs} \\
-          --user root \\
+          --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_03"
+          bash -lc 'set -euo pipefail
+                   python -m venv /tmp/venv
+                   source .venv/bin/activate 
+                   COMP='ShortTermPlanning' 
+                   pip install -r /repo/\$COMP/requirements.txt 
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
+
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   cd /app/shortterm/dynreact/tests/integration_test 
+                   pytest -s -p no:cacheprovider test_auction.py::test_scenario_03
+         '
         """
     }
 
     runStageWithCleanup('Run Scenario 4') {
-        def vars = ['TOPIC_CALLBACK', 'TOPIC_GEN', 'SNAPSHOT_VERSION', 'SCENARIO_4_5_EQUIPMENT']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX', 'SCENARIO_4_5_EQUIPMENT']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/DynReActService/data/:/app/shortterm/dynreact/data/:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           ${envArgs} \\
-          --user root \\
+          --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_04"
+          bash -lc 'set -euo pipefail
+                   python -m venv /tmp/venv
+                   source .venv/bin/activate 
+                   COMP='ShortTermPlanning' 
+                   pip install -r /repo/\$COMP/requirements.txt 
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
+
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   cd /app/shortterm
+                   pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_04
+         '
         """
     }
 
-    stage('Replace BASE agents') {
-        sh """
-        # Run container to execute tests
-        docker run --rm \\
-          -v /var/run/docker.sock:/var/run/docker.sock:rw \\
-          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/replace_base.py:/app/shortterm/__main__.py:ro" \\
-          -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
-          --user root \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-           python -m shortterm -v 3 -g 111
-        """
-    }
-
-    stage('Run Scenario 5') {
-        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_4_5_EQUIPMENT', 'LOCAL_REGISTRY']
+    runStageWithCleanup('Run Scenario 5') {
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/DynReActService/data/:/app/shortterm/dynreact/data/:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
+          -e REMOTE_BASE_AGENTS="1" \\
           ${envArgs} \\
-          --user root \\
+          --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_05"
+          bash -lc 'set -euo pipefail
+                   source .venv/bin/activate 
+                   COMP='ShortTermPlanning' 
+                   pip install -r /repo/\$COMP/requirements.txt 
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true
+
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   cd /app/shortterm
+                   pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_05
+         '
         """
     }
 
-    stage('Run Scenario 6') {
-        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_6_EQUIPMENT', 'LOCAL_REGISTRY']
+    runStageWithCleanup('Run Scenario 6') {
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/DynReActService/data/:/app/shortterm/dynreact/data/:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
+          -e REMOTE_BASE_AGENTS="1" \\
           ${envArgs} \\
-          --user root \\
+          --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_06"
+          bash -lc 'set -euo pipefail
+                   source .venv/bin/activate 
+                   COMP='ShortTermPlanning' 
+                   pip install -r /repo/\$COMP/requirements.txt 
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
+
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   cd /app/shortterm
+                   pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_06
+         '
         """
     }
 
-    stage('Run Scenario 7') {
-        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_7_EQUIPMENTS', 'LOCAL_REGISTRY']
+    runStageWithCleanup('Run Scenario 7') {
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/DynReActService/data/:/app/shortterm/dynreact/data/:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
+          -e REMOTE_BASE_AGENTS="1" \\
           ${envArgs} \\
-          --user root \\
+          --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_07"
+          bash -lc 'set -euo pipefail
+                   source .venv/bin/activate 
+                   COMP='ShortTermPlanning' 
+                   pip install -r /repo/\$COMP/requirements.txt 
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
+
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   cd /app/shortterm
+                   pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_07
+         '
         """
     }
 
-    stage('Run Scenario 8') {
-        def vars = ['SNAPSHOT_VERSION', 'SCENARIO_8_EQUIPMENTS', 'SCENARIO_8_ORDER_ID', 'LOCAL_REGISTRY']
+    runStageWithCleanup('Run Scenario 8') {
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
         docker run --rm \\
+          --network host \\
           -v /var/run/docker.sock:/var/run/docker.sock:rw \\
+          -v "$WORKSPACE:/repo:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/pyproject.toml:/app/pyproject.toml:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/dynreact/shortterm/short_term_planning.py:/app/shortterm/dynreact/shortterm/short_term_planning.py:ro" \\
+          -v "$WORKSPACE/DynReActService/data/:/app/shortterm/dynreact/data/:ro" \\
           -v "$WORKSPACE/ShortTermPlanning/tests/:/app/shortterm/dynreact/tests/:rw" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e PYTHONPYCACHEPREFIX=/tmp/pycache \\
+          -e KAFKA_TOPIC_PREFIX="$TEST_KAFKA_TOPIC_PREFIX" \\
+          -e TOPIC_GEN="$TEST_TOPIC_GEN" \\
+          -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
+          -e REMOTE_BASE_AGENTS="1" \\
           ${envArgs} \\
-          --user root \\
+          --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
-          bash -c "source .venv/bin/activate && \\
-                   pip install poetry && \\
-                   poetry install --no-root && \\
-                   cd /app/shortterm/dynreact/tests/integration_test && \\
-                   pytest -s test_auction.py::test_scenario_08"
+          bash -lc 'set -euo pipefail
+                   source .venv/bin/activate 
+                   COMP='ShortTermPlanning' 
+                   pip install -r /repo/\$COMP/requirements.txt 
+                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
+                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
+
+                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   cd /app/shortterm
+                   pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_08
+         '
         """
     }
+  }
 }
+

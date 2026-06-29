@@ -6,16 +6,20 @@ from dotenv import load_dotenv
 
 class DynReActSrvConfig:
 
-    time_zone: str|None = None
-    "By default, the local timezone is used. Example: \"Europe/Berlin\", \"America/Los_Angeles\"."
+    time_zone: str|None = "local"
+    "By default, the local timezone of the server is used. Example: \"local\", \"Europe/Berlin\", \"America/Los_Angeles\"."
     config_provider: str = "default+file:./data/site.json"
+    "Config provider id. Alternatively, it is also admissible to set this field to the config provider itself (for testing)"
     snapshot_provider: str = "default+file:./data/snapshots"
+    "Snapshot provider id. Alternatively, it is also admissible to set this field to the snapshot provider itself (for testing)"
     downtime_provider: str = "default+file:./data/downtimes.json"
-    cost_provider: str|None = None  # needs to be specified
-    "If None, an arbitrary cost provider will be used, if available"
-    long_term_provider: str = "default:8h"
+    cost_provider: str|None = None
+    "If None and the `profile` configuration is set, an attempt will be made to load the cost provider from the module dynreact.cost.<profile>."
+    long_term_provider: str = "default:"
+    lot_creation: str = "default:tabu-search"
     short_term_planning: str = "default+file:./data/stp_context.json"
     results_persistence: str = "default+file:./results"
+    "Results persistence id. Alternatively, it is also admissible to set this field to the persistence provider itself (for testing)"
     availability_persistence: str = "default+file:./config"
     aggregation: bool = False
     aggregation_persistence: str = "default+file:./aggregation"
@@ -27,19 +31,26 @@ class DynReActSrvConfig:
     lots_batch_config: str = ""   # TODO option to specify initialization method
     """
     Configuration for periodic batch lot creation processes.
-    Format: <time of day>;<process id1>:<max_iterations>:<max duration>,<process id2>:<max duration>,...[;test] .
+    Format: <time of day>(,append,<max_horizon>);<planning horizon>;<process id1>:<max_iterations>:<max duration>,<process id2>:<max duration>,...[;test] .
     If the `test` flag is set, then the batch job will run once on startup, based on the latest snapshot available. 
     Multiple configs to be separated by a single space. 
-    Examples: 
-        06:00;PROC1:1000:15m,PROC2:250:10m;
-        06:00;PROC1:1000:15m,PROC2:250:10m;test
-        
+        Examples:
+            06:00;P1D;PROC1:1000:PT15M,PROC2:250:PT10M
+            06:00;P1D;PROC1:1000:PT15M,PROC2:250:PT10M;test
+            06:00,mode:append,lh:P5D,sa:PT1H;P1D;PROC1:1000:PT15M,PROC2:250:PT10M;
+            
+        Where lh = lots horizon, sa = snapshot age
     """
-    shifts_provider: str = "dummy:default"
+    shifts_provider: str|None = None
+    "If not specified and the `profile` configuration is set, an attempt will be made to load the shifts provider from the module dynreact.shifts.<profile>. Else fallback to 'dummy:default'."
+    history_reader: str|None = None
+    "If not specified and the `profile` configuration is set, an attempt will be made to load the production history reader from the module dynreact.history.<profile>. Else fallback to 'dummy:default'."
     out_directory: str = "./out"
     cors: bool = False
     auth_method: Literal["dummy", "ldap", "ldap_simple"]|None = None
     auth_max_user_length: int = 20
+    auth_view_permission: str|tuple[str]|None=None
+    "Permission required for accessing the frontend"
     ldap_address: str|list[str] = "ldap://localhost:1389"
     # for ldap_simple mode
     ldap_user_extension: str | None = None
@@ -48,11 +59,20 @@ class DynReActSrvConfig:
     ldap_query_pw: str|None = None
     ldap_search_base: str|None = None
     ldap_query: str = "(sAMAccountName={user})"
+    ldap_use_ssl: bool = False
+    ldap_permissions: dict[str, str]|None=None
+    "Mapping permission name => group distinguished name"
     # expected format: ["dynreact.custom.SomePlantPerformanceModel:uri"],
     # where the first component identifies a class name (sub class of PlantPerformanceModel) and uri may contain
     # model-specific initialization data
     plant_performance_models: list[str]|None = None
+    energy_provider: str|None = "default+file:./data/energy_context.json"
+    "Optional energy analysis provider. Preferred values: `default+file:./data/energy_context.json` or `ras+file:./data/context/energy_context.json`."
     stp_frontend: str = "default"  # default is the frontend provided in this module
+    material_order_allocation_frontend: str|None = None
+    "Optionally register a frontend for a custom material-order allocation service"
+    profile: str|None = None
+    "Optional profile name for loading of custom components. If unset, DynReAct uses the base OSS/default loading path. Can be overwritten for individual components."
 
     def __init__(self,
                  config_provider: str | None = None,
@@ -64,6 +84,7 @@ class DynReActSrvConfig:
                  aggregation_persistence: str|None = None,
                  aggregation_exec_interval_minutes: int|None=None,
                  aggregation_exec_offset_minutes: int|None = None,
+                 lot_creation: str|None=None,
                  lot_sinks: list[str]|str|None = None,
                  cost_provider: str|None = None,
                  long_term_provider: str|None = None,
@@ -73,23 +94,35 @@ class DynReActSrvConfig:
                  max_snapshot_solutions_caches: int|None = None,
                  lots_batch_config: str|None = None,
                  shifts_provider: str|None = None,
+                 history_reader: str | None = None,
                  cors: bool|None = None,
                  auth_method: Literal["dummy", "ldap", "ldap_simple"]|None = None,
                  auth_max_user_length: int|None = None,
+                 auth_view_permission: str|tuple[str]|None = None,
                  ldap_user_extension: str | None = None,
                  ldap_address: str|list[str] | None = None,
                  ldap_query_user: str | None = None,
                  ldap_query_pw: str | None = None,
                  ldap_search_base: str | None = None,
                  ldap_query: str | None = None,
+                 ldap_use_ssl: bool|None = None,
+                 ldap_permissions: dict[str, str]|None=None,
                  plant_performance_models: list[str]|None = None,
+                 energy_provider: str|None = None,
                  stp_frontend: str|None = None,
-                 time_zone: str | None = None
+                 material_order_allocation_frontend: str|None = None,
+                 time_zone: str | None = None,
+                 profile: str|None = None
                  ):
-        load_dotenv()
+        # Resolve .env from the current working directory / standard dotenv search
+        # so packaged executions do not depend on the source-tree layout.
+        load_dotenv(override=True)
         if time_zone is None:
-            time_zone = os.getenv("TIME_ZONE")
+            time_zone = os.getenv("TIME_ZONE", DynReActSrvConfig.time_zone)
         self.time_zone = time_zone
+        if profile is None:
+            profile = os.getenv("DYNREACT_PROFILE", DynReActSrvConfig.profile)
+        self.profile = profile
         if config_provider is None:
             config_provider = os.getenv("CONFIG_PROVIDER", DynReActSrvConfig.config_provider)
         if snapshot_provider is None:
@@ -100,6 +133,8 @@ class DynReActSrvConfig:
             cost_provider = os.getenv("COST_PROVIDER", DynReActSrvConfig.cost_provider)
         if long_term_provider is None:
             long_term_provider = os.getenv("LONG_TERM_PLANNING", DynReActSrvConfig.long_term_provider)
+        if lot_creation is None:
+            lot_creation = os.getenv("LOT_CREATION", DynReActSrvConfig.lot_creation)
         if short_term_planning is None:
             short_term_planning = os.getenv("SHORT_TERM_PLANNING_PARAMS", DynReActSrvConfig.short_term_planning)
         if results_persistence is None:
@@ -130,6 +165,7 @@ class DynReActSrvConfig:
         self.downtime_provider = downtime_provider
         self.cost_provider: str = cost_provider
         self.long_term_provider: str = long_term_provider
+        self.lot_creation = lot_creation
         self.short_term_planning: str = short_term_planning
         self.results_persistence = results_persistence
         self.availability_persistence = availability_persistence
@@ -138,6 +174,9 @@ class DynReActSrvConfig:
         if shifts_provider is None:
             shifts_provider = os.getenv("SHIFTS_PROVIDER", DynReActSrvConfig.shifts_provider)
         self.shifts_provider = shifts_provider
+        if history_reader is None:
+            history_reader = os.getenv("HISTORY_READER", DynReActSrvConfig.history_reader)
+        self.history_reader = history_reader
         if out_directory is None:
             out_directory = os.getenv("OUT_DIRECTORY", DynReActSrvConfig.out_directory)
         self.out_directory: str = out_directory
@@ -154,6 +193,10 @@ class DynReActSrvConfig:
             auth_method = os.getenv("AUTH_METHOD", DynReActSrvConfig.auth_method)
         if auth_max_user_length is None:
             auth_max_user_length = int(os.getenv("AUTH_MAX_USER_LENGTH", DynReActSrvConfig.auth_max_user_length))
+        if auth_method is not None and auth_view_permission is None:
+            auth_view_permission = os.getenv("AUTH_VIEW_PERMISSION")
+            if auth_view_permission is not None and "," in auth_view_permission:
+                auth_view_permission = tuple([perm for perm in (perm.strip() for perm in auth_view_permission.split(",")) if perm != ""])
         if auth_method is not None:
             auth_method = auth_method.lower()
             if auth_method.startswith("ldap"):
@@ -169,9 +212,19 @@ class DynReActSrvConfig:
                         ldap_search_base = os.getenv("LDAP_SEARCH_BASE")
                     if ldap_query is None:
                         ldap_query = os.getenv("LDAP_QUERY", DynReActSrvConfig.ldap_query)
+                if ldap_use_ssl is None:
+                    ldap_use_ssl = os.getenv("LDAP_SSL") is not None and os.getenv("LDAP_SSL").lower() != "false"
+                if ldap_permissions is None:
+                    ldap_permissions0 = os.getenv("LDAP_PERMISSIONS")
+                    if ldap_permissions0 is not None and ldap_permissions0.strip() != "":
+                        permissions: list[tuple[str, str]] = [perms for perms in ((perm[0:perm.index("=")], perm[perm.index("=")+1:])for perm in ldap_permissions0.split(";") if len(perm) > 0)]
+                        if any(len(perms) != 2 for perms in permissions):
+                            raise Exception("Invalid LDAP permissions configuration, need pairs of the form \"PERM_1=DIST_NAME1,PERM_2=DIST_NAME2\", etc")
+                        ldap_permissions = {arr[0]: arr[1] for arr in permissions}
         elif auth_method == "none":
             auth_method = None
         self.auth_method = auth_method
+        self.auth_view_permission = auth_view_permission
         self.auth_max_user_length = auth_max_user_length
         self.ldap_user_extension = ldap_user_extension
         if ldap_address is not None and "," in ldap_address:
@@ -181,6 +234,9 @@ class DynReActSrvConfig:
         self.ldap_query_pw = ldap_query_pw
         self.ldap_query = ldap_query
         self.ldap_search_base = ldap_search_base
+        self.ldap_use_ssl = ldap_use_ssl
+        self.ldap_permissions = ldap_permissions
+
         idx = 0
         if plant_performance_models is None:
             plant_performance_models = []
@@ -192,9 +248,17 @@ class DynReActSrvConfig:
                 idx += 1
         if len(plant_performance_models) > 0:
             self.plant_performance_models = plant_performance_models
+        if energy_provider is None:
+            energy_provider = os.getenv("DYNREACT_ENERGY", DynReActSrvConfig.energy_provider)
+        self.energy_provider = energy_provider
         if stp_frontend is None:
             stp_frontend = os.getenv("STP_FRONTEND", DynReActSrvConfig.stp_frontend)
         self.stp_frontend = stp_frontend
+        if material_order_allocation_frontend is None:
+            material_order_allocation_frontend = os.getenv("MATERIAL_ORDER_ALLOCATION_FRONTEND", DynReActSrvConfig.material_order_allocation_frontend)
+            if material_order_allocation_frontend == "":
+                material_order_allocation_frontend = None
+        self.material_order_allocation_frontend = material_order_allocation_frontend
 
 
 class ConfigProvider:
@@ -204,5 +268,3 @@ class ConfigProvider:
     """
 
     config = DynReActSrvConfig()
-
-

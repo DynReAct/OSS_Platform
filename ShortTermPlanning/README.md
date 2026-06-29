@@ -81,4 +81,3 @@ python3 ShortTermPlanning.py -v 3 -b . -rw 100 -cw 300 -aw 1200 -bw 45 -ew 100 -
 ```
 
 Be sure that the live kafka broker  and the live cost service have been properly configured in the file *config.cnf*.
-

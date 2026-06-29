@@ -1,4 +1,6 @@
+import logging
 import os
+from typing import Sequence
 
 import dash
 from dash import dcc, html, Output, Input, State, clientside_callback, ClientsideFunction, callback
@@ -7,7 +9,7 @@ from flask import Flask
 
 from dynreact.app import config, state
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import Snapshot
+from dynreact.base.model import Snapshot, Lot
 from dynreact.gui.gui_utils import GuiUtils
 from dynreact.gui.pages.session_state import language, site, selected_snapshot, selected_snapshot_obj, selected_process, \
     snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector
@@ -16,7 +18,10 @@ server = Flask(__name__)
 
 # requests_pathname_prefix required for operation with FastAPI
 app = dash.Dash(__name__, server=server, routes_pathname_prefix="/", requests_pathname_prefix="/dash/",
-                assets_folder="assets", suppress_callback_exceptions=False, title="DynReAct",
+                assets_folder="assets", assets_ignore=r".*dynreactviz/.*",
+                suppress_callback_exceptions=True, title="DynReAct",
+                # dynreactviz contains ES modules that should not be auto-injected as classic Dash assets.
+                # external_scripts=[{"src": "/dash/assets/dynreactviz/ltp-viz.js", "type": "module"}],
                 use_pages=True, pages_folder="pages")
 # app = dash.Dash(__name__, server=server,  url_base_pathname="/dash/",
 #                 assets_folder="assets", suppress_callback_exceptions=False, title="DynReAct",
@@ -50,70 +55,82 @@ def layout(*args, **kwargs):
     # init_stores(*args, **kwargs)  # it seems that arguments are not passed to the global layout function
     prov = state.get_snapshot_provider()
     is_importer = hasattr(prov, "next_scheduled_import")
-    if is_importer:  # add a submenu for snapshot imports
-        snapshot_link = html.Div([
+    #if is_importer:  # add a submenu for snapshot imports
+    snap_links = [dcc.Link("Snapshot", id="menu-snaps_header-1", className="menu-link login-required", href="/dash/", title="Open snapshots tab"),
+                  dcc.Link("Lots", id="menu-snaps_gantt_header", className="menu-link login-required", href="/dash/lots-gantt", title="Open lots tab")
+                            #dcc.Link("Imports", id="menu-snaps-import_header", className="menu-link", href="/dash/imports", title="Snapshot imports")
+                ]
+    if is_importer:
+        snap_links.append(dcc.Link("Imports", id="menu-snaps-import_header", className="menu-link", href="/dash/imports", title="Snapshot imports"))
+    snapshot_link = html.Div([
                     html.Div([
                         html.Div("Snapshot", id="menu-snaps_header"),
-                        html.Div([
-                            dcc.Link("Snapshot", id="menu-snaps_header-1", className="menu-link login-required", href="/dash/", title="Open snapshots tab"),
-                            #dcc.Link("Lot creation", id="menu-lots-creation_header", className="menu-link", href="/dash/lots/create", title="Lots creation"),
-                            dcc.Link("Imports", id="menu-snaps-import_header", className="menu-link", href="/dash/imports", title="Snapshot imports")
-                        ], className="submenu-content")
+                        html.Div(snap_links, className="submenu-content")
                     ])
                 ], className="menu-link login-required", title="Open snapshots tab")
-    else:
-        snapshot_link =  dcc.Link("Snapshot", id="menu-snaps_header", className="menu-link login-required",  href="/dash/", title="Open snapshots tab")
+    mtp_links = [dcc.Link("Lots planned", id="menu-lots-planned_header", className="menu-link", href="/dash/lots/planned", title="Lots planned"),
+                dcc.Link("Lot creation", id="menu-lots2-creation_header", className="menu-link", href="/dash/lots/create2", title="Lots creation (new)")]
+    if state.has_batch_mtp():
+        mtp_links.append(dcc.Link("Batch job", id="menu-snaps-batch_header", className="menu-link", href="/dash/lots/batch", title="Lot creation batch jobs"))
+    moa_link = None
+    if state.has_material_order_allocation_page():
+        moa_link = dcc.Link("Material-order allocation", id="menu-moa_header", className="menu-link login-required", href="/dash/moa", title="Open material order allocation tab")
+    menu_entries = [
+        dcc.Link("Site", id="menu-site_header", className="menu-link login-required", href="/dash/site", title="Site"),
+        #dcc.Link("Long term planning", id="menu-ltp_header", className="menu-link login-required", href="/dash/ltp", title="Open long term planning tab"),
+        html.Div([
+            html.Div([
+                html.Div("Long term planning", id="menu-ltp_header"),
+                html.Div([
+                    dcc.Link("Results", id="menu-ltp-planned_header", className="menu-link", href="/dash/ltp/planned", title="Long term planning results"),
+                    dcc.Link("Long term planning", id="menu-ltp-new_header", className="menu-link", href="/dash/ltp", title="Open long term planning tab"),
+                    dcc.Link("Equipment performance", id="menu-ltp-perf_header", className="menu-link", href="/dash/ltp/performance", title="Open equipment performance tab")
+                ], className="submenu-content")
+            ]),
+        ], className="menu-link login-required", title="Open long term planning tab"),
+        moa_link,
+        #dcc.Link("Lot creation", id="menu-lots_header", className=["menu-link"], href="/dash/lots", title="Open lot creation tab"),
+        html.Div([
+                html.Div([
+                    html.Div("Lot creation", id="menu-lots_header"),
+                    html.Div(mtp_links, className="submenu-content")
+                ]),
+
+                #html.Select([
+                #  html.Option(label="test", value="test", selected=False)
+                #], id="menu-lots-selector")
+            ], className="menu-link login-required", title="Open lot creation tab"),
+        dcc.Link("Short term planning", id="menu-agents_header", className="menu-link login-required",
+                 href="/dash/stp", title="Open short term planning tab"),
+        snapshot_link,
+        html.Div([
+            html.Div([
+                html.Div("Performance models", id="menu-perf_header"),
+                html.Div([
+                    dcc.Link("Quality", id="menu-perf-quality_header", className="menu-link", href="/dash/perfmodels", title="Open quality performance models tab"),
+                    dcc.Link("Energy", id="menu-perf-energy_header", className="menu-link", href="/dash/perfmodels/energy", title="Open energy performance models tab"),
+                ], className="submenu-content")
+            ]),
+        ], className="menu-link login-required", title="Open plant performance models tabs"),
+        html.Div(id="menu-user_header"),
+        html.Div([
+            html.Img(src="/dash/assets/icons/globe.svg", role="img"),
+            dcc.Dropdown(id="menu-lang-select", options=[{"label": "English", "value": "en"},
+                                                         {"label": "Deutsch", "value": "de"},
+                                                         {"label": "Español", "value": "es"}])],
+                className="lang-selector", title="Select the language"),
+    ]
     menu_container = html.Div([
         dcc.Location(id="menu-url"),
         language,
         #dcc.Store(id="lang2", storage_type="memory"),
         dcc.Store(id="lang3", storage_type="memory"),  # dummy output for client side callbacks?
-        dcc.Store(id="client-tz", storage_type="memory"),  # holds client timezone information
+        # dcc.Store(id="client-tz", storage_type="memory", data="UTC"),  # Initialize with UTC, will be overridden by client
         site, selected_snapshot, selected_snapshot_obj, selected_process, snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector,
         #html.Div("DynReAct", className="dynreact-header"),
         html.Img(src=app.get_asset_url(DYNREACT_LOGO), className="menu-logo"),
         html.Img(src=app.get_asset_url(DYNREACT_BACKGROUND), className="menu-background"),
-        html.Div([
-            dcc.Link("Site", id="menu-site_header", className="menu-link login-required", href="/dash/site", title="Site"),
-            #dcc.Link("Long term planning", id="menu-ltp_header", className="menu-link login-required", href="/dash/ltp", title="Open long term planning tab"),
-            html.Div([
-                html.Div([
-                    html.Div("Long term planning", id="menu-ltp_header"),
-                    html.Div([
-                        dcc.Link("Results", id="menu-ltp-planned_header", className="menu-link", href="/dash/ltp/planned", title="Long term planning results"),
-                        dcc.Link("Long term planning", id="menu-ltp-new_header", className="menu-link", href="/dash/ltp", title="Open long term planning tab")
-                    ], className="submenu-content")
-                ]),
-            ], className="menu-link login-required", title="Open long term planning tab"),
-            dcc.Link("Coil-order allocation", id="menu-coa_header", className="menu-link login-required", href="/dash/coa", title="Open coil order allocation tab"),
-            #dcc.Link("Lot creation", id="menu-lots_header", className=["menu-link"], href="/dash/lots", title="Open lot creation tab"),
-            html.Div([
-                    html.Div([
-                        html.Div("Lot creation", id="menu-lots_header"),
-                        html.Div([
-                            dcc.Link("Lots planned", id="menu-lots-planned_header", className="menu-link", href="/dash/lots/planned", title="Lots planned"),
-                            #dcc.Link("Lot creation", id="menu-lots-creation_header", className="menu-link", href="/dash/lots/create", title="Lots creation"),
-                            dcc.Link("Lot creation", id="menu-lots2-creation_header", className="menu-link", href="/dash/lots/create2", title="Lots creation (new)")
-                        ], className="submenu-content")
-                    ]),
-
-                    #html.Select([
-                    #  html.Option(label="test", value="test", selected=False)
-                    #], id="menu-lots-selector")
-                ], className="menu-link login-required", title="Open lot creation tab"),
-            dcc.Link("Short term planning", id="menu-agents_header", className="menu-link login-required",
-                     href="/dash/stp", title="Open short term planning tab"),
-            snapshot_link,
-            dcc.Link("Performance models", id="menu-perf_header", className="menu-link login-required",
-                     href="/dash/perfmodels", title="Open plant performance models tab"),
-            html.Div(id="menu-user_header"),
-            html.Div([
-                html.Img(src="/dash/assets/icons/globe.svg", role="img"),
-                dcc.Dropdown(id="menu-lang-select", options=[{"label": "English", "value": "en"},
-                                                             {"label": "Deutsch", "value": "de"},
-                                                             {"label": "Español", "value": "es"}])],
-                    className="lang-selector", title="Select the language"),
-        ], id="main-menu", className="main-menu")
+        html.Div(menu_entries, id="main-menu", className="main-menu")
     ],
     className="menu-container", id="menu")  # id should match outer key in translation file
     # see https://dash.plotly.com/urls#query-strings
@@ -149,7 +166,6 @@ def update_user_tab(path: str):
     return main_menu_class, user_header, user_class_name
 
 
-
 clientside_callback(
     ClientsideFunction(
         namespace="dynreact",
@@ -171,14 +187,20 @@ clientside_callback(
     Input("snapshot_selected-snapshot", "data"),
     Input("create_process-selector", "data"),
     Input("lotplanning_process-selector", "data"),
-    Input("client-tz", "data"),
-    State("selected-snapshot", "data")
+    #Input("client-tz", "data"),
+    State("selected-snapshot", "data"),
+    prevent_initial_call=False
 )
-def params_changed(params: str|None, user_set_snapshot: str|None, create_process: str|None, planning_process: str|None, client_tz: str|None, old_snapshot: str|None):
+def params_changed(params: str|None, user_set_snapshot: str|None, create_process: str|None, planning_process: str|None, old_snapshot: str|None):  # , client_tz: str|None
     """
     Setting shared state between pages
     """
     changed = GuiUtils.changed_ids()
+    
+    ## If only client-tz changed, don't update anything
+    #if changed == ["client-tz"]:
+    #    return dash.no_update, dash.no_update, dash.no_update
+    
     process_changed_by_user = "create_process-selector" in changed or  "lotplanning_process-selector" in changed
     if "snapshot_selected-snapshot" in changed:
         snapshot, process = user_set_snapshot, dash.no_update
@@ -199,12 +221,24 @@ def params_changed(params: str|None, user_set_snapshot: str|None, create_process
     if snapshot == dash.no_update and old_snapshot is None and not process_changed_by_user:
         ## init snapshot
         snap = state.get_snapshot()
-        snapshot = GuiUtils.format_snapshot(snap.timestamp, client_tz) if snap is not None else None
+        snapshot = GuiUtils.format_snapshot(snap.timestamp, None, state=state) if snap is not None else None
     elif snapshot != dash.no_update:
         snap = state.get_snapshot(DatetimeUtils.parse_date(snapshot))
-        snapshot = GuiUtils.format_snapshot(snap.timestamp, client_tz) if snap is not None else None
-    if snap != dash.no_update:
-        snap = snap.model_dump(exclude_none=True, exclude_unset=True)
+        snapshot = GuiUtils.format_snapshot(snap.timestamp, None, state=state) if snap is not None else None
+    if snap != dash.no_update and snap is not None:
+        lots: dict[int, Sequence[Lot]] = snap.lots
+        snap = snap.model_dump(mode="json", exclude_none=True, exclude_unset=True)
+        lots_copy = {}
+        snap_provider = state.get_snapshot_provider()
+        for eq, eq_lots in lots.items():
+            new_lots = []
+            lots_copy[eq] = new_lots
+            for lot in eq_lots:
+                dump = lot.model_dump(mode="json", exclude_unset=True, exclude_none=True)
+                dump["lot_complete"] = snap_provider.is_lot_complete(lot)
+                new_lots.append(dump)
+            lots_copy[eq] = new_lots
+        snap["lots"] = lots_copy
     return snapshot, snap, process
 
 
@@ -242,14 +276,15 @@ clientside_callback(
     Input("menu-url", "href")   # problem: this triggers the callback before the new page is loaded
 )
 
-clientside_callback(
-    ClientsideFunction(
-        namespace="dynreact",
-        function_name="getTimezoneOffset"
-    ),
-    Output("client-tz", "data"),
-    Input("client-tz", "storage_type")  # run once only
-)
+# Set client timezone once on page load
+#@app.callback(
+#    Output("client-tz", "data"),
+#    Input("menu-url", "pathname"),
+#    prevent_initial_call=False
+#)
+#def init_timezone(pathname):
+#    # Return default timezone - client will override via JavaScript if needed
+#    return "UTC"
 
 
 if __name__ == "__main__":

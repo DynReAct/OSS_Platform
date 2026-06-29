@@ -75,6 +75,11 @@ def layout(*args, **kwargs):
     moa_link = None
     if state.has_material_order_allocation_page():
         moa_link = dcc.Link("Material-order allocation", id="menu-moa_header", className="menu-link login-required", href="/dash/moa", title="Open material order allocation tab")
+
+    performance_pages = [dcc.Link("Equipment models", id="menu-perf-quality_header", className="menu-link", href="/dash/perfmodels", title="Open equipment performance models tab"),
+                    dcc.Link("Energy", id="menu-perf-energy_header", className="menu-link", href="/dash/perfmodels/energy", title="Open energy performance models tab")]
+    if len(state.energy_prediction_types()) > 0:
+        performance_pages.append(dcc.Link("Energy2", id="menu-perf-energy2_header", className="menu-link", href="/dash/perfmodels/energy2", title="Open energy performance models tab"))
     menu_entries = [
         dcc.Link("Site", id="menu-site_header", className="menu-link login-required", href="/dash/site", title="Site"),
         #dcc.Link("Long term planning", id="menu-ltp_header", className="menu-link login-required", href="/dash/ltp", title="Open long term planning tab"),
@@ -106,10 +111,7 @@ def layout(*args, **kwargs):
         html.Div([
             html.Div([
                 html.Div("Performance models", id="menu-perf_header"),
-                html.Div([
-                    dcc.Link("Quality", id="menu-perf-quality_header", className="menu-link", href="/dash/perfmodels", title="Open quality performance models tab"),
-                    dcc.Link("Energy", id="menu-perf-energy_header", className="menu-link", href="/dash/perfmodels/energy", title="Open energy performance models tab"),
-                ], className="submenu-content")
+                html.Div(performance_pages, className="submenu-content")
             ]),
         ], className="menu-link login-required", title="Open plant performance models tabs"),
         html.Div(id="menu-user_header"),

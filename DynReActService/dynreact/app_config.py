@@ -68,6 +68,10 @@ class DynReActSrvConfig:
     plant_performance_models: list[str]|None = None
     energy_provider: str|None = "default+file:./data/energy_context.json"
     "Optional energy analysis provider. Preferred values: `default+file:./data/energy_context.json` or `ras+file:./data/context/energy_context.json`."
+    energy_service: dict[str, str]|None = None
+    "Keys: energy types ('electric', 'heat'), values: provider id"
+    energy_cost_service: dict[str, str] | None = None
+    "Keys: energy types ('electric', 'heat'), values: provider id"
     stp_frontend: str = "default"  # default is the frontend provided in this module
     material_order_allocation_frontend: str|None = None
     "Optionally register a frontend for a custom material-order allocation service"
@@ -109,6 +113,8 @@ class DynReActSrvConfig:
                  ldap_permissions: dict[str, str]|None=None,
                  plant_performance_models: list[str]|None = None,
                  energy_provider: str|None = None,
+                 energy_service: dict[str, str]|None = None,
+                 energy_cost_service: dict[str, str] | None = None,
                  stp_frontend: str|None = None,
                  material_order_allocation_frontend: str|None = None,
                  time_zone: str | None = None,
@@ -251,6 +257,18 @@ class DynReActSrvConfig:
         if energy_provider is None:
             energy_provider = os.getenv("DYNREACT_ENERGY", DynReActSrvConfig.energy_provider)
         self.energy_provider = energy_provider
+        if energy_service is None:
+            energy_service0 = os.getenv("DYNREACT_ENERGY_SERVICE", "")
+            energy_service = {key: value for key, value in ((key.strip(), value.strip()) for key, value in
+                            (entry.split("=") for entry in energy_service0.split(",") if "=" in entry)) if len(key) > 0 and len(value) > 0}
+        if len(energy_service) > 0:
+            self.energy_service = energy_service
+        if energy_cost_service is None:
+            energy_cost_service0 = os.getenv("DYNREACT_ENERGY_COST_SERVICE", "")
+            energy_cost_service = {key: value for key, value in ((key.strip(), value.strip()) for key, value in
+                            (entry.split("=") for entry in energy_cost_service0.split(",") if "=" in entry)) if len(key) > 0 and len(value) > 0}
+        if len(energy_cost_service) > 0:
+            self.energy_cost_service = energy_cost_service
         if stp_frontend is None:
             stp_frontend = os.getenv("STP_FRONTEND", DynReActSrvConfig.stp_frontend)
         self.stp_frontend = stp_frontend

@@ -3,12 +3,13 @@ import importlib.util
 import logging
 import sys
 import traceback
-from typing import Any
+from typing import Any, Literal, Sequence
 
 from dynreact.auth.authentication import get_permission_manager
 from dynreact.base.ConfigurationProvider import ConfigurationProvider
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.DowntimeProvider import DowntimeProvider
+from dynreact.base.EnergyService import EnergyService, EnergyCostService
 from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.LotSink import LotSink
@@ -59,6 +60,9 @@ class Plugins:
         self._lot_sinks: dict[str, LotSink]|None = None
         self._aggregation_persistence: AggregationPersistence|None = None
         self._permissions: PermissionManager|None = None
+        self._energy_services: dict[str, EnergyService|None] = {}  # keys: energy type (electric, heat, ...)
+        self._energy_cost_services: dict[str, EnergyCostService|None] = {}
+
 
     @staticmethod
     def _module_error_page(module: str, module_id: str, module_name: str, error: Exception | None = None):
@@ -162,7 +166,7 @@ class Plugins:
                 self._aggregation_persistence = FileAggregationPersistence(self._config.aggregation_persistence)
             else:
                 self._aggregation_persistence = Plugins._load_module("dynreact.aggregation", self._config.aggregation_persistence, self._profile,
-                                                                 AggregationPersistence, self._config.aggregation_persistence, do_raise=True)
+                                                                     AggregationPersistence, self._config.aggregation_persistence, do_raise=True)
         return self._aggregation_persistence
 
     def get_lot_sinks(self, if_exists: bool=False) -> dict[str, LotSink]:
@@ -212,8 +216,45 @@ class Plugins:
         if self._plant_performance_models is None:
             site = self.get_config_provider().site_config()
             self._plant_performance_models = [Plugins._load_plant_performance_model(config, site) for
-                                config in self._config.plant_performance_models] if self._config.plant_performance_models is not None else []
+                                              config in self._config.plant_performance_models] if self._config.plant_performance_models is not None else []
         return self._plant_performance_models
+
+    def energy_prediction_types(self) -> Sequence[Literal["electric", "heat"]]:
+        return tuple() if self._config.energy_service is None else tuple(self._config.energy_service.keys())
+
+    def energy_cost_types(self) -> Sequence[Literal["electric", "heat"]]:
+        return tuple() if self._config.energy_cost_service is None else tuple(self._config.energy_cost_service.keys())
+
+    def get_energy_service(self, energy_type: Literal["electric", "heat"]) -> EnergyService|None:
+        if energy_type not in self._energy_services and self._config.energy_service is not None:
+            provider_url = self._config.energy_service.get(energy_type)
+            site = self.get_config_provider().site_config()
+            if isinstance(provider_url, EnergyService):
+                provider = provider_url
+            elif provider_url is None:
+                provider = None
+            elif provider_url.startswith("simple:"):
+                from dynreact.base.impl.SimpleEnergyService import SimpleEnergyService
+                provider = SimpleEnergyService(provider_url, site)
+            else:
+                provider = Plugins._load_energy_service(provider_url, site)
+            self._energy_services[energy_type] = provider
+        return self._energy_services.get(energy_type)
+
+    def get_energy_cost_service(self, energy_type: Literal["electric", "heat"]) -> EnergyCostService|None:
+        if energy_type not in self._energy_cost_services and self._config.energy_cost_service is not None:
+            provider_url = self._config.energy_cost_service.get(energy_type)
+            if isinstance(provider_url, EnergyCostService):
+                provider = provider_url
+            elif provider_url is None:
+                provider = None
+            elif provider_url.startswith("simple:"):
+                from dynreact.base.impl.SimpleEnergyService import SimpleEnergyCostService
+                provider = SimpleEnergyCostService(provider_url)
+            else:
+                provider = Plugins._load_energy_cost_service(provider_url)
+            self._energy_cost_services[energy_type] = provider
+        return self._energy_cost_services.get(energy_type)
 
     def load_short_term_planning(self):
         uri = self._config.short_term_planning
@@ -309,6 +350,34 @@ class Plugins:
         return instantiate_first_matching(class_name, PlantPerformanceModel, config, do_raise=True)
 
     @staticmethod
+    def _load_energy_service(config: str,  site: Site) -> EnergyService | None:
+        if "::" not in config:
+            return None
+        idx = config.index("::")
+        class_name = config[0:idx]
+        last_idx = config.rindex("::")
+        has_token = last_idx > idx
+        uri = config[idx + 2:] if not has_token else config[idx + 2:last_idx]
+        token = config[last_idx + 2:] if has_token else None
+        # actually a generic client config
+        config = PerformanceModelClientConfig(address=uri, token=token)
+        return instantiate_first_matching(class_name, EnergyService, site, config, do_raise=True)
+
+    @staticmethod
+    def _load_energy_cost_service(config: str) -> EnergyCostService | None:
+        if "::" not in config:
+            return None
+        idx = config.index("::")
+        class_name = config[0:idx]
+        last_idx = config.rindex("::")
+        has_token = last_idx > idx
+        uri = config[idx + 2:] if not has_token else config[idx + 2:last_idx]
+        token = config[last_idx + 2:] if has_token else None
+        # actually a generic client config
+        config = PerformanceModelClientConfig(address=uri, token=token)
+        return instantiate_first_matching(class_name, EnergyCostService,  config, do_raise=True)
+
+    @staticmethod
     def _load_module(
             base_module: str,
             provider_url: str|None,
@@ -316,7 +385,7 @@ class Plugins:
             clzz,
             *args,
             **kwargs
-        ) -> Any|None:   # returns an instance of the clzz, if found
+    ) -> Any|None:   # returns an instance of the clzz, if found
         module: str|None = None
         explicit_class_name: str | None = None
         if provider_url is not None and provider_url.startswith("class:"):

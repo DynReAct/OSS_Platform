@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone, tzinfo
 from threading import Lock
-from typing import Any, Sequence
+from typing import Any, Sequence, Literal
 
 from dynreact.SnapshotUpdate import SnapshotUpdate
 from dynreact.base.AggregationProvider import AggregationProvider
@@ -249,6 +249,18 @@ class DynReActSrvState:
             lot = lot.copy(update={"id": new_lot_id})
             new_snap = updates.update_snapshot(snapshot, lot)
         return new_lot_id
+
+    def energy_prediction_types(self) -> Sequence[Literal["electric", "heat"]]:
+        return self._plugins.energy_prediction_types()
+
+    def energy_cost_types(self) -> Sequence[Literal["electric", "heat"]]:
+        return self._plugins.energy_cost_types()
+
+    def get_energy_service(self, energy_type: Literal["electric", "heat"]):
+        return self._plugins.get_energy_service(energy_type)
+
+    def get_energy_cost_service(self, energy_type: Literal["electric", "heat"]):
+        return self._plugins.get_energy_cost_service(energy_type)
 
     def get_snapshot_solution(self, process: str, snapshot: datetime|None=None,
                               horizon:  timedelta|None=None) -> tuple[ProductionPlanning, ProductionTargets]|None:

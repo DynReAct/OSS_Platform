@@ -37,6 +37,7 @@ class EnergyPrediction(BaseModel, use_attribute_docstrings=True):
     model: str|None = None   # model_name conflicts with pydantic conventions
     predicted_energy: float
     "The predicted energy consumption (kWh)."
+    # TODO uncertainties etc
 
 
 class EnergyService:
@@ -71,6 +72,15 @@ class EnergyService:
             Estimated energy for processing the specified order at the specified equipment
         """
         raise NotImplementedError
+
+    def bulk_energy_consumption(self,
+                           orders: Sequence[Order],
+                           equipment: int,
+                           *args,
+                           process_id: int|None=None,
+                           model: str|None=None,
+                           **kwargs) -> Sequence[EnergyPrediction]:
+        return [self.energy_consumption(order, equipment, *args, process_id=process_id, model=model, **kwargs) for order in orders]
 
 
 class EnergyCostServiceMetadata(BaseModel, use_attribute_docstrings=True):

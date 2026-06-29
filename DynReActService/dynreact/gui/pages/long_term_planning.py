@@ -429,8 +429,7 @@ def start_time_changed(start_time_type: Literal["now", "nextmonth", "other"]|Non
                         if is_applicable:
                             applicable_solutions[sol_start] = sol_ids
                             break
-                        month_start = datetime(start_time)
-                        month_start.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                        month_start = start_time.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
                         if result[0].period[1] <= month_start:  #  if sol_start is in previous month break
                             break
                     except StopIteration:

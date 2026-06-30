@@ -160,8 +160,9 @@ def prepare_lots_for_lot_view(snapshot: str|datetime|None, process: str|None, re
     return data
 
 
-def ltp_init_dialog(prefix: str):
+def ltp_init_dialog(prefix: str, frozen_lots_checkbox: bool=False):
     import dash_ag_grid as dash_ag
+    check = None if not frozen_lots_checkbox else dcc.Checklist(id=f"{prefix}-ltp-frozen-check", options=[{"value": "", "label": "Respect frozen lots"}], value=[""])
     return html.Dialog(
         html.Div([
             html.H3("Long term planning results"),
@@ -182,15 +183,15 @@ def ltp_init_dialog(prefix: str):
                                 # {"field": "delete"} # not possible
                                 ],
                     defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
-                    style={"height": "20em"},
                     rowData=[],
                     getRowId="params.data.id",
                     className="ag-theme-alpine",  # ag-theme-alpine-dark
                     columnSizeOptions={"defaultMinWidth": 125},
                     columnSize="responsiveSizeToFit",
-                    dashGridOptions={"rowSelection": "single"}
+                    dashGridOptions={"rowSelection": "single", "domLayout": "autoHeight"}
                 ),
                 html.Br(),
+                check,
                 html.Div([
                     html.H3("Selected long-term planning"),
                     html.Div([html.Span("Total production: "), html.Span(id=f"{prefix}-ltp-popup-total"), html.Span("t")], className="lots2-ltp-summary-item"),

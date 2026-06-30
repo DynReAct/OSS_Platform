@@ -1,4 +1,5 @@
 node {
+    properties([disableConcurrentBuilds()])
     def IMAGE_NAME = "dynreact-oss-shortterm"
     def IMAGE_TAG = "latest"
     def LOCAL_REGISTRY = "192.168.110.176:5000/"
@@ -40,8 +41,12 @@ node {
     def runStageWithCleanup = { stageName, body ->
         stage(stageName) {
             sh '''
-                echo "[PRE] Cleaning up containers with prefix $CONTAINER_NAME_PREFIX..."
-                docker ps -a --filter "name=$CONTAINER_NAME_PREFIX_" -q | xargs -r docker rm -f
+                test -n "${CONTAINER_NAME_PREFIX:-}" || {
+                    echo "[ERROR] CONTAINER_NAME_PREFIX is empty; refusing cleanup."
+                    exit 1
+                }
+                echo "[PRE] Cleaning up containers with prefix ${CONTAINER_NAME_PREFIX}..."
+                docker ps -a --filter "name=^${CONTAINER_NAME_PREFIX}_" -q | xargs -r docker rm -f
                 docker system prune -f || echo "[WARN] docker system prune failed; continuing because cleanup is non-blocking."
             '''
             body()

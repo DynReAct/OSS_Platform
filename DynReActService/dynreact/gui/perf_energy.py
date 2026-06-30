@@ -414,31 +414,11 @@ class HttpEnergyBackend(EnergyBackend):
             resolved = self._resolve_feature_table(row, spec, item, feature_table)
             required = self._required_feature_names(spec, resolved)
             return {name: resolved[name] for name in required}
-
-        duration_min = item.duration_min
-        time_gap_min = item.time_gap_min
-        service_equipment = spec["service_equipment"]
-        if service_equipment in ("TD1", "TD2"):
-            return {
-                "Length Out": _number(row.get("Final Length (mm)")),
-                "Length In": _number(row.get("HRC Width (mm)")),
-                "Thickness-Planned-Out (TD)": _number(row.get("Thickness-Planned-Out (TD) (mm)")),
-                "Thickness-Planned-In (TD)": _number(row.get("Thickness-Planned-In (TD) (mm)")),
-                "Weight Out": _number(row.get("Weight (t)")) * 1000.0,
-                "Steelgrade": _number(row.get("Steelgrade")),
-                "Planned Performance (TD)": _number(row.get(spec["performance_column"])),
-            }
-        return {
-            "Width input actual": _number(row.get("Width-Out (NW) (mm)") or row.get("Width-Out (VA) (mm)")),
-            "Thickness input actual": _number(row.get("Thickness-Planned-Out (NW) (mm)")),
-            "Mat-ID of HRC": row.get("Mat-ID-In") or row.get("Me-ID-Primary") or "",
-            "Tin layer up": _number(row.get("Tin Layer Up")),
-            "Tin layer down": _number(row.get("Tin Layer Down")),
-            "Speed acutal": _number(row.get(spec["performance_column"])),
-            "Weight Input (t)": _number(row.get("Weight (t)")),
-            "Processing time (min)": duration_min,
-            "Time_gap": time_gap_min,
-        }
+        service_equipment = str(spec.get("service_equipment") or item.equipment_name).strip() or item.equipment_name
+        raise ValueError(
+            "Energy HTTP configuration for equipment "
+            f"`{item.equipment_name}` (service `{service_equipment}`) is missing `feature_table`."
+        )
 
     def _required_feature_names(self, spec: dict[str, Any], resolved: dict[str, Any]) -> list[str]:
         """Return the union of required feature names across configured models.
@@ -874,6 +854,14 @@ def _build_http_backend(http_cfg: dict[str, Any]) -> HttpEnergyBackend:
     equipment = http_cfg.get("equipment")
     if not isinstance(equipment, dict) or len(equipment) == 0:
         raise ValueError("Energy HTTP configuration is missing `equipment` mappings.")
+    for equipment_name, spec in equipment.items():
+        if not isinstance(spec, dict):
+            raise ValueError(f"Energy HTTP configuration for `{equipment_name}` must be a mapping.")
+        feature_table = spec.get("feature_table")
+        if not isinstance(feature_table, dict) or len(feature_table) == 0:
+            raise ValueError(
+                f"Energy HTTP configuration for `{equipment_name}` is missing `feature_table`."
+            )
     return HttpEnergyBackend(
         base_url,
         region=str(http_cfg.get("region") or "DE"),

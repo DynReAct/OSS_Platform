@@ -29,7 +29,7 @@ from pydantic.fields import FieldInfo
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
 from dynreact.gui.gui_utils import GuiUtils
-from dynreact.gui.pages.components import prepare_lots_for_lot_view, lots_view
+from dynreact.gui.pages.components import prepare_lots_for_lot_view, lots_view, ltp_init_dialog
 #from dynreact.gui.pages.optimization_listener import FrontendOptimizationListener
 from dynreact.lots_optimization import FrontendOptimizationListener
 
@@ -112,7 +112,7 @@ def layout(*args, **kwargs):
             #    ])
         ], className="lots2-control-row"),
         lots_view("lots2", *args, **kwargs),
-        ltp_dialog(),
+        ltp_init_dialog("lots2"),
         # ========= Stores ================
         dcc.Store(id="lots2-active-tab", data=tab),  # Literal["targets", "orders", "settings"]
         dcc.Store(id="lots2-iterations", data=str(iterations), storage_type="memory"),  # Literal["targets", "orders", "settings"]
@@ -471,50 +471,6 @@ def settings_tab(init_method: Literal["heuristic", "duedate", "snapshot", "resul
             html.Button("Stop", id="lots2-stop", className="dynreact-button", disabled=True)
         ], id="lots2-control-btns", className="lots2-control-btns"),
     ]
-
-def ltp_dialog():
-    return html.Dialog(
-        html.Div([
-            html.H3("Long term planning results"),
-            html.Div([
-                dash_ag.AgGrid(
-                    id="lots2-ltp-table",
-                    columnDefs=[{"field": "id", "pinned": True},
-                                {"field": "start_time", "filter": "agDateColumnFilter",
-                                 "headerName": "Start time"},
-                                {"field": "end_time", "filter": "agDateColumnFilter",
-                                 "headerName": "End time"},
-                                {"field": "shift_duration", "filter": "agNumberColumnFilter",
-                                 "headerName": "Shift duration / h"},
-                                {"field": "total_production", "filter": "agNumberColumnFilter",
-                                 "headerName": "Total production / t"},
-                                {"field": "production_per_shift", "filter": "agNumberColumnFilter",
-                                 "headerName": "Avg. production per shift / t"},
-                                # {"field": "delete"} # not possible
-                                ],
-                    defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
-                    style={"height": "20em"},
-                    rowData=[],
-                    getRowId="params.data.id",
-                    className="ag-theme-alpine",  # ag-theme-alpine-dark
-                    columnSizeOptions={"defaultMinWidth": 125},
-                    columnSize="responsiveSizeToFit",
-                    dashGridOptions={"rowSelection": "single"}
-                ),
-                html.Br(),
-                html.Div([
-                    html.H3("Selected long-term planning"),
-                    html.Div([html.Span("Total production: "), html.Span(id="lots2-ltp-popup-total"), html.Span("t")], className="lots2-ltp-summary-item"),
-                    html.Div("Material structure for selected planning interval:", className="lots2-ltp-summary-item"),
-                    html.Div(id="lots2-ltp-popup-structure")
-                ], id="lots2-ltp-popup-summary", hidden=True)
-            ]),
-            html.Div([
-                html.Button("Cancel", id="lots2-ltp-cancel", className="dynreact-button"),
-                html.Button("Apply", id="lots2-ltp-submit", className="dynreact-button")
-            ], className="lots2-materials-buttons")
-        ]),
-        id="lots2-ltp-dialog", className="dialog-filled lots2-ltp-dialog", open=False)
 
 
 def structure_portfolio_popup(initial_weight: float):

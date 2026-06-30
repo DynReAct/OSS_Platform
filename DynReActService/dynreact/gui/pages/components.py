@@ -159,3 +159,49 @@ def prepare_lots_for_lot_view(snapshot: str|datetime|None, process: str|None, re
         data = sorted(data, key=lambda lot: lot["id"])
     return data
 
+
+def ltp_init_dialog(prefix: str):
+    import dash_ag_grid as dash_ag
+    return html.Dialog(
+        html.Div([
+            html.H3("Long term planning results"),
+            html.Div([
+                dash_ag.AgGrid(
+                    id=f"{prefix}-ltp-table",
+                    columnDefs=[{"field": "id", "pinned": True},
+                                {"field": "start_time", "filter": "agDateColumnFilter",
+                                 "headerName": "Start time"},
+                                {"field": "end_time", "filter": "agDateColumnFilter",
+                                 "headerName": "End time"},
+                                {"field": "shift_duration", "filter": "agNumberColumnFilter",
+                                 "headerName": "Shift duration / h"},
+                                {"field": "total_production", "filter": "agNumberColumnFilter",
+                                 "headerName": "Total production / t"},
+                                {"field": "production_per_shift", "filter": "agNumberColumnFilter",
+                                 "headerName": "Avg. production per shift / t"},
+                                # {"field": "delete"} # not possible
+                                ],
+                    defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
+                    style={"height": "20em"},
+                    rowData=[],
+                    getRowId="params.data.id",
+                    className="ag-theme-alpine",  # ag-theme-alpine-dark
+                    columnSizeOptions={"defaultMinWidth": 125},
+                    columnSize="responsiveSizeToFit",
+                    dashGridOptions={"rowSelection": "single"}
+                ),
+                html.Br(),
+                html.Div([
+                    html.H3("Selected long-term planning"),
+                    html.Div([html.Span("Total production: "), html.Span(id=f"{prefix}-ltp-popup-total"), html.Span("t")], className="lots2-ltp-summary-item"),
+                    html.Div("Material structure for selected planning interval:", className="lots2-ltp-summary-item"),
+                    html.Div(id=f"{prefix}-ltp-popup-structure")
+                ], id=f"{prefix}-ltp-popup-summary", hidden=True)
+            ]),
+            html.Div([
+                html.Button("Cancel", id=f"{prefix}-ltp-cancel", className="dynreact-button"),
+                html.Button("Apply", id=f"{prefix}-ltp-submit", className="dynreact-button")
+            ], className="lots2-materials-buttons")
+        ]),
+        id=f"{prefix}-ltp-dialog", className="dialog-filled lots2-ltp-dialog", open=False)
+

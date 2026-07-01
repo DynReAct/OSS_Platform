@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Sequence
 from zoneinfo import ZoneInfo
 
 from dash import html, callback_context
@@ -23,7 +24,7 @@ class GuiUtils:
         return html.Div(plant.name_short, title=title)
 
     @staticmethod
-    def changed_ids(excluded_ids: list[str]|None=None):
+    def changed_ids(excluded_ids: Sequence[str]|None=None):
         "To be called from a callback"
         return [cid for cid in (p['prop_id'].split(".")[0] for p in callback_context.triggered) if excluded_ids is None or cid not in excluded_ids]
 

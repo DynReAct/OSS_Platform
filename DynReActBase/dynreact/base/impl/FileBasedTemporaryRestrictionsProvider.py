@@ -87,6 +87,9 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
             rules = [r for r in rules if r.equipment in equipment or (isinstance(r.equipment, Sequence) and any(e in equipment for e in r.equipment))]
         return self._active_status_for_rules(rules)
 
+    def is_active(self, rule_id: str) -> bool:
+        return rule_id in self._active_rules
+
     def set_active_status(self, rule: str|Sequence[str], active: bool):
         """
         Activate or deactivate a rule, identified by its id
@@ -95,14 +98,18 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
             rule:
             active:
         """
-        if not isinstance(rule, Sequence):
+        self._check_parse()
+        if isinstance(rule, str):
             rule = [rule]
+        missing = [r for r in rule if r not in self._rules]
+        if len(missing) > 0:
+            raise ValueError(f"Rules {missing} unknown")
         current_rules = self._active_rules
         if not active:
             rules = [r for r in current_rules if r not in rule]
         else:
             rules = list(current_rules) + [r for r in rule if r not in current_rules]
-        self._rules = tuple(rules)
+        self._active_rules = tuple(rules)
         self._store_rules()
 
     def _store_rules(self):
@@ -113,7 +120,7 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
             if os.path.isfile(file):
                 os.remove(file)
             return
-        content = "[" + ", ".join(rules) + "]"
+        content = "[" + ", ".join(["\"" + r + "\"" for r in rules]) + "]"
         with open(file, mode="w") as fl:
             fl.write(content)
 

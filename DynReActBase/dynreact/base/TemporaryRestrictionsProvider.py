@@ -41,6 +41,16 @@ class TemporaryRestrictionsProvider:
         """
         raise NotImplementedError
 
+    def is_active(self, rule_id: str) -> bool:
+        """
+        Check if rule is active.
+        Parameters:
+            rule_id:
+        Returns:
+            active status
+        """
+        raise NotImplementedError
+
     def set_active_status(self, rule: str|Sequence[str], active: bool):
         """
         Activate or deactivate a rule, identified by its id

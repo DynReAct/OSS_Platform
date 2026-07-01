@@ -20,6 +20,7 @@ from dynreact.base.ProductionHistoryReader import ProductionHistoryReader
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.SnapshotProvider import SnapshotProvider
+from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider
 from dynreact.base.impl.AggregationPersistence import AggregationPersistence
 from dynreact.base.impl.DummyHistoryReader import DummyHistoryReader
 from dynreact.base.impl.DummyShiftsProvider import DummyShiftsProvider
@@ -58,6 +59,7 @@ class Plugins:
         self._plant_performance_models: list[PlantPerformanceModel]|None = None
         self._lot_sinks: dict[str, LotSink]|None = None
         self._aggregation_persistence: AggregationPersistence|None = None
+        self._temporary_restrictions: TemporaryRestrictionsProvider|None = None
         self._permissions: PermissionManager|None = None
 
     @staticmethod
@@ -202,6 +204,21 @@ class Plugins:
             else:
                 self._history_reader = Plugins._load_module("dynreact.history", self._config.history_reader, self._profile, ProductionHistoryReader, site, do_raise=True)
         return self._history_reader
+
+    def get_temporary_restrictions(self) -> TemporaryRestrictionsProvider:
+        if self._temporary_restrictions is None:
+            site = self.get_config_provider().site_config()
+            if isinstance(self._config.temporary_restrictions, TemporaryRestrictionsProvider):
+                self._temporary_restrictions = self._config.temporary_restrictions
+            elif self._config.temporary_restrictions and self._config.temporary_restrictions.startswith("file:"):
+                from dynreact.base.impl.FileBasedTemporaryRestrictionsProvider import FileBasedTemporaryRestrictionsProvider
+                try:
+                    self._temporary_restrictions = FileBasedTemporaryRestrictionsProvider(self._config.temporary_restrictions, site)
+                except NotApplicableException:
+                    pass
+            else:
+                self._temporary_restrictions = Plugins._load_module("dynreact.restrictions", self._config.temporary_restrictions, self._profile, TemporaryRestrictionsProvider, site, do_raise=True)
+        return self._temporary_restrictions
 
     def get_permission_manager(self) -> PermissionManager:
         if self._permissions is None:

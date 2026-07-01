@@ -1,0 +1,139 @@
+from __future__ import annotations
+
+from datetime import datetime, date
+from types import MappingProxyType
+from typing import Sequence, Literal, TypeVar, Any, Mapping
+
+from pydantic import BaseModel
+
+type ConditionOperator = Literal["=", "<", "<=", ">", ">=", "!="]
+type LowerOperator = Literal["<", "<="]
+type ConditionValue = str | int | float | bool | datetime | date | None
+type NumericValue = int | float | datetime | date
+
+
+class BaseCondition(BaseModel, use_attribute_docstrings=True):
+    type: str
+
+
+class PropertyCondition(BaseCondition):
+    attribute: str
+
+
+V = TypeVar("V", bound=ConditionValue)
+N = TypeVar("N", bound=NumericValue)
+
+
+class ThresholdCondition[V](PropertyCondition):
+    type: Literal["threshold"] = "threshold"
+    operator: ConditionOperator
+    value: V
+
+
+class ListCondition[V](PropertyCondition):
+    type: Literal["list"] = "list"
+    operator: Literal["in", "not_in"] = "in"
+    values: Sequence[V]
+
+
+class RangeCondition[N](PropertyCondition):
+    type: Literal["range"] = "range"
+    value_range: tuple[N, N]
+    operators: tuple[LowerOperator, LowerOperator]
+
+
+class MaterialCondition(BaseCondition):
+    type: Literal["material"] = "material"
+    material_class: str
+    relevant_attributes: tuple[str, ...]|None = None
+    "For display to the user only"
+
+
+type LeafCondition = ThresholdCondition | ListCondition | RangeCondition | MaterialCondition
+
+
+class NotCondition(BaseCondition):
+    type: Literal["not"] = "not"
+    base: Condition
+
+
+class CompositeCondition(BaseCondition):
+    conditions: Sequence[Condition]
+
+
+class And(CompositeCondition):
+    type: Literal["and"] = "and"
+
+
+class Or(CompositeCondition):
+    type: Literal["or"] = "or"
+
+
+type Condition = LeafCondition | NotCondition | And | Or
+
+
+class ConditionUtils:
+
+    _TYPES: dict[str, type[Condition]] = MappingProxyType({
+        "threshold": ThresholdCondition, "list": ListCondition, "range": RangeCondition, "material": MaterialCondition,
+        "not": NotCondition, "and": And, "or": Or
+    })
+
+    @staticmethod
+    def deserialize(content: dict[str, Any]) -> Condition:
+        if not content or "type" not in content or content["type"] not in ConditionUtils._TYPES:
+            raise ValueError(f"Invalid condition: {content}")
+        tp = ConditionUtils._TYPES.get(content["type"])
+        instance: Condition = tp.model_validate(content)
+        return instance
+
+    @staticmethod
+    def applies(condition: Condition, obj: Any):
+        if isinstance(condition, And):
+            return all(ConditionUtils.applies(c, obj) for c in condition.conditions)
+        if isinstance(condition, Or):
+            return any(ConditionUtils.applies(c, obj) for c in condition.conditions)
+        if isinstance(condition, NotCondition):
+            return not ConditionUtils.applies(condition.base, obj)
+        if isinstance(condition, MaterialCondition):
+            cl = condition.material_class
+            value = getattr(obj, "material_classes", None)
+            return cl in value.values() if isinstance(value, Mapping) else False
+        value = ConditionUtils._extract_value(obj, condition)
+        if isinstance(condition, ListCondition):
+            return value in condition.values
+        if isinstance(condition, ThresholdCondition):
+            operator = condition.operator
+            target_value = condition.value
+            if value is None:
+                return (operator == "=" and target_value is None) or (operator == "!=" and target_value is not None)
+            if operator == "=":
+                return value == target_value
+            if operator == "<":
+                return value < target_value
+            if operator == "<=":
+                return value <= target_value
+            if operator == ">":
+                return value > target_value
+            if operator == ">=":
+                return value >= target_value
+            if operator == "!=":
+                return value != target_value
+            raise ValueError(f"Unsupported operator {operator} in condition {condition}")
+        if isinstance(condition, RangeCondition):
+            rng = condition.value_range
+            if value is None or value < rng[0] or value > rng[1]:
+                return False
+            if (value == rng[0] and condition.operators[0] == "<=") or (value == rng[1] and condition.operators[1] == "<="):
+                return True
+            return False
+        raise ValueError(f"Condition type not supported: {type(condition)}")
+
+    @staticmethod
+    def _extract_value(obj: Any, condition: PropertyCondition):
+        attributes = condition.attribute.split(".")
+        for attr in attributes:
+            obj = getattr(obj, attr, None) if not isinstance(obj, Mapping) else obj.get(attr)
+            if obj is None:
+                return None
+        return obj

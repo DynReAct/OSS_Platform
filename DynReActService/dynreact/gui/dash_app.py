@@ -72,6 +72,8 @@ def layout(*args, **kwargs):
                 dcc.Link("Lot creation", id="menu-lots2-creation_header", className="menu-link", href="/dash/lots/create2", title="Lots creation (new)")]
     if state.has_batch_mtp():
         mtp_links.append(dcc.Link("Batch job", id="menu-snaps-batch_header", className="menu-link", href="/dash/lots/batch", title="Lot creation batch jobs"))
+    if config.temporary_restrictions is not None:
+        mtp_links.append(dcc.Link("Temporary restrictions", id="menu-temp-rest-header", className="menu-link", href="/dash/lots/temprest", title="Temporary equipment restrictions"))
     moa_link = None
     if state.has_material_order_allocation_page():
         moa_link = dcc.Link("Material-order allocation", id="menu-moa_header", className="menu-link login-required", href="/dash/moa", title="Open material order allocation tab")

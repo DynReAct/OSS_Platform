@@ -17,6 +17,7 @@ from dynreact.base.ProductionHistoryReader import ProductionHistoryReader
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.SnapshotProvider import SnapshotProvider
+from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider
 from dynreact.base.impl.AggregationPersistence import AggregationPersistence
 from dynreact.base.impl.AggregationProviderImpl import AggregationProviderImpl
 from dynreact.base.impl.MemoryResultsPersistence import MemoryResultsPersistence
@@ -65,6 +66,7 @@ class DynReActSrvState:
         self._moa_loaded = False
         self._aggregation: AggregationProvider|None = None
         self._aggregation_persistence: AggregationPersistence|None = None
+        self._temporary_restrictions: TemporaryRestrictionsProvider|None = None
         self._optimization_state = LotCreator()
         self._lots_batch_job = None
         self._snapshot_locks: dict[datetime, Lock] = {}
@@ -156,6 +158,11 @@ class DynReActSrvState:
         if self._shifts_provider is None:
             self._shifts_provider = self._plugins.get_shifts_provider()
         return self._shifts_provider
+
+    def get_temporary_restrictions(self) -> TemporaryRestrictionsProvider|None:
+        if self._temporary_restrictions is None:
+            self._temporary_restrictions = self._plugins.get_temporary_restrictions()
+        return self._temporary_restrictions
 
     def get_history_reader(self) -> ProductionHistoryReader:
         if self._history_reader is None:

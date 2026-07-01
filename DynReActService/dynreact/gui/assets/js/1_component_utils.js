@@ -33,12 +33,26 @@
                     console.log("Alert sibling not found", siblingId);
                     return "";
                 }
-                let alert = sibling.nextElementSibling;
+                const isDialog = sibling.tagName === "DIALOG";
+                let alert = isDialog ? sibling.querySelector("basic-alert") : sibling.nextElementSibling;
                 if (alert?.tagName !== "BASIC-ALERT")  {
                     alert = document.createElement("basic-alert");
-                    sibling.parentNode.insertBefore(alert, sibling.nextSibling);
+                    if (isDialog)
+                        sibling.appendChild(alert);
+                    else
+                        sibling.parentNode.insertBefore(alert, sibling.nextSibling);
                 }
                 alert.showMessage(msg, type, options);
+                if (isDialog && msg) {
+                    const close = (event) => {
+                        if (event.target.id === siblingId) { // only when user clicks outside the dialog
+                            sibling.close();
+                            sibling.removeEventListener("click", close);
+                        }
+                    };
+                    sibling.showModal();
+                    sibling.addEventListener("click", close);
+                }
                 return dummyReturnValue || "";
             },
             showAlertObj: function(obj, siblingId, dummyReturnValue) {

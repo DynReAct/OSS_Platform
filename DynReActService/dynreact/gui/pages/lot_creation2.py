@@ -1445,8 +1445,9 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     current_process_plants = [p for p in plant_targets.target_weight.keys()] if plant_targets is not None else []
     if len(current_process_plants) == 0:
         return None, None, None, "sizeToFit"
-
-    orders_filtered = [order for order in snapshot_obj.orders if any(plant in current_process_plants for plant in order.allowed_equipment)]
+    temporary_restrictions = state.get_temporary_restrictions()
+    orders = LotsOptimizationAlgo.orders_apply_temporary_constraints(snapshot_obj.orders, temporary_restrictions, equipment=current_process_plants)
+    orders_filtered = [order for order in orders if any(plant in current_process_plants for plant in order.allowed_equipment)]
     orders_sorted = sorted(orders_filtered, key=process_index_for_order)
     order_ids = {o.id: o for o in orders_sorted}
     new_selected_rows = {"ids": []}
@@ -1491,7 +1492,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     elif is_init_command2:
         # adapt planning start time according to frozen lots
         eligible_orders = state.get_snapshot_provider().eligible_orders2(snapshot_obj, process, (actual_start_time, end_time),
-                                            equipment=current_process_plants, transport_times=transport_times)
+                                            equipment=current_process_plants, transport_times=transport_times, temporary_restrictions=temporary_restrictions)
         if not update_selection and selected_rows is not None:
             eligible_orders = eligible_orders + [row for row in (row0["id"] if isinstance(row0, dict) else row0 for row0 in selected_rows) if row not in eligible_orders]
         # filter orders matching for selected process

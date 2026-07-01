@@ -132,20 +132,7 @@ runStageWithCleanup('Run Scenario 0') {
           ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG} \\
           bash -lc 'set -euo pipefail
                 source .venv/bin/activate
-                COMP=DynReActService
-
-                python -m venv /tmp/venv
-                . /tmp/venv/bin/activate
-
-                python -m pip install -U pip setuptools wheel
-                python -m pip install -r "/repo/DynReActBase/requirements.txt"
-                python -m pip install -r "/repo/\$COMP/requirements.txt"
-                [ -f "/repo/\$COMP/requirements_local.txt" ] && python -m pip install -r "/repo/\$COMP/requirements_local.txt" || true
-                [ -f "/repo/\$COMP/requirements-dev.txt" ] && python -m pip install -r "/repo/\$COMP/requirements-dev.txt" || true
-                python -m pip install -r "/repo/ShortTermPlanning/requirements.txt"
-
-                command -v pytest >/dev/null 2>&1 || python -m pip install pytest
-                cd /app/shortterm/dynreact/tests/integration_test
+                   cd /app/shortterm/dynreact/tests/integration_test
                 pytest -s -p no:cacheprovider test_auction.py::test_scenario_00
       '
     """
@@ -174,13 +161,7 @@ runStageWithCleanup('Run Scenario 0') {
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
                    python -m venv /tmp/venv
-                   source .venv/bin/activate 
-                   COMP='ShortTermPlanning' 
-                   pip install -r /repo/\$COMP/requirements.txt
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
-
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   source .venv/bin/activate
                    cd /app/shortterm/dynreact/tests/integration_test 
                    pytest -s  -p no:cacheprovider test_auction.py::test_scenario_01
          '
@@ -208,13 +189,7 @@ runStageWithCleanup('Run Scenario 0') {
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
                    python -m venv /tmp/venv
-                   source .venv/bin/activate 
-                   COMP='ShortTermPlanning' 
-                   pip install -r /repo/\$COMP/requirements.txt 
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
-
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   source .venv/bin/activate
                    cd /app/shortterm/dynreact/tests/integration_test 
                    pytest -s -p no:cacheprovider test_auction.py::test_scenario_02
          '
@@ -243,13 +218,7 @@ runStageWithCleanup('Run Scenario 0') {
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
                    python -m venv /tmp/venv
-                   source .venv/bin/activate 
-                   COMP='ShortTermPlanning' 
-                   pip install -r /repo/\$COMP/requirements.txt 
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
-
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   source .venv/bin/activate
                    cd /app/shortterm/dynreact/tests/integration_test 
                    pytest -s -p no:cacheprovider test_auction.py::test_scenario_03
          '
@@ -279,13 +248,7 @@ runStageWithCleanup('Run Scenario 0') {
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
                    python -m venv /tmp/venv
-                   source .venv/bin/activate 
-                   COMP='ShortTermPlanning' 
-                   pip install -r /repo/\$COMP/requirements.txt 
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
-
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   source .venv/bin/activate
                    cd /app/shortterm
                    pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_04
          '
@@ -315,13 +278,7 @@ runStageWithCleanup('Run Scenario 0') {
           --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
-                   source .venv/bin/activate 
-                   COMP='ShortTermPlanning' 
-                   pip install -r /repo/\$COMP/requirements.txt 
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true
-
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   source .venv/bin/activate
                    cd /app/shortterm
                    pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_05
          '
@@ -351,13 +308,7 @@ runStageWithCleanup('Run Scenario 0') {
           --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
-                   source .venv/bin/activate 
-                   COMP='ShortTermPlanning' 
-                   pip install -r /repo/\$COMP/requirements.txt 
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
-
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   source .venv/bin/activate
                    cd /app/shortterm
                    pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_06
          '
@@ -387,13 +338,7 @@ runStageWithCleanup('Run Scenario 0') {
           --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
-                   source .venv/bin/activate 
-                   COMP='ShortTermPlanning' 
-                   pip install -r /repo/\$COMP/requirements.txt 
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
-
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   source .venv/bin/activate
                    cd /app/shortterm
                    pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_07
          '
@@ -423,13 +368,7 @@ runStageWithCleanup('Run Scenario 0') {
           --user "0:0" \\
           "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
-                   source .venv/bin/activate 
-                   COMP='ShortTermPlanning' 
-                   pip install -r /repo/\$COMP/requirements.txt 
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
-
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   source .venv/bin/activate
                    cd /app/shortterm
                    pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_08
          '

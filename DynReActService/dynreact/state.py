@@ -77,6 +77,11 @@ class DynReActSrvState:
     def has_batch_mtp(self) -> bool:
         return self._lots_batch_job is not None
 
+    def run_batch_mtp(self) -> bool:
+        if not self._lots_batch_job:
+            return False
+        return self._lots_batch_job.trigger()
+
     def get_batch_mtp_data(self) -> LotsBatchJobStatistics|None:
         if self._lots_batch_job is None:
             return None

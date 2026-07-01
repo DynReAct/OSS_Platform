@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Sequence
 
 from dynreact.base.model import Model
@@ -40,6 +40,7 @@ class ServiceMetrics(Model):
 
 class LotCreationProcessStatistics(Model):
     solution_id: str
+    duration: timedelta
     order_backlog_count: int
     order_backlog_tons: float
     lots_created: int
@@ -68,8 +69,7 @@ class LotsBatchJobStatistics(Model):
     previous_invocation: datetime | None = None
     previous_snapshot: datetime|None = None
     next_invocation: datetime | None = None
-    # TODO option to keep more than one result set
-    previous_process_results: dict[str, LotCreationProcessStatistics] | None = None
+    previous_process_results: dict[datetime, dict[str, LotCreationProcessStatistics]] = {}
     overall_process_results: dict[str, LotCreationProcessStatistics]
 
 

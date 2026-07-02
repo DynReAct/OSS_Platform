@@ -1,8 +1,10 @@
+import random
 import unittest
 from datetime import datetime, timedelta
 from typing import Callable, Sequence
 
 from dynreact.base.LotsOptimizer import OptimizationListener, LotsOptimizationState, LotsOptimizationAlgo, LotsOptimizer
+from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider, EquipmentRestriction
 from dynreact.base.conditions import ThresholdCondition
 from dynreact.base.impl.SimpleCostProvider import SimpleCostProvider
@@ -30,7 +32,7 @@ def _init_algo(site: Site, temporary_restrictions: TemporaryRestrictionsProvider
 
 class TemporaryRestrictionsTest(unittest.TestCase):
 
-    def test_restrictions_are_considered(self):
+    def test_temporary_restrictions_are_considered(self):
         process = "testProcess"
         process_id = 0
         num_plants = 2
@@ -76,6 +78,34 @@ class TemporaryRestrictionsTest(unittest.TestCase):
         optimization.add_listener(listener)
         optimization_state: LotsOptimizationState = optimization.run(max_iterations=10)
         listener.check()
+
+    def test_temporary_restrictions_are_considered_in_backlog(self):
+        rand = random.Random(x=42)
+        process = "testProcess"
+        process_id = 0
+        num_plants = 2
+        plants = [Equipment(id=p, name_short="Plant" + str(p), process=process) for p in range(num_plants)]
+        test_site = Site(
+            processes=[Process(name_short=process, process_ids=[process_id])],
+            equipment=plants,
+            storages=[], material_categories=[]
+        )
+        allowed_plants = list(range(num_plants))
+        orders = [
+            _create_order("a", allowed_plants, [0]),
+            _create_order("b", allowed_plants, [0])]
+        snapshot = Snapshot(timestamp=datetime(2026, 7, 2),
+                            orders=orders,
+                            material=[mat for o in orders for mat in _create_material_for_order(o, process_id)],
+                            inline_material={}, lots={})
+        sp = SnapshotProvider("test:", test_site)
+        planning_period = (snapshot.timestamp, snapshot.timestamp + timedelta(days=1))
+        # Order a temporarily not allowed at equipment 0
+        restriction = EquipmentRestriction(id="test", label="test", equipment=0, condition=ThresholdCondition(attribute="id", operator="=", value="a"))
+        restrictions = TestRestrictionsProvider(test_site, [(restriction, True)])
+        eligible_orders: list[str] = sp.eligible_orders2(snapshot, process, planning_period, equipment=(0, ), temporary_restrictions=restrictions)
+        assert "a" not in eligible_orders, f"Order a found in eligible orders, despite temporary constraint preventing it to run at equipment 0. Eligible: {eligible_orders}"
+        assert "b" in eligible_orders, f"Order b missing from eligible orders: {eligible_orders}"
 
 
 class TestRestrictionsProvider(TemporaryRestrictionsProvider):

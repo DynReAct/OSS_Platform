@@ -37,8 +37,8 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
         self._active_file = os.path.join(self._folder, FileBasedTemporaryRestrictionsProvider._ACTIVE_FILE)
         self._active_rules: tuple[str, ...] = self._parse_active()
 
-    def _active_status_for_rules(self, rules: Sequence[EquipmentRestriction]) -> Sequence[tuple[EquipmentRestriction, bool]]:
-        return [(r, r.id in self._active_rules) for r in rules]
+    def _active_status_for_rules(self, rules: Sequence[EquipmentRestriction], active_only: bool) -> Sequence[tuple[EquipmentRestriction, bool]]:
+        return [(r, r.id in self._active_rules) for r in rules if not active_only or r.id in self._active_rules]
 
     def _check_parse(self):
         if not self._rules:
@@ -77,7 +77,7 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
         rule = self._rules.get(rule_id)
         return rule, rule is not None and rule_id in self._active_rules
 
-    def equipment_restrictions(self, equipment: int | Sequence[int] | None = None) -> Sequence[tuple[EquipmentRestriction, bool]]:
+    def equipment_restrictions(self, equipment: int | Sequence[int] | None = None, active_only: bool=False) -> Sequence[tuple[EquipmentRestriction, bool]]:
         """
         Parameters:
             equipment:
@@ -90,7 +90,7 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
         if equipment is not None:
             equipment = equipment if isinstance(equipment, Sequence) else (equipment, )
             rules = [r for r in rules if r.equipment in equipment or (isinstance(r.equipment, Sequence) and any(e in equipment for e in r.equipment))]
-        return self._active_status_for_rules(rules)
+        return self._active_status_for_rules(rules, active_only)
 
     def is_active(self, rule_id: str) -> bool:
         return rule_id in self._active_rules

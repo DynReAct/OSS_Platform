@@ -31,7 +31,7 @@ class TemporaryRestrictionsProvider:
         self._url = url
         self._site = site
 
-    def equipment_restrictions(self, equipment: int|Sequence[int]|None=None) -> Sequence[tuple[EquipmentRestriction, bool]]:
+    def equipment_restrictions(self, equipment: int|Sequence[int]|None=None, active_only: bool=False) -> Sequence[tuple[EquipmentRestriction, bool]]:
         """
         Parameters:
             equipment:
@@ -51,15 +51,6 @@ class TemporaryRestrictionsProvider:
         """
         return next(((rule, active) for rule, active in self.equipment_restrictions() if rule.id == rule_id), (None, False))
 
-    def is_active(self, rule_id: str) -> bool:
-        """
-        Check if rule is active.
-        Parameters:
-            rule_id:
-        Returns:
-            active status
-        """
-        raise NotImplementedError
 
     def set_active_status(self, rule: str|Sequence[str], active: bool):
         """

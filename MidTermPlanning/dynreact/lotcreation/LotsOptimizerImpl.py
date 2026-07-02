@@ -15,6 +15,7 @@ from dynreact.base.CostProvider import CostProvider
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo, LotsOptimizer, LotsOptimizationState
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation
+from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider
 from dynreact.base.model import Snapshot, ProductionPlanning, ProductionTargets, Site, OrderAssignment, Order, \
     EquipmentStatus, Lot, Equipment, EquipmentProduction, ObjectiveFunction
 from dynreact.lotcreation.TabuParams import TabuParams
@@ -54,10 +55,12 @@ class TabuSearch(LotsOptimizer):
                  forced_orders:  list[str]|None = None,
                  base_lots: list[Lot]|None = None,
                  params: TabuParams|None=None,
+                 temporary_restrictions: TemporaryRestrictionsProvider | None = None
                  ):
         super().__init__(site, process, costs, snapshot, targets, initial_solution, min_due_date=min_due_date,
                          best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
-                         orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots)
+                         orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots,
+                         temporary_restrictions=temporary_restrictions)
         self._params: TabuParams = params if params is not None else TabuParams()
         self._performance_restrictions: list[PerformanceEstimation]|None = None
         self._forbidden_assignments: dict[str, list[int]] = {}
@@ -888,8 +891,8 @@ class LotsAllocator:
 
 class TabuAlgorithm(LotsOptimizationAlgo):
 
-    def __init__(self, provider_url: str, site: Site):
-        super().__init__(provider_url, site)
+    def __init__(self, provider_url: str, site: Site, temporary_restrictions: TemporaryRestrictionsProvider|None=None):
+        super().__init__(provider_url, site, temporary_restrictions=temporary_restrictions)
         if provider_url.lower() != "default:tabu-search":
             raise NotApplicableException()
         self._params = TabuParams()
@@ -902,11 +905,13 @@ class TabuAlgorithm(LotsOptimizationAlgo):
                                   parameters: dict[str, Any] | None = None,
                                   orders_custom_priority: dict[str, int] | None = None,
                                   forced_orders: list[str] | None = None,
-                                  base_lots: dict[int, Lot] | None = None
+                                  base_lots: dict[int, Lot] | None = None,
+                                  temporary_restrictions: TemporaryRestrictionsProvider|None= None
                                   ) -> TabuSearch:
         return TabuSearch(self._site, process, costs, snapshot, targets, initial_solution=initial_solution, min_due_date=min_due_date,
                           best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
-                          orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots, params=self._params)
+                          orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots, params=self._params,
+                          temporary_restrictions=temporary_restrictions)
 
     def set_params(self, params: TabuParams):
         self._params = params

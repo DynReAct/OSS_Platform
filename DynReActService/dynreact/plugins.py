@@ -121,7 +121,7 @@ class Plugins:
             if cfg == "default:tabu-search":
                 cfg = f"class:dynreact.lotcreation.LotsOptimizerImpl,{cfg}"
             self._lots_optimizer = Plugins._load_module("dynreact.lotcreation", cfg, self._profile, LotsOptimizationAlgo,
-                                                        self.get_config_provider().site_config(), do_raise=True)
+                                                        self.get_config_provider().site_config(), temporary_restrictions=self.get_temporary_restrictions(), do_raise=True)
         return self._lots_optimizer
 
     def get_long_term_planning(self) -> LongTermPlanning:

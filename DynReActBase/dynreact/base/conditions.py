@@ -25,25 +25,25 @@ N = TypeVar("N", bound=NumericValue)
 
 
 class ThresholdCondition[V](PropertyCondition):
-    type: Literal["threshold"]
+    type: Literal["threshold"] = "threshold"
     operator: ConditionOperator
     value: V
 
 
 class ListCondition[V](PropertyCondition):
-    type: Literal["list"]
+    type: Literal["list"] = "list"
     operator: Literal["in", "not_in"] = "in"
     values: Sequence[V]
 
 
 class RangeCondition[N](PropertyCondition):
-    type: Literal["range"]
+    type: Literal["range"] = "range"
     value_range: tuple[N, N]
     operators: tuple[LowerOperator, LowerOperator]
 
 
 class MaterialCondition(BaseCondition):
-    type: Literal["material"]
+    type: Literal["material"] = "material"
     material_class: str
     relevant_attributes: tuple[str, ...]|None = None
     "For display to the user only"
@@ -53,7 +53,7 @@ type LeafCondition = ThresholdCondition | ListCondition | RangeCondition | Mater
 
 
 class NotCondition(BaseCondition):
-    type: Literal["not"]
+    type: Literal["not"] = "not"
     base: Condition
 
 
@@ -62,11 +62,11 @@ class CompositeCondition(BaseCondition):
 
 
 class And(CompositeCondition):
-    type: Literal["and"]
+    type: Literal["and"] = "and"
 
 
 class Or(CompositeCondition):
-    type: Literal["or"]
+    type: Literal["or"] = "or"
 
 
 type Condition = LeafCondition | NotCondition | And | Or

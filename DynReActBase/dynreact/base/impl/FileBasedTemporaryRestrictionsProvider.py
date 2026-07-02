@@ -35,7 +35,7 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
         self._files = json_files
         self._rules: dict[str, EquipmentRestriction]|None = None  # initialized lazily
         self._active_file = os.path.join(self._folder, FileBasedTemporaryRestrictionsProvider._ACTIVE_FILE)
-        self._active_rules: tuple[str] = self._parse_active()
+        self._active_rules: tuple[str, ...] = self._parse_active()
 
     def _active_status_for_rules(self, rules: Sequence[EquipmentRestriction]) -> Sequence[tuple[EquipmentRestriction, bool]]:
         return [(r, r.id in self._active_rules) for r in rules]
@@ -50,7 +50,7 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
             return tuple()
         with open(file, "r") as fl:
             content = fl.read()
-        active_rules = TypeAdapter(tuple[str]).validate_json(content)
+        active_rules = TypeAdapter(tuple[str, ...]).validate_json(content)
         return active_rules
 
     @staticmethod

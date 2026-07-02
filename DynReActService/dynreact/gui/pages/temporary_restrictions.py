@@ -44,7 +44,8 @@ def layout(*args, **kwargs):
         else:
             equipment_text, equipment_title = _equipment_text(equipment, site)
         grid.extend([html.Span(rst.label, title=f"Id: {rst.id}"), html.Span(rst.description), html.Span(equipment_text, title="Id: " + equipment_title),
-                     html.Span(material_filter), html.Span(f"{order_attribute}"), html.Span(f"{active}"),
+                     html.Span(material_filter), html.Span(f"{order_attribute}"),
+                     html.Span(f"{active}", id={"role": "temprest-active", "id": rst.id}),
                      html.Div(html.Button("Toggle", id={"role": "temprest-toggle", "id": rst.id}, className="dynreact-button"))])
     return html.Div([
         html.H1("Temporary restrictions"),
@@ -52,9 +53,13 @@ def layout(*args, **kwargs):
         html.Span(id="temprest-blub")
     ])
 
-@callback(Output("temprest-blub", "children"),
+
+@callback(Output({"role": "temprest-active", "id": ALL}, "children"),
          Input({"role": "temprest-toggle", "id": ALL}, "n_clicks"),
-          config_prevent_initial_callbacks=True)
+         running=[
+              (Output({"role": "temprest-toggle", "id": ALL}, "disabled"), True, False),
+         ],
+         config_prevent_initial_callbacks=True)
 def toggle(clicks):
     changed = GuiUtils.changed_ids(excluded_ids=("",))
     if len(changed) == 0:
@@ -63,7 +68,8 @@ def toggle(clicks):
     restrictions = state.get_temporary_restrictions()
     active = restrictions.is_active(triggered)
     restrictions.set_active_status(triggered, not active)
-    return "Successfully toggled status"
+    status = [f"{active}" for _, active in restrictions.equipment_restrictions()]
+    return status
 
 
 def _equipment_text(e: int, site: Site) -> tuple[str, str|None]:

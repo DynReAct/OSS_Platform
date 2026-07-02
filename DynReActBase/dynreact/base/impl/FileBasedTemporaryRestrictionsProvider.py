@@ -48,7 +48,7 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
         file = self._active_file
         if not os.path.isfile(file):
             return tuple()
-        with open(file, "r") as fl:
+        with open(file, mode="rt", encoding="utf-8") as fl:
             content = fl.read()
         active_rules = TypeAdapter(tuple[str, ...]).validate_json(content)
         return active_rules
@@ -57,7 +57,7 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
     def _parse(files: Sequence[str]) -> dict[str, EquipmentRestriction]:
         rules = {}
         for file in files:
-            with open(file, mode="r") as fl:
+            with open(file, mode="rt", encoding="utf-8") as fl:
                 content = fl.read()
                 json_content = json.loads(content)  # FIXME better use a custom Python validator than deserialize
             rule: EquipmentRestriction = RestrictionUtils.deserialize(json_content)
@@ -126,7 +126,7 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
                 os.remove(file)
             return
         content = "[" + ", ".join(["\"" + r + "\"" for r in rules]) + "]"
-        with open(file, mode="w") as fl:
+        with open(file, mode="wt", encoding="utf-8") as fl:
             fl.write(content)
 
 

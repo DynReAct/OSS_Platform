@@ -1,7 +1,7 @@
 import json
 from typing import Sequence
 
-from dash import html, callback, Output, ALL, Input, dcc
+from dash import html, callback, Output, ALL, Input, dcc, State, clientside_callback, ClientsideFunction
 import dash
 import dash_ag_grid as dash_ag
 
@@ -112,14 +112,16 @@ def layout(*args, **kwargs):
             ], style={"display": "flex", "column-gap": "1em", "align-items": "center"}),
             html.Br(),
             orders_table
-        ])
-
+        ]),
+        html.Dialog(id="temprest-error-dialog", className="dialog-filled temprest-dialog", open=False),
+        dcc.Store(id="temprest-error-msg", storage_type="memory")   # {type: ...,  msg: ...}
     ], id="temprest")
 
 
 @callback(Output({"role": "temprest-active", "id": ALL}, "children"),
          Output({"role": "temprest-active", "id": ALL}, "className"),
          Output({"role": "temprest-active", "id": ALL}, "title"),
+         Output("temprest-error-msg", "data"),
          Input({"role": "temprest-toggle", "id": ALL}, "n_clicks"),
          running=[
               (Output({"role": "temprest-toggle", "id": ALL}, "disabled"), True, False),
@@ -128,16 +130,32 @@ def layout(*args, **kwargs):
 def toggle(clicks):
     changed = GuiUtils.changed_ids(excluded_ids=("",))
     if len(changed) == 0 or not dash_authenticated(config):
-        return
+        return None, None, None, None
     triggered = json.loads(changed[0])["id"]
     restrictions = state.get_temporary_restrictions()
     active = restrictions.is_active(triggered)
-    restrictions.set_active_status(triggered, not active)
+    msg = None
+    try:
+        restrictions.set_active_status(triggered, not active)
+        # msg = {"type": "success", "msg": f"Status toggled: {triggered} = {not active}"}  # the alert is too ugly here
+    except Exception as e:
+        msg = {"type": "error", "msg": f"Failed to toggle status: {e}"}
     rules_active = [active for _, active in restrictions.equipment_restrictions()]
     status = ["✔" if active else "✖" for active in rules_active]
     classes = ["temprest-cell " + ("temprest-active" if active else "temprest-inactive") for active in rules_active]
     titles = ["Rule is " + ("active" if active else "inactive") for active in rules_active]
-    return status, classes, titles
+    return status, classes, titles, msg
+
+# clientside arguments: msg, type, siblingId, dummyReturnValue
+clientside_callback(
+    ClientsideFunction(
+        namespace="alert",
+        function_name="showAlertObj"
+    ),
+    Output("temprest-title", "title"),
+    Input("temprest-error-msg", "data"),
+    State("temprest-error-dialog", "id"),
+)
 
 
 def _equipment_text(e: int, site: Site) -> tuple[str, str|None]:

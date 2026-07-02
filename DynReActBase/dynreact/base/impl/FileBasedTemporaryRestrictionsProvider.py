@@ -114,11 +114,15 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
             rules = [r for r in current_rules if r not in rule]
         else:
             rules = list(current_rules) + [r for r in rule if r not in current_rules]
+        logging.getLogger(__name__).info(("De-a" if not active else "A") + f"ctivating temporary equipment restriction(s) {rule}")
         self._active_rules = tuple(rules)
-        self._store_rules()
+        try:
+            self._store_rules()
+        except:
+            self._active_rules = current_rules
+            raise
 
     def _store_rules(self):
-        # TODO failsafe writing
         rules = self._rules
         file = self._active_file
         if not rules:

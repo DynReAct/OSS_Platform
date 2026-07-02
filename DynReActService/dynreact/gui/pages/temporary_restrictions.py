@@ -9,7 +9,7 @@ from dynreact.app import config, state
 from dynreact.auth.authentication import dash_authenticated
 from dynreact.base.TemporaryRestrictionsProvider import EquipmentRestriction, RestrictionUtils
 from dynreact.base.conditions import MaterialCondition, PropertyCondition, ThresholdCondition, ListCondition, \
-    RangeCondition
+    RangeCondition, Condition, CompositeCondition, NotCondition
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Site, Order
 from dynreact.gui.gui_utils import GuiUtils
@@ -41,16 +41,7 @@ def layout(*args, **kwargs):
     rule_options = []
     for rst, active in restrictions:
         material_filter = "" if not isinstance(rst.condition, MaterialCondition) else rst.condition.material_class
-        order_attribute = ""
-        if isinstance(rst.condition, PropertyCondition):
-            order_attribute = rst.condition.attribute + " "
-            if isinstance(rst.condition, ThresholdCondition):
-                order_attribute += rst.condition.operator + " " + str(rst.condition.value)
-            elif isinstance(rst.condition, ListCondition):
-                order_attribute += rst.condition.operator + " [" + ", ".join(rst.condition.values) + "]"
-            elif isinstance(rst.condition, RangeCondition):
-                order_attribute += str(rst.condition.value_range[0]) + " " + rst.condition.operators[0] + \
-                    " x " + rst.condition.operators[1] + str(rst.condition.value_range[1])
+        order_attribute = _print_order_attribute(rst.condition)
         equipment = rst.equipment
         if isinstance(equipment, Sequence):
             equipment_texts = [_equipment_text(e, site) for e in equipment]
@@ -65,7 +56,7 @@ def layout(*args, **kwargs):
                     html.Td(rst.description, className="temprest-cell"),
                     html.Td(equipment_text, title="Id: " + equipment_title, className="temprest-cell"),
                     html.Td(material_filter, className="temprest-cell"),
-                    html.Td(f"{order_attribute}", className="temprest-cell"),
+                    html.Td(order_attribute, className="temprest-cell"),
                     html.Td(active_text, id={"role": "temprest-active", "id": rst.id}, className="temprest-cell temprest-" + active_status, title=f"Rule is {active_status}"),
                     html.Td(html.Button("Toggle", id={"role": "temprest-toggle", "id": rst.id}, className="dynreact-button",
                                         title=f"Toggle active status of rule: {rst.label or rst.id}"), className="temprest-cell")
@@ -181,13 +172,7 @@ def snapshot_changed(snapshot: str|None, rule_id: str|None):
     relevant_fields = None
     orders_affected: Sequence[str] = tuple()
     if rule is not None:
-        if isinstance(rule.condition, PropertyCondition):
-            relevant_fields = rule.condition.attribute
-        elif isinstance(rule.condition, MaterialCondition):
-            if rule.condition.relevant_attributes is not None:
-                relevant_fields = list(rule.condition.relevant_attributes) + ["material_classes"]
-            else:
-                relevant_fields = ("material_classes", )
+        relevant_fields = _relevant_fields_for_condition(rule.condition)
         equipment = rule.equipment
         if isinstance(equipment, int):
             equipment = (equipment, )
@@ -203,6 +188,41 @@ def snapshot_changed(snapshot: str|None, rule_id: str|None):
             if row.get("id") in orders_affected:  # set row color
                 row["affectedOrder"] = True
     return cols, rows
+
+def _print_order_attribute(condition: Condition):
+    if isinstance(condition, CompositeCondition):
+        return html.Div([html.Span(condition.type.upper() + ":")] +
+                 [html.Div(_print_order_attribute(c), style={"padding-left": "1em"}) for c in condition.conditions],
+                 style={"display": "flex", "flex-direction": "column"})
+    if isinstance(condition, NotCondition):
+        return html.Div([html.Span("!("), _print_order_attribute(condition.base), html.Span(")")])
+    order_attribute = ""
+    if isinstance(condition, PropertyCondition):
+        order_attribute = condition.attribute + " "
+        if isinstance(condition, ThresholdCondition):
+            order_attribute += condition.operator + " " + str(condition.value)
+        elif isinstance(condition, ListCondition):
+            order_attribute += condition.operator + " [" + ", ".join(condition.values) + "]"
+        elif isinstance(condition, RangeCondition):
+            order_attribute += str(condition.value_range[0]) + " " + condition.operators[0] + \
+                               " x " + condition.operators[1] + str(condition.value_range[1])
+    return order_attribute
+
+
+def _relevant_fields_for_condition(condition: Condition) -> list[str]|None:
+    relevant_fields = None
+    if isinstance(condition, PropertyCondition):
+        relevant_fields = [condition.attribute]
+    elif isinstance(condition, MaterialCondition):
+        if condition.relevant_attributes is not None:
+            relevant_fields = list(condition.relevant_attributes) + ["material_classes"]
+        else:
+            relevant_fields = ("material_classes", )
+    elif isinstance(condition, CompositeCondition):
+        relevant_fields = list(set(rf for rfs in (_relevant_fields_for_condition(c) for c in condition.conditions) if rfs is not None for rf in rfs))
+    elif isinstance(condition, NotCondition):
+        relevant_fields = _relevant_fields_for_condition(condition.base)
+    return relevant_fields
 
 
 

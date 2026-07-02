@@ -28,13 +28,13 @@ def layout(*args, **kwargs):
     grid_body = []
     grid = [ # html.Caption("Temporary equipment restrictions"),
             html.Thead(html.Tr([
-                html.Th("Rule", scope="col", title="Name of the rule"),
-                html.Th("Explanation", scope="col", title="Explanation of the rule", style={"min-width": "25em"}),
-                html.Th("Equipment", scope="col", title="Equipment affected by the rule"),
-                html.Th("Material filter", scope="col", title="Does the rule apply to a specific material class?"),
-                html.Th("Property filter", scope="col", title="Does the rule apply to specific order properties?"),
-                html.Th("Active", scope="col", title="Is the rule currently active?"),
-                html.Th("Toggle", scope="col", title="Toggle the active status of the rule")
+                html.Th("Rule", scope="col", title="Name of the rule", id="temprest-grid-rule"),
+                html.Th("Explanation", scope="col", title="Explanation of the rule", style={"min-width": "25em"}, id="temprest-grid-explanation"),
+                html.Th("Equipment", scope="col", title="Equipment affected by the rule", id="temprest-grid-equipment"),
+                html.Th("Material filter", scope="col", title="Does the rule apply to a specific material class?", id="temprest-grid-mat"),
+                html.Th("Property filter", scope="col", title="Does the rule apply to specific order properties?", id="temprest-grid-prop"),
+                html.Th("Active", scope="col", title="Is the rule currently active?", id="temprest-grid-active"),
+                html.Th("Toggle", scope="col", title="Toggle the active status of the rule", id="temprest-grid-toggle")
             ])),
             html.Tbody(grid_body)
     ]
@@ -101,20 +101,20 @@ def layout(*args, **kwargs):
             }
         )
     return html.Div([
-        html.H1("Temporary restrictions"),
-        html.H2("Equipment restrictions"),
+        html.H1("Temporary restrictions", id="temprest-title"),
+        html.H2("Equipment restrictions", id="temprest-header-eq-rest"),
         html.Table(grid, className="temprest-rules-table"),
-        html.H2("Orders affected"),
+        html.H2("Orders affected", id="temprest-header-orders"),
         html.Div([
             html.Div([
-                html.Span("Rule", title="Select the rule to evaluate on orders"),
+                html.Span("Rule", title="Select the rule to evaluate on orders", id="temprest-selected-rule-label"),
                 dcc.Dropdown(id="temprest-selected-rule", options=rule_options, value=rule_options[0]["value"] if len(rule_options) > 0 else None, style={"min-width": "15em"}),
             ], style={"display": "flex", "column-gap": "1em", "align-items": "center"}),
             html.Br(),
             orders_table
         ])
 
-    ])
+    ], id="temprest")
 
 
 @callback(Output({"role": "temprest-active", "id": ALL}, "children"),

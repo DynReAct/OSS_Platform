@@ -45,6 +45,8 @@ class RangeCondition[N](PropertyCondition):
 class MaterialCondition(BaseCondition):
     type: Literal["material"]
     material_class: str
+    relevant_attributes: tuple[str, ...]|None = None
+    "For display to the user only"
 
 
 type LeafCondition = ThresholdCondition | ListCondition | RangeCondition | MaterialCondition
@@ -96,13 +98,15 @@ class ConditionUtils:
         if isinstance(condition, MaterialCondition):
             cl = condition.material_class
             value = getattr(obj, "material_classes", None)
-            return cl in value if value is not None else False
+            return cl in value.values() if isinstance(value, Mapping) else False
         value = ConditionUtils._extract_value(obj, condition)
         if isinstance(condition, ListCondition):
             return value in condition.values
         if isinstance(condition, ThresholdCondition):
             operator = condition.operator
             target_value = condition.value
+            if value is None:
+                return (operator == "=" and target_value is None) or (operator == "!=" and target_value is not None)
             if operator == "=":
                 return value == target_value
             if operator == "<":
@@ -118,7 +122,7 @@ class ConditionUtils:
             raise ValueError(f"Unsupported operator {operator} in condition {condition}")
         if isinstance(condition, RangeCondition):
             rng = condition.value_range
-            if value < rng[0] or value > rng[1]:
+            if value is None or value < rng[0] or value > rng[1]:
                 return False
             if (value == rng[0] and condition.operators[0] == "<=") or (value == rng[1] and condition.operators[1] == "<="):
                 return True

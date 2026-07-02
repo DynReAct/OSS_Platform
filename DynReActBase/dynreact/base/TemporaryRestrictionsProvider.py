@@ -41,6 +41,16 @@ class TemporaryRestrictionsProvider:
         """
         raise NotImplementedError
 
+    def get_restriction(self, rule_id: str) -> tuple[EquipmentRestriction|None, bool]:
+        """
+        Parameters:
+            rule_id:
+
+        Returns:
+             Restriction plus active status
+        """
+        return next(((rule, active) for rule, active in self.equipment_restrictions() if rule.id == rule_id), (None, False))
+
     def is_active(self, rule_id: str) -> bool:
         """
         Check if rule is active.

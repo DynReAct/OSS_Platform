@@ -72,6 +72,11 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
             rules[rule_id] = rule
         return rules
 
+    def get_restriction(self, rule_id: str) -> tuple[EquipmentRestriction, bool] | None:
+        self._check_parse()
+        rule = self._rules.get(rule_id)
+        return rule, rule is not None and rule_id in self._active_rules
+
     def equipment_restrictions(self, equipment: int | Sequence[int] | None = None) -> Sequence[tuple[EquipmentRestriction, bool]]:
         """
         Parameters:

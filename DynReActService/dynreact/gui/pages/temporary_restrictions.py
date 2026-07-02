@@ -29,7 +29,7 @@ def layout(*args, **kwargs):
     grid = [ # html.Caption("Temporary equipment restrictions"),
             html.Thead(html.Tr([
                 html.Th("Rule", scope="col", title="Name of the rule"),
-                html.Th("Explanation", scope="col", title="Explanation of the rule"),
+                html.Th("Explanation", scope="col", title="Explanation of the rule", style={"min-width": "25em"}),
                 html.Th("Equipment", scope="col", title="Equipment affected by the rule"),
                 html.Th("Material filter", scope="col", title="Does the rule apply to a specific material class?"),
                 html.Th("Property filter", scope="col", title="Does the rule apply to specific order properties?"),
@@ -58,11 +58,17 @@ def layout(*args, **kwargs):
             equipment_title = ", ".join([title for label, title in equipment_texts if title is not None])
         else:
             equipment_text, equipment_title = _equipment_text(equipment, site)
+        active_text = "✔" if active else "✖"
+        active_status = "active" if active else "inactive"
         grid_body.append(html.Tr([
-                    html.Th(rst.label, title=f"Id: {rst.id}", scope="row"), html.Td(rst.description), html.Td(equipment_text, title="Id: " + equipment_title),
-                    html.Td(material_filter), html.Td(f"{order_attribute}"),
-                    html.Td(f"{active}", id={"role": "temprest-active", "id": rst.id}),
-                    html.Td(html.Button("Toggle", id={"role": "temprest-toggle", "id": rst.id}, className="dynreact-button"))
+                    html.Th(rst.label or rst.id, title=f"Id: {rst.id}", scope="row", className="temprest-cell"),
+                    html.Td(rst.description, className="temprest-cell"),
+                    html.Td(equipment_text, title="Id: " + equipment_title, className="temprest-cell"),
+                    html.Td(material_filter, className="temprest-cell"),
+                    html.Td(f"{order_attribute}", className="temprest-cell"),
+                    html.Td(active_text, id={"role": "temprest-active", "id": rst.id}, className="temprest-cell temprest-" + active_status, title=f"Rule is {active_status}"),
+                    html.Td(html.Button("Toggle", id={"role": "temprest-toggle", "id": rst.id}, className="dynreact-button",
+                                        title=f"Toggle active status of rule: {rst.label or rst.id}"), className="temprest-cell")
         ]))
         rule_options.append({"value": rst.id, "label": rst.label or rst.id})
     orders_table = dash_ag.AgGrid(
@@ -97,7 +103,7 @@ def layout(*args, **kwargs):
     return html.Div([
         html.H1("Temporary restrictions"),
         html.H2("Equipment restrictions"),
-        html.Table(grid),
+        html.Table(grid, className="temprest-rules-table"),
         html.H2("Orders affected"),
         html.Div([
             html.Div([
@@ -112,6 +118,8 @@ def layout(*args, **kwargs):
 
 
 @callback(Output({"role": "temprest-active", "id": ALL}, "children"),
+         Output({"role": "temprest-active", "id": ALL}, "className"),
+         Output({"role": "temprest-active", "id": ALL}, "title"),
          Input({"role": "temprest-toggle", "id": ALL}, "n_clicks"),
          running=[
               (Output({"role": "temprest-toggle", "id": ALL}, "disabled"), True, False),
@@ -125,8 +133,11 @@ def toggle(clicks):
     restrictions = state.get_temporary_restrictions()
     active = restrictions.is_active(triggered)
     restrictions.set_active_status(triggered, not active)
-    status = [f"{active}" for _, active in restrictions.equipment_restrictions()]
-    return status
+    rules_active = [active for _, active in restrictions.equipment_restrictions()]
+    status = ["✔" if active else "✖" for active in rules_active]
+    classes = ["temprest-cell " + ("temprest-active" if active else "temprest-inactive") for active in rules_active]
+    titles = ["Rule is " + ("active" if active else "inactive") for active in rules_active]
+    return status, classes, titles
 
 
 def _equipment_text(e: int, site: Site) -> tuple[str, str|None]:

@@ -1,0 +1,39 @@
+.temprest-rules-table {
+    border-collapse: collapse;  /* required for setting row borders => ? */
+    border: 1px solid #ddd;
+    margin-bottom: 2em;
+}
+
+.temprest-rules-table tr {
+  border-bottom: 1px solid #ddd;
+}
+
+.temprest-rules-table td,th {
+  border-left: 1px solid #ddd;
+}
+
+.temprest-rules-table tr:nth-child(even) {
+    background-color: rgba(150, 212, 212, 0.2);
+}
+
+.temprest-rules-table th[scope=col] {
+    background-color: rgba(150, 212, 212, 0.4);
+}
+
+.temprest-rules-table th {
+    padding: 1em 1em;
+}
+
+.temprest-cell {
+    text-align: start;
+    padding: 0.5em 1em;
+}
+
+.temprest-active {
+    color: green;
+}
+
+.temprest-inactive {
+    color: red;
+}
+

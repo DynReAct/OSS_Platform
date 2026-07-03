@@ -13,10 +13,12 @@ from pydantic import BaseModel
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.SnapshotProvider import SnapshotProvider
+from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider, RestrictionUtils, \
+    EquipmentRestriction
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import ProductionPlanning, PlanningData, ProductionTargets, Snapshot, OrderAssignment, Site, \
-    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction, MaterialClass, \
-    ServiceMetrics, Histogram
+    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction, MaterialClass
+from dynreact.base.monitoring import ServiceMetrics, Histogram
 
 
 class OptimizationListener:
@@ -118,7 +120,8 @@ class LotsOptimizer(Generic[P]):
                  orders_custom_priority: dict[str, int]|None = None,
                  forced_orders: list[str] | None = None,
                  # TODO if this is set, then a corresponding initial solution should be provided(?)
-                 base_lots: dict[int, Lot] | None = None  # Keys: equipment id; used to extend existing lots
+                 base_lots: dict[int, Lot] | None = None,  # Keys: equipment id; used to extend existing lots
+                 temporary_restrictions: TemporaryRestrictionsProvider|None = None
                  ):
         self._listeners: list[OptimizationListener] = []
         self._site: Site = site
@@ -126,6 +129,7 @@ class LotsOptimizer(Generic[P]):
         self._snapshot = snapshot
         self._costs: CostProvider = costs
         self._targets = targets
+        self._temporary_restrictions: TemporaryRestrictionsProvider|None = temporary_restrictions
         self._min_due_date: datetime|None = min_due_date
         main_cat = ModelUtils.main_category_for_targets(targets.material_weights, site.material_categories)
         self._main_category = main_cat.id if main_cat is not None else None
@@ -200,6 +204,7 @@ class LotsOptimizer(Generic[P]):
         self._base_lot_weights: dict[int, float]|None = {p: sum(self._orders[o].actual_weight for o in lot.orders) for p, lot in base_lots.items()} if base_lots is not None else None
         self._base_assignments: dict[str, OrderAssignment]|None = {o: OrderAssignment(order=o, equipment=lot.equipment, lot=lot.id, lot_idx=idx+1)
                                                             for lot in base_lots.values() for idx, o in enumerate(lot.orders)} if base_lots is not None else None
+        self._orders = LotsOptimizationAlgo.orders_apply_temporary_constraints(self._orders, temporary_restrictions, equipment=self._plant_ids) if self._orders is not None else None
 
     def process(self) -> str:
         return self._process
@@ -242,10 +247,11 @@ class LotsOptimizationAlgo:
     Implementation expected in module dynreact.lotscreation.LotsOptimizerImpl
     """
 
-    def __init__(self, provider_url: str, site: Site):
+    def __init__(self, provider_url: str, site: Site, temporary_restrictions: TemporaryRestrictionsProvider|None=None):
         self._url = provider_url
         self._site = site
         self._stats: dict[str, OptimizationStatistics] = {}
+        self._temporary_restrictions: TemporaryRestrictionsProvider|None = temporary_restrictions
 
     # TODO clarify: should we consider the planning horizon here? => would need some information about planned lot execution time
     def snapshot_solution(self, process: str, snapshot: Snapshot, planning_horizon: timedelta, costs: CostProvider,
@@ -353,13 +359,15 @@ class LotsOptimizationAlgo:
         :param orders_custom_priority
         :return:
         """
-        all_prev_orders = previous_orders.values() if previous_orders is not None else tuple()
-        # We remove orders from this dict as they are assigned to plants
-        order_objects: dict[str, Order] = {order.id: order for order in snapshot.orders if order.id in orders and order.id not in all_prev_orders}
-        # for faster access, remember assigned orders
-        orders_done: dict[str, Order] = {}
         # We remove plants from this list as soon as there are no more orders available for them (by checking available_tons_per_plant[plant] > 0)
         plants: dict[int, Equipment] = {p.id: p for p in self._site.get_process_equipment(process) if p.id in targets.target_weight}
+        all_prev_orders = previous_orders.values() if previous_orders is not None else tuple()
+        order_objects0: list[Order] = [order for order in snapshot.orders if order.id in orders and order.id not in all_prev_orders]
+        order_objects0 = LotsOptimizationAlgo.orders_apply_temporary_constraints(order_objects0, self._temporary_restrictions, equipment=tuple(plants.keys()))
+        # We remove orders from this dict as they are assigned to plants
+        order_objects: dict[str, Order] = {order.id: order for order in order_objects0}
+        # for faster access, remember assigned orders
+        orders_done: dict[str, Order] = {}
         #assignments: dict[str, int] = {}
         assignments_by_plant: dict[int, list[str]] = {p: [] for p in plants.keys()}
         plant_weights: dict[int, float] = {}
@@ -428,7 +436,7 @@ class LotsOptimizationAlgo:
                 for idx, order in enumerate(lot.orders):
                     order_assignments[order] = OrderAssignment(order=order, equipment=plant, lot=lot.id, lot_idx=idx + 1)
         if orders is not None:
-            unassigned: Sequence[str] = (order for order in orders if order not in order_assignments)
+            unassigned: Sequence[str] = (o for o in orders if o not in order_assignments)
             order_assignments.update(
                 {order: OrderAssignment(order=order, equipment=-1, lot="", lot_idx=-1) for order in unassigned})
         planning = costs.evaluate_order_assignments(process, order_assignments, targets=targets, snapshot=snapshot,
@@ -452,12 +460,12 @@ class LotsOptimizationAlgo:
         """
         if targets is None:  # TODO long term planning targets?
             _, targets = self.snapshot_solution(process, snapshot, planning_horizon, None, include_inactive_lots=include_inactive_lots)
-        orders_sorted: list[Order] = sorted([o for o in snapshot.orders if o.due_date is not None and
-                                             (orders is None or o.id in orders)], key=lambda order: order.due_date)
+        orders_sorted: list[Order] = sorted([o for o in snapshot.orders if o.due_date is not None and (orders is None or o.id in orders)], key=lambda order: order.due_date)
         #assignments: dict[str, OrderAssignment] = {}
         assignments: dict[str, int] = {}
         plant_weights: dict[int, float] = {}
         plants: list[int] = [p.id for p in self._site.get_process_equipment(process) if p.id in targets.target_weight]
+        orders_sorted = LotsOptimizationAlgo.orders_apply_temporary_constraints(orders_sorted, self._temporary_restrictions, equipment=plants)
         for order in orders_sorted:
             # TODO filter orders eligible for the current process stage => non-trivial!
             next_eligible_plant: int|None = next((p for p in order.allowed_equipment if p in plants and
@@ -500,7 +508,7 @@ class LotsOptimizationAlgo:
                         include_inactive_lots: bool = False,
                         orders_custom_priority: dict[str, int] | None = None,
                         forced_orders: list[str] | None = None,
-                        base_lots: dict[int, Lot] | None = None  # if this is set, then orders will be appended to those lots instead of creating new ones
+                        base_lots: dict[int, Lot] | None = None,  # if this is set, then orders will be appended to those lots instead of creating new ones
                         ) -> LotsOptimizer:
         if initial_solution is None or targets is None:
             planning_horizon = targets.period[1] - targets.period[0] if targets is not None else timedelta(hours=8)  # XXX?
@@ -512,7 +520,8 @@ class LotsOptimizationAlgo:
                 targets = targets0
         instance = self._create_instance_internal(process, snapshot, targets, cost_provider, initial_solution, min_due_date=min_due_date,
                                               best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
-                                              orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots)
+                                              orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots,
+                                              temporary_restrictions=self._temporary_restrictions)
         if process not in self._stats:
             self._stats[process] = OptimizationStatistics(process=process)
         stats = self._stats[process]
@@ -535,7 +544,8 @@ class LotsOptimizationAlgo:
                                   parameters: dict[str, Any] | None = None,
                                   orders_custom_priority: dict[str, int] | None = None,
                                   forced_orders: list[str] | None = None,
-                                  base_lots: dict[int, Lot] | None = None
+                                  base_lots: dict[int, Lot] | None = None,
+                                  temporary_restrictions: TemporaryRestrictionsProvider|None = None
                                   ) -> LotsOptimizer:
         raise Exception("not implemented")
 
@@ -558,3 +568,35 @@ class LotsOptimizationAlgo:
                 metrics.append(Histogram(id="iteration_duration_seconds", labels={"process": proc},
                                          data=[int(d / i) for d, i in zip(stats.durations_seconds, stats.iterations)], buckets=[4, 15, 60])),
         return ServiceMetrics(service_id="midtermplanning", metrics=metrics)
+
+    @staticmethod
+    def orders_apply_temporary_constraints(orders: list[Order]|dict[str, Order], temporary_constraints: TemporaryRestrictionsProvider|None, equipment: Sequence[int]|None=None) -> list[Order]|dict[str, Order]:
+        if temporary_constraints is None:
+            return orders
+        rules = [r for r, _ in temporary_constraints.equipment_restrictions(equipment=equipment, active_only=True)]
+        if len(rules) == 0:
+            return orders
+        is_list = isinstance(orders, list)
+        rules_by_equipment: dict[int, list[EquipmentRestriction]] = {}
+        for rule in rules:
+            eq = rule.equipment
+            eq = [eq] if not isinstance(eq, Sequence) else eq
+            for e in eq:
+                if e not in rules_by_equipment:
+                    rules_by_equipment[e] = []
+                rules_by_equipment[e].append(rule)
+        equipment_updates: dict[int|str, list[int]] = {}  # key: order idx or order id, values: allowed equipments
+        iterator = enumerate(orders) if is_list else orders.items()
+        for idx, order in iterator:
+            applicable_equipments = [e for e in order.allowed_equipment if (equipment is None or e in equipment) and e in rules_by_equipment]
+            forbidden_equipments = [e for e in applicable_equipments if not RestrictionUtils.equipment_allowed(rules_by_equipment[e], e, order)]
+            if len(forbidden_equipments) > 0:
+                equipment_updates[idx] = [e for e in order.allowed_equipment if e not in forbidden_equipments]
+        if len(equipment_updates) == 0:
+            return orders
+        updated_orders = list(orders) if is_list else dict(orders)  # do not modify the incoming list/dict
+        for idx, update in equipment_updates.items():
+            original_order = orders[idx]
+            updated_order = original_order.model_copy(update={"allowed_equipment": update})
+            updated_orders[idx] = updated_order
+        return updated_orders

@@ -9,6 +9,7 @@
     "lots-planned_header": {"text": "Losplanung", "title": "Losplanung"},
     "lots-creation_header": {"text": "Loserzeugung", "title": "Tab für die Loserzeugung öffnen"},
     "lots2-creation_header": {"text": "Loserzeugung", "title": "Tab für die Loserzeugung öffnen"},
+    "temp-rest-header": {"text": "Temporäre Regeln", "title":  "Tab für temporäre Regeln öffnen"},
     "agents_header": {"text": "Agenten", "title": "Tab für das Empfehlungssystem öffnen"},
     "snaps_header": { "text": "Snapshot", "title": "Snapshot Tab öffnen" },
     "user_title_loggedin": "Benutzerinformationen und Logout anzeigen",
@@ -27,12 +28,26 @@
   "ltp": {
     "title": "Langzeitplanung"
   },
-  "coa": {
-    "title": "Ring-Auftrag Zuordnung"
+  "moa": {
+    "title": "Material-Auftrag Zuordnung"
   },
   "lots": {
     "title": "Loserzeugung"
   },
+  "temprest": {
+    "title": "Temporäre Regeln",
+    "header-eq-rest": "Anlagenbeschränkungen",
+    "header-orders": "Betroffene Aufträge",
+    "selected-rule-label": {"text": "Regel", "title": "Wählen Sie die Regel aus zum Auswerten auf den aktuellen Aufträgen."},
+    "grid-rule": {"text": "Regel", "title": "Name der Regel"},
+    "grid-explanation": {"text": "Erläuterung", "title": "Erläuterung zur Regel"},
+    "grid-equipment": {"text": "Anlage(n)", "title": "Anlagen betroffen von der Regel"},
+    "grid-mat": {"text": "Materialfilter", "title": "Gilt die Regel für eine spezielle Materialklasse?"},
+    "grid-prop": {"text": "Eigenschaftsfilter", "title": "Gilt die Regel für Aufträge mit speziellen Eigenschaften?"},
+    "grid-active": {"text": "Aktiv", "title": "Ist die Regel zur Zeit aktiv?"},
+    "grid-toggle": {"text": "Umschalten", "title": "Aktivieren oder Deaktivieren der Regel"}
+  },
+
   "snapshot": {
     "title": "Snapshot Seite",
     "active": {"text":  "Aktiver Snapshot: "},

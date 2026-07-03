@@ -40,7 +40,7 @@ class ProcessInformation(Model):
 
 class Process(LabeledItem, ProcessInformation):
     name_short: str = Field(..., examples=["VA", "BZ"], min_length=1)
-    "Short name uniquely identifying the process2."
+    "Short name uniquely identifying the process."
     process_ids: list[int]
     "Internal process id(s)"
     synonyms: list[str]|None = Field(None, examples=["VEA"], min_length=1)
@@ -59,7 +59,6 @@ class Equipment(LabeledItem, ProcessInformation):
     id: int
     name_short: str
     process: str
-
     storage_in: str = None
     "Default storage location of material waiting to be processed by this equipment"
     storage_out: str|None = None
@@ -105,14 +104,13 @@ class Storage(LabeledItem):
     name_short: str
     equipment: list[int]
     "Equipment served by this storage primarily."
-    #secondary_plants: list[int]|None = Field(None, description="Plants served by this storage.")
     capacity_weight: float|None = None
     "Capacity in t."
     capacity_items: int|None = None
     "Capacity in items / material."
     target_filling_level: float|None = None  # TODO rather need a range
     "A number between 0 and 1"
-    #target_filling_range: tuple[float, float]|None = Field(None, description="Numbers between 0 and 1")
+    # target_filling_range: tuple[float, float]|None = Field(None, description="Numbers between 0 and 1")
     material_constraints: MaterialConstraint|None=None
     "Constraints on the type of material supported by this storage."
 
@@ -146,7 +144,7 @@ class EquipmentAvailability(Model):
 PROPERTIES = TypeVar("PROPERTIES", bound=Model)  # Material-specific properties, not matching the MATERIAL parameter in the Order class
 
 
-class Material(Model):
+class Material(Model, Generic[PROPERTIES]):
     model_config = ConfigDict(extra="allow")
 
     id: str
@@ -225,15 +223,15 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
 
 class Lot(Model):
     """
-    A lot contains the production schedule for specific equipment, consisting of a list of production orders to be produced in a sequence.
-    Usually, within a lot no excessive setup operations should be necessary between orders, otherwise the lot should be split into two.
+    A lot contains the production schedule for specific equipment, consisting of a list of production
+    orders to be produced in a sequence. Usually, within a lot no excessive setup operations should be
+    necessary between orders, otherwise the lot should be split into two.
     """
-
     id: str
     equipment: int
     active: bool
     status: int
-    "1: created; 2: blocked; 3: released; 4: in progress; 5: completed"
+    "1: created; 2: blocked; 3: released; 4: in progress; 5: deleted"
     orders: list[str]
     processing_status: Literal["PENDING", "STARTED", "FINISHED"]|None = None
     comment: str|None = None
@@ -271,13 +269,12 @@ class MaterialOrderData(Model):
             
 class PlanningData(Model):
     """
-    This class holds the internal state of the optimization algorithm
+    This class holds the internal state of the lot creation/mid-term planning optimization algorithm
     """
     model_config = ConfigDict(extra="allow", use_attribute_docstrings=True)
 
     target_fct: float = 0.0
     "Current value of the target function"
-    # lots: list[list[str]] TODO?
     transition_costs: float = 0.0
     logistic_costs: float = 0.0
     assignment_costs: float = 0.0
@@ -288,13 +285,15 @@ class PlanningData(Model):
     delta_weight: float = 0.0
     "Deviation from target weight in t. Positive for missing tonnage."
     material_structure: dict[str, dict[str, float]]|None = None
-    "Keep track of material classes. Outer key: category id, inner key: class id; special keys \"_sum\" represent the total/aggregated values"
+    """Keep track of material classes. Outer key: category id, inner key: class id; 
+    special keys \"_sum\" represent the total/aggregated values"""
     main_category: str|None = None
     "For nested structure planning, the main category."
     nested_material_structure: dict[str, dict[str, dict[str, float]]]|None = None
     """
     Keep track of nested material classes. Only used in case of nested structure targets. 
-    Outermost key: class id for main category, middle key: sub category id, innermost key: class id; special keys \"_sum\" represent the total/aggregated values.
+    Outermost key: class id for main category, middle key: sub category id, innermost key: class id; 
+    special keys \"_sum\" represent the total/aggregated values.
     """
     min_due_date: datetime|None = None
     assigned_priority: int = 0
@@ -386,7 +385,8 @@ class ProductionTargets(Model):
     "Target production by equipment id"
     period: tuple[datetime, datetime]
     material_weights: dict[str, float|dict[str, float]] | None = None
-    "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed. The special value \"_sum\" represents the total weight."
+    """Produced quantity by material class id, in t. This may be a nested model, 
+    in case a hierarchical structure is needed. The special value \"_sum\" represents the total weight."""
 
 
 class StorageLevel(Model):
@@ -398,10 +398,11 @@ class StorageLevel(Model):
     timestamp: datetime|None = None
     "The timestamp when the level was recorded or for which it is predicted."
     material_levels: dict[str, float]|None = None
-    "Material-specific filling levels in the range 0 - 1, referring to the total storage capacity. Keys: material class ids."
+    """Material-specific filling levels in the range 0 - 1, referring to the total 
+    storage capacity. Keys: material class ids."""
 
 
-class OrderAssignment(Model):  # base for SolutionElement
+class OrderAssignment(Model):
     """
     "Unassigned" is realized in terms of equipment=-1, lot="", lot_idx=-1
     """
@@ -411,19 +412,19 @@ class OrderAssignment(Model):  # base for SolutionElement
     lot_idx: int
 
 
-# TODO add lot weight targets to get_targets() return value
 class ProductionPlanning(Model, Generic[P]):
     """
     The optimization needs to generate an object of this type
     """
 
     process: str
-    order_assignments: dict[str, OrderAssignment]   # "sbest"
+    order_assignments: dict[str, OrderAssignment]
     "keys: order ids"
-    equipment_status: dict[int, EquipmentStatus[P]]                  # "vbest"
+    equipment_status: dict[int, EquipmentStatus[P]]
     "keys: equipment ids"
     target_structure: dict[str, float|dict[str, float]] | None = None
-    "Produced quantity by material class id, in t. This may be a nested model, in case a hierarchical structure is needed. Special key \"_sum\" represents the total/aggregated value."
+    """Produced quantity by material class id, in t. This may be a nested model, in case a 
+    hierarchical structure is needed. Special key \"_sum\" represents the total/aggregated value."""
     total_priority: int = 0
     "Sum priority orders"
     previous_orders: dict[int, str] | None = None
@@ -596,14 +597,13 @@ class Site(LabeledItem):
     storages: list[Storage]
     material_categories: list[MaterialCategory]
     logistic_costs: dict[int, dict[int, float]]|None = None
-    """
-    Logistic costs for transfer of a complete order(?) from one plant to another (only within a single process stage, not considering
-    transfer costs between processes)
-    """
+    "Logistic costs for transfer of a complete order from one plant to another."
     transport_times: TransportTimes|None = None
-    #structure_planning: dict[str, StructurePlanningSettings]|None = None
+    "Information about transport times between equipment, relevant for the mid-term and short-term planning."
     lot_creation: LotCreationSettings|None=None
+    "Settings for lot creation"
     long_term_planning: LongTermPlanningSettings|None=None
+    "Settings for long term planning"
 
 
     def get_process(self, process: str, do_raise: bool=False) -> Process|None:
@@ -658,7 +658,6 @@ class Site(LabeledItem):
         return [p for p in self.equipment]
 
 
-# Some changes in methods made by JOM / UPM)
 class Snapshot(Model, Generic[MATERIAL_PROPERTIES]):
     timestamp: datetime
     "The timestamp serves as the unique snapshot id"
@@ -843,7 +842,8 @@ class MidTermTargets(LongTermTargets):
     typically corresponding to production shifts.
     """
     production_sub_targets: dict[str, list[ProductionTargets]]
-    "Production targets for the planning sub periods. Keys: process ids, values: list of production targets, covering all planning sub periods chronologically."
+    """Production targets for the planning sub periods. Keys: process ids, values: 
+    list of production targets, covering all planning sub periods chronologically."""
 
 
 class AggregatedMaterial(Model):
@@ -867,30 +867,3 @@ class AggregatedStorageContent(Model):
     content_by_storage: dict[str, AggregatedMaterial]
     content_by_process: dict[str, AggregatedMaterial]
     content_by_equipment: dict[int, AggregatedMaterial]
-
-
-class ServiceHealth(Model):
-
-    status: int
-    "0: ok"
-    running_since: datetime|None=None
-
-
-class Metric(Model):
-    id: str
-    labels: dict[str, str]|None=None
-
-
-class PrimitiveMetric(Metric):
-    value: float|int
-
-
-class Histogram(Metric):
-    data: list[float]
-    buckets: list[float]
-    include_infinity: bool=True
-
-
-class ServiceMetrics(Model):
-    service_id: str
-    metrics: Sequence[Metric]

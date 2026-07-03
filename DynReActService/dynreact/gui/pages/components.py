@@ -83,8 +83,8 @@ def prepare_lots_for_lot_view(snapshot: str|datetime|None, process: str|None, re
         o.actual_weight if o.actual_weight is not None else (o.target_weight if o.target_weight is not None else 0)
         for o in orders if o is not None) for lot, orders in orders_by_lot.items()}
     equipment_with_missing_time_info = set(lot.equipment for lot in lots if lot.start_time is None or lot.end_time is None)
-    equipment_timing_info = {e: [lot.weight/((lot.end_time - lot.start_time).total_seconds()/3_600) for lot in lots if lot.equipment == e and lot.start_time is not None and lot.end_time is not None and lot.weight is not None]
-                             for e in equipment_with_missing_time_info}
+    equipment_timing_info = {e: [lot.weight/((lot.end_time - lot.start_time).total_seconds()/3_600) for lot in lots if lot.equipment == e and lot.start_time is not None and
+                                 lot.end_time is not None and lot.end_time > lot.start_time and lot.weight is not None] for e in equipment_with_missing_time_info}
     # tons per hour
     throughput_capacity: dict[int, float] = {e: plants[e].throughput_capacity or (np.mean(equipment_timing_info[e]) if len(equipment_timing_info[e]) > 0 else 1.) for e in equipment_with_missing_time_info}
     start_time_by_equipment: dict[int, datetime] = {e: max([lt.end_time for lt in lots if lt.end_time is not None and lt.equipment == e] + [snapshot]) for e in equipment_with_missing_time_info}
@@ -158,4 +158,51 @@ def prepare_lots_for_lot_view(snapshot: str|datetime|None, process: str|None, re
     else:
         data = sorted(data, key=lambda lot: lot["id"])
     return data
+
+
+def ltp_init_dialog(prefix: str, frozen_lots_checkbox: bool=False):
+    import dash_ag_grid as dash_ag
+    check = None if not frozen_lots_checkbox else dcc.Checklist(id=f"{prefix}-ltp-frozen-check", options=[{"value": "", "label": "Respect frozen lots"}], value=[""])
+    return html.Dialog(
+        html.Div([
+            html.H3("Long term planning results"),
+            html.Div([
+                dash_ag.AgGrid(
+                    id=f"{prefix}-ltp-table",
+                    columnDefs=[{"field": "id", "pinned": True},
+                                {"field": "start_time", "filter": "agDateColumnFilter",
+                                 "headerName": "Start time"},
+                                {"field": "end_time", "filter": "agDateColumnFilter",
+                                 "headerName": "End time"},
+                                {"field": "shift_duration", "filter": "agNumberColumnFilter",
+                                 "headerName": "Shift duration / h"},
+                                {"field": "total_production", "filter": "agNumberColumnFilter",
+                                 "headerName": "Total production / t"},
+                                {"field": "production_per_shift", "filter": "agNumberColumnFilter",
+                                 "headerName": "Avg. production per shift / t"},
+                                # {"field": "delete"} # not possible
+                                ],
+                    defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
+                    rowData=[],
+                    getRowId="params.data.id",
+                    className="ag-theme-alpine",  # ag-theme-alpine-dark
+                    columnSizeOptions={"defaultMinWidth": 125},
+                    columnSize="responsiveSizeToFit",
+                    dashGridOptions={"rowSelection": "single", "domLayout": "autoHeight"}
+                ),
+                html.Br(),
+                check,
+                html.Div([
+                    html.H3("Selected long-term planning"),
+                    html.Div([html.Span("Total production: "), html.Span(id=f"{prefix}-ltp-popup-total"), html.Span("t")], className="lots2-ltp-summary-item"),
+                    html.Div("Material structure for selected planning interval:", className="lots2-ltp-summary-item"),
+                    html.Div(id=f"{prefix}-ltp-popup-structure")
+                ], id=f"{prefix}-ltp-popup-summary", hidden=True)
+            ]),
+            html.Div([
+                html.Button("Cancel", id=f"{prefix}-ltp-cancel", className="dynreact-button"),
+                html.Button("Apply", id=f"{prefix}-ltp-submit", className="dynreact-button")
+            ], className="lots2-materials-buttons")
+        ]),
+        id=f"{prefix}-ltp-dialog", className="dialog-filled lots2-ltp-dialog", open=False)
 

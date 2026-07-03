@@ -1,7 +1,9 @@
 import sys
+import tempfile
 import types
 import unittest
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
@@ -14,6 +16,7 @@ from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.impl.FileSnapshotProvider import FileSnapshotProvider
 from dynreact.plugins import Plugins
 from dynreact.state import DynReActSrvState
+from dynreact.gui.snapshot_rows import require_snapshot_rows_provider
 
 
 @contextmanager
@@ -313,6 +316,34 @@ class ProfileLoaderTest(unittest.TestCase):
         finally:
             dash.register_page = original_register_page
         self.assertEqual(calls["count"], 1)
+
+
+    def test_energy_backend_accepts_duck_typed_snapshot_provider(self):
+        provider = types.SimpleNamespace(get_snapshot_rows=lambda snapshot=None: [])
+        self.assertIs(require_snapshot_rows_provider(provider), provider)
+
+    def test_energy_backend_accepts_legacy_ras_snapshot_provider(self):
+        snapshot_id = datetime(2026, 3, 1, 5, 0, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            csv_path = Path(tmpdir) / "snapshot.csv"
+            csv_path.write_text("MatID;Production Order NR\nC1;O1\n", encoding="utf-8")
+
+            class LegacyProvider:
+                def __init__(self):
+                    self._snapshot_files = {snapshot_id: str(csv_path)}
+
+                def _find_time(self, snapshot=None):
+                    return snapshot_id if snapshot is None else snapshot
+
+            provider = require_snapshot_rows_provider(LegacyProvider())
+            self.assertEqual(
+                provider.get_snapshot_rows(),
+                [{"MatID": "C1", "Production Order NR": "O1"}],
+            )
+
+    def test_energy_backend_rejects_provider_without_rows(self):
+        with self.assertRaisesRegex(ValueError, "get_snapshot_rows"):
+            require_snapshot_rows_provider(object())
 
 
 if __name__ == "__main__":

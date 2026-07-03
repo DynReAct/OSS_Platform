@@ -3,9 +3,10 @@ from typing import Annotated
 
 from dynreact.perfsample.config import ServiceConfig
 from dynreact.base.PlantPerformanceModel import PlantPerformanceInput, PerformanceEstimation, PerformanceModelMetadata, \
-    PlantPerformanceResultsSuccess
-from dynreact.base.model import ServiceHealth, Order
-from fastapi import FastAPI, Header, HTTPException
+    PlantPerformanceResultsSuccess, EquipmentStatusEstimation
+from dynreact.base.model import Order
+from dynreact.base.monitoring import ServiceHealth
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -63,6 +64,19 @@ def health(x_token: Annotated[str | None, Header()] = None) -> ServiceHealth:
 def model(x_token: Annotated[str | None, Header()] = None) -> PerformanceModelMetadata:
     check_secret(x_token)
     return meta
+
+
+@app.get("/status",
+         tags=["dynreact"],
+         response_model_exclude_unset=True,
+         response_model_exclude_none=True,
+         summary="Current equipments status")
+def model(equipment: list[int] = Query(...), x_token: Annotated[str | None, Header()] = None) -> dict[int, EquipmentStatusEstimation]:
+    check_secret(x_token)
+    if len(equipment) == 0:
+        return {}
+    result = {eq: EquipmentStatusEstimation(equipment=eq, active=True, capacity=random.random() if config.feasibility_random_threshold else 1) for eq in equipment}
+    return result
 
 
 @app.post("/performance",

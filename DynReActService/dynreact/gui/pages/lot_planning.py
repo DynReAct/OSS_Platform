@@ -280,7 +280,7 @@ def update_link(process: str|None, snapshot: str|datetime|None):
     if process is not None:
         url += ("?" if not added else "&") + "process=" + process
     shifts: dict[int, Sequence[PlannedWorkingShift]] = \
-        state.get_shifts_provider().load_all(snapshot, end=snapshot + timedelta(days=8), equipments=[e.id for e in state.get_site().get_process_equipment(process, do_raise=True)])
+        state.get_shifts_provider().load_all(snapshot, end=(snapshot or DatetimeUtils.now()) + timedelta(days=8), equipments=[e.id for e in state.get_site().get_process_equipment(process, do_raise=True)])
     shifts_serialized = {e: TypeAdapter(Sequence[PlannedWorkingShift]).dump_python(eq_shifts, exclude_unset=True, exclude_none=True, mode="json") for e, eq_shifts in shifts.items()}
     return url, shifts_serialized
 

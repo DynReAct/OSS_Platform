@@ -67,6 +67,8 @@ DYNREACT_ENERGY=ras+file:./data/context/energy_context.json
 
 The selected JSON file defines the energy backend. The context can be structured in blocks such as `http` and `energy_functions`. The OSS context evaluates local formulas from `data/energy_context.json`, while the RAS context delegates the calculation to an external HTTP service configured in `data/context/energy_context.json`.
 
+For HTTP-backed energy estimation, each equipment entry can now declare a `feature_table` and `model_features`. `feature_table` maps payload feature names to row or computed sources, while `model_features` documents which features each model key expects. The GUI builds the outgoing `features` payload from this declarative table and uses the union of the declared model feature lists, which makes payload coverage auditable directly from the JSON context. The uncertainty filter is also configurable through `uncertainty_sigma_factor`, either globally inside `http` or per equipment. Before building the uncertainty band, model predictions outside `mean ± uncertainty_sigma_factor * sd` are discarded.
+
 If the HTTP backend needs authentication, define the token separately in the environment:
 
 ```text

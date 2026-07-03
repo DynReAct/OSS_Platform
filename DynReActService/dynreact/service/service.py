@@ -13,7 +13,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
 from dynreact.base.model import Snapshot, Equipment, Site, Material, Order, EquipmentStatus, EquipmentDowntime, \
     MaterialOrderData, ProductionPlanning, ProductionTargets, EquipmentProduction, AggregatedStorageContent, \
-    AggregatedMaterial, Histogram, ServiceMetrics, PrimitiveMetric, PlannedWorkingShift, Lot, LotTimes, TransportTimes
+    AggregatedMaterial, PlannedWorkingShift, Lot, LotTimes, TransportTimes
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.params import Path, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,6 +21,7 @@ from pydantic import AliasChoices
 
 from dynreact.app import config, state
 from dynreact.auth.authentication import fastapi_authentication
+from dynreact.base.monitoring import Histogram, PrimitiveMetric, ServiceMetrics
 from dynreact.service.model import EquipmentTransition, EquipmentTransitionStateful, LotsOptimizationInput, \
     LotsOptimizationResults, TransitionInfo, MaterialTransfer, LongTermPlanningResults, SnapshotExtended, LotExtended
 from dynreact.service.optim_listener import LotsOptimizationListener

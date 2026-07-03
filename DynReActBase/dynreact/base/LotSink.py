@@ -1,7 +1,8 @@
 from typing import Sequence
 
 from dynreact.base.PermissionManager import PermissionManager
-from dynreact.base.model import Lot, Site, Snapshot, ServiceMetrics
+from dynreact.base.model import Lot, Site, Snapshot
+from dynreact.base.monitoring import ServiceMetrics
 
 
 class LotSink:
@@ -16,12 +17,15 @@ class LotSink:
         self._permissions = permissions
 
     def id(self) -> str:
+        """Model id"""
         raise Exception("not implemented")
 
     def label(self, lang: str = "en") -> str:
+        """Model label for display"""
         return self.id()
 
     def description(self, lang: str = "en") -> str | None:
+        """Optional model description"""
         return None
 
     def transfer_new(self,

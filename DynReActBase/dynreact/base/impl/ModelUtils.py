@@ -3,7 +3,8 @@ from typing import Mapping, Sequence
 
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.model import MidTermTargets, ProductionTargets, EquipmentProduction, ProductionPlanning, Site, \
-    EquipmentAvailability, MaterialCategory, SUM_MATERIAL, Lot, PlannedWorkingShift, Snapshot
+    EquipmentAvailability, MaterialCategory, SUM_MATERIAL, Lot, PlannedWorkingShift, Snapshot, StorageLevel, Storage, \
+    Material
 
 
 class ModelUtils:
@@ -84,12 +85,13 @@ class ModelUtils:
     def mid_term_targets_from_ltp_result(
             result: MidTermTargets,
             process: str,
-            snapshot: Snapshot,
+            snapshot: Snapshot|None,
             horizon: timedelta,
             num_shifts: int,
             site: Site,
             snapshot_provider: SnapshotProvider,
             equipment_ids: Sequence[int]|None=None,
+            interval: tuple[datetime, datetime]|None=None,
             max_horizon: timedelta = timedelta(days=8)) -> tuple[ProductionTargets, datetime, dict[int, datetime]]:
         """
         Determines the actual amount of material to be produced by the equipment belonging to the considered
@@ -107,6 +109,7 @@ class ModelUtils:
             snapshot_provider: the snapshot provider
             equipment_ids: optional equipments ids to be included. If not specified, all equipment for the considered
                 process stage is included
+            interval: if interval is specified, then snapshot is optional; the plannign interval is considered fixed then
             max_horizon: maximum time horizon to consider (w.r.t. the snapshot timestamp)
 
         Returns:
@@ -115,18 +118,19 @@ class ModelUtils:
         equipment_ids = equipment_ids if equipment_ids is not None else [p.id for p in site.get_process_equipment(process)]
         if len(equipment_ids) == 0:
             raise Exception("No equipment specified")
-        max_planning_time = snapshot.timestamp + max_horizon
+        max_planning_time = snapshot.timestamp + max_horizon if interval is None else interval[1]
         material_by_equipment_targets: dict[int, dict[str, float]] = {}
         material_by_equipment_existing: dict[int, dict[str, float]] = {}
         scale_factor_by_equipment: dict[int, float] = {}
         total_weight_by_equipment: dict[int, float] = {}
         min_start: datetime = max_planning_time
-        max_end: datetime = snapshot.timestamp + horizon
+        max_end: datetime = snapshot.timestamp + horizon if interval is None else interval[1]
         start_time_by_equipment: dict[int, datetime] = {}
+        start_time = snapshot.timestamp if interval is None else interval[0]
         for equipment in equipment_ids:
-            lots = [lot for lot in snapshot.lots.get(equipment, tuple()) if lot.active and lot.end_time is not None]  # and snapshot_provider.is_lot_complete(lot)
-            eq_horizon = max(lt.end_time for lt in lots) if len(lots) > 0 else snapshot.timestamp
-            if eq_horizon >= max_planning_time:  # nothing to be planned for this equipment, lots already cover the planning horizon
+            lots = [lot for lot in snapshot.lots.get(equipment, tuple()) if lot.active and lot.end_time is not None] if snapshot is not None else []
+            eq_horizon = max(lt.end_time for lt in lots) if len(lots) > 0 else interval[0] if interval is not None else snapshot.timestamp
+            if eq_horizon >= max_planning_time:  # nothing to be planned for this equipment, lots already covered the planning horizon
                 continue
             planning_end = min(eq_horizon + horizon, max_planning_time)
             if eq_horizon < min_start:
@@ -138,7 +142,7 @@ class ModelUtils:
             #    continue
             # need to sum up all targets from now, and then subtract the existing lots
             equipment_horizon: timedelta = planning_end - eq_horizon
-            applicable: dict[int, float] = ModelUtils.applicable_periods(result.sub_periods, snapshot.timestamp, planning_end)
+            applicable: dict[int, float] = ModelUtils.applicable_periods(result.sub_periods, start_time, planning_end)
             if len(applicable) == 0:  # nothing planned for this equipment?
                 continue
             mats_existing: dict[str, float] = {}
@@ -447,6 +451,72 @@ class ModelUtils:
         common_horizon = None if any(e not in horizons for e in equipment) else min(horizons.values())
         return common_horizon, horizons, last_orders
 
-
-
+    @staticmethod
+    def storage_content_from_snapshot(snapshot: Snapshot, site: Site) -> dict[str, StorageLevel]:
+        material_by_orders: dict[str, list[Material]] = {}
+        for mat in snapshot.material:
+            if mat.order not in material_by_orders:
+                material_by_orders[mat.order] = []
+            material_by_orders[mat.order].append(mat)
+        storage_by_equipment: dict[int, Storage] = \
+            {e.id: site.get_storage(e.storage_in, do_raise=True) for e in site.equipment if e.storage_in is not None}
+        # outer key: storage, inner key: material class
+        material_levels: dict[str, dict[str, float]] = {}
+        total_weight: dict[str, float] = {}  # by storage
+        for order in snapshot.orders:
+            equipment = order.current_equipment
+            storages = [s for s in (storage_by_equipment.get(e) for e in equipment) if s is not None] \
+                                        if equipment is not None else tuple()
+            if len(storages) == 0:
+                continue
+            shares: dict[str, float] = {}  # share by storage
+            materials = material_by_orders.get(order.id)
+            if len(storages) == 1:
+                shares[storages[0].name_short] = 1
+            elif materials is None or len(materials) == 0:
+                for stg in storages:
+                    shares[stg.name_short] = 1/len(storages)
+            else:
+                for mat in materials:
+                    storage = storage_by_equipment.get(mat.current_equipment)
+                    if storage is not None:
+                        stg_id = storage.name_short
+                        if stg_id not in shares:
+                            shares[stg_id] = 0.
+                        shares[stg_id] += mat.weight / order.actual_weight
+            for storage in storages:
+                stg_id = storage.name_short
+                share = shares.get(stg_id)
+                if share is None or share <= 0:
+                    continue
+                if stg_id not in total_weight:
+                    total_weight[stg_id] = 0.
+                total_weight[stg_id] += order.actual_weight * share
+                ml = order.material_classes
+                if ml is not None:
+                    if stg_id not in material_levels:
+                        material_levels[stg_id] = {}
+                    mat_levels: dict[str, float] = material_levels[stg_id]
+                    for clzz in ml.values():
+                        if clzz == "_sum":
+                            continue
+                        if clzz not in mat_levels:
+                            mat_levels[clzz] = 0.
+                        mat_levels[clzz] += order.actual_weight * share
+        storage_levels: dict[str, StorageLevel] = {}
+        for storage, total in total_weight.items():
+            if total <= 0:
+                continue
+            stg_obj = site.get_storage(storage, do_raise=True)
+            capacity = stg_obj.capacity_weight  # may be None
+            filling_level = total if capacity is None else total/capacity
+            mat_levels = material_levels.get(storage)
+            relative_mat_levels = {mat: level/capacity for mat, level in mat_levels.items()} \
+                if mat_levels is not None and capacity is not None and len(mat_levels) > 0 \
+                else mat_levels if mat_levels is not None and len(mat_levels) > 0 \
+                else None
+            level = StorageLevel(storage=storage, filling_level=filling_level,
+                                 timestamp=snapshot.timestamp, material_levels=relative_mat_levels)
+            storage_levels[storage] = level
+        return storage_levels
 

@@ -21,7 +21,7 @@ class DummyShiftsProvider(ShiftsProvider):
         use_random: bool = url[len("dummy:"):].startswith("rand")
         seed = None
         if use_random and "(" in url and ")" in url:
-            seed = int(url[url.index("(")+1:url.index(")")+1])
+            seed = int(url[url.index("(")+1:url.index(")")])
         self._rand: random.Random|None = random.Random(x=seed) if use_random else None
         self._url = url
         self._site = site

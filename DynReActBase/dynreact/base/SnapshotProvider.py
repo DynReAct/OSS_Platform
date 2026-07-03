@@ -8,9 +8,11 @@ import enum
 from datetime import datetime, timezone, timedelta
 from typing import Iterator, Literal, Iterable, Any, Sequence, Callable
 
+from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider, EquipmentRestriction, \
+    RestrictionUtils
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import Snapshot, Site, Lot, Process, Material, Order, MaterialCategory, MaterialClass, \
-    ServiceMetrics, LotTimes
+from dynreact.base.model import Snapshot, Site, Lot, Process, Material, Order, MaterialCategory, MaterialClass, LotTimes
+from dynreact.base.monitoring import ServiceMetrics
 
 
 # Note: requires Python >= 3.11
@@ -160,8 +162,12 @@ class SnapshotProvider:
         """
         This method is used to check if orders assigned to some lot may be rescheduled.
         It can be overwritten by subclasses; by default, lots with status <= 1 are considered reschedulable.
-        :param lot:
-        :return:
+
+        Parameters:
+            lot: the lot to check
+
+        Returns:
+            a boolean flag indicating whether the lot is reschedulable
         """
         return lot.status <= 1
 
@@ -169,17 +175,25 @@ class SnapshotProvider:
         """
         This method is used to check if a lot is complete and can be scheduled.
         The methhod can be overwritten by subclasses. By default, lots with status >= 3 and start and end time set are considered complete.
-        :param lot:
-        :return:
+
+        Parameters:
+            lot: the lot to check
+
+        Returns:
+            a boolean flag indicating whether the lot is complete
         """
         return lot.status >= 3 and lot.start_time is not None and lot.end_time is not None
 
     def material_class_for_order(self, order: Order, category: MaterialCategory) -> MaterialClass|None:
         """
         Overwrite this method in derived class to provide a custom material class mapping
-        :param order:
-        :param category:
-        :return:
+
+        Parameters:
+            order: the order to analyze
+            category: the requested material category
+
+        Returns:
+            the material class associated to the order
         """
         if not self._has_class_mapping:
             raise Exception("Material class for order not implemented")
@@ -300,7 +314,8 @@ class SnapshotProvider:
                          process: str,
                          planning_horizon: tuple[datetime, datetime],
                          equipment: Sequence[int]|None=None,
-                         transport_times: Callable[[int, int], timedelta]|None=None) -> list[str]:
+                         transport_times: Callable[[int, int], timedelta]|None=None,
+                         temporary_restrictions: TemporaryRestrictionsProvider|None = None) -> list[str]:
         """
         Determine the orders eligible for planning/lot creation for a specific process.
         This method can be overridden in a derived implementation.
@@ -310,13 +325,22 @@ class SnapshotProvider:
         :param transport_times: a function that determines the minimum transport time between equipment that needs to be respected
                 after processing of any material at some equipment before it can be scheduled at the next equipment. Signature:
                     (previous_equipment: int, next_equipment: int) -> timedelta
+        :param temporary_restrictions: optional provider of temporary equipment restrictions
         :return: list of eligible order ids
         """
         all_lots = snapshot.lots
         lots_by_ids: dict[str, Lot] = {lot.id: lot for lots in all_lots.values() for lot in lots}
         plants: list[int] = [p.id for p in self._site.get_process_equipment(process)]
-        equipment = equipment if equipment is not None else plants
+        equipment: list[int] = equipment if equipment is not None else plants
         process_lots: dict[str, Lot] = {lot.id: lot for eq, eq_lots in all_lots.items() if eq in plants for lot in eq_lots}
+        #restrictions: Sequence[EquipmentRestriction]|None = None
+        restrictions: dict[int, Sequence[EquipmentRestriction]]|None = None
+        if temporary_restrictions is not None:
+            restrictions0 = temporary_restrictions.equipment_restrictions(equipment=equipment, active_only=True)
+            if len(restrictions0) > 0:
+                restrictions1 = [rule for rule, active in restrictions0]
+                affected_equipments = [eq for plants in ((rule.equipment, ) if isinstance(rule.equipment, int) else rule.equipment for rule in restrictions1) for eq in plants]
+                restrictions = {e: [r for r in restrictions1 if r.equipment == e or (isinstance(r.equipment, Sequence) and e in r.equipment)] for e in affected_equipments}
         previous_steps: list[Process] = [p for p in self._site.processes if p.next_steps is not None and process in p.next_steps]
         previous_process_names = [p.name_short for p in previous_steps]
         proc = self._site.get_process(process, do_raise=True)
@@ -327,6 +351,10 @@ class SnapshotProvider:
         for order in snapshot.orders:
             # step 0: any equipment allowed at all?
             order_equipment = [e for e in equipment if e in order.allowed_equipment]
+            if restrictions:
+                affected_equipment: list[int] = [e for e in order_equipment if e in restrictions]
+                forbidden = [e for e in affected_equipment if not RestrictionUtils.equipment_allowed(restrictions[e], e, order)]
+                order_equipment = [e for e in order_equipment if e not in forbidden]
             if len(order_equipment) == 0:
                 continue
             # step 1: check if order is already scheduled at the considered process stage

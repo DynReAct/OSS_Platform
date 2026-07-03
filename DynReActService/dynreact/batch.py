@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import threading
 import time
 import traceback
@@ -15,6 +16,7 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Snapshot, ProcessLotCreationSettings, ProductionTargets, EquipmentProduction, Lot, \
     MidTermTargets, PlannedWorkingShift, ProductionPlanning
+from dynreact.base.monitoring import LotsBatchJobStatistics, LotCreationProcessStatistics
 from dynreact.lots_optimization import FrontendOptimizationListener
 from dynreact.state import DynReActSrvState
 
@@ -51,6 +53,10 @@ class LotsBatchOptimizationJob:
     TODO use logging over print
     """
 
+    _base_stats: LotCreationProcessStatistics = LotCreationProcessStatistics(solution_id="", duration=timedelta(), order_backlog_count=0, order_backlog_tons=0., lots_created=0,
+        orders_assigned=0, tons_assigned=0., tons_target=0.,  objective_value=0., equipment=tuple(), missing_material=0,
+        material_insufficient_for_target=0, lots_exceed_planning_horizon=0, errors=0)
+
     def __init__(self, config: DynReActSrvConfig, state: DynReActSrvState,
                  store_results: bool=True, batch_config: BatchConfig|None=None, listener: OptimizationListener|None=None, initial_solutions: dict[str, ProductionPlanning]|None=None):
         self._thread = None
@@ -62,6 +68,10 @@ class LotsBatchOptimizationJob:
         self._initial_solutions = initial_solutions
         self._snapshot_provider = state.get_snapshot_provider()
         self._stopped = threading.Event()
+        self._user_interrupted = threading.Event()
+        overall_results: dict[str, LotCreationProcessStatistics] = {}
+        self._overall_results = overall_results
+        self._stats = LotsBatchJobStatistics(start_time=DatetimeUtils.now().astimezone(), total_invocations=0, overall_process_results=overall_results)
         if config.lots_batch_config or batch_config:
             self._config = batch_config if batch_config else LotsBatchOptimizationJob._parse_config(config.lots_batch_config.strip())
             self._thread = threading.Thread(name="batch-lot-creation", target=self.run)
@@ -73,17 +83,21 @@ class LotsBatchOptimizationJob:
         next_planned_invocation = self._next_invocation(DatetimeUtils.now())
         snaps_provider = self._snapshot_provider
         wait_cnt: int = 0
-        while True:
+        while not self._stopped.is_set():
+            self._user_interrupted.clear()
+            is_user_interrupted = False
             now = DatetimeUtils.now()
             while next_planned_invocation > now:
-                self._stopped.wait((next_planned_invocation-now).total_seconds())
-                if self._stopped.is_set():
+                self._user_interrupted.wait((next_planned_invocation-now).total_seconds())
+                is_user_interrupted = self._user_interrupted.is_set()
+                if self._stopped.is_set() or is_user_interrupted:
                     break
                 now = DatetimeUtils.now()
             if self._stopped.is_set():
                 break
             try:
-                start = next_planned_invocation - self._config.max_snapshot_age if not (self._config.test and self._runs == 0) else now - timedelta(days=10*365)
+                start = next_planned_invocation - self._config.max_snapshot_age if not ((self._config.test and self._runs == 0) or is_user_interrupted)  \
+                            else now - timedelta(days=10*365)
                 snap = next(snaps_provider.snapshots(start, now, order="desc"))
             except StopIteration:
                 if wait_cnt > 30:   # TODO  configurable?
@@ -106,14 +120,22 @@ class LotsBatchOptimizationJob:
 
     def stop(self):
         self._stopped.set()
+        self._user_interrupted.set()
 
     def is_active(self) -> bool:
         return self._thread is not None and not self._stopped.is_set()
+
+    def trigger(self):
+        if self._stats.is_active:
+            return False
+        self._user_interrupted.set()
+        return True
 
     def wait(self, timeout: timedelta|None=None):
         self._thread.join(timeout=timeout.total_seconds() if timeout is not None else None)
 
     def _process(self, snapshot: datetime):
+        self._stats = self._stats.model_copy(update={"is_active": True})
         state = self._state
         store_results = self._store_results
         custom_listener = self._listener
@@ -128,26 +150,33 @@ class LotsBatchOptimizationJob:
         proc_settings: dict[str, ProcessLotCreationSettings] = site.lot_creation.processes if site.lot_creation is not None else {}
         reference_duration: timedelta = site.lot_creation.duration if site.lot_creation is not None else timedelta(days=1)
         planning_horizon: timedelta = self._config.period
-        now = DatetimeUtils.now()
+        now = DatetimeUtils.now().astimezone()
+        snap_now = snapshot.astimezone()
+        temporary_restrictions = state.get_temporary_restrictions()
         # this is the generic period, but we'll adapt it further for each process stage depending on the horizon of existing lots
-        period = (now, now + planning_horizon)
+        period = (snap_now, snap_now + planning_horizon)
         lot_size_to_tuple = lambda x: x if x is None else (x.min, x.max)
         all_orders = {o.id: o for o in snap.orders}
         do_append: bool = self._config.append_period
         if do_append:
-            period = (now, now + self._config.max_equipment_horizon)
+            period = (snap_now, snap_now + self._config.max_equipment_horizon)
+        stats: dict[str, LotCreationProcessStatistics] = {proc.process: LotsBatchOptimizationJob._base_stats.model_copy(deep=True) for proc in self._config.processes}
         for proc in self._config.processes:
             if self._stopped.is_set():
                 break
+            process = proc.process
+            stat = stats[process]
+            start_t = datetime.now()
             try:
-                settings: ProcessLotCreationSettings = proc_settings.get(proc.process) if proc_settings is not None else None
-                equipment = site.get_process_equipment(proc.process)
+                settings: ProcessLotCreationSettings = proc_settings.get(process) if proc_settings is not None else None
+                equipment = site.get_process_equipment(process)
                 equipment_ids = [e.id for e in equipment]
                 # Here the hours=8 offset in the lot.end_time condition is added to ensure that the last order of an existing lot that is about to be finished can be considered
-                existing_lots: list[Lot] = [lot for eq, lots in snap.lots.items() if eq in equipment_ids for lot in lots if   # TODO lot status filter correct?
-                        (lot.active and lot.start_time is not None and lot.end_time is not None and lot.end_time > period[0] - timedelta(hours=8) and lot.start_time < period[1])]
+                existing_lots: list[Lot] = [lot for eq, lots in snap.lots.items() if eq in equipment_ids for lot in lots if   
+                        (lot.active and lot.start_time is not None and lot.end_time is not None and lot.end_time > period[0] - timedelta(hours=8))]
                 lots_horizon, equipment_horizons, last_orders = ModelUtils.lots_horizon(equipment_ids, existing_lots)
                 if lots_horizon is not None and lots_horizon >= period[1]:
+                    stat.lots_exceed_planning_horizon += 1
                     continue
                 process_period = period
                 if not do_append and lots_horizon is not None and lots_horizon > period[0]:
@@ -183,7 +212,8 @@ class LotsBatchOptimizationJob:
                     equipment_durations[plant] = equipment_duration
                 equipment_ids = [e for e, frac in fractions_available.items() if frac > 0]
                 if len(equipment_ids) == 0:
-                    print(f"No equipment available for process {proc.process} (or available equipment already covered by lots).")
+                    stat.lots_exceed_planning_horizon += 1
+                    print(f"No equipment available for process {process} (or available equipment already covered by lots).")
                     continue
                 targets_weights0: dict[int, float] = {}
                 for e in equipment_ids:
@@ -201,10 +231,12 @@ class LotsBatchOptimizationJob:
                     if targets_0 is not None and not np.isnan(targets_0):
                         targets_weights0[e] = fractions_available[e] * targets_0
                 if len(targets_weights0) == 0:
+                    stat.lots_exceed_planning_horizon += 1
                     print(f"Batch MTP: no plants available or no configuration found for process {proc.process}")
                     continue
                 target_weights: dict[int, EquipmentProduction] = {equ: EquipmentProduction(equipment=equ, total_weight=weight, lot_weight_range=lot_size_to_tuple(settings.get_equipment_lot_sizes(equ)))
                                                                   for equ, weight in targets_weights0.items()}
+                stat.equipment = tuple(target_weights.keys())
                 # TODO option to set material structure settings
                 targets = ProductionTargets(process=proc.process, period=period, target_weight=target_weights)
                 ## original method to determine the final amount of material
@@ -217,6 +249,7 @@ class LotsBatchOptimizationJob:
                 final_targets = targets
                 final_total_production = sum(t.total_weight for t in final_targets.target_weight.values())
                 if final_total_production <= 0:  # process already covered completely
+                    stat.lots_exceed_planning_horizon += 1
                     continue
                 # eligible_orders: list[str] = self._snapshot_provider.eligible_orders(snap, proc.process, process_period, method=method)
                 if site.transport_times is None:
@@ -228,19 +261,25 @@ class LotsBatchOptimizationJob:
                     initial_solution = initial_solutions[proc.process]
                     eligible_orders: list[str] = list(initial_solution.order_assignments.keys())
                 else:
-                    eligible_orders = self._snapshot_provider.eligible_orders2(snap, proc.process, process_period, equipment=equipment_ids, transport_times=transport_times)
+                    eligible_orders = self._snapshot_provider.eligible_orders2(snap, proc.process, process_period, equipment=equipment_ids,
+                                                        transport_times=transport_times, temporary_restrictions=temporary_restrictions)
                     eligible_orders = [o for o in eligible_orders if o in all_orders and any(e in equipment_ids for e in all_orders[o].allowed_equipment)]
                     initial_solution, _ = algo.heuristic_solution(proc.process, snap, process_period[1]-process_period[0], costs, self._snapshot_provider, final_targets, eligible_orders, previous_orders=last_orders)
                 if len(eligible_orders) <= 2:   # TODO configurable, maybe also minimum amount of material
+                    stat.missing_material += 1
                     print(f"Batch lot creation job for process {proc.process} has only {len(eligible_orders)} eligible orders, skipping it.")
                     continue
                 available_material = sum(all_orders[o].actual_weight for o in eligible_orders)
+                stat.order_backlog_tons = available_material
+                stat.order_backlog_count = len(eligible_orders)
                 if final_total_production > available_material:
+                    stat.material_insufficient_for_target += 1
                     print(f"Batch lot creation for {proc.process}: available order backlog of {available_material}t does not cover the target of {final_total_production}t.")
                 opti = algo.create_instance(proc.process, snap, costs, targets=final_targets, initial_solution=initial_solution, orders=eligible_orders)
                 # TODO parameters
                 time_id: str = DatetimeUtils.format(DatetimeUtils.now(), use_zone=False).replace("-", "").replace(":","").replace("T", "")
-                listener = FrontendOptimizationListener(proc.process + "_" + time_id + "_batch", persistence, store_results, opti, timeout=proc.max_duration)
+                solution_id = proc.process + "_" + time_id + "_batch"
+                listener = FrontendOptimizationListener(solution_id, persistence, store_results, opti, timeout=proc.max_duration)
                 if custom_listener is not None:
                     opti.add_listener(custom_listener)
                 t0 = time.time()
@@ -249,17 +288,35 @@ class LotsBatchOptimizationJob:
                 seconds = time.time() - t0
                 history = listener.history()
                 sol, objective = listener.best_solution()
+                duration = timedelta(seconds=seconds)
+                stat.duration = duration
                 print(f"Batch lot creation job finished for process {proc.process} with {len(eligible_orders)} orders after {len(history)} iterations and {int(seconds/60)} minutes. Id: {listener._id}")
                 if sol is not None:
                     all_lots = [lot for lots in sol.get_lots(orders=all_orders).values() for lot in lots]
-                    lots_cnt = len(all_lots)
-                    lots_weight = sum(lot.weight or 0 for lot in all_lots)
+                    lots_created = len(all_lots)
+                    tons_assigned = sum(lot.weight or 0 for lot in all_lots)
                     orders_assigned = sum(len(lot.orders) for lot in all_lots)
-                    print(f"  Objective value: {objective}, lots: {lots_cnt}, orders assigned: {orders_assigned}/{len(eligible_orders)}, " +
-                          f"total lot weights: {lots_weight}t (targeted: {final_total_production}t).")
+                    stat.solution_id = solution_id
+                    stat.objective_value = objective
+                    stat.lots_created = lots_created
+                    stat.orders_assigned = orders_assigned
+                    stat.tons_assigned = tons_assigned
+                    stat.tons_target = final_total_production
+                    print(f"  Objective value: {objective}, lots: {lots_created}, orders assigned: {orders_assigned}/{len(eligible_orders)}, " +
+                          f"total lot weights: {tons_assigned}t (targeted: {final_total_production}t).")
             except:
+                stat.errors += 1
                 print(f"Error in lots batch job for proc {proc.process}")
                 traceback.print_exc()
+        total_invocations = self._stats.total_invocations + 1
+        last_results = dict(self._stats.previous_process_results)
+        if len(last_results) > 5:
+            first = sorted(list(last_results.keys()))[0]
+            last_results.pop(first)
+        last_results[now] = stats
+        # TODO overall process results
+        self._stats = self._stats.model_copy(update={"is_active": False, "previous_invocation": now,
+                                    "previous_snapshot": snapshot, "previous_process_results": last_results, "total_invocations": total_invocations})
 
 
     # TODO support multiple configs
@@ -307,6 +364,7 @@ class LotsBatchOptimizationJob:
 
     def _next_invocation(self, now: datetime) -> datetime:
         if self._config.test and self._runs == 0:
+            self._stats = self._stats.model_copy(update={"next_invocation": now})
             return now
         now = now.astimezone()  # convert to local time
         tm = self._config.time
@@ -314,7 +372,11 @@ class LotsBatchOptimizationJob:
         while nxt < now:
             nxt = nxt + timedelta(days=1)
         nxt = nxt.astimezone(tz=timezone.utc)
+        self._stats = self._stats.model_copy(update={"next_invocation": nxt})
         return nxt
+
+    def stats(self) -> LotsBatchJobStatistics:
+        return self._stats
 
 
 

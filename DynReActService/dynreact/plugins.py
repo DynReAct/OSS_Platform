@@ -1,5 +1,6 @@
 import importlib
 import importlib.util
+import logging
 import sys
 import traceback
 from typing import Any
@@ -19,6 +20,7 @@ from dynreact.base.ProductionHistoryReader import ProductionHistoryReader
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.SnapshotProvider import SnapshotProvider
+from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider
 from dynreact.base.impl.AggregationPersistence import AggregationPersistence
 from dynreact.base.impl.DummyHistoryReader import DummyHistoryReader
 from dynreact.base.impl.DummyShiftsProvider import DummyShiftsProvider
@@ -39,6 +41,8 @@ from dynreact.module_loader import instantiate_first_matching, resolve_explicit_
 
 class Plugins:
 
+    _LOG_ID = "dynreact.plugins.Plugins"
+
     def __init__(self, config: DynReActSrvConfig):
         self._config = config
         self._profile: str|None = config.profile
@@ -55,15 +59,16 @@ class Plugins:
         self._plant_performance_models: list[PlantPerformanceModel]|None = None
         self._lot_sinks: dict[str, LotSink]|None = None
         self._aggregation_persistence: AggregationPersistence|None = None
+        self._temporary_restrictions: TemporaryRestrictionsProvider|None = None
         self._permissions: PermissionManager|None = None
 
     @staticmethod
-    def _stp_error_page(stp: str, error: Exception|None = None):
+    def _module_error_page(module: str, module_id: str, module_name: str, error: Exception | None = None):
         from dash import html
-        msg = f"Failed to load STP frontend '{stp}'."
+        msg = f"Failed to load {module_id} frontend '{module}'."
         details = str(error) if error is not None else "Unknown error"
         return html.Div([
-            html.H2("Short Term Planning Unavailable"),
+            html.H2(f"{module_name} Unavailable"),
             html.P(msg),
             html.Pre(details, style={"whiteSpace": "pre-wrap"}),
             html.P("Check that the frontend package is installed and that its Python dependencies are available."),
@@ -116,7 +121,7 @@ class Plugins:
             if cfg == "default:tabu-search":
                 cfg = f"class:dynreact.lotcreation.LotsOptimizerImpl,{cfg}"
             self._lots_optimizer = Plugins._load_module("dynreact.lotcreation", cfg, self._profile, LotsOptimizationAlgo,
-                                                        self.get_config_provider().site_config(), do_raise=True)
+                                                        self.get_config_provider().site_config(), temporary_restrictions=self.get_temporary_restrictions(), do_raise=True)
         return self._lots_optimizer
 
     def get_long_term_planning(self) -> LongTermPlanning:
@@ -200,6 +205,21 @@ class Plugins:
                 self._history_reader = Plugins._load_module("dynreact.history", self._config.history_reader, self._profile, ProductionHistoryReader, site, do_raise=True)
         return self._history_reader
 
+    def get_temporary_restrictions(self) -> TemporaryRestrictionsProvider:
+        if self._temporary_restrictions is None:
+            site = self.get_config_provider().site_config()
+            if isinstance(self._config.temporary_restrictions, TemporaryRestrictionsProvider):
+                self._temporary_restrictions = self._config.temporary_restrictions
+            elif self._config.temporary_restrictions and self._config.temporary_restrictions.startswith("file:"):
+                from dynreact.base.impl.FileBasedTemporaryRestrictionsProvider import FileBasedTemporaryRestrictionsProvider
+                try:
+                    self._temporary_restrictions = FileBasedTemporaryRestrictionsProvider(self._config.temporary_restrictions, site)
+                except NotApplicableException:
+                    pass
+            else:
+                self._temporary_restrictions = Plugins._load_module("dynreact.restrictions", self._config.temporary_restrictions, self._profile, TemporaryRestrictionsProvider, site, do_raise=True)
+        return self._temporary_restrictions
+
     def get_permission_manager(self) -> PermissionManager:
         if self._permissions is None:
             self._permissions = get_permission_manager(self._config)
@@ -231,7 +251,7 @@ class Plugins:
             except Exception as exc:
                 print("Failed to load standard Agents page")
                 traceback.print_exc()
-                return Plugins._stp_error_page(stp, exc)
+                return Plugins._module_error_page(stp, "STP", "Short Term Planning", exc)
         try:
             modl = importlib.import_module(stp)
             layout = getattr(modl, "layout", None)
@@ -259,7 +279,38 @@ class Plugins:
                 print(f"An error occurred loading the STP frontend {stp}")
                 traceback.print_exc()
                 import_error = exc
-        return Plugins._stp_error_page(stp, import_error)
+        return Plugins._module_error_page(stp, "STP", "Short Term Planning", import_error)
+
+    def load_material_order_allocation_frontend(self):
+        moa = self._config.material_order_allocation_frontend
+        if not moa:
+            return None
+        try:
+            modl = importlib.import_module(moa)
+            layout = getattr(modl, "layout", None)
+            if layout is not None:
+                return layout
+        except Exception as exc:
+            logging.getLogger(Plugins._LOG_ID).error(f"An error occurred loading the MOA frontend {moa}: {exc}")
+            import_error = exc
+        else:
+            import_error = None
+
+        importers = iter(sys.meta_path)
+        for importer in importers:
+            try:
+                spec_res = importer.find_spec(moa, path=None)
+                if spec_res is not None:
+                    modl = importlib.util.module_from_spec(spec_res)
+                    spec_res.loader.exec_module(modl)
+                    layout = getattr(modl, "layout", None)
+                    if layout is not None:
+                        sys.modules[moa] = modl
+                        return layout
+            except Exception as exc:
+                logging.getLogger(Plugins._LOG_ID).error(f"An error occurred loading the MOA frontend {moa}: {exc}")
+                import_error = exc
+        return Plugins._module_error_page(moa, "MOA", "Material-order allocation", import_error)
 
     @staticmethod
     def _load_plant_performance_model(config: str, site: Site) -> PlantPerformanceModel|None:

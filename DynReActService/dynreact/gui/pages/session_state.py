@@ -20,10 +20,9 @@ if "transport_times" in _st0 and "unit" in _st0["transport_times"] and isinstanc
 
 site: dcc.Store = dcc.Store(id="site-store", storage_type="memory", data=_st0)
 # Type: datetime (the snapshot id)
-# FIXME session persistence is not working; but neither does local, it only stores the initial value, no updates
-selected_snapshot: dcc.Store = dcc.Store(id="selected-snapshot", storage_type="session")
-selected_snapshot_obj: dcc.Store = dcc.Store(id="selected-snapshot-obj", storage_type="session")
-selected_process: dcc.Store = dcc.Store(id="selected-process", storage_type="session")
+selected_snapshot: dcc.Store = dcc.Store(id="selected-snapshot", storage_type="memory")
+selected_snapshot_obj: dcc.Store = dcc.Store(id="selected-snapshot-obj", storage_type="memory")
+selected_process: dcc.Store = dcc.Store(id="selected-process", storage_type="memory")
 
 # XXX this one is a bit ugly, but to be able to set the value of selected_snapshot from the snapshot page
 # and also from url params we need an intermediate second global store which is only manipulated by the snapshot page

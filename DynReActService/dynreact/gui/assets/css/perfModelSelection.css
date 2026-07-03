@@ -14,3 +14,18 @@
     column-gap: 1em;
     align-items: center;
 }
+
+.perf-equipment-status {
+    display: grid;
+    grid-template-columns: repeat(4, auto);
+    column-gap: 1em;
+    row-gap: 0.5em;
+    justify-content: start;
+    align-items: center;
+}
+
+.perf-table-header {
+    font-size: 1.05em;
+    font-weight: bold;
+}
+

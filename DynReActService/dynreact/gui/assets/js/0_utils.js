@@ -180,4 +180,38 @@ class JsUtils {
         URL.revokeObjectURL(url);
     }
 
+    /**
+    * Sets the default_share attribute for material classes, potentially adjusted for excluded material
+    */
+    static defaultMaterialSharesByCategory(cats /*: Array<MaterialCategory> */, excludedMaterial /*: Array<MaterialClass>|undefined */) /* => Array<MaterialCategory> */ {
+        const results /*: Array<MaterialCategory> */ = [];
+        for (const cat of catsIncluded) {
+            const shareByMat = Object.fromEntries(cat.classes.filter(cl => cl.default_share > 0).map(cl => [cl.id, cl.default_share]));
+            const sumShares = Object.values(shareByMat).reduce((a,b) => a+b, 0);
+            const defaultClass = cat.classes.find(cl => cl.is_default && !(cl.default_share > 0));
+            if (defaultClass)
+                shareByMat[defaultClass.id] = Math.max(1-sumShares, 0);
+            if (excludedMaterial) {
+                missingShare = Object.entries(shareByMat).filter(([mat, share]) => excludedMaterial.indexOf(mat) >= 0).reduce((a,b)=>a+b, 0);
+                if (missingShare > 0) {
+                    if (missingShare >= 1-1e-4) {
+                         allMats = cat.classes.filter(cl => excludedMaterial.indexOf(cl.id) < 0);
+                         if (allMats.length === 0) {
+                            shareByMat = {};
+                         } else {
+                            shareByMat = Object.fromEntries(allMats.map(mat => [mat, 1/allMats.length]));
+                         }
+                    } else {
+                        shareByMat = Object.fromEntries(Object.entries(shareByMat)
+                            .filter(([mat, value]) => excludedMaterial.indexOf(mat) < 0)
+                            .map(([mat, value]) => [mat, value / (1-missingShare)]));
+                    }
+                }
+            }
+            const newCat = {...cat, classes: cat.classes.filter(cl => excludedMaterial.indexOf(cl.id) < 0).map(cl => { return {...cl, default_share: shareByMat[cl.id] || 0}; })};
+            results.push(newCat);
+        }
+        return results;
+    }
+
 }

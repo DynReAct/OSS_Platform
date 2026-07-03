@@ -69,8 +69,13 @@ class DynReActSrvConfig:
     energy_provider: str|None = "default+file:./data/energy_context.json"
     "Optional energy analysis provider. Preferred values: `default+file:./data/energy_context.json` or `ras+file:./data/context/energy_context.json`."
     stp_frontend: str = "default"  # default is the frontend provided in this module
+    material_order_allocation_frontend: str|None = None
+    "Optionally register a frontend for a custom material-order allocation service"
+    temporary_restrictions: str|None = None
+    "Optional url of the equipment restrictions service, for constraints that can be activated and deactivated by the user."
     profile: str|None = None
     "Optional profile name for loading of custom components. If unset, DynReAct uses the base OSS/default loading path. Can be overwritten for individual components."
+
 
     def __init__(self,
                  config_provider: str | None = None,
@@ -108,6 +113,8 @@ class DynReActSrvConfig:
                  plant_performance_models: list[str]|None = None,
                  energy_provider: str|None = None,
                  stp_frontend: str|None = None,
+                 material_order_allocation_frontend: str|None = None,
+                 temporary_restrictions: str | None = None,
                  time_zone: str | None = None,
                  profile: str|None = None
                  ):
@@ -251,6 +258,14 @@ class DynReActSrvConfig:
         if stp_frontend is None:
             stp_frontend = os.getenv("STP_FRONTEND", DynReActSrvConfig.stp_frontend)
         self.stp_frontend = stp_frontend
+        if material_order_allocation_frontend is None:
+            material_order_allocation_frontend = os.getenv("MATERIAL_ORDER_ALLOCATION_FRONTEND", DynReActSrvConfig.material_order_allocation_frontend)
+            if material_order_allocation_frontend == "":
+                material_order_allocation_frontend = None
+        self.material_order_allocation_frontend = material_order_allocation_frontend
+        if temporary_restrictions is None:
+            temporary_restrictions = os.getenv("TEMPORARY_RESTRICTIONS")
+        self.temporary_restrictions = temporary_restrictions
 
 
 class ConfigProvider:

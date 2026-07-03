@@ -16,7 +16,7 @@ class CostProvider:
     """
     An interface that must be implemented for each specific scheduling use-case. It contains all
     the custom logic for building an objective function for schedules.
-    Implementation expected in package dynreact.cost.CostCalculatorImpl
+    Implementation expected in package dynreact.cost.<PROFILE>
     """
 
     def __init__(self,  url: str|None, site: Site):

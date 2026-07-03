@@ -149,7 +149,7 @@ def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["order
         return [{"field": "id", "pinned": True}], []
     snapshot_id = DatetimeUtils.parse_date(snapshot_id)
     snapshot = state.get_snapshot(snapshot_id) if snapshot_id is not None else None
-    if snapshot is None or len(snapshot.material) == 0:
+    if snapshot is None or len(snapshot.orders) == 0:
         return [{"field": "id", "pinned": True}], []
     site = state.get_site()
 
@@ -176,7 +176,7 @@ def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["order
             field["valueFormatter"] = value_formatter_object
 
     def order_to_json(o: Order):
-        as_dict = o.model_dump(exclude_none=True, exclude_unset=True)
+        as_dict = o.model_dump(exclude_none=True, exclude_unset=True, mode="json")
         #for key in ["lots", "lot_positions"]:
         #    if key in as_dict:
         #        as_dict[key] = json.dumps(as_dict[key])
@@ -185,7 +185,7 @@ def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["order
         if o.current_equipment is not None:
             as_dict["current_plants"] = [next((plant.name_short for plant in site.equipment if plant.id == p), str(p)) for p in o.current_equipment]
         if isinstance(o.material_properties, BaseModel):
-            as_dict.update(o.material_properties.model_dump(exclude_none=True, exclude_unset=True))
+            as_dict.update(o.material_properties.model_dump(mode="json", exclude_none=True, exclude_unset=True))
         return as_dict
     return fields, [order_to_json(order) for order in snapshot.orders]
 

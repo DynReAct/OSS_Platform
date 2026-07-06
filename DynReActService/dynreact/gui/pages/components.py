@@ -12,30 +12,38 @@ from dynreact.app import state
 def lots_view(id_prefix: str, initial_hidden: bool=True, ids_toggle: bool=False, *args, **kwargs):
     lot_size: str | None = kwargs.get("lotsize", "time")
     controls = [
-        html.Span("Display mode: "),
-        dcc.Dropdown(id=id_prefix + "-swimlane-mode", options=[
-            {"value": "time", "label": "Time",
-             "title": "Show a gantt chart of lots."},
-            {"value": "constant", "label": "Lots",
-             "title": "All lots are shown with the same width, depending on the available screen space."},
-            {"value": "weight", "label": "Weight",
-             "title": "The width of a lot is proportional to the total weight of its coils."},
-            {"value": "orders", "label": "Orders",
-             "title": "The width of a lot is proportional to the number of orders it contains."},
-            {"value": "coils", "label": "Coils",
-             "title": "The width of a lot is proportional to the number of coils it contains."},
-        ], value=lot_size)
+        html.Span("Display mode: ", id=f"{id_prefix}-mode-label"),
+        dcc.Dropdown(id=id_prefix + "-swimlane-mode", options=lots_view_options(None), value=lot_size)
     ]
     if ids_toggle:
-        controls.append(html.Span("Show lot ids: "))
+        controls.append(html.Span("Show lot ids: ", id=f"{id_prefix}-show-lotids"))
         controls.append(dcc.Checklist(id=id_prefix + "-lotid-toggle", options= [{"value": ""}] , value=[""]))
     return html.Div([
         html.Div([
-            html.H2("Lots view"),
+            html.H2("Lots view", id=f"{id_prefix}-lotsview-head"),
             html.Div(controls, className="planning-swimlane-mode")
         ], id=id_prefix + "-lotsview-header", hidden=initial_hidden),
         html.Div(id=id_prefix + "-lots-swimlane")
     ])
+
+def lots_view_options(lang: str|None):
+    is_de: bool = lang and lang.startswith("de")
+    return [
+        {"value": "time", "label": "Zeit" if is_de else "Time",
+         "title": "Balkendiagramm der Lose anzeigen" if is_de else "Show a gantt chart of lots."},
+        {"value": "constant", "label": "Lose" if is_de else  "Lots",
+         "title": "Alle Lose mit gleicher Breite anzeigen" if is_de else
+                "All lots are shown with the same width, depending on the available screen space."},
+        {"value": "weight", "label": "Gewicht" if is_de else "Weight",
+         "title": "Die Breite des Loses ist proportional zum Gesamtgewicht der enthaltenen Ringe" if is_de else
+                "The width of a lot is proportional to the total weight of its coils."},
+        {"value": "orders", "label": "Aufträge" if is_de else "Orders",
+         "title": "Die Breite des Loses ist proportional zur Anzahl der enthaltenen Aufträge" if is_de else
+                "The width of a lot is proportional to the number of orders it contains."},
+        {"value": "coils", "label": "Ringe" if is_de else "Coils",
+         "title": "Die Breite des Loses ist proportional zur Anzahl der enthaltenen Ringe" if is_de else
+                "The width of a lot is proportional to the number of coils it contains."},
+    ]
 
 
 def prepare_lots_for_lot_view(snapshot: str|datetime|None, process: str|None, result: ProductionPlanning | None,

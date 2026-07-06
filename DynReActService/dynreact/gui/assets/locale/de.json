@@ -13,7 +13,8 @@
     "moa_header": {"text": "Warmbandanbindung", "title":  "Tab zur Warmbandanbindung öffnen"},
     "agents_header": {"text": "Agenten", "title": "Tab für das Empfehlungssystem öffnen"},
     "snaps_header": { "text": "Snapshot", "title": "Snapshot Tab öffnen" },
-    "snaps_gantt_header": {"text":  "Lose", "title": "Tab zu Losen öffnen"},
+    "snaps_gantt_header": {"text": "Lose", "title": "Tab zu Losen öffnen"},
+    "snaps-import_header": {"text": "Importe", "title": "Snapshot-Import Tab öffnen"},
     "perf_header": {"text":  "Performance-Modelle", "title": "Anlagenperformance-Modelle anzeigen"},
     "user_title_loggedin": "Benutzerinformationen und Logout anzeigen",
     "user_title_loggedout": "Login-Seite anzeigen"
@@ -37,6 +38,15 @@
   "lots": {
     "title": "Loserzeugung"
   },
+  "lots-gantt": {
+    "title": "Lose",
+    "mode-label": "Darstellungsmodus",
+    "table-header": "Tabellenansicht",
+    "equipment-label": "Anlagenauswahl: ",
+    "mat-label" : "Materialauswahl: ",
+    "show-lotids": "Los-Ids anzeigen: ",
+    "lotsview-head": "Losansicht"
+  },
   "temprest": {
     "title": "Temporäre Regeln",
     "header-eq-rest": "Anlagenbeschränkungen",
@@ -58,6 +68,17 @@
     "select_header": "Snapshot Auswahl",
     "details_header": "Snapshot Details",
     "display_label": "Darstellung: "
+  },
+  "snapimp": {
+    "title": "Snapshot Import",
+    "lastsnap-label": "Letzter Snapshot:",
+    "nextsnap-label": "Nächster Snapshot:",
+    "importactive-label": "Import aktiv",
+    "importrunning-label": "Import läuft",
+    "pause-label": {"text": "Importe pausieren", "title": "Keine neuen Snapshots importieren bis auf Weiteres"},
+    "pause": {"title": "Keine neuen Snapshots importieren bis auf Weiteres"},
+    "trigger-label": {"text": "Neuer Snapshot:", "title": "Neuen Snapshot importieren"},
+    "trigger": {"title": "Neuen Snapshot importieren"}
   },
   "site": {
     "header": "Standort"

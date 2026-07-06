@@ -66,7 +66,7 @@ def layout(*args, **kwargs):
         # ======= Top row: snapshot and process selector =========
         html.Div([
             html.Div([html.Div("Snapshot: "), html.Div(snap, id="lots2-current_snapshot")]),
-            html.Div([html.Div("Process: "), dcc.Dropdown(id="lots2-process-selector",
+            html.Div([html.Div("Process: ", id="lots2-process-selector-label"), dcc.Dropdown(id="lots2-process-selector",
                         options=[{"value": p.name_short, "label": p.name_short,
                                   "title": p.name if p.name is not None else p.name_short} for p in procs],
                         value=process,
@@ -76,10 +76,10 @@ def layout(*args, **kwargs):
             # html.Div([html.Div("Results: "), html.Div(id="create_result")]),
             html.Div([
                 html.Progress(),
-                html.Div("Optimization running")
+                html.Div("Optimization running", id="lots2-running-label")
             ], id="lots2-running-indicator", hidden=True),
             html.Div([
-                dcc.Link(html.Button("View solutions", className="dynreact-button"), id="lots2-link-solutions", href="/dash/lots/planned", target="_blank")
+                dcc.Link(html.Button("View solutions", id="lots2-link-sol-btn", className="dynreact-button"), id="lots2-link-solutions", href="/dash/lots/planned", target="_blank")
             ], id="lots2-link-solutions-wrapper", hidden=True),
         ], className="lots2-selector-flex"),
         html.Div([
@@ -171,41 +171,43 @@ def targets_tab(horizon: int):
 
     return [
         html.Div([
-            html.Div("Planning horizon"),
+            html.Div("Planning horizon", id="lots2-horizon-label"),
             html.Div([
                 dcc.Input(type="number", id="lots2-horizon-hours", min=1, max=1024, value=horizon),
-                html.Div("hours")
+                html.Div("hours", id="lots2-horizon-label-hours")
             ])
         ], className="lots2-horizon"),
         html.Br(),
         html.Div([
-            html.Div("Planning start"),
+            html.Div("Planning start", id="lots2-planning-start-label"),
             dcc.Input(type="date", id="lots2-planning-itv-start-date"),
             dcc.Input(type="time", id="lots2-planning-itv-start-time")
         ], className="lot2-planning-start"),
         html.Div([
             html.Div([
-                html.H4("Target production / t"),
+                html.H4("Target production / t", id="lots2-target-amount-header"),
                 html.Div([
                     html.Button("Initialize: LTP", id="lots2-targets-init-ltp", className="dynreact-button dynreact-button-small", title="Derive from long term planning."),
                     # html.Button("Initialize: lots", id="lots2-targets-init-lots", className="dynreact-button dynreact-button-small", title="Derive from currently planned lots."),
                 ], className="lots2-target-buttons"),
                 html.Div([
                     html.Div(dcc.Checklist(id="lots2-check-use-lot-range", options=checklist_dict, value=[], className="lots2-checkbox")),
-                    html.Div("Use lot weight range ?", title="Check to specify target weight ranges for the new lots to be created."),
+                    html.Div("Use lot weight range ?", id="lots2-check-use-lot-range-label",
+                             title="Check to specify target weight ranges for the new lots to be created."),
                 ], className="lots2-use-range-checkbox"),
                 html.Div([
                     html.Div(dcc.Checklist(id="lots2-check-append_to_lot", options=checklist_dict, value=[],className="lots2-checkbox")),
-                    html.Div("Append to existing lots?", title="Instead of creating new lots, add orders to an existing lot (select via \"Previous lot\" column)"),
+                    html.Div("Append to existing lots?", id="lots2-check-append_to_lot-label",
+                             title="Instead of creating new lots, add orders to an existing lot (select via \"Previous lot\" column)"),
                 ], className="lots2-use-range-checkbox"),
                 html.Div(id="lots2-details-plants", className="lots2-plants-targets grid-items-4"),
                 html.Div([
-                    html.Span("Total production: "),
+                    html.Span("Total production: ", id="lots2-plant-targets-sum-label"),
                     html.Span(id="lots2-plant-targets-sum"),
                     html.Span("t"),
                 ]),
                 html.Div([
-                    html.Div("Structure planning: "),
+                    html.Div("Structure planning: ", id="lots2-check-material-planning-label"),
                     dcc.Checklist(id="lots2-check-material-planning", options=checklist_dict, value=[""])
                 ], className="lots2-structure-toggle"), #
                 html.Div([
@@ -229,26 +231,26 @@ def orders_tab():
     return [
         html.Div([
             html.Div([
-                html.H4("Order backlog", title="Select orders for scheduling from the order backlog."),
+                html.H4("Order backlog", id="lots2-orders-backlog-header", title="Select orders for scheduling from the order backlog."),
 
                 html.Div([
-                    html.Span("Selected orders:"),
+                    html.Span("Selected orders:", id="lots2-orders-backlog-count-label"),
                     html.Span(id="lots2-orders-backlog-count", className="left-space"),
-                    html.Span(", total weight:"),
+                    html.Span(", total weight:", id="lots2-orders-backlog-weight-acc-label"),
                     html.Span(id="lots2-orders-backlog-weight-acc", className="left-space"),
-                    html.Span("t (target:"),
+                    html.Span("t (target:", id="lots2-orders-backlog-target-weight-label"),
                     html.Span(id="lots2-orders-backlog-target-weight", className="left-space"),
                     html.Span("t)")
                 ], className="lots2-orders-selection-overview"),
                 html.Br(),
                 html.Div([
-                    html.Span("Planning interval start:"),
+                    html.Span("Planning interval start:", id="lots2-itv-start-label"),
                     html.Span("", id="lots2-itv-start", className="left-space")
                 ])
             ]),
             html.Div([
                 html.Div([
-                    html.Div("Backlog structure:"),
+                    html.Div("Backlog structure:", id="lots2-backlog-structure-widget-label"),
                     html.Div([
                         html.Div(id="lots2-backlog-structure-widget")
                     ]),
@@ -257,12 +259,12 @@ def orders_tab():
         ], className="lots2-orders-structure-flex"),
 
         html.Fieldset([
-            html.Legend("Initialize orders"),
+            html.Legend("Initialize orders", id="lots2-orders-backlog-init-label"),
             html.Div([
-                html.Div("Select all available orders:", title="Add available orders to backlog"),
+                html.Div("Select all available orders:", title="Add available orders to backlog", id="lots2-orders-backlog-init2-label"),
                 html.Div(html.Button("Init", id="lots2-orders-backlog-init2", className="dynreact-button dynreact-button-small"), title="Add available orders to backlog"),
                 html.Div(),
-                html.Div("Clear backlog:", title="Clear order backlog"),
+                html.Div("Clear backlog:", title="Clear order backlog", id="lots2-orders-backlog-clear2-label"),
                 html.Div(html.Button("Clear", id="lots2-orders-backlog-clear2", className="dynreact-button dynreact-button-small"), title="Clear order backlog"),
                 html.Div(),
             ], className="lots2-orders-init-menu2"),
@@ -313,14 +315,15 @@ def orders_tab():
 
         # TODO hideable?, use icon (https://wiki.selfhtml.org/wiki/SVG/Tutorials/Icons)
         html.Fieldset([
-            html.Legend("Lot-based selection"),
+            html.Legend("Lot-based selection", id="lots2-orders-lots-label"),
             html.Div([
                 html.Div([
-                    html.Div("Processes:"),
+                    html.Div("Processes:", id="lots2-oders-lots-processes-label"),
                     dcc.Dropdown(id="lots2-oders-lots-processes", className="lots2-order-lots-selector", multi=True),
-                    html.Div("Lots:"),
+                    html.Div("Lots:", id="lots2-oders-lots-lots-label"),
                     dcc.Dropdown(id="lots2-oders-lots-lots", className="lots2-order-lots-selector", multi=True),
-                    html.Div(["(", html.Div(id="lots2-orders-lots-order-selected"), "/", html.Div(id="lots2-orders-lots-order-total"), "selected)"], className="flex"),
+                    html.Div(["(", html.Div(id="lots2-orders-lots-order-selected"), "/", html.Div(id="lots2-orders-lots-order-total"),
+                              html.Span("selected)", id="lots2-orders-lots-selected-str")], className="flex"),
                     html.Div(html.Button("Select orders", id="lots2-orders-backlog-add-logs",
                              className="dynreact-button dynreact-button-small", disabled=True), title="Add orders from selected lots to backlog"),
                     html.Div(html.Button("Deselect orders", id="lots2-orders-backlog-rm-logs",
@@ -329,10 +332,10 @@ def orders_tab():
             ]) #, id="lots2-orders-backlog-settings")
         ], className="lots2-orders-grouped-menu"),
         html.Fieldset([
-            html.Legend("Table operations"),
+            html.Legend("Table operations", id="lots2-orders-backlog-table-header"),
             html.Div([
                 html.Div([
-                    html.Div("Backlog operations: "),
+                    html.Div("Backlog operations: ", id="lots2-orders-backlog-table-label2"),
                     # html.Div(html.Button("Clear", id="lots2-orders-backlog-clear", className="dynreact-button dynreact-button-small"),
                     #         title="Clear order backlog"),
                     html.Div(html.Button("Select visible", id="lots2-orders-select-visible",
@@ -349,9 +352,7 @@ def orders_tab():
                 ], className="lots2-orders-backlog-settings-buttons"),
                 html.Br(),
                 html.Div([
-                    html.Div(dcc.Checklist(id="lots2-check-hide-released-lots", options=[{"value": "hide_released", "label": "Hide released lots"},
-                                                    {"value": "hide_unavailable","label": "Hide unavailable orders"},
-                                                    {"value": "hide_next_procs", "label": "Hide orders at later process steps"}],
+                    html.Div(dcc.Checklist(id="lots2-check-hide-released-lots", options=order_backlog_checklist_options(None),
                                            value=["hide_released", "hide_unavailable", "hide_next_procs"],
                                            className="lots2-checkbox"))
                 ], className="lots2-use-range-checkbox"),
@@ -790,7 +791,8 @@ def ltp_row_selected(selected_rows: list[dict[str, any]]|None, snapshot: datetim
     Input("lots2-active-tab", "data"),
     # Input("lots2-targets-init-lots", "n_clicks"),
     Input("lots2-ltp-submit", "n_clicks"),
-    Input("lots2-check-use-lot-range", "value")
+    Input("lots2-check-use-lot-range", "value"),
+    Input("lang", "data")
 )
 def update_plants(snapshot: str,
                   horizon_hours: int,
@@ -800,7 +802,8 @@ def update_plants(snapshot: str,
                   process: str,
                   active_tab: Literal["targets", "orders", "settings"]|None,
                   _,  # __,
-                  use_lot_range0: list[Literal[""]]
+                  use_lot_range0: list[Literal[""]],
+                  lang: str|None
                   ) -> tuple[list[Component], list[any], list[Literal[""]], str, str, dict|None]:
     changed = GuiUtils.changed_ids()
     process_changed = "lots2-process-selector" in changed
@@ -825,9 +828,14 @@ def update_plants(snapshot: str,
     toggle_lot_range: bool = "lots2-check-use-lot-range" in changed
     site = state.get_site()
     plants: list[Equipment] = site.get_process_equipment(process)
-    elements = [html.Div(), html.Div("Equipment"), html.Div("Production / t"), html.Div("Previous lot", title="The previous lot defines the starting point for the lot creation.")]
+    is_de: bool = lang and lang.startswith("de")
+    elements = [html.Div(), html.Div("Anlage" if is_de else "Equipment"),
+                html.Div("Produktion (t)" if is_de else "Production / t"),
+                html.Div("Vorheriges Los" if is_de else "Previous lot", title="Das vorherige Los definiert den Startpunkt der Loserzeugung" if is_de else \
+                             "The previous lot defines the starting point for the lot creation.")]
     if use_lot_range:
-        elements.extend([html.Div("Min lot size / t"), html.Div("Max lot size / t")])
+        elements.extend([html.Div("Min-Losgröße (t)" if is_de else "Min lot size / t"),
+                         html.Div("Max-Losgröße (t)" if is_de else "Max lot size / t")])
     targets: ProductionTargets|None = None
     targets0 = None
     if not is_ltp_init:
@@ -2578,6 +2586,17 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
     except ValueError as e:
         traceback.print_exc()
         return None, False, None, str(e)
+
+
+@callback(
+    Output("lots2-check-hide-released-lots", "options"),
+    Input("lang", "data"),
+)
+def order_backlog_checklist_options(lang: str|None):
+    is_de: bool = lang and lang.startswith("de")
+    return [{"value": "hide_released", "label": "Freigegebene Lose ausblenden" if is_de else "Hide released lots"},
+               {"value": "hide_unavailable", "label": "Nicht verfügbare Aufträge ausblenden" if is_de else "Hide unavailable orders"},
+               {"value": "hide_next_procs", "label": "Aufträge an nachfolgenden Produktionsstufen ausblenden" if is_de else "Hide orders at later process steps"}]
 
 def _selected_dropdown_value(c: dict|None) -> str | None:
     if c is None or "props" not in c:

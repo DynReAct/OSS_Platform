@@ -39,6 +39,15 @@ div.main-menu {
     position: relative;
 }
 
+/* TODO below 1450 or so we need to collapse the menu */
+@media (max-width: 1600px) {
+    .menu-link {
+        min-width: 4em;
+        max-width: 7em;
+        overflow-wrap: anywhere;
+    }
+}
+
 .menu-link>a {
     color: rgba(5, 111, 19, 1);
     text-decoration: none;

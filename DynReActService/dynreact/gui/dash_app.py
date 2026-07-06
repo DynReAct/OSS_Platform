@@ -109,7 +109,7 @@ def _layout():
             html.Div([
                 html.Div("Performance models", id="menu-perf_header"),
                 html.Div([
-                    dcc.Link("Quality", id="menu-perf-quality_header", className="menu-link", href="/dash/perfmodels", title="Open quality performance models tab"),
+                    dcc.Link("Equipment", id="menu-perf-equipment_header", className="menu-link", href="/dash/perfmodels", title="Open equipment performance models tab"),
                     dcc.Link("Energy", id="menu-perf-energy_header", className="menu-link", href="/dash/perfmodels/energy", title="Open energy performance models tab"),
                 ], className="submenu-content")
             ]),

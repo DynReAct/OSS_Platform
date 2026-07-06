@@ -60,6 +60,7 @@ class Plugins:
         self._lot_sinks: dict[str, LotSink]|None = None
         self._aggregation_persistence: AggregationPersistence|None = None
         self._temporary_restrictions: TemporaryRestrictionsProvider|None = None
+        self._temporary_restrictions_loaded: bool = False
         self._permissions: PermissionManager|None = None
 
     @staticmethod
@@ -206,7 +207,8 @@ class Plugins:
         return self._history_reader
 
     def get_temporary_restrictions(self) -> TemporaryRestrictionsProvider:
-        if self._temporary_restrictions is None:
+        if not self._temporary_restrictions_loaded:
+            self._temporary_restrictions_loaded = True
             site = self.get_config_provider().site_config()
             if isinstance(self._config.temporary_restrictions, TemporaryRestrictionsProvider):
                 self._temporary_restrictions = self._config.temporary_restrictions
@@ -217,7 +219,8 @@ class Plugins:
                 except NotApplicableException:
                     pass
             else:
-                self._temporary_restrictions = Plugins._load_module("dynreact.restrictions", self._config.temporary_restrictions, self._profile, TemporaryRestrictionsProvider, site, do_raise=True)
+                self._temporary_restrictions = Plugins._load_module("dynreact.restrictions", self._config.temporary_restrictions,
+                                                                    self._profile, TemporaryRestrictionsProvider, site, do_raise=False)
         return self._temporary_restrictions
 
     def get_permission_manager(self) -> PermissionManager:

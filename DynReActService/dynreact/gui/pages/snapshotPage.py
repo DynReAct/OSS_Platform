@@ -23,6 +23,8 @@ translations_key = "snapshot"
 def layout(*args, **kwargs):
     #init_stores(*args, **kwargs)
     categories = state.get_site().material_categories
+    display_options = [{"label": "Material", "value": "material"}, {"label": "Orders", "value": "orders"}]
+
     return html.Div([
         #selected_snapshot,  # in dash_app layout
         html.H1("Snapshots"),
@@ -33,9 +35,8 @@ def layout(*args, **kwargs):
             dcc.DatePickerRange(id="snapshots-date-range", display_format="YYYY-MM-DD")])
         ], className="snapshots-selector-row"),
         html.H2("Snapshot details", id="snapshot-details_header"),
-        html.Div([html.Div("Display: ", id="snapshot-display_label"), dcc.Dropdown(id="order-coil-selector", className="snap-select", options=[
-            # TODO localization of options?
-            {"label": "Coils", "value": "coils", "id": "opt1"}, {"label": "Orders", "value": "orders"}], value="orders")], className="coil-order-row"),
+        html.Div([html.Div("Display: ", id="snapshot-display_label"), dcc.Dropdown(id="order-coil-selector", className="snap-select",
+                                                            options=display_options, value="orders")], className="coil-order-row"),
         html.Br(),
         dash_ag.AgGrid(
             id="snapshot-table",
@@ -103,6 +104,12 @@ def _material_overview(categories: list[MaterialCategory]):
         # "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
     )])
 
+@callback(
+    Output("order-coil-selector", "options"),
+    Input("lang", "data"),
+)
+def lang_changed(lang: str|None):
+    return [{"label": "Material", "value": "material"}, {"label": "Aufträge" if lang and lang.startswith("de") else "Orders", "value": "orders"}]
 
 @callback(
     Output("snapshots-selector", "options"),
@@ -142,9 +149,10 @@ def set_snapshot(snapshot_id: str):
     Output("snapshot-table", "columnDefs"),
     Output("snapshot-table", "rowData"),
     Input("selected-snapshot", "data"),
-    Input("order-coil-selector", "value")
+    Input("order-coil-selector", "value"),
+
 )
-def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["orders", "coils"]):
+def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["orders", "material"]):
     if not dash_authenticated(config):
         return [{"field": "id", "pinned": True}], []
     snapshot_id = DatetimeUtils.parse_date(snapshot_id)
@@ -159,7 +167,7 @@ def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["order
                 "agTextColumnFilter"
         col_def = {"field": field, "filter": filter_id}
         return col_def
-    if order_coil == "coils":
+    if order_coil == "material":
         fields = [column_def_for_field(key, info) for key, info in snapshot.material[0].model_fields.items()]  # TODO how to sort?
         return fields, [coil.model_dump(exclude_none=True, exclude_unset=True) for coil in snapshot.material]
     # TODO how to sort?

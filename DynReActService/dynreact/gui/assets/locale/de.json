@@ -10,8 +10,11 @@
     "lots-creation_header": {"text": "Loserzeugung", "title": "Tab für die Loserzeugung öffnen"},
     "lots2-creation_header": {"text": "Loserzeugung", "title": "Tab für die Loserzeugung öffnen"},
     "temp-rest-header": {"text": "Temporäre Regeln", "title":  "Tab für temporäre Regeln öffnen"},
+    "moa_header": {"text": "Warmbandanbindung", "title":  "Tab zur Warmbandanbindung öffnen"},
     "agents_header": {"text": "Agenten", "title": "Tab für das Empfehlungssystem öffnen"},
     "snaps_header": { "text": "Snapshot", "title": "Snapshot Tab öffnen" },
+    "snaps_gantt_header": {"text":  "Lose", "title": "Tab zu Losen öffnen"},
+    "perf_header": {"text":  "Performance-Modelle", "title": "Anlagenperformance-Modelle anzeigen"},
     "user_title_loggedin": "Benutzerinformationen und Logout anzeigen",
     "user_title_loggedout": "Login-Seite anzeigen"
   },
@@ -50,11 +53,11 @@
 
   "snapshot": {
     "title": "Snapshot Seite",
-    "active": {"text":  "Aktiver Snapshot: "},
+    "active": {"text":  "Ausgewählter Snapshot: "},
     "selection_range": "Auswahlbereich: ",
     "select_header": "Snapshot Auswahl",
     "details_header": "Snapshot Details",
-    "display_label": "Anzeige: "
+    "display_label": "Darstellung: "
   },
   "site": {
     "header": "Standort"

@@ -51,7 +51,7 @@ DYNREACT_BACKGROUND = "img/dynreact.png"
 translations_key = "menu"
 
 
-def layout(*args, **kwargs):
+def _layout():
     # init_stores(*args, **kwargs)  # it seems that arguments are not passed to the global layout function
     prov = state.get_snapshot_provider()
     is_importer = hasattr(prov, "next_scheduled_import")
@@ -118,9 +118,10 @@ def layout(*args, **kwargs):
         html.Div([
             html.Img(src="/dash/assets/icons/globe.svg", role="img"),
             dcc.Dropdown(id="menu-lang-select", options=[{"label": "English", "value": "en"},
-                                                         {"label": "Deutsch", "value": "de"},
-                                                         {"label": "Español", "value": "es"}])],
-                className="lang-selector", title="Select the language"),
+                                                                     {"label": "Deutsch", "value": "de"},
+                                                                     {"label": "Español", "value": "es"}],
+                                     persistence=True)],  # , persisted_props="value"
+            className="lang-selector", title="Select the language"),
     ]
     menu_container = html.Div([
         dcc.Location(id="menu-url"),
@@ -141,7 +142,7 @@ def layout(*args, **kwargs):
     return layout_menu
 
 
-app.layout = layout
+app.layout = _layout()
 
 
 @callback(
@@ -251,10 +252,13 @@ def _get_snapshot(snapshot_id: str|None) -> Snapshot|None:
 
 # Looks circular, but apparently it is possible...
 """
-@callback(Output("lang", "data"), Output("lang-select", "value"), State("menu-url", "search"), Input("lang-select", "value"))
+@callback(Output("lang", "data"),
+          Output("lang-select", "value"),
+          State("menu-url", "search"),
+          Input("lang-select", "value"))
 def set_lang(search: str, value: str):
     if value is not None and len(value) > 0:
-        return value, value
+        return value, dash.no_update
     if search is not None and search.startswith("?"):
         search = search[1:]
         for params in search.split("&"):
@@ -266,7 +270,6 @@ def set_lang(search: str, value: str):
     return "en", "en"
 """
 
-
 clientside_callback(
     ClientsideFunction(
         namespace="locale",
@@ -275,7 +278,8 @@ clientside_callback(
     Output("lang", "data"),
     Output("menu-lang-select", "value"),
     Input("menu-lang-select", "value"),
-    Input("menu-url", "href")   # problem: this triggers the callback before the new page is loaded
+    Input("menu-url", "href"),
+    State("lang", "data")
 )
 
 # Set client timezone once on page load

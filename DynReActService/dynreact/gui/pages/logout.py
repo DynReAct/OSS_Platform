@@ -2,7 +2,6 @@ import dash
 from dash import html, dcc, callback, Input, Output, State
 
 from dynreact.gui.localization import Localization
-from dynreact.gui.pages.session_state import language
 
 dash.register_page(__name__, path="/user")
 translations_key = "user"
@@ -18,8 +17,7 @@ def layout(*args, **kwargs):
             html.Div("", id="current-user"),
             html.Div(html.Button(children="Logout", type="submit", id="logout-button", title="Click to logout")),
         ], className="logout-row"),
-        html.Div(id="success-indicator-logout"),
-        language
+        html.Div(id="success-indicator-logout")
     ]
 )
 

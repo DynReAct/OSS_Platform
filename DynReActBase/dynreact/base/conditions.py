@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, date
 from types import MappingProxyType
-from typing import Sequence, Literal, TypeVar, Any, Mapping
+from typing import Sequence, Literal, TypeVar, Any, Mapping, Generic
 
 from pydantic import BaseModel
 
@@ -28,19 +28,19 @@ V = TypeVar("V", bound=ConditionValue)
 N = TypeVar("N", bound=NumericValue)
 
 
-class ThresholdCondition[V](PropertyCondition):
+class ThresholdCondition(PropertyCondition, Generic[V]):
     type: Literal["threshold"] = "threshold"
     operator: ConditionOperator
     value: V
 
 
-class ListCondition[V](PropertyCondition):
+class ListCondition(PropertyCondition, Generic[V]):
     type: Literal["list"] = "list"
     operator: Literal["in", "not_in"] = "in"
     values: Sequence[V]
 
 
-class RangeCondition[N](PropertyCondition):
+class RangeCondition(PropertyCondition, Generic[N]):
     type: Literal["range"] = "range"
     value_range: tuple[N, N]
     operators: tuple[LowerOperator, LowerOperator]

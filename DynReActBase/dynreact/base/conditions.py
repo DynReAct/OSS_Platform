@@ -6,10 +6,14 @@ from typing import Sequence, Literal, TypeVar, Any, Mapping
 
 from pydantic import BaseModel
 
-type ConditionOperator = Literal["=", "<", "<=", ">", ">=", "!="]
-type LowerOperator = Literal["<", "<="]
-type ConditionValue = str | int | float | bool | datetime | date | None
-type NumericValue = int | float | datetime | date
+#type
+ConditionOperator = Literal["=", "<", "<=", ">", ">=", "!="]
+#type
+LowerOperator = Literal["<", "<="]
+#type
+ConditionValue = str | int | float | bool | datetime | date | None
+#type
+NumericValue = int | float | datetime | date
 
 
 class BaseCondition(BaseModel, use_attribute_docstrings=True):
@@ -49,7 +53,8 @@ class MaterialCondition(BaseCondition):
     "For display to the user only"
 
 
-type LeafCondition = ThresholdCondition | ListCondition | RangeCondition | MaterialCondition
+#type
+LeafCondition = ThresholdCondition | ListCondition | RangeCondition | MaterialCondition
 
 
 class NotCondition(BaseCondition):
@@ -69,7 +74,8 @@ class Or(CompositeCondition):
     type: Literal["or"] = "or"
 
 
-type Condition = LeafCondition | NotCondition | And | Or
+#type
+Condition = LeafCondition | NotCondition | And | Or
 
 
 class ConditionUtils:

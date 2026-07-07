@@ -160,8 +160,9 @@ def _equipment_text(e: int, site: Site) -> tuple[str, str|None]:
 @callback(Output("temprest-orders-table", "columnDefs"),
          Output("temprest-orders-table", "rowData"),
          Input("selected-snapshot", "data"),
-         Input("temprest-selected-rule", "value"))
-def snapshot_changed(snapshot: str|None, rule_id: str|None):
+         Input("temprest-selected-rule", "value"),
+        Input("lang", "data"))
+def snapshot_changed(snapshot: str|None, rule_id: str|None, lang: str|None):
     snap = DatetimeUtils.parse_date(snapshot)
     snap_obj = state.get_snapshot(time=snap)
     if not snap_obj or not dash_authenticated(config):
@@ -182,7 +183,7 @@ def snapshot_changed(snapshot: str|None, rule_id: str|None):
         # sort orders: affected ones first
         orders_affected = [o.id for o in orders if order_affected(o)]
         orders = sorted(orders, key=lambda order: -1 if order.id in orders_affected else 1)
-    cols, rows = GuiUtils.orders_table(orders, state.get_site(), relevant_fields=relevant_fields, skip_selection_checkbox=True)
+    cols, rows = GuiUtils.orders_table(orders, state.get_site(), relevant_fields=relevant_fields, skip_selection_checkbox=True, lang=lang)
     if len(orders_affected) > 0:
         for row in rows:
             if row.get("id") in orders_affected:  # set row color

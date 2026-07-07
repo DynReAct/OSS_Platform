@@ -69,7 +69,8 @@ class GuiUtils:
                      snapshot: Snapshot|None=None,
                      snapshot_provider: SnapshotProvider|None=None,
                      relevant_fields: list[str] | None=None,
-                     skip_selection_checkbox: bool=False):
+                     skip_selection_checkbox: bool=False,
+                     lang: str|None=None):
         """Generate column definitions and row data"""
         from pydantic.fields import FieldInfo
         import json
@@ -142,6 +143,7 @@ class GuiUtils:
                         end_time = end_time + max_transport
             _availability_by_order[order] = end_time
             return end_time
+        is_de = lang and lang.startswith("de")
 
         def column_def_for_field(field: str, info: FieldInfo):
             filter_id = "agNumberColumnFilter" if _is_numeric(
@@ -160,6 +162,11 @@ class GuiUtils:
 
         value_formatter_object = {"function": "formatCell(params.value)"}
         for field in fields:
+            if is_de:
+                f = field["field"]
+                field["headerName"] = "Aktive Prozesse" if f == "active_processes" else "Ringstatus" if f == "coil_status" else "Nachfolgeprozesse" if f == "follow_up_processes" else \
+                    "Materialstatus" if f == "material_status" else "Gesamtgewicht" if f == "actual_weight" else "Materialklassen" if f == "material_classes" else "Zielgewicht" if f == "target_weight" else \
+                    "Ringe" if f == "material_count" else "Zieldatum" if f == "due_date" else None
             if field["field"] == "id":
                 field["pinned"] = True
                 field["headerName"] = "Id"
@@ -169,14 +176,14 @@ class GuiUtils:
             if field["field"] in ["active_processes", "coil_status", "follow_up_processes", "material_status", "actual_weight", "material_classes"]:
                 field["valueFormatter"] = value_formatter_object
             if field["field"] == "current_equipment":
-                field["headerName"] = "Equipment"
+                field["headerName"] = "Anlage" if is_de else "Equipment"
         # FIXME tooltipField not working?
         if process and snapshot:
-            fields.append({"field": "lot_info", "headerName": "Lot", "tooltipField": "lot_info",
-                           "headerTooltip": "Lot of the selected processing stage", "filter": "agTextColumnFilter"})
-            fields.append({"field": "prev_lot_info", "headerName": "Lot: previous", "tooltipField": "prev_lot_info",
-                           "headerTooltip": "Lot of the previous processing stage", "filter": "agTextColumnFilter"})
-            fields.append({"field": "availability", "headerTooltip": "Order availability", "filter": "agDateColumnFilter"})
+            fields.append({"field": "lot_info", "headerName": "Los" if is_de else "Lot", "tooltipField": "lot_info",
+                           "headerTooltip": "Los an der ausgewählten Prozessstufe" if is_de else "Lot of the selected processing stage", "filter": "agTextColumnFilter"})
+            fields.append({"field": "prev_lot_info", "headerName": "Vorgängerlos" if is_de else "Lot: previous", "tooltipField": "prev_lot_info",
+                           "headerTooltip": "Los an der vorhergehenden Prozessstufe" if is_de else "Lot of the previous processing stage", "filter": "agTextColumnFilter"})
+            fields.append({"field": "availability", "headerName": "Verfügbarkeit" if is_de else "Availability", "headerTooltip": "Auftragsverfügbarkeit" if is_de else "Order availability", "filter": "agDateColumnFilter"})
 
         plants = {p.id: p for p in site.equipment}
 

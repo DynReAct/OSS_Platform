@@ -382,19 +382,16 @@ def orders_tab():
         html.Div(id="lots2-details-orders-hidden", className="lots2-details-orders", hidden=True),
 
         html.Fieldset([
-            html.Legend("Custom orders priority"),
+            html.Legend("Custom orders priority", id="lots2-custom-priority-header"),
             html.Br(),
             html.Div([
-                html.Div("Custom priority configuration: "),
-                html.Div(html.Button("Open custom priority", id="lots2-orders-custom-priority-open",
-                                     className="dynreact-button dynreact-button-small"),
-                         title="Set custom orders priority in the table."),
-                html.Div(html.Button("Clear custom priority", id="lots2-orders-custom-priority-clear",
-                                     className="dynreact-button dynreact-button-small"),
-                         title="Clear custom orders priority in the table."),
-                html.Div(html.Button("Save custom priority", id="lots2-orders-custom-priority-save",
-                                     className="dynreact-button dynreact-button-small"),
-                         title="Save custom orders priority for use in optimisation."),
+                html.Div("Custom priority configuration: ", id="lots2-custom-prio-config-label"),
+                html.Div(html.Button("Open custom priority", id="lots2-orders-custom-priority-open", title="Set custom orders priority in the table.",
+                                     className="dynreact-button dynreact-button-small")),
+                html.Div(html.Button("Clear custom priority", id="lots2-orders-custom-priority-clear", title="Clear custom orders priority in the table.",
+                                     className="dynreact-button dynreact-button-small")),
+                html.Div(html.Button("Save custom priority", id="lots2-orders-custom-priority-save",title="Save custom orders priority for use in optimisation.",
+                                     className="dynreact-button dynreact-button-small")),
                 html.Div(dcc.Textarea(id='lots2-prio-logging', value='', className="lots2-prio-textarea")) #&&&&
             ], className="lots2-orders-custom-prio-buttons"),
 
@@ -1305,6 +1302,7 @@ def update_backlog_state(snapshot: str, process: str, rows: list[dict[str, any]]
             Input("lots2-orders-deselect-visible", "n_clicks"),
             Input("lots2-orders-backlog-add-logs", "n_clicks"),
             Input("lots2-orders-backlog-rm-logs", "n_clicks"),
+            Input("lang", "data"),
             State("lots2-orders-data", "data"),
             State("lots2-oders-lots-lots", "value"),
             State("lots2-orders-table", "selectedRows"),
@@ -1322,7 +1320,7 @@ def update_backlog_state(snapshot: str, process: str, rows: list[dict[str, any]]
             State("lots2-planning-itv-start", "data")
 )
 def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: list[Literal["hide_released", "hide_unavailable", "hide_next_procs"]],
-                  _1, _2, _3, _4, _5, _6, _7, _8,
+                  _1, _2, _3, _4, _5, _6, _7, _8, lang: str|None,
                   orders_data: dict[str, str]|None, selected_lots: list[str],
                   selected_rows: list[dict[str, any]]|None, filtered_rows: list[dict[str, any]]|None, horizon_hours: int,
                   init_method: Literal["active_process", "active_plant", "inactive_lots", "active_lots", "current_planning"]|None,
@@ -1373,6 +1371,8 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
             return float in args or int in args
         return False
 
+    is_de = lang and lang.startswith("de")
+
     def column_def_for_field(field: str, info: FieldInfo):
         filter_id = "agNumberColumnFilter" if _is_numeric(info.annotation) else "agDateColumnFilter" if info.annotation == datetime or info.annotation == date else "agTextColumnFilter"
         col_def = {"field": field, "filter": filter_id, "filterParams": {"buttons": ["reset"]}}
@@ -1394,11 +1394,11 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
         if field["field"] in ["active_processes", "coil_status", "follow_up_processes", "material_status", "actual_weight", "material_classes"]:
             field["valueFormatter"] = value_formatter_object
         if field["field"] == "current_equipment":
-            field["headerName"]  = "Equipment"
+            field["headerName"]  = "Anlage" if is_de else "Equipment"
     # FIXME tooltipField not working?
-    fields.append({"field": "lot_info", "headerName": "Lot", "tooltipField": "lot_info", "headerTooltip": "Lot of the selected processing stage", "filter":  "agTextColumnFilter"})
-    fields.append({"field": "prev_lot_info", "headerName": "Lot: previous", "tooltipField": "prev_lot_info", "headerTooltip": "Lot of the previous processing stage", "filter": "agTextColumnFilter"})
-    fields.append({"field": "availability", "headerTooltip": "Order availability", "filter": "agDateColumnFilter"})
+    fields.append({"field": "lot_info", "headerName": "Los" if is_de else "Lot", "tooltipField": "lot_info", "headerTooltip": "Los an der ausgewählten Anlagenstufe" if is_de else "Lot of the selected processing stage", "filter":  "agTextColumnFilter"})
+    fields.append({"field": "prev_lot_info", "headerName": "Vorgängerlos" if is_de else "Lot: previous", "tooltipField": "prev_lot_info", "headerTooltip": "Los an der Vorgängerstufe" if is_de else "Lot of the previous processing stage", "filter": "agTextColumnFilter"})
+    fields.append({"field": "availability", "headerName": "Verfügbarkeit" if is_de else "Availability", "headerTooltip": "Auftragsverfügbarkeit" if is_de else "Order availability", "filter": "agDateColumnFilter"})
 
     current_process_index = next((idx for idx, proc in enumerate(site.processes) if proc.name_short == process), None)
 

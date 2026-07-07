@@ -92,7 +92,13 @@
     "tabsnav-prev": {"text": "Zurück","title": "Zum vorherigen Tab"},
     "tabsnav-next": {"text": "Weiter","title": "Zum nächsten Tab"},
     "lotsview-head": "Losansicht",
-    "mode-label": "Darstellungsmodus"
+    "mode-label": "Darstellungsmodus",
+    "custom-priority-header": "Prioritäten anpassen",
+    "custom-prio-config-label": "Prioritäten konfigurieren:",
+    "orders-custom-priority-open": {"text": "Editieren", "title": "Auftragsprioritäten bearbeiten."},
+    "orders-custom-priority-clear": {"text": "Zurücksetzen", "title": "Geänderte Auftragsprioritäten in der Tabelle zurücksetzen."},
+    "orders-custom-priority-save": {"text": "Speichern", "title": "Geänderte Auftragsprioritäten speichern."}
+
   },
   "lotsplanning": {
     "title": "Losplanung",

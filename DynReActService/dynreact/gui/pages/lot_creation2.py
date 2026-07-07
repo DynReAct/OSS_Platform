@@ -29,7 +29,7 @@ from pydantic.fields import FieldInfo
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
 from dynreact.gui.gui_utils import GuiUtils
-from dynreact.gui.pages.components import prepare_lots_for_lot_view, lots_view, ltp_init_dialog
+from dynreact.gui.pages.components import prepare_lots_for_lot_view, lots_view, ltp_init_dialog, lots_view_options
 #from dynreact.gui.pages.optimization_listener import FrontendOptimizationListener
 from dynreact.lots_optimization import FrontendOptimizationListener
 
@@ -39,7 +39,6 @@ translations_key = "lots2"
 
 # TODO option to record optimizaiton history including lots information and possibility to replay/step to specific optimization steps
 # TODO option to initialize optimization from existing result
-# TODO swimlane visualization
 # TODO init method existing solution
 def layout(*args, **kwargs):
     # init_stores(*args, **kwargs)
@@ -431,38 +430,35 @@ def orders_tab():
 
 def settings_tab(init_method: Literal["heuristic", "duedate", "snapshot", "result"]|None, iterations: int):
     return [
-        html.H4("Lot creation settings"),
+        html.H4("Lot creation settings", id="lots2-opti-tab-header"),
 
         # Initialization
         html.Div([
-            html.Div("Initialization: ", title="Specify the algorithm for the initialization of the lot creation."),
-            dcc.Dropdown(id="lots2-init-selector", options=[
-                {"value": "heuristic", "label": "Heuristic",
-                 "title": "A heuristic initialization that aims to start with a reasonable assignment of orders already, with low costs, but ignoring global constraints."},
-                {"value": "duedate", "label": "Due date", "title": "Initialization based on the due dates of orders."},
-                {"value": "snapshot", "label": "Snapshot", "title": "Initialization based on planning in current snapshot. "
-                                                                    "This only makes sense if the order selection contains a significant number of orders in currently active lots"},
-                # TODO show this one only if there are existing runs?
-                #{"value": "result", "label": "Existing solution", "title": "Continue a previous optimization run."}
-            ], value=init_method, className="lots2-init-selector"),
+            html.Div("Initialization: ", id="lots2-opti-tab-init",
+                     title="Specify the algorithm for the initialization of the lot creation."),
+            dcc.Dropdown(id="lots2-init-selector", options=init_method_options(None),
+                         value=init_method, className="lots2-init-selector"),
             # Existing results
             html.Div([
-                html.Div("Solution:"),
+                html.Div("Solution:", id="lots2-existing-sols-label"),
                 dcc.Dropdown(id="lots2-existing-sols")
             ], id="lots2-init-results-selector", className="lots2-existing-sol-selector lots2-panel-col", hidden=True),  # classes do not exist yet
-            html.Div("Selected orders:", title="Number of orders selected for the lot creation"),
+            html.Div("Selected orders:", id="lots2-num-orders-label",
+                     title="Number of orders selected for the lot creation"),
             html.Div(id="lots2-num-orders"),
-            html.Div("Iterations:", title="Specify the maximum number of optimization iterations to run."),
+            html.Div("Iterations:", id="lots2-iterations-value-label",
+                     title="Specify the maximum number of optimization iterations to run."),
             html.Div([
                 html.Div(id="lots2-iterations-value"),
                 # Note that 0 iterations actually makes sense... it will result in an optimized arrangement into lots of the selected orders, without altering the order
                 dcc.Input(type="range", id="lots2-num-iterations", min=0, max=1000, value=iterations, list="lots2-iterations-options")
             ], className="lots2-iterations-view"),
-            html.Div("Comment:", title="Add a comment, explaining for instance the settings applied (target weights, orders included, etc)"),
+            html.Div("Comment:", id="lots2-comment-label",
+                     title="Add a comment, explaining for instance the settings applied (target weights, orders included, etc)"),
             html.Div(
                 html.Div(dcc.Textarea(rows=1, cols=10, placeholder="Add a comment", id="lots2-comment", value="",
                                       title="Add a comment, explaining for instance the settings applied (target weights, orders included, etc)"))),
-            html.Div("Store:", title="Store results?"),
+            html.Div("Store:", id="lots2-store-results-label", title="Store results?"),
             html.Div(dcc.Checklist(options=[""], value=[""], id="lots2-store-results"), title="Store results?"),
         ], className="lots2-settings-tab-grid"),
         html.Div(id="lots2-warning-message", className="lots2-message-severe"),
@@ -1830,7 +1826,7 @@ def update_solution_state(snapshot: str|datetime|None, process: str|None, _, sel
 @callback(
     Output("lots2-creation-objectives", "figure"),
     #Output("lots2-creation-graph", "hidden"),
-    Input("lots2-objectives-history", "data")
+    Input("lots2-objectives-history", "data"),
 )
 def update_figure(history: list[float]|None):
     lot_creation_listener = None if history is not None else state.get_lot_creator().listener()
@@ -1912,7 +1908,7 @@ def update_figure(history: list[float]|None):
           Input("lots2-stop", "n_clicks"),
           Input("lots2-continue", "n_clicks"),
           Input("lots2-interval", "n_intervals"),
-
+          Input("lang", "data")
           )
 def process_changed(snapshot: datetime|None,
                     use_lot_range0: list[Literal[""]],
@@ -1935,7 +1931,7 @@ def process_changed(snapshot: datetime|None,
                     process: str,
                     selected_init_method: Literal["heuristic", "duedate", "snapshot", "result"]|None,
                     existing_solution: str|dash._callback.NoUpdate|None,
-                    _, __, ___, _v,
+                    _, __, ___, _v, lang: str|None
                     ):
     warning_message = ""
     warning_class = "lots2-message-severe"
@@ -2016,17 +2012,21 @@ def process_changed(snapshot: datetime|None,
         results = [{"label": sol, "value": sol, "title": sol} for sol in existing_solutions]
     result_selector_hidden: bool = selected_init_method != "result"
     stop_disabled = check_stop_optimization(changed_ids)
+    is_de: bool = lang and lang.startswith("de")
     if is_running and not stop_disabled:
         interval = 3000
         selection_disabled = True
         #for result in results:  # TODO not working
         #    result["disabled"] = True
         #settings_trigger_hidden = selected_init_method == "result"
+        running_msg = "Optimierung läuft" if is_de else "Optimization running"
         return (True, stop_disabled, True, #process_out,
                 True, iterations, iterations, iterations, result_selector_hidden, selected_init_method, results,
-                existing_solution, selection_disabled, "Optimization running", interval, False, warning_message, warning_class)
+                existing_solution, selection_disabled, running_msg, interval, False, warning_message, warning_class)
     if horizon_hours is None or iterations is None or process is None or snapshot is None:
-        title = "Select a process first" if process is None else "Select a snapshot first" if snapshot is None else "Enter valid planning horizon"
+        title = ("Bitte zunächst eine Anlagenstufe auswählen" if is_de else "Select a process first") if process is None \
+            else ("Bitte zunächst einen Snapshot auswählen" if is_de else "Select a snapshot first") if snapshot is None \
+            else ("Bitte ein gültiges Planungsintervall eingeben" if is_de else "Enter valid planning horizon")
         warning_message = warning_message if warning_message else title
         return (True, stop_disabled, True, #process_out,
                 False, iterations, iterations, iterations, True, selected_init_method, [], None,
@@ -2043,7 +2043,8 @@ def process_changed(snapshot: datetime|None,
                               order_data.get("process") != process or order_data.get("snapshot") != DatetimeUtils.format(snapshot)
     plant_targets_unset: bool = target_elements is None and selected_init_method != "result"
     if orders_unselected or plant_targets_unset:
-        title = "Select orders first" if orders_unselected else "Set plant targets first"
+        title = ("Bitte zunächst den Auftragsvorrat auswählen" if is_de else "Select orders first") if orders_unselected \
+            else ("Bitte zunächst die Anlagenziele auswählen" if is_de else "Set plant targets first")
         warning_message = warning_message if warning_message else title
         return (True, stop_disabled, continue_hidden, #process_out,
                 False, iterations, iterations, iterations, True, selected_init_method, [], None,
@@ -2064,8 +2065,8 @@ def process_changed(snapshot: datetime|None,
             start_disabled = True
     if selected_init_method == "result" and existing_solution is None:
         if start_disabled or len(existing_solutions) == 0 or "create-existing-sols" in changed_ids:  # trying to start the optimization, or explicitly deselected solution id # TODO check
-            title = "Select an existing result" if len(results) > 0 else \
-                        "No previous results avaialable, select a different initialization method."
+            title = ("Bestehende Lösung auswählen" if is_de else "Select an existing result") if len(results) > 0 else \
+                ("Keine Lösungen vorhanden, bitte eine andere Initialisierungsmethode auswählen." if is_de else "No previous results avaialable, select a different initialization method.")
             warning_message = warning_message if warning_message else title
             return (True, stop_disabled, True, #process_out,
                     False, iterations, iterations, iterations, False, selected_init_method, results, existing_solution,
@@ -2090,7 +2091,8 @@ def process_changed(snapshot: datetime|None,
         warning_message = error_msg
     backlog_weight = order_data.get("orders_selected_weight", 0) if order_data is not None else 0
     if (warning_message is None or warning_message == "") and _tab == "settings" and target_weight is not None and target_weight > backlog_weight:
-        warning_message = f"Order backlog of {backlog_weight:.1f}t does not cover the targeted {target_weight:.1f}t."
+        warning_message = f"Auftragsvorrat von {backlog_weight:.1f}t reicht nicht für die geplanten {target_weight:.1f}t." if is_de else \
+                f"Order backlog of {backlog_weight:.1f}t does not cover the targeted {target_weight:.1f}t."
         warning_class = "lots2-message-warn"
     return (start_disabled, stop_disabled, continue_hidden, #process_out,
             process_selection_disabled, iterations, iterations, iterations, result_selector_hidden,
@@ -2500,6 +2502,14 @@ def target_value_update_backlog(target_value: float):
     return formatted_sum, formatted_sum
 
 
+@callback(
+    Output("lots2-swimlane-mode", "options"),
+    Input("lang", "data")
+)
+def lang_changed_swimlane(lang: str|None):
+    return lots_view_options(lang)
+
+
 def target_values_from_settings(process: str, period: tuple[datetime, datetime], plants: list[int], use_lot_range: bool, components: list[Component]|None) -> tuple[ProductionTargets|None, bool, dict[int, str], str|None]:
     """
     :return: targets, indicator if default values have been changed, selected predecessor lot by plant , message
@@ -2597,6 +2607,25 @@ def order_backlog_checklist_options(lang: str|None):
     return [{"value": "hide_released", "label": "Freigegebene Lose ausblenden" if is_de else "Hide released lots"},
                {"value": "hide_unavailable", "label": "Nicht verfügbare Aufträge ausblenden" if is_de else "Hide unavailable orders"},
                {"value": "hide_next_procs", "label": "Aufträge an nachfolgenden Produktionsstufen ausblenden" if is_de else "Hide orders at later process steps"}]
+
+@callback(
+    Output("lots2-init-selector", "options"),
+    Input("lang", "data"),
+)
+def init_method_options(lang: str|None):
+    is_de: bool = lang and lang.startswith("de")
+    return [
+        {"value": "heuristic", "label": "Heuristisch" if is_de else "Heuristic",
+             "title": "Eine heuristische Initialisierung mit einer plausiblen Anordnung von Aufträgen, die jedoch globale Kosten ignoriert." if is_de else
+                    "A heuristic initialization that aims to start with a reasonable assignment of orders already, with low costs, but ignoring global constraints."},
+        {"value": "duedate", "label": "Fälligkeitsdatum" if is_de else "Due date",
+            "title": "Initialisierung basierend auf dem Fälligkeitsdatum der Aufträge" if is_de else
+                    "Initialization based on the due dates of orders."},
+        {"value": "snapshot", "label": "Snapshot", "title":
+            "Initialisierung basierend auf dem aktuellen Snapshot. Nur zum Testen mit Aufträgen aus aktiven Snapshot-Losen." if is_de else
+            "Initialization based on planning in current snapshot. This only makes sense if the order selection contains a significant number of orders in currently active lots"},
+    ]
+
 
 def _selected_dropdown_value(c: dict|None) -> str | None:
     if c is None or "props" not in c:

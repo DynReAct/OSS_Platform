@@ -23,8 +23,7 @@ from dynreact.base.model import ProductionPlanning, EquipmentStatus, Lot, Order,
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated, get_current_user
 from dynreact.gui.gui_utils import GuiUtils
-from dynreact.gui.pages.components import lots_view, prepare_lots_for_lot_view
-
+from dynreact.gui.pages.components import lots_view, prepare_lots_for_lot_view, lots_view_options
 
 dash.register_page(__name__, path="/lots/planned")
 translations_key = "lotsplanning"
@@ -50,21 +49,21 @@ def layout(*args, **kwargs):
     site = state.get_site()
     snap = GuiUtils.format_snapshot(kwargs["snapshot"], None, state=state) if "snapshot" in kwargs else None
     return html.Div([
-        html.H1("Lots planning", id="lotsplanning-title"),
+        html.H1("Lots planning", id=f"{translations_key}-title"),
         html.Div([
             html.Div([html.Div("Snapshot: "), html.Div(snap, id="current_snapshot_lotplanning")]),
-            html.Div([html.Div("Process: "), dcc.Dropdown(id="process-selector-lotplanning",
+            html.Div([html.Div("Process: ", id="lotsplanning-process-selector-label"), dcc.Dropdown(id="process-selector-lotplanning",
                             options=[{"value": p.name_short, "label": p.name_short, "title": p.name if p.name is not None else p.name_short} for p in site.processes],
                             value=process, className="process-selector", persistence=True)]),
             html.Div([
-                dcc.Link(html.Button("Open lot creation", className="dynreact-button"), id="plan-link-create",
+                dcc.Link(html.Button("Open lot creation", className="dynreact-button", id=f"{translations_key}-create-link"), id=f"{translations_key}-plan-link-create",
                          href="/dash/lots/create2", target="_blank")
             ]),
         ], className="create-selector-flex"),
-        html.H2("Solutions"),
+        html.H2("Solutions", id=f"{translations_key}-solutions-header"),
         html.Div(
             dash_ag.AgGrid(
-                id="plan-solutions-table",
+                id="lotsplanning-solutions-table",
                 columnDefs=[],
                 defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
                 rowData=[],
@@ -83,28 +82,19 @@ def layout(*args, **kwargs):
                 ## "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
             )
         ),
-        lots_view("planning", *args, **kwargs),
+        lots_view("lotsplanning", *args, **kwargs),
         html.Div([
             html.H2("Structure"),
-            html.Div(id="lotplanning-structure-view", className="lotplanning-structure-container")
-        ], id="lotplanning-structure-container", hidden=True),
+            html.Div(id="lotsplanning-structure-view", className="lotplanning-structure-container")
+        ], id="lotsplanning-structure-container", hidden=True),
         html.Div([
-            html.H2("Lots"),
-            html.Button("Download lots csv", id="download-csv", className="dynreact-button"),
+            html.H2("Lots", id=f"{translations_key}-lots-header"),
+            html.Button("Download lots csv", id=f"{translations_key}-download-csv", className="dynreact-button"),
             html.Br(),html.Br(),
             html.Div(
                 dash_ag.AgGrid(
-                    id="planning-lots-table",
-                    columnDefs=[{"field": "id", "pinned": True},
-                                {"field": "plant"},
-                                {"field": "num_orders", "filter": "agNumberColumnFilter", "headerName": "Orders"},
-                                {"field": "num_coils", "filter": "agNumberColumnFilter", "headerName": "Coils"},
-                                {"field": "total_weight", "filter": "agNumberColumnFilter", "headerName": "Weight / t"},
-                                {"field": "order_ids", "headerName": "Order ids", "tooltipField": "order_ids"},
-                                {"field": "first_due_date", "headerName": "Due", "filter": "agDateColumnFilter",
-                                    "headerTooltip": "The earliest due date of the orders included", "tooltipField": "all_due_dates"},
-                                {"field": "active"},
-                                ],
+                    id="lotsplanning-lots-table",
+                    columnDefs=lots_table_col_defs(None),
                     defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
                     dashGridOptions={"tooltipShowDelay": 250, "rowSelection": "single", "domLayout": "autoHeight"},
                     rowData=[],
@@ -116,25 +106,25 @@ def layout(*args, **kwargs):
                     columnSize="responsiveSizeToFit",
                 )
             ),
-            html.H2("Orders"),
-            html.Div([html.Button("Download orders csv", id="download-orders-csv", className="dynreact-button"),
-                      html.Div("\U0001F6C8", title="Download a csv file. Note that the csv is based on English punctuation. " +
+            html.H2("Orders", id=f"{translations_key}-orders-header"),
+            html.Div([html.Button("Download orders csv", id=f"{translations_key}-download-orders-csv", className="dynreact-button"),
+                      html.Div("\U0001F6C8", id=f"{translations_key}-download-orders-info", title="Download a csv file. Note that the csv is based on English punctuation. " +
                             "To import this file into Excel with non-English default settings, first open an empty sheet, go to the \"Data\" tab, select \"Get external data\" (leftmost button), " +
                             "then \"Query options\" -> \"Current workbook\" - \"Regional settings\" -> Select \"English (Europe)\". Then import data \"From text/csv\" and select the downloaded file. " +
                             "Otherwise Excel will transform fractional numbers into dates and other strange objects.")], className="lotplanning-button-info-row"),
             html.Br(),
             html.Div([
-                html.Span("Show cost relevant columns only?"), # unchecked
-                html.Div(dcc.Checklist(id="lotplanning-relevant-fields-check", options= [{"value": ""}] , value=[], className="lots2-checkbox"))],
+                html.Span("Show cost relevant columns only?", id=f"{translations_key}-cost-cols-label"), # unchecked
+                html.Div(dcc.Checklist(id="lotsplanning-relevant-fields-check", options= [{"value": ""}] , value=[], className="lots2-checkbox"))],
                 className="lots2-use-range-checkbox"
             ),
             # this button is hidden, it needs to be activated via the browser console. Command:
             # document.querySelector("#lotplanning-download-scenario").hidden=false
-            html.Button("Download scenario", id="lotplanning-download-scenario", className="dynreact-button", hidden=True),
+            html.Button("Download scenario", id="lotsplanning-download-scenario", className="dynreact-button", hidden=True),
             html.Br(),
             html.Div(
                 dash_ag.AgGrid(
-                    id="planning-lots-order-table",
+                    id="lotsplanning-lots-order-table",
                     columnDefs=[{"field": "order", "pinned": True},
                                 {"field": "lot"}],
                     # defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
@@ -160,25 +150,25 @@ def layout(*args, **kwargs):
                     }
                 )
             )
-        ], id="planning-lots-table-wrapper", hidden=True),
+        ], id="lotsplanning-lots-table-wrapper", hidden=True),
         transfer_popup(),
-        dcc.Store(id="planning-initial_solution", data=initial_solution, storage_type="memory"),  # str|None
-        dcc.Store(id="planning-selected-solution", storage_type="memory"),  # str
-        dcc.Store(id="planning-solution-data", storage_type="memory"),      # rowData, list of dicts, one row per lot
-        dcc.Store(id="planning-selected-lot", storage_type="memory"),       # lot id; selected by clicking a row in the lots table
+        dcc.Store(id="lotsplanning-initial_solution", data=initial_solution, storage_type="memory"),  # str|None
+        dcc.Store(id="lotsplanning-selected-solution", storage_type="memory"),  # str
+        dcc.Store(id="lotsplanning-solution-data", storage_type="memory"),      # rowData, list of dicts, one row per lot
+        dcc.Store(id="lotsplanning-selected-lot", storage_type="memory"),       # lot id; selected by clicking a row in the lots table
         # opaque lot identifier
-        dcc.Store(id="lotplanning-transferred-lot", storage_type="memory"),
-        dcc.Store(id="lotplanning-transfer-message", storage_type="memory"),
-        dcc.Store(id="lotplanning-transfer-type", storage_type="memory"),
-        dcc.Store(id="lotplanning-material-structure", storage_type="memory"),   # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
-        dcc.Store(id="lotplanning-material-targets", storage_type="memory"),     # dict[str, float]
-        dcc.Store(id="lotplanning-scenario-json", storage_type="memory"),        # for scenario download
+        dcc.Store(id="lotsplanning-transferred-lot", storage_type="memory"),
+        dcc.Store(id="lotsplanning-transfer-message", storage_type="memory"),
+        dcc.Store(id="lotsplanning-transfer-type", storage_type="memory"),
+        dcc.Store(id="lotsplanning-material-structure", storage_type="memory"),   # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
+        dcc.Store(id="lotsplanning-material-targets", storage_type="memory"),     # dict[str, float]
+        dcc.Store(id="lotsplanning-scenario-json", storage_type="memory"),        # for scenario download
 
-        dcc.Store(id="lotplanning-shifts", storage_type="memory"),
+        dcc.Store(id="lotsplanning-shifts", storage_type="memory"),
 
-        dcc.Interval(id="planning-interval", n_intervals=3_600_000),  # for polling when lot transfer is running
-        dcc.Interval(id="lotplanning-process-init", interval=100),
-    ], id="lotsplanned")
+        dcc.Interval(id="lotsplanning-interval", n_intervals=3_600_000),  # for polling when lot transfer is running
+        dcc.Interval(id="lotsplanning-process-init", interval=100),
+    ], id=translations_key)
 
 
 def transfer_popup():
@@ -190,29 +180,22 @@ def transfer_popup():
             html.H3("Lot transfer"),
             html.Div([
                 html.Div("Selected lot: "),
-                html.Div(id="lotplanning-transfer-selectedlot"),
+                html.Div(id="lotsplanning-transfer-selectedlot"),
                 html.Div("New lot name", title="Name of the lot to be transferred"),
-                dcc.Input(id="lotplanning-transfer-lotname"),
+                dcc.Input(id="lotsplanning-transfer-lotname"),
                 html.Div("Orders:"),
-                dcc.Dropdown(id="lotplanning-transfer-oders", className="lotplanning-transfer-orders", multi=True),
+                dcc.Dropdown(id="lotsplanning-transfer-oders", className="lotplanning-transfer-orders", multi=True),
                 html.Div("Transfer to", title="Target system the lot will be transferred to"),
-                dcc.Dropdown(id="lotplanning-transfer-target", className="lotplanning-transfer-target",
+                dcc.Dropdown(id="lotsplanning-transfer-target", className="lotplanning-transfer-target",
                              options=[{"value": sink_id, "label": sink.label(), "title": sink.description()} for sink_id, sink in sinks.items()],
                              value=next((sink_id for sink_id in sinks.keys()), None)),
                 html.Div("Update snapshot:", title="Update the current snapshot (in memory only/until software restart)?"),
-                html.Div(dcc.Checklist(id="lotplanning-transfer-snapupdate", options= [{"value": ""}], value=[""], className="lots2-checkbox"), title="Update the current snapshot (in memory only/until software restart)?"),
-            ], className="lotplanning-transfer-grid", id="lotplanning-transfer-grid"),
+                html.Div(dcc.Checklist(id="lotsplanning-transfer-snapupdate", options= [{"value": ""}], value=[""], className="lots2-checkbox"), title="Update the current snapshot (in memory only/until software restart)?"),
+            ], className="lotplanning-transfer-grid", id="lotsplanning-transfer-grid"),
             html.H3("Orders overview"),
             dash_ag.AgGrid(
-                id="lotplanning-transfer-orders-table",
-                columnDefs=[{"field": "order", "pinned": True},
-                            {"field": "quality_locks", "filter": "agNumberColumnFilter", "headerName": "Quality locks"},
-                            {"field": "material_units", "filter": "agNumberColumnFilter", "headerName": "Material units"},
-                            {"field": "equipment", "headerTooltip": "Current equipment location of the order"},
-                            {"field": "previous_lot", "headerTooltip": "The lot at the previous process stage, if any.", "headerName": "Previous lot"},
-                            {"field": "availability", "headerTooltip": "Order availability, determined by the lot at the previous process stage."},
-                            {"field": "existing_lot", "headerTooltip": "The existing lot at the planned process stage, if any.", "headerName": "Existing lot"},
-                            {"field": "due_date", "headerTooltip": "Order due date.", "headerName": "Due date"}],
+                id="lotsplanning-transfer-orders-table",
+                columnDefs=lots_transfer_table_col_defs(None),
                 defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
                 rowData=[],
                 getRowId="params.data.order",
@@ -224,17 +207,17 @@ def transfer_popup():
                 style={"height": None},
             ),
             html.Div([
-                html.Button("Transfer", id="lotplanning-transfer-start", className="dynreact-button"),
-                html.Button("Cancel", id="lotplanning-transfer-cancel", className="dynreact-button")
+                html.Button("Transfer", id="lotsplanning-transfer-start", className="dynreact-button"),
+                html.Button("Cancel", id="lotsplanning-transfer-cancel", className="dynreact-button")
             ], className="lotplanning-transfer-buttons")
         ], title=""),
-        id="lotplanning-transfer-dialog", className="dialog-filled lotplanning-transfer-dialog", open=False)
+        id="lotsplanning-transfer-dialog", className="dialog-filled lotplanning-transfer-dialog", open=False)
 
 
 # init the process, if not done yet
 @callback(Output("process-selector-lotplanning", "value"),
-          Output("lotplanning-process-init", "interval"),
-          Input("lotplanning-process-init", "n_intervals"),
+          Output("lotsplanning-process-init", "interval"),
+          Input("lotsplanning-process-init", "n_intervals"),
           State("selected-process", "data"),
           State("process-selector-lotplanning", "value"))
 def proc_changed(update_cnt: int, process: str|None, old_process) -> tuple[str, float]:
@@ -262,8 +245,8 @@ def snapshot_changed(snapshot: datetime|str|None) -> str:  #, tz: str|None
 
 
 @callback(
-    Output("plan-link-create", "href"),
-    Output("lotplanning-shifts", "data"),
+    Output("lotsplanning-plan-link-create", "href"),
+    Output("lotsplanning-shifts", "data"),
     Input("process-selector-lotplanning", "value"),
     Input("selected-snapshot", "data"),
     #Input("create-existing-sols", "value"),
@@ -286,33 +269,36 @@ def update_link(process: str|None, snapshot: str|datetime|None):
 
 
 @callback(
-    Output("plan-solutions-table", "columnDefs"),
-    Output("plan-solutions-table", "rowData"),
-    Output("plan-solutions-table", "selectedRows"),
+    Output("lotsplanning-solutions-table", "columnDefs"),
+    Output("lotsplanning-solutions-table", "rowData"),
+    Output("lotsplanning-solutions-table", "selectedRows"),
     Input("selected-snapshot", "data"),
     Input("process-selector-lotplanning", "value"),
-    Input("planning-initial_solution", "data")
+    Input("lotsplanning-initial_solution", "data"),
+    Input("lang", "data")
     #Input("create-existing-sols", "value"),
 )
-def solutions_table(snapshot: str|datetime|None, process: str|None, preselected_solution: str|None):
+def solutions_table(snapshot: str|datetime|None, process: str|None, preselected_solution: str|None, lang: str|None):
     if not dash_authenticated(config):
         return [], [], []
     snapshot = DatetimeUtils.parse_date(snapshot)
     value_formatter_object = {"function": "formatCell(params.value, 4)"}
+    is_de = lang and lang.startswith("de")
     col_defs: list[dict[str, Any]] = [{"field": "id", "pinned": True},
-         {"field": "target_production", "filter": "agNumberColumnFilter", "headerName": "Target Production / t", "valueFormatter": value_formatter_object, "headerTooltip": "Target production"},
+         {"field": "target_production", "filter": "agNumberColumnFilter", "headerName": "Zielvorgabe / t" if is_de else "Target Production / t", "valueFormatter": value_formatter_object, "headerTooltip": "Zielproduktion in Tonnen" if is_de else "Target production"},
          #{"field": "initialization"},  # ?
-         {"field": "target_fct", "filter": "agNumberColumnFilter", "headerName": "Target function", "valueFormatter": value_formatter_object,
-          "headerTooltip": "Value of the objective function. The lower the better, but results are only comparable for the same target weights and init settings."},
-         {"field": "iterations", "filter": "agNumberColumnFilter", "headerTooltip": "Number of optimization iterations"},
-         {"field": "orders_considered", "filter": "agNumberColumnFilter", "headerName": "Orders",
-          "headerTooltip": "Number of orders considered in the lot creation, including those not assigned to a lot."},
-         {"field": "lots", "filter": "agNumberColumnFilter", "headerTooltip": "Number of lots"},
-         {"field": "plants", "headerTooltip": "Equipment/plants scheduled"},
-         {"field": "comment"},
+         {"field": "target_fct", "filter": "agNumberColumnFilter", "headerName": "Zielfunktion" if is_de else "Target function", "valueFormatter": value_formatter_object,
+          "headerTooltip": "Wert der Ziel-/Kostenfunktion. Je niedriger der Wert ist desto besser, allerdings sind nur Ergebnisse bei gleichem Zielgewicht und gleichen Parametern vergleichbar" if is_de else
+                "Value of the objective function. The lower the better, but results are only comparable for the same target weights and init settings."},
+         {"field": "iterations", "headerName": "Iterationen" if is_de else "Iterations", "filter": "agNumberColumnFilter", "headerTooltip": "Anzahl Iterationen der Optimierung" if is_de else "Number of optimization iterations"},
+         {"field": "orders_considered", "filter": "agNumberColumnFilter", "headerName": "Aufträge" if is_de else "Orders",
+          "headerTooltip": "Anzahl Aufträge im Auftragsvorrat." if is_de else "Number of orders considered in the lot creation, including those not assigned to a lot."},
+         {"field": "lots", "headerName": "Lose" if is_de else "Lots", "filter": "agNumberColumnFilter", "headerTooltip": "Anzahl Lose" if is_de else "Number of lots"},
+         {"field": "plants", "headerName": "Anlagen" if is_de else "Equipment", "headerTooltip": "Verplante Anlagen" if is_de else "Equipment/plants scheduled"},
+         {"field": "comment", "headerName": "Kommentar" if is_de else "Comment"},
          #{"field": "transition_costs", "filter": "agNumberColumnFilter", "headerName": "Transition costs"},
-         {"field": "performance_models", "headerName": "Performance models",
-          "headerTooltip": "Plant performance models considered"},
+         {"field": "performance_models", "headerName": "Performance-Modelle" if is_de else "Performance models",
+          "headerTooltip": "Berücksichtigte Anlagenperformance-Modelle" if is_de else "Plant performance models considered"},
     ]
     if snapshot is None or process is None:
         return col_defs, [], []
@@ -381,8 +367,8 @@ def solutions_table(snapshot: str|datetime|None, process: str|None, preselected_
 
 
 @callback(
-    Output("planning-selected-solution", "data"),
-    Input("plan-solutions-table", "selectedRows"),
+    Output("lotsplanning-selected-solution", "data"),
+    Input("lotsplanning-solutions-table", "selectedRows"),
 
 )
 def solution_selected(selected_rows: list[dict[str, any]]|None) -> str|None:
@@ -392,21 +378,57 @@ def solution_selected(selected_rows: list[dict[str, any]]|None) -> str|None:
     return row["id"] if isinstance(row, dict) else row
 
 @callback(
-    Output("planning-lots-table-wrapper", "hidden"),
-    Output("planning-lots-table", "rowData"),
-    Output("planning-solution-data", "data"),
-    Output("planning-lotsview-header", "hidden"),
-    Output("planning-lots-order-table", "columnDefs"),
-    Output("planning-lots-order-table", "rowData"),
-    Output("lotplanning-material-structure", "data"),
-    Output("lotplanning-material-targets", "data"),
-    Output("lotplanning-structure-container", "hidden"),
+    Output("lotsplanning-lots-table", "columnDefs"),
+    Input("lang", "data")
+)
+def lots_table_col_defs(lang: str | None):
+    is_de = lang and lang.startswith("de")
+    return [{"field": "id", "pinned": True},
+                {"field": "plant", "headerName": "Anlage" if is_de else "Equipment"},
+                {"field": "num_orders", "filter": "agNumberColumnFilter", "headerName": "Aufträge" if is_de else "Orders"},
+                {"field": "num_coils", "filter": "agNumberColumnFilter", "headerName": "Ringe" if is_de else "Coils"},
+                {"field": "total_weight", "filter": "agNumberColumnFilter", "headerName": "Gewicht / t" if is_de else "Weight / t"},
+                {"field": "order_ids", "headerName": "Auftrags-Ids" if is_de else "Order ids", "tooltipField": "order_ids"},
+                {"field": "first_due_date", "headerName": "Fällig" if is_de else "Due", "filter": "agDateColumnFilter",
+                    "headerTooltip": "Frühestes Fälligkeitsdatum aller inkludierten Aufträge" if is_de else "The earliest due date of the orders included", "tooltipField": "all_due_dates"},
+                {"field": "active", "headerName": "Aktiv" if is_de else "Active"},
+            ]
+
+@callback(
+    Output("lotsplanning-transfer-orders-table", "columnDefs"),
+    Input("lang", "data")
+)
+def lots_transfer_table_col_defs(lang: str | None):
+    is_de = lang and lang.startswith("de")
+    return [{"field": "order", "headerName": "Auftrag" if is_de else "Order", "pinned": True},
+              {"field": "quality_locks", "filter": "agNumberColumnFilter", "headerName": "Qualitätssperren" if is_de else "Quality locks"},
+              {"field": "material_units", "filter": "agNumberColumnFilter", "headerName": "Ringe" if is_de else "Material units"},
+              {"field": "equipment", "headerName": "Anlage" if is_de else "Equipment", "headerTooltip": "Anlage an der sich der Auftrag befindet" if is_de else "Current equipment location of the order"},
+              {"field": "previous_lot", "headerTooltip": "Los an der Vorgängerstufe, sofern vorhanden." if is_de else "The lot at the previous process stage, if any.",
+               "headerName": "Vorgängerlos" if is_de else "Previous lot"},
+              {"field": "availability", "headerName": "Verfügbarkeit" if is_de else "Availability",
+               "headerTooltip": "Auftragsverfügbarkeit, anhand des Loses an der Vorgängerstufe" if is_de else "Order availability, determined by the lot at the previous process stage."},
+              {"field": "existing_lot", "headerTooltip": "Bestehendes Los an der verplanten Anlagenstufe, sofern vorhanden." if is_de else "The existing lot at the planned process stage, if any.",
+               "headerName": "Bestehendes Los" if is_de else "Existing lot"},
+              {"field": "due_date", "headerTooltip": "Fälligkeitsdatum des Auftrags" if is_de else "Order due date.", "headerName": "Fälligkeit" if is_de else "Due date"}]
+
+@callback(
+    Output("lotsplanning-lots-table-wrapper", "hidden"),
+    Output("lotsplanning-lots-table", "rowData"),
+    Output("lotsplanning-solution-data", "data"),
+    Output("lotsplanning-lotsview-header", "hidden"),
+    Output("lotsplanning-lots-order-table", "columnDefs"),
+    Output("lotsplanning-lots-order-table", "rowData"),
+    Output("lotsplanning-material-structure", "data"),
+    Output("lotsplanning-material-targets", "data"),
+    Output("lotsplanning-structure-container", "hidden"),
     State("selected-snapshot", "data"),
     Input("process-selector-lotplanning", "value"),
-    Input("planning-selected-solution", "data"),
-    Input("lotplanning-relevant-fields-check", "value")
+    Input("lotsplanning-selected-solution", "data"),
+    Input("lotsplanning-relevant-fields-check", "value"),
+    Input("lang", "data")
 )
-def solution_changed(snapshot: str|datetime|None, process: str|None, solution: str|None, relevant_fields_only0: list[Literal[""]]):
+def solution_changed(snapshot: str|datetime|None, process: str|None, solution: str|None, relevant_fields_only0: list[Literal[""]], lang: str|None):
     snapshot = DatetimeUtils.parse_date(snapshot)
     if not dash_authenticated(config) or process is None or snapshot is None:
         return True, None, None, True, None, None, None, None, True
@@ -487,20 +509,22 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
                       if relevant_fields is not None else props.model_fields
 
     value_formatter_object = {"function": "formatCell(params.value, 2, 4)"}
+    is_de = lang and lang.startswith("de")
     if not relevant_fields_only or not relevant_fields:
-        fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True, "filter": "agTextColumnFilter"},
-                {"field": "equipment", "headerTooltip": "Current equipment location of the order"},
-                {"field": "previous_lot", "headerTooltip": "The lot at the previous process stage, if any."},
-                {"field": "availability", "headerTooltip": "Order availability, determined by the lot at the previous process stage."},
-                {"field": "existing_lot", "headerTooltip": "The existing lot at the planned process stage, if any."},
-                {"field": "costs", "headerTooltip": "Transition costs from previous order.", "valueFormatter": value_formatter_object},
-                {"field": "weight", "headerTooltip": "Order weight in tons.", "valueFormatter": value_formatter_object },
-                {"field": "due_date", "headerTooltip": "Order due date." },
-                {"field": "priority", "headerTooltip": "Order priority."}] + \
+        fields = [{"field": "order", "headerName": "Auftrag" if is_de else "Order", "pinned": True},
+                  {"field": "lot", "headerName": "Los" if is_de else "Lot", "pinned": True, "filter": "agTextColumnFilter"},
+                {"field": "equipment", "headerName": "Anlage" if is_de else "Equipment", "headerTooltip": "Aktuelle Anlage" if is_de else "Current equipment location of the order"},
+                {"field": "previous_lot", "headerName": "Vorgängerlos" if is_de else "Previous lot", "headerTooltip": "Los an vorheriger Anlagenstufe, sofern vorhanden." if is_de else "The lot at the previous process stage, if any."},
+                {"field": "availability", "headerName": "Verfügbarkeit" if is_de else "Availability", "headerTooltip": "Auftragsverfügbarkeit, entsprechend dem Los an der Vorgängerstufe" if is_de else "Order availability, determined by the lot at the previous process stage."},
+                {"field": "existing_lot", "headerName": "Bestehendes Los" if is_de else "Existing lot", "headerTooltip": "Existierendes Los an der geplanten Anlagenstufe, sofern gesetzt." if is_de else "The existing lot at the planned process stage, if any."},
+                {"field": "costs", "headerName": "Kosten" if is_de else "Costs", "headerTooltip": "Übergangskosten vom vorherigen Auftrag" if is_de else "Transition costs from previous order.", "valueFormatter": value_formatter_object},
+                {"field": "weight", "headerName": "Gewicht" if is_de else "Weight", "headerTooltip": "Auftragsgewicht in Tonnen." if is_de else "Order weight in tons.", "valueFormatter": value_formatter_object },
+                {"field": "due_date", "headerName": "Fälligkeit" if is_de else "Due date", "headerTooltip": "Fälligkeitsdatum des Auftrags" if is_de else "Order due date." },
+                {"field": "priority", "headerName": "Priorität" if is_de else "Priority", "headerTooltip": "Auftragspriorität" if is_de else "Order priority."}] + \
              [column_def_for_field(key, info) for key, info in fields_0.items()]
     else:
-        fields = [{"field": "order", "pinned": True}, {"field": "lot", "pinned": True, "filter": "agTextColumnFilter"},
-                  {"field": "costs", "headerTooltip": "Transition costs from previous order.", "valueFormatter": value_formatter_object},] + \
+        fields = [{"field": "order", "headerName": "Auftrag" if is_de else "Order", "pinned": True}, {"field": "lot", "headerName": "Los" if is_de else "Lot", "pinned": True, "filter": "agTextColumnFilter"},
+                  {"field": "costs", "headerName": "Kosten" if is_de else "Costs", "headerTooltip": "Übergangskosten vom vorherigen Auftrag" if is_de else "Transition costs from previous order.", "valueFormatter": value_formatter_object},] + \
                  [column_def_for_field(key, info) for key, info in fields_0.items() if key in relevant_fields]
 
     last_plant = None
@@ -602,12 +626,12 @@ def _append_lot_info_for_order(row: dict[str, Any], o: Order, process: str, snap
 
 # Lots export
 @callback(
-    Output("planning-lots-table", "exportDataAsCsv"),
-    Output("planning-lots-table", "csvExportParams"),
-    Input("download-csv", "n_clicks"),
+    Output("lotsplanning-lots-table", "exportDataAsCsv"),
+    Output("lotsplanning-lots-table", "csvExportParams"),
+    Input("lotsplanning-download-csv", "n_clicks"),
     State("selected-snapshot", "data"),
     State("process-selector-lotplanning", "value"),
-    State("planning-selected-solution", "data"),
+    State("lotsplanning-selected-solution", "data"),
     prevent_initial_call=True,
 )
 def export_data_as_csv(n_clicks, snapshot: str|None, process: str|None, solution: str|None):
@@ -623,12 +647,12 @@ def export_data_as_csv(n_clicks, snapshot: str|None, process: str|None, solution
 
 # Orders with lot information export
 @callback(
-    Output("planning-lots-order-table", "exportDataAsCsv"),
-    Output("planning-lots-order-table", "csvExportParams"),
-    Input("download-orders-csv", "n_clicks"),
+    Output("lotsplanning-lots-order-table", "exportDataAsCsv"),
+    Output("lotsplanning-lots-order-table", "csvExportParams"),
+    Input("lotsplanning-download-orders-csv", "n_clicks"),
     State("selected-snapshot", "data"),
     State("process-selector-lotplanning", "value"),
-    State("planning-selected-solution", "data"),
+    State("lotsplanning-selected-solution", "data"),
     prevent_initial_call=True,
 )
 def export_order_data_as_csv(n_clicks, snapshot: str|None, process: str|None, solution: str|None):
@@ -648,12 +672,12 @@ clientside_callback(
         namespace="createlots",
         function_name="showLotsSwimlane"
     ),
-    Output("planning-lots-swimlane", "title"),
-    Input("planning-solution-data", "data"),
-    Input("lotplanning-shifts", "data"),
-    State("planning-lots-swimlane", "id"),
+    Output("lotsplanning-lots-swimlane", "title"),
+    Input("lotsplanning-solution-data", "data"),
+    Input("lotsplanning-shifts", "data"),
+    State("lotsplanning-lots-swimlane", "id"),
     State("process-selector-lotplanning", "value"),
-    State("planning-swimlane-mode", "value"),
+    State("lotsplanning-swimlane-mode", "value"),
 )
 
 clientside_callback(
@@ -661,9 +685,9 @@ clientside_callback(
         namespace="createlots",
         function_name="setLotsSwimlaneMode"
     ),
-    Output("planning-lotsview-header", "title"),
-    Input("planning-swimlane-mode", "value"),
-    State("planning-lots-swimlane", "id")
+    Output("lotsplanning-lotsview-header", "title"),
+    Input("lotsplanning-swimlane-mode", "value"),
+    State("lotsplanning-lots-swimlane", "id")
 )
 
 clientside_callback(
@@ -671,24 +695,24 @@ clientside_callback(
         namespace="lots2",
         function_name="setBacklogStructureOverview"
     ),
-    Output("lotplanning-structure-view", "title"),
-    Input("lotplanning-material-structure", "data"),
-    Input("lotplanning-material-targets", "data"),
-    State("lotplanning-structure-view", "id"),
+    Output("lotsplanning-structure-view", "title"),
+    Input("lotsplanning-material-structure", "data"),
+    Input("lotsplanning-material-targets", "data"),
+    State("lotsplanning-structure-view", "id"),
 )
 
 # FIXME closing the popup and reopening the same lot does not work
 # open popup on selection, but only if a lot is really selected, and if it is not part of the snapshot solution
 @callback(
-    Output("planning-selected-lot", "data"),
-    Output("lotplanning-transfer-selectedlot", "children"),
-    Output("lotplanning-transfer-lotname", "value"),
-    Output("lotplanning-transfer-oders", "options"),
-    Output("lotplanning-transfer-oders", "value"),
-    Output("lotplanning-transfer-orders-table", "rowData"),
-    Input("planning-lots-table", "selectedRows"),
-    State("planning-selected-solution", "data"),
-    State("lotplanning-transferred-lot", "data"),
+    Output("lotsplanning-selected-lot", "data"),
+    Output("lotsplanning-transfer-selectedlot", "children"),
+    Output("lotsplanning-transfer-lotname", "value"),
+    Output("lotsplanning-transfer-oders", "options"),
+    Output("lotsplanning-transfer-oders", "value"),
+    Output("lotsplanning-transfer-orders-table", "rowData"),
+    Input("lotsplanning-lots-table", "selectedRows"),
+    State("lotsplanning-selected-solution", "data"),
+    State("lotsplanning-transferred-lot", "data"),
     State("selected-snapshot", "data"),
     State("process-selector-lotplanning", "value"),
     prevent_initial_call=True,
@@ -742,9 +766,9 @@ clientside_callback(
         namespace="dialog",
         function_name="showModal"
     ),
-    Output("lotplanning-transfer-dialog", "title"),
-    Input("planning-selected-lot", "data"),
-    State("lotplanning-transfer-dialog", "id"),
+    Output("lotsplanning-transfer-dialog", "title"),
+    Input("lotsplanning-selected-lot", "data"),
+    State("lotsplanning-transfer-dialog", "id"),
 )
 
 clientside_callback(
@@ -752,17 +776,17 @@ clientside_callback(
         namespace="dialog",
         function_name="closeModal"
     ),
-    Output("lotplanning-transfer-cancel", "title"),
-    Input("lotplanning-transfer-cancel", "n_clicks"),
-    State("lotplanning-transfer-dialog", "id"),
+    Output("lotsplanning-transfer-cancel", "title"),
+    Input("lotsplanning-transfer-cancel", "n_clicks"),
+    State("lotsplanning-transfer-dialog", "id"),
 )
 
 @callback(
-    Output("lotplanning-scenario-json", "data"),
-    Input("lotplanning-download-scenario", "n_clicks"),
+    Output("lotsplanning-scenario-json", "data"),
+    Input("lotsplanning-download-scenario", "n_clicks"),
     State("selected-snapshot", "data"),
     State("process-selector-lotplanning", "value"),
-    State("planning-selected-solution", "data"),   # TODO need ProductionTargets, order backlog, reduced snapshot and solution
+    State("lotsplanning-selected-solution", "data"),   # TODO need ProductionTargets, order backlog, reduced snapshot and solution
     prevent_initial_call=True
 )
 def extract_scenario_json(_, snapshot: str|datetime|None, process: str|None, solution: str|None):
@@ -823,22 +847,22 @@ clientside_callback(
         function_name="downloadScenario",
 
     ),
-    Output("lotplanning-download-scenario", "title"),
-    Input("lotplanning-scenario-json", "data"),
+    Output("lotsplanning-download-scenario", "title"),
+    Input("lotsplanning-scenario-json", "data"),
     State("selected-snapshot", "data"),
-    State("planning-selected-solution", "data"),
+    State("lotsplanning-selected-solution", "data"),
 )
 
 
 """
 @callback(
-    Output("lotplanning-transfer-start", "disabled"),
-    Output("lotplanning-transfer-start", "title"),
-    Input("planning-selected-lot", "data"),
-    Input("lotplanning-transfer-lotname", "value"),
-    Input("lotplanning-transfer-oders", "value"),
-    Input("lotplanning-transfer-target", "value"),
-    Input("planning-interval", "n_intervals"),
+    Output("lotsplanning-transfer-start", "disabled"),
+    Output("lotsplanning-transfer-start", "title"),
+    Input("lotsplanning-selected-lot", "data"),
+    Input("lotsplanning-transfer-lotname", "value"),
+    Input("lotsplanning-transfer-oders", "value"),
+    Input("lotsplanning-transfer-target", "value"),
+    Input("lotsplanning-interval", "n_intervals"),
 
 )
 """
@@ -858,23 +882,23 @@ def disable_transfer_button(lot: str, new_lotname: str, orders: list[str]|str, t
 
 
 @callback(
-    Output("planning-interval", "interval"),
-    Output("lotplanning-transfer-start", "disabled"),
-    Output("lotplanning-transfer-start", "title"),
-    Output("lotplanning-transferred-lot", "data"),
-    Output("lotplanning-transfer-message", "data"),
-    Output("lotplanning-transfer-type", "data"),
-    Input("lotplanning-transfer-start", "n_clicks"),
-    Input("planning-interval", "n_intervals"),
-    Input("planning-selected-lot", "data"),
-    Input("lotplanning-transfer-lotname", "value"),
-    Input("lotplanning-transfer-oders", "value"),
-    Input("lotplanning-transfer-target", "value"),
+    Output("lotsplanning-interval", "interval"),
+    Output("lotsplanning-transfer-start", "disabled"),
+    Output("lotsplanning-transfer-start", "title"),
+    Output("lotsplanning-transferred-lot", "data"),
+    Output("lotsplanning-transfer-message", "data"),
+    Output("lotsplanning-transfer-type", "data"),
+    Input("lotsplanning-transfer-start", "n_clicks"),
+    Input("lotsplanning-interval", "n_intervals"),
+    Input("lotsplanning-selected-lot", "data"),
+    Input("lotsplanning-transfer-lotname", "value"),
+    Input("lotsplanning-transfer-oders", "value"),
+    Input("lotsplanning-transfer-target", "value"),
     State("selected-snapshot", "data"),
     State("process-selector-lotplanning", "value"),
-    State("planning-selected-solution", "data"),
-    State("lotplanning-transferred-lot", "data"),
-    State("lotplanning-transfer-snapupdate", "value"),
+    State("lotsplanning-selected-solution", "data"),
+    State("lotsplanning-transferred-lot", "data"),
+    State("lotsplanning-transfer-snapupdate", "value"),
     config_prevent_initial_callbacks=True
 )
 def check_start_transfer(_, __, lot: str, new_lotname: str, orders: list[str] | str, transfer_target: str | None, snapshot: str | datetime | None, process: str | None,
@@ -895,7 +919,7 @@ def check_start_transfer(_, __, lot: str, new_lotname: str, orders: list[str] | 
     if btn_disabled:
         return 3_600_000, True, btn_title, dash.no_update, transfer_alert_msg, transfer_alert_type
     changed = GuiUtils.changed_ids()
-    is_start_command = "lotplanning-transfer-start" in changed
+    is_start_command = "lotsplanning-transfer-start" in changed
     if is_start_command:
         orders = orders if not isinstance(orders, str) else [orders]
         update_snap: bool = len(update_snap_check) > 0
@@ -965,12 +989,18 @@ clientside_callback(
         namespace="alert",
         function_name="showAlert"
     ),
-    Output("lotplanning-transfer-grid", "title"),
-    Input("lotplanning-transfer-message", "data"),
-    Input("lotplanning-transfer-type", "data"),
-    State("lotplanning-transfer-grid", "id"),
+    Output("lotsplanning-transfer-grid", "title"),
+    Input("lotsplanning-transfer-message", "data"),
+    Input("lotsplanning-transfer-type", "data"),
+    State("lotsplanning-transfer-grid", "id"),
 )
 
+@callback(
+    Output("lotsplanning-swimlane-mode", "options"),
+    Input("lang", "data")
+)
+def lang_changed_swimlane(lang: str|None):
+    return lots_view_options(lang)
 
 def _lot_info(lot: Lot) -> str:
     result = f"{lot.id} [status={lot.status}, active={lot.active}"

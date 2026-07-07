@@ -43,9 +43,9 @@ class Plugins:
 
     _LOG_ID = "dynreact.plugins.Plugins"
 
-    def __init__(self, config: DynReActSrvConfig):
-        self._config = config
-        self._profile: str|None = config.profile
+    def __init__(self, config: DynReActSrvConfig|None=None):
+        self._config = config or DynReActSrvConfig()
+        self._profile: str|None = self._config.profile
         self._config_provider: ConfigurationProvider | None = None
         self._snapshot_provider: SnapshotProvider | None = None
         self._downtime_provider: DowntimeProvider | None = None

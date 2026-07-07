@@ -14,6 +14,7 @@ from pydantic.fields import FieldInfo
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
+from dynreact.gui.gui_utils import GuiUtils
 from dynreact.gui.pages.session_state import get_date_range
 
 dash.register_page(__name__, path="/")
@@ -31,8 +32,7 @@ def layout(*args, **kwargs):
         html.H2("Snapshot selection", id="snapshot-select_header"),
         html.Div([
             html.Div([html.Div("Active snapshot: ", id="snapshot-active"), dcc.Dropdown(id="snapshots-selector", className="snap-select")]),
-            html.Div([html.Div("Selection range: ", id="snapshot-selection_range"),
-            dcc.DatePickerRange(id="snapshots-date-range", display_format="YYYY-MM-DD")])
+            html.Div([html.Div("Selection range: ", id="snapshot-selection_range"), dcc.DatePickerRange(id="snapshots-date-range", display_format="YYYY-MM-DD")])
         ], className="snapshots-selector-row"),
         html.H2("Snapshot details", id="snapshot-details_header"),
         html.Div([html.Div("Display: ", id="snapshot-display_label"), dcc.Dropdown(id="order-coil-selector", className="snap-select",
@@ -119,10 +119,11 @@ def lang_changed(lang: str|None):
     Output("snapshot-init-interval", "interval"),
     #Input("client-tz", "data"),  # client timezone, defined in dash_app
     Input("snapshot-init-interval", "n_intervals"),
+    Input("snapshots-selector", "value"),
     # this would best be an input, but we need to avoid the circular dependency, since it is updated by snapshots-selector.value
     State("selected-snapshot", "data")
 )
-def set_snapshot_options( _, snapshot: str|None):  # tz: str|None,
+def set_snapshot_options( _, snap0, snapshot: str|None):  # tz: str|None,
     if not dash_authenticated(config):
         return dash.no_update, dash.no_update,dash.no_update,dash.no_update, 30_000
     if snapshot is None:
@@ -133,6 +134,8 @@ def set_snapshot_options( _, snapshot: str|None):  # tz: str|None,
     #except:
     #    pass
     start_date, end_date, snap_options, selected_snap = get_date_range(snapshot)  #, zi=zi)
+    if "snapshots-selector" in GuiUtils.changed_ids():
+        selected_snap = dash.no_update
     return snap_options, selected_snap, start_date, end_date, 7_200_000
 
 

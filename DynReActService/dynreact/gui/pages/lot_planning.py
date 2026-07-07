@@ -254,7 +254,7 @@ def snapshot_changed(snapshot: datetime|str|None) -> str:  #, tz: str|None
 def update_link(process: str|None, snapshot: str|datetime|None):
     url = "/dash/lots/create2"
     if not dash_authenticated(config):
-        return url
+        return url, None
     snapshot = DatetimeUtils.parse_date(snapshot)
     added: bool=False
     if snapshot is not None:

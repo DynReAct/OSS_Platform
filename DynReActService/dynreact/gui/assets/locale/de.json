@@ -17,6 +17,7 @@
     "snaps-import_header": {"text": "Importe", "title": "Snapshot-Import Tab öffnen"},
     "perf_header": {"text":  "Performance-Modelle", "title": "Anlagenperformance-Modelle anzeigen"},
     "perf-equipment_header": {"text": "Anlagen", "title": "Anlagenperformance-Modelle anzeigen"},
+    "perf-energy_header": {"text": "Energie", "title": "Energievorhersage-Tab öffnen"},
     "user_title_loggedin": "Benutzerinformationen und Logout anzeigen",
     "user_title_loggedout": "Login-Seite anzeigen"
   },

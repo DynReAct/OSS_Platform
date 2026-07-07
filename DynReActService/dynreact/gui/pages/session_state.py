@@ -44,16 +44,18 @@ def get_date_range(current_snapshot: str|datetime|None, zi: ZoneInfo|None = None
     if current is None:
         # 3) use current snapshot
         current = state.get_snapshot_provider().current_snapshot_id()
+    now = state.as_timezone(DatetimeUtils.now())
     if current is None:  # should not really happen
-        now = state.as_timezone(DatetimeUtils.now())
         return (now - timedelta(days=30)).date(), (now + timedelta(days=1)).date(), [], None
     dates: list[datetime] = []
     cnt = 0
-    iterator = state.get_snapshot_provider().snapshots(start_time=current - timedelta(days=90), end_time=current + timedelta(days=3), order="desc") #if current_snapshot is None \
+    # ensure the current snapshot is always shown for selection
+    end_time = now + timedelta(days=1) if timedelta(days=3) < now - current < timedelta(days=10) else current + timedelta(days=3)
+    iterator = state.get_snapshot_provider().snapshots(start_time=current - timedelta(days=90), end_time=end_time, order="desc") #if current_snapshot is None \
         #else state.get_snapshot_provider().snapshots(start_time=current - timedelta(hours=2), end_time=current + timedelta(days=90), order="asc")
     for dt in iterator:
-        dates.append(dt)
-        if cnt > 100:  # ?
+        dates.append(state.as_timezone(dt))
+        if cnt > 100 and dt <= current:  # ?
             break
         cnt += 1
     dates = sorted(dates, reverse=True)

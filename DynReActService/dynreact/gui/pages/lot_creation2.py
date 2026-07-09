@@ -1612,7 +1612,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     try:
         relevant_fields: list[str]|None = state.get_cost_provider().relevant_fields(site.get_equipment(current_process_plants[0]))
         if relevant_fields is not None:
-            def field_sort_id(f: dict[str, any]) -> int:
+            def field_sort_id(f: dict[str, Any]) -> int:
                 _id = f.get("field")
                 if not _id:
                     return 1000

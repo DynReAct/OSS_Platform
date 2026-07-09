@@ -76,6 +76,7 @@ def _layout():
     if config.temporary_restrictions is not None:
         mtp_links.append(dcc.Link("Temporary restrictions", id="menu-temp-rest-header", className="menu-link", href="/dash/lots/temprest", title="Temporary equipment restrictions"))
     mtp_links.append(dcc.Link("Order backlog", id="menu-lots-backlog-header", className="menu-link", href="/dash/lots/backlog", title="Order backlog view"))
+    mtp_links.append(dcc.Link("Timeseries plot", id="menu-tsplot-header", className="menu-link", href="/dash/lots/ts-plots", title="Timeseries plots"))
     moa_link = None
     if state.has_material_order_allocation_page():
         moa_link = dcc.Link("Material-order allocation", id="menu-moa_header", className="menu-link login-required", href="/dash/moa", title="Open material order allocation tab")

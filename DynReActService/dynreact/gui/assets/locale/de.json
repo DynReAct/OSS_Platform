@@ -10,6 +10,7 @@
     "lots-creation_header": {"text": "Loserzeugung", "title": "Tab für die Loserzeugung öffnen"},
     "lots2-creation_header": {"text": "Loserzeugung", "title": "Tab für die Loserzeugung öffnen"},
     "lots-backlog-header": {"text": "Auftragsvorrat", "title": "Tab für den Auftragsvorrat öffnen"},
+    "tsplot-header": {"text": "Zeitreihenplots", "title": "Tab für Zeitreihenplots öffnen"},
     "temp-rest-header": {"text": "Temporäre Regeln", "title":  "Tab für temporäre Regeln öffnen"},
     "moa_header": {"text": "Warmbandanbindung", "title":  "Tab zur Warmbandanbindung öffnen"},
     "agents_header": {"text": "Agenten", "title": "Tab für das Empfehlungssystem öffnen"},
@@ -140,6 +141,16 @@
     "equipment-header": "Anlage",
     "backlog-header": "Auftragsvorrat",
     "overview-header": "Übersicht Auftragsvorrat"
+  },
+  "ts-plots": {
+    "title": "Zeitreihenplots",
+    "eq-header": "Anlagen",
+    "proc-select-label": "Anlagenstufe:",
+    "eq-select-label": "Anlagen:",
+    "endlot-select-label": "Endlose:",
+    "endtime-label": "Endzeit:",
+    "data-header": "Datenpunkte",
+    "data-select-label": "Datenpunkte:"
   },
   "temprest": {
     "title": "Temporäre Regeln",

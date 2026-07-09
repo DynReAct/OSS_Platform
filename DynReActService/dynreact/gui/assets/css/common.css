@@ -47,6 +47,11 @@
 * </div>
 */
 
+.settings-panel {
+    background-color: lightgray;
+    padding: 0.5em;
+}
+
 .control-panel {  /*create-control-box*/
     margin: 1em 0em;
     display: flex;

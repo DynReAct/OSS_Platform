@@ -129,11 +129,17 @@
     "title": "Auftragsvorrat",
     "proc-select-label": "Anlagenstufe:",
     "eq-select-label": "Anlage:",
+    "startlot-select-label": "Startlos:",
+    "planning-start-label": "Startzeit Loserstellung",
     "tons-available-label": {"text":  "Material verfügbar:", "title": "Material verfügbar für den Auftragsvorrat in Tonnen"},
     "tons-total-label": {"text":  "Material gesamt:", "title": "Gesamtmenge Material in der Tabelle, in Tonnen"},
     "not-applicable-label": "Für die gewählte Anlage unzulässige Aufträge anzeigen:",
     "later-stages-label": "Aufträge an Nachfolgestufen anzeigen:",
-    "unknown-eq-label": "Aufträge an unbekannten Anlagen anzeigen:"
+    "unknown-eq-label": "Aufträge an unbekannten Anlagen anzeigen:",
+    "filter-header": "Auftragsfilter",
+    "equipment-header": "Anlage",
+    "backlog-header": "Auftragsvorrat",
+    "overview-header": "Übersicht Auftragsvorrat"
   },
   "temprest": {
     "title": "Temporäre Regeln",

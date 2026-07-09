@@ -1180,7 +1180,7 @@ def layout(*args: Any, **kwargs: Any) -> html.Div|None:
                     dash_ag.AgGrid(id="perf-energy-demand-table", columnDefs=_demand_table_columns(), rowData=[], className="ag-theme-alpine", defaultColDef={"sortable": True, "filter": True, "resizable": True}, style={"height": "280px", "width": "100%", "marginBottom": "1rem"}, columnSize="responsiveSizeToFit"),
                     dcc.Graph(id="perf-energy-demand-graph", figure=_empty_demand_figure()),
                 ],
-                delay_show=100,
+                # delay_show=100,   # compatibility issue; rather new feature of Dash
             ),
         ]
     )

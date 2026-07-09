@@ -33,7 +33,7 @@ def layout(*args, **kwargs):
         html.H2("Processes"),
         html.Div(id="lotbatch-processes-table", className="lotbatch-proc-table"),
         dcc.Interval(id="lotbatch-interval", interval=30_000),
-    ])
+    ], id="lotbatch")
 
 
 @callback(
@@ -58,7 +58,7 @@ def set_stats(_, clicks: int|None, selected_solution: datetime|None):
     snap = DatetimeUtils.format(state.as_timezone(stats.previous_snapshot), use_zone=False) if stats.previous_snapshot is not None else None
     active = stats.is_active
     proc_results = stats.previous_process_results
-    sol_options = None
+    sol_options = []
     trigger_run = "lotbatch-trigger" in GuiUtils.changed_ids() and clicks is not None and clicks > 0 and not active
     if proc_results:
         solutions = sorted(list(proc_results.keys()), reverse=True)

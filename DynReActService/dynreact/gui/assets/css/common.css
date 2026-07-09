@@ -15,6 +15,14 @@
     align-items: center;
 }
 
+.grid-2 {
+    display: grid;
+    align-items: center;
+    grid-template-columns: auto auto;
+    justify-content: start;
+    row-gap: 0.5em;
+}
+
 .gap-05 {
     column-gap: 0.5em;
 }

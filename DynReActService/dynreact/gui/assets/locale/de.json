@@ -9,6 +9,7 @@
     "lots-planned_header": {"text": "Losplanung", "title": "Losplanung"},
     "lots-creation_header": {"text": "Loserzeugung", "title": "Tab für die Loserzeugung öffnen"},
     "lots2-creation_header": {"text": "Loserzeugung", "title": "Tab für die Loserzeugung öffnen"},
+    "lots-backlog-header": {"text": "Auftragsvorrat", "title": "Tab für den Auftragsvorrat öffnen"},
     "temp-rest-header": {"text": "Temporäre Regeln", "title":  "Tab für temporäre Regeln öffnen"},
     "moa_header": {"text": "Warmbandanbindung", "title":  "Tab zur Warmbandanbindung öffnen"},
     "agents_header": {"text": "Agenten", "title": "Tab für das Empfehlungssystem öffnen"},
@@ -123,6 +124,16 @@
     "mat-label" : "Materialauswahl: ",
     "show-lotids": "Los-Ids anzeigen: ",
     "lotsview-head": "Losansicht"
+  },
+  "lots-backlog": {
+    "title": "Auftragsvorrat",
+    "proc-select-label": "Anlagenstufe:",
+    "eq-select-label": "Anlage:",
+    "tons-available-label": {"text":  "Material verfügbar:", "title": "Material verfügbar für den Auftragsvorrat in Tonnen"},
+    "tons-total-label": {"text":  "Material gesamt:", "title": "Gesamtmenge Material in der Tabelle, in Tonnen"},
+    "not-applicable-label": "Für die gewählte Anlage unzulässige Aufträge anzeigen:",
+    "later-stages-label": "Aufträge an Nachfolgestufen anzeigen:",
+    "unknown-eq-label": "Aufträge an unbekannten Anlagen anzeigen:"
   },
   "temprest": {
     "title": "Temporäre Regeln",

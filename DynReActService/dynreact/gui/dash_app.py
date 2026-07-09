@@ -47,6 +47,7 @@ if config.auth_method is not None:
         return User(username)
 
 DYNREACT_LOGO = "img/dynreact_logo2.png"
+DYNREACT_LOGO_SMALL = "img/dynreact_cropped.jpg"
 DYNREACT_BACKGROUND = "img/dynreact.png"
 translations_key = "menu"
 
@@ -74,6 +75,7 @@ def _layout():
         mtp_links.append(dcc.Link("Batch job", id="menu-snaps-batch_header", className="menu-link", href="/dash/lots/batch", title="Lot creation batch jobs"))
     if config.temporary_restrictions is not None:
         mtp_links.append(dcc.Link("Temporary restrictions", id="menu-temp-rest-header", className="menu-link", href="/dash/lots/temprest", title="Temporary equipment restrictions"))
+    mtp_links.append(dcc.Link("Order backlog", id="menu-lots-backlog-header", className="menu-link", href="/dash/lots/backlog", title="Order backlog view"))
     moa_link = None
     if state.has_material_order_allocation_page():
         moa_link = dcc.Link("Material-order allocation", id="menu-moa_header", className="menu-link login-required", href="/dash/moa", title="Open material order allocation tab")
@@ -132,6 +134,7 @@ def _layout():
         site, selected_snapshot, selected_snapshot_obj, selected_process, snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector,
         #html.Div("DynReAct", className="dynreact-header"),
         html.Img(src=app.get_asset_url(DYNREACT_LOGO), className="menu-logo"),
+        html.Img(src=app.get_asset_url(DYNREACT_LOGO_SMALL), className="menu-logo menu-logo-small"),
         html.Img(src=app.get_asset_url(DYNREACT_BACKGROUND), className="menu-background"),
         html.Div(menu_entries, id="main-menu", className="main-menu")
     ],

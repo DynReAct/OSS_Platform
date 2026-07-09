@@ -302,8 +302,6 @@ def update_table(equipment: int|None, start_date0: str|None,
         else:
             od["available"] = False
             od["reason"] = "Unbekannt" if is_de else "Unknown"
-            # FIXME
-            print("  UNKNOWN!", order.id, "prev stage: ",  is_at_previous_stage, " available at", available_at, " match", process_match, " at next stage", is_at_follow_up_stage)
         return od
 
     show_not_applicable: bool = not_appl and len(not_appl) > 0

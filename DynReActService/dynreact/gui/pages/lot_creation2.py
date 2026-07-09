@@ -115,7 +115,8 @@ def layout(*args, **kwargs):
         # ========= Stores ================
         dcc.Store(id="lots2-active-tab", data=tab),  # Literal["targets", "orders", "settings"]
         dcc.Store(id="lots2-iterations", data=str(iterations), storage_type="memory"),  # Literal["targets", "orders", "settings"]
-        dcc.Store(id="lots2-planning-itv-start", storage_type="memory"),  # datetime
+        dcc.Store(id="lots2-planning-itv-start", storage_type="memory"),  # datetime   # receives the value from the datetime selector
+        dcc.Store(id="lots2-planning-itv-start2", storage_type="memory"),  # datetime  # initializes the datetime selector
         dcc.Store(id="lots2-orders-data", storage_type="memory"),  # a dict with keys "snapshot", "process", "orders_selected_cnt", "orders_selected_weight"
         dcc.Store(id="lots2-orders-backlog-structure-data", storage_type="memory"),  # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
         dcc.Store(id="lots2-lots-data", storage_type="memory"),    # rowData, list of dicts, one row per lot; input for swim lane
@@ -772,8 +773,8 @@ def ltp_row_selected(selected_rows: list[dict[str, any]]|None, snapshot: datetim
     Output("lots2-details-plants", "children"),
     Output("lots2-details-plants", "className"),
     Output("lots2-check-use-lot-range", "value"),
-    Output("lots2-planning-itv-start-date", "value"),
-    Output("lots2-planning-itv-start-time", "value"),
+    #Output("lots2-planning-itv-start-date", "value"),
+    #Output("lots2-planning-itv-start-time", "value"),
     Output("lots2-material-setpoints-ltp", "data"),
     State("selected-snapshot", "data"),
     State("lots2-horizon-hours", "value"),
@@ -781,7 +782,7 @@ def ltp_row_selected(selected_rows: list[dict[str, any]]|None, snapshot: datetim
     State("lots2-planning-itv-start", "data"),
     State("lots2-ltp-selected-solution", "data"),
     Input("lots2-process-selector", "value"),
-    Input("lots2-active-tab", "data"),
+    # Input("lots2-active-tab", "data"),
     # Input("lots2-targets-init-lots", "n_clicks"),
     Input("lots2-ltp-submit", "n_clicks"),
     Input("lots2-check-use-lot-range", "value"),
@@ -793,7 +794,7 @@ def update_plants(snapshot: str,
                   current_start: datetime|None,
                   ltp_solution: dict[str, any]|None,
                   process: str,
-                  active_tab: Literal["targets", "orders", "settings"]|None,
+                  #active_tab: Literal["targets", "orders", "settings"]|None,
                   _,  # __,
                   use_lot_range0: list[Literal[""]],
                   lang: str|None
@@ -813,8 +814,8 @@ def update_plants(snapshot: str,
     snapshot = DatetimeUtils.parse_date(snapshot)
     snapshot_obj = state.get_snapshot(snapshot)
     ltp_structure = dash.no_update
-    if not dash_authenticated(config) or process is None or snapshot_obj is None or active_tab != "targets":
-        return no_update, my_parent_classname, no_update, no_update, no_update, ltp_structure
+    if not dash_authenticated(config) or process is None or snapshot_obj is None:  # or active_tab != "targets":
+        return no_update, my_parent_classname, no_update, ltp_structure  # no_update, no_update, ltp_structure
     is_ltp_init = "lots2-ltp-submit" in changed and ltp_solution is not None   # TODO already contains all the relevant data
     re_init: bool = "lots2-targets-init-lots" in changed or is_ltp_init
     init_dates = current_start is None or re_init or "lots2-process-selector" in changed
@@ -968,14 +969,14 @@ def update_plants(snapshot: str,
     # my_parent_classname for formatting purpose
     # todo if input-selector HAS CHANGED ??
     checked_use_lot_range = ([""] if use_lot_range else []) if process_changed else no_update
-    if is_ltp_init:
-        start_date, start_time = DatetimeUtils.format(state.as_timezone(DatetimeUtils.parse_date(ltp_solution["planning_start_time"])), use_zone=False).split("T")
-    elif not init_dates:
-        start_date = no_update
-        start_time = no_update
-    else:
-        start_date, start_time = DatetimeUtils.format(state.as_timezone(earliest_start), use_zone=False).split("T")
-    return elements, my_parent_classname, checked_use_lot_range, start_date, start_time, ltp_structure
+    #if is_ltp_init:
+    #    start_date, start_time = DatetimeUtils.format(state.as_timezone(DatetimeUtils.parse_date(ltp_solution["planning_start_time"])), use_zone=False).split("T")
+    #elif not init_dates:
+    #    start_date = no_update
+    #    start_time = no_update
+    #else:
+    #    start_date, start_time = DatetimeUtils.format(state.as_timezone(earliest_start), use_zone=False).split("T")
+    return elements, my_parent_classname, checked_use_lot_range, ltp_structure # start_date, start_time, ltp_structure
 
 @callback(
          Output("lots2-planning-itv-start", "data"),
@@ -2273,8 +2274,10 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
          Input({"role": "plant-lot", "id": ALL}, "value"),
          Input({"role": "plant-lotmin", "id": ALL}, "value"),
          Input({"role": "plant-lotmax", "id": ALL}, "value"))
-def test_test(plants, checked: Sequence[Sequence[Literal[""]]], inputs: Sequence[str|float], selected_lots: Sequence[str|None],
+def plant_settings_changed0(plants, checked: Sequence[Sequence[Literal[""]]], inputs: Sequence[str|float], selected_lots: Sequence[str|None],
               lots_min: Sequence[float|None]|None, lots_max: Sequence[float|None]|None):
+    if "lots2-active-tab" in GuiUtils.changed_ids():
+        return dash.no_update, dash.no_update
     plants_checked = [len(c) > 0 for c in checked]
     total_values = [0 if not plants_checked[idx] or not GuiUtils.is_numeric(inp) else float(inp) for idx, inp in enumerate(inputs)]
     lots_range = None
@@ -2294,18 +2297,50 @@ def test_test(plants, checked: Sequence[Sequence[Literal[""]]], inputs: Sequence
 
 @callback(
           Output("lots2-active-plants", "data"),
+          Output("lots2-planning-itv-start2", "data"),
           Input("lots2-plant-settings", "data"),
           State("lots2-active-plants", "data"),
+          State("selected-snapshot", "data")
 )
-def plant_settings_changed(settings: dict[int, Any]|None, active_plants: Sequence[str]) -> Sequence[int]:
+def plant_settings_changed(settings: dict[int, Any]|None, active_plants: Sequence[str], snapshot: str|None) -> tuple[Sequence[int], str]:
     if settings is None or len(settings) == 0:
-        return tuple()
+        return tuple(), snapshot
     num_current = len(active_plants)
     num_new = len(settings) if settings is not None else 0
-    if num_current == num_new and all(p in settings for p in active_plants):
-        return dash.no_update
-    return tuple(int(p) for p in settings.keys())
 
+    if num_current == num_new and all(p in settings for p in active_plants):
+        active_plants = dash.no_update
+    else:
+        active_plants = tuple(int(p) for p in settings.keys())
+    snap_obj = state.get_snapshot(time=DatetimeUtils.parse_date(snapshot))
+    _empty = tuple()
+    if snap_obj is not None:
+        start_time = None  # snap_obj.timestamp
+        for plant, p_settings in settings.items():
+            prev_lot = p_settings.get("predecessor_lot")
+            lot = next((lt for lt in snap_obj.lots.get(int(plant), _empty) if lt.id == prev_lot), None) if prev_lot is not None else None
+            lot_end = lot.end_time if lot is not None and lot.end_time is not None else snap_obj.timestamp
+            if start_time is None or lot_end < start_time:
+                start_time = lot_end
+        if start_time is None:
+            start_time = snap_obj.timestamp
+    else:
+        start_time = DatetimeUtils.now()
+    if isinstance(start_time, datetime):
+        start_time = DatetimeUtils.format(state.as_timezone(start_time))
+    return active_plants, start_time
+
+
+@callback(
+    Output("lots2-planning-itv-start-date", "value"),
+          Output("lots2-planning-itv-start-time", "value"),
+          Input("lots2-planning-itv-start2", "data"),
+)
+def planning_start_changed2(start: str|None):
+    start = DatetimeUtils.parse_date(start)
+    if start is None:
+        return dash.no_update,dash.no_update
+    return DatetimeUtils.format(state.as_timezone(start), use_zone=False).split("T")
 
 # Swimlane related callbacks
 

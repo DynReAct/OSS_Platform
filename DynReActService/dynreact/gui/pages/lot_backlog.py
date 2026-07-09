@@ -48,11 +48,11 @@ def layout(*args, **kwargs):
                 html.Div([
                     html.Span("Include orders not applicable to equipment:",
                               id=f"{translations_key}-not-applicable-label"),
-                    dcc.Checklist(options=[{"value": ""}], value=[], id=f"{translations_key}-not-applicable"),
+                    dcc.Checklist(options=[{"value": ""}], value=[""], id=f"{translations_key}-not-applicable"),
                     html.Span("Include orders at later stages:", id=f"{translations_key}-later-stages-label"),
-                    dcc.Checklist(options=[{"value": ""}], value=[], id=f"{translations_key}-later-stages"),
+                    dcc.Checklist(options=[{"value": ""}], value=[""], id=f"{translations_key}-later-stages"),
                     html.Span("Include orders at unknown equipment:", id=f"{translations_key}-unknown-eq-label"),
-                    dcc.Checklist(options=[{"value": ""}], value=[], id=f"{translations_key}-unknown-eq")
+                    dcc.Checklist(options=[{"value": ""}], value=[""], id=f"{translations_key}-unknown-eq")
                 ], className="grid-2 gap-1"),
             ], className="settings-panel"),
             html.Div([

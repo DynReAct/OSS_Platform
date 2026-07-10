@@ -200,9 +200,10 @@ def data_changed(equipments: Sequence[int]|None, data: Sequence[str]|None, end_l
     colors = ["red", "blue", "green", "orange"]
     num_colors = len(colors)
     trace_cnt = 0
+    equipment_objects = {e: site.get_equipment(e, do_raise=True) for e in equipments}
     for data_point in data:
         for eq_idx, equipment in enumerate(equipments):
-            eq_obj = site.get_equipment(equipment, do_raise=True)
+            eq_obj = equipment_objects[equipment]
             lots = snap_obj.lots.get(equipment)
             lots = [lot for lot in lots if lot.active and lot.end_time is not None] if lots else []
             if len(lots) == 0:
@@ -251,13 +252,17 @@ def data_changed(equipments: Sequence[int]|None, data: Sequence[str]|None, end_l
             new_line = go.Scatter(x=xs, y=ys, customdata=custom_orders, mode="lines+markers", line={"color": color, "width": 2}, marker={"size": 7}, name=f"{equipment_name}: {data_point}", legendgroup=equipment_name,
                                   hovertemplate=f"{lt_label}: %{{customdata[1]}}, {order_label}: %{{customdata[0]}}, {data_point}: %{{y:,.2f}}, {time_label}: %{{x}}<extra></extra>")
             fig.add_trace(new_line)
-
+    data_label = ", ".join(data)
+    if is_single_equipment:
+        e = equipment_objects[equipments[0]]
+        title = f"{e.name_short or e.id}: {data_label}"
+    else:
+        title = f"{process}: {data_label}"
+    fig_layout = {"title": title, "font": {"size": 16}}
+    if len(data_label) < 20:
+        fig_layout["yaxis"] = {"title": data_label}
+    fig.update_layout(fig_layout)
     return fig
-
-
-
-
-
 
 
 def _plants_for_ids(equipment: str|None, site: Site) -> list[Equipment]|None:

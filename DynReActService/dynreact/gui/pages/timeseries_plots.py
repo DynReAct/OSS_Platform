@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
+from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Equipment, Site, LotTimes
 
 dash.register_page(__name__, path="/lots/ts-plots")
@@ -216,7 +217,7 @@ def data_changed(equipments: Sequence[int]|None, data: Sequence[str]|None, end_l
                     continue
                 lots = lots[:end_lot_idx+1]
             orders = [order for lot in lots for order in lot.orders]
-            order_lot_times: dict[str, dict[str, LotTimes]]|None = snap_provider.get_order_lot_times(snapshot=snap_obj.timestamp, order=orders)
+            order_lot_times: dict[str, dict[str, LotTimes]]|None = ModelUtils.get_order_lot_times_with_fallback(site, snap_provider, snapshot=snap_obj.timestamp, order=orders, process=process)
             xs = []
             ys = []
             custom_orders = []

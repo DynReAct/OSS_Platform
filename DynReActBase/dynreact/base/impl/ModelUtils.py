@@ -4,7 +4,7 @@ from typing import Mapping, Sequence
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.model import MidTermTargets, ProductionTargets, EquipmentProduction, ProductionPlanning, Site, \
     EquipmentAvailability, MaterialCategory, SUM_MATERIAL, Lot, PlannedWorkingShift, Snapshot, StorageLevel, Storage, \
-    Material
+    Material, LotTimes, Order
 
 
 class ModelUtils:
@@ -520,3 +520,58 @@ class ModelUtils:
             storage_levels[storage] = level
         return storage_levels
 
+    @staticmethod
+    def get_order_lot_times_with_fallback(site: Site, snapshot_provider: SnapshotProvider, snapshot: datetime | None = None,
+                                          order: str|Sequence[str]|None=None, process: str|None=None) -> dict[str, dict[str, LotTimes]]|None:
+        """
+        Provides the same functionality as SnapshotProvider.get_order_lots(), but with a fallback in case this method is not implemented
+
+        Parameters:
+            site:
+            snapshot_provider:
+            snapshot: snapshot timestamp
+            order:    optional order(s) filter
+            process:  optional process filter
+
+        Returns:
+            A nested dictionary order id -> process -> lot times object
+        """
+        try:
+            return snapshot_provider.get_order_lot_times(snapshot=snapshot, order=order)
+        except NotImplementedError:
+            pass
+        snap_obj = snapshot_provider.load(time=snapshot)
+        if not snap_obj:
+            return None
+        if order is not None and not isinstance(order, Sequence):
+            order = (order, )
+        elif order is None:
+            order = [o.id for o in snap_obj.orders]
+        order_objects: dict[str, Order] = {o.id: o for o in snap_obj.orders}
+        result: dict[str, dict[str, LotTimes]] = {}
+        for equipment, lots in snap_obj.lots.items():
+            eq_obj = site.get_equipment(equipment)
+            lot_process = eq_obj.process if eq_obj else None
+            if not lot_process or (process is not None and lot_process != process):
+                continue
+            for lot in lots:
+                if not lot.active or not lot.start_time or not lot.end_time or not any(o in lot.orders for o in order):
+                    continue
+                lot_weight = lot.weight if lot.weight is not None else sum(order_objects[o].actual_weight for o in lot.orders if o in order_objects)
+                if lot_weight < 1e-2:
+                    continue
+                start_time = lot.start_time
+                lot_delta = lot.end_time - lot.start_time
+                for l_order in lot.orders:
+                    if l_order not in order_objects:
+                        continue
+                    order_obj = order_objects[l_order]
+                    share = order_obj.actual_weight / lot_weight
+                    end_time = start_time + share * lot_delta
+                    if l_order in order:
+                        lot_times = LotTimes(id=l_order, process=lot_process, start=start_time, end=end_time, processing_time=end_time-start_time)
+                        if l_order not in result:
+                            result[l_order] = {}
+                        result[l_order][lot_process] = lot_times
+                    start_time = end_time
+        return result

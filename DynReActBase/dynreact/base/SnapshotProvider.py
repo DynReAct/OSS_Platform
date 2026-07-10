@@ -90,7 +90,7 @@ class SnapshotProvider:
         """
         Optional method, may not be implemented
         """
-        raise Exception("not implemented")
+        raise NotImplementedError
 
     def snapshots(self, start_time: datetime, end_time: datetime, order: Literal["asc", "desc"] = "asc") -> Iterator[datetime]:
         """
@@ -101,7 +101,7 @@ class SnapshotProvider:
             end_time:
             order:
         """
-        raise Exception("not implemented")
+        raise NotImplementedError
 
     def size(self, start_time: datetime, end_time:datetime) -> int:
         """
@@ -152,7 +152,7 @@ class SnapshotProvider:
         Returns:
              the snapshot object, if there is a snapshot for the specified timestamp, else None.
         """
-        raise Exception("not implemented")
+        raise NotImplementedError
 
     # tbd
     def current_snapshot_id(self) -> datetime:
@@ -303,11 +303,11 @@ class SnapshotProvider:
 
     def get_order_lot_times(self, snapshot: datetime | None = None, order: str|Sequence[str]|None=None) -> dict[str, dict[str, LotTimes]]|None:
         """Returns a dictionary order id -> process id -> lot data"""
-        raise Exception("not implemented")
+        raise NotImplementedError
 
     def get_material_lot_times(self, snapshot: datetime | None = None, material: str|Sequence[str]|None=None) -> dict[str, dict[str, LotTimes]]|None:
         """Returns a dictionary material id -> process id -> lot data"""
-        raise Exception("not implemented")
+        raise NotImplementedError
 
     def eligible_orders2(self,
                          snapshot: Snapshot,

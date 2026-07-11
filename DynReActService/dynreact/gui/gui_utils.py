@@ -4,9 +4,10 @@ from datetime import datetime, date, timedelta
 from typing import Sequence, Any
 from zoneinfo import ZoneInfo
 
-from dash import html, callback_context
+from dash import html, callback_context, callback, Output, Input, State, dash, dcc
 from pydantic import BaseModel
 
+from dynreact.app import state
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Equipment, Order, Snapshot, Site, Lot, Process, TransportTimes
@@ -250,3 +251,54 @@ class GuiUtils:
             pass
 
         return fields, sorted_orders
+
+    @staticmethod
+    def create_snapshots_selector_prev_next(page_prefix: str):
+        return html.Div([
+            html.Button("<", id=f"{page_prefix}-snap-prev", hidden=True, title="Select previous snapshot"),
+            html.Span(id=f"{page_prefix}-snapshot"),
+            html.Button(">", id=f"{page_prefix}-snap-next", hidden=True, title="Select following snapshot"),
+            dcc.Store(id={"role": "snapshot-selector", "page": page_prefix}, storage_type="memory"),
+            dcc.Interval(id=f"{page_prefix}-snapshot-init-interval", interval=100),  # snapshot selector init
+        ], style={"display": "flex", "column-gap": "0.5em"})
+
+    @staticmethod
+    def create_snapshot_callbacks(page_prefix: str):
+
+        @callback(Output({"role": "snapshot-selector", "page": page_prefix}, "data"),
+                  Output(f"{page_prefix}-snapshot-init-interval", "interval"),
+                  Input(f"{page_prefix}-snap-prev", "n_clicks"),
+                  Input(f"{page_prefix}-snap-next", "n_clicks"),
+                  Input(f"{page_prefix}-snapshot-init-interval", "n_intervals"),
+                  State({"role": "snapshot-selector", "page": page_prefix}, "data"),
+                  State("selected-snapshot", "data"),
+                  State("selected-snapshot-next", "data"),
+                  State("selected-snapshot-prev", "data"))
+        def snapshot_changed(_, __, ___, old_selection: str | None, global_selection: str | None, next_snap: str | None,
+                             prev_snap: str | None):
+            if old_selection is None and global_selection is None:
+                return dash.no_update, dash.no_update
+            new_interval = 3_600_000
+            if old_selection is None:
+                return state.as_timezone(DatetimeUtils.parse_date(global_selection)), new_interval
+            changed = GuiUtils.changed_ids()
+            prev: bool = f"{page_prefix}-snap-prev" in changed
+            if prev and prev_snap:
+                return prev_snap, new_interval
+            nxt: bool = f"{page_prefix}-snap-next" in changed
+            if nxt and next_snap:
+                return next_snap, new_interval
+            return dash.no_update, new_interval
+
+        @callback(Output(f"{page_prefix}-snap-next", "hidden"),
+                  Output(f"{page_prefix}-snap-prev", "hidden"),
+                  Input("selected-snapshot-next", "data"),
+                  Input("selected-snapshot-prev", "data"))
+        def set_prev_next_snap_visibility(next_snap: str | None, prev_snap: str | None):
+            return next_snap is None, prev_snap is None
+
+        @callback(Output(f"{page_prefix}-snapshot", "children"),
+                  Input({"role": "snapshot-selector", "page": page_prefix}, "data"))
+        def display_snapshot(snapshot):
+            return snapshot
+

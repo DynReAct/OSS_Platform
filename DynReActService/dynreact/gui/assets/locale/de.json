@@ -145,6 +145,8 @@
   "ts-plots": {
     "title": "Zeitreihenplots",
     "eq-header": "Anlagen",
+    "snap-prev": {"title": "Vorherigen Snapshot auswählen"},
+    "snap-next": {"title": "Nachfolgenden Snapshot auswählen"},
     "proc-select-label": "Anlagenstufe:",
     "eq-select-label": "Anlagen:",
     "endlot-select-label": "Endlose:",

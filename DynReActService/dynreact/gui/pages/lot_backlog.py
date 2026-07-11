@@ -9,6 +9,7 @@ from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Equipment, Order, Process, Lot, LotTimes
+from dynreact.gui.gui_utils import GuiUtils
 
 dash.register_page(__name__, path="/lots/backlog")
 translations_key = "lots-backlog"
@@ -26,7 +27,7 @@ def layout(*args, **kwargs):
             html.Div([
                 html.H2("Equipment", id=f"{translations_key}-equipment-header"),
                 html.Div([
-                    html.Span("Snapshot"), html.Span(id=f"{translations_key}-snapshot"),
+                    html.Span("Snapshot"), GuiUtils.create_snapshots_selector_prev_next(translations_key),
                     html.Span("Select process:", id=f"{translations_key}-proc-select-label"),
                     dcc.Dropdown(options=[{"value": p.name_short, "label": p.name_short} for p in processes],
                                  value=process, id=f"{translations_key}-proc-select", style={"min-width": "12em"}),
@@ -95,10 +96,9 @@ def _plant_for_id(plants: list[Equipment], plant_id0: str|None) -> Equipment|Non
     plant = next((p for p in plants if (p.name_short is not None and p.name_short.upper() == plant_id) or (p.name is not None and p.name.upper() == plant_id)), None)
     return plant
 
-@callback(Output("lots-backlog-snapshot", "children"),
-          Input("selected-snapshot", "data"))
-def table_columns(snapshot: str|None):
-    return snapshot
+
+GuiUtils.create_snapshot_callbacks(translations_key)
+
 
 @callback(Output("lots-backlog-orders-table", "columnDefs"),
           Input("lang", "data"))
@@ -149,9 +149,9 @@ def process_changed(proc: str|None, selected_plant: int|None):
 @callback(Output("lots-backlog-startlot-select", "options"),
           Output("lots-backlog-startlot-select", "value"),
           Input("lots-backlog-eq-select", "value"),
-          State("lots-backlog-startlot-select", "value"),
-          State("selected-snapshot", "data"))
-def equipment_changed(equipment: int|None, current_selection: str|None, snapshot: str|None):
+          Input({"role": "snapshot-selector", "page": translations_key}, "data"),
+          State("lots-backlog-startlot-select", "value"))
+def equipment_changed(equipment: int|None, snapshot: str|None, current_selection: str|None):
     snapshot = DatetimeUtils.parse_date(snapshot)
     if not dash_authenticated(config) or equipment is None or not snapshot:
         return [], None
@@ -172,7 +172,7 @@ def equipment_changed(equipment: int|None, current_selection: str|None, snapshot
             Output("lots-backlog-planning-start-time", "value"),
           Input("lots-backlog-eq-select", "value"),
           Input("lots-backlog-startlot-select", "value"),
-          State("selected-snapshot", "data"))
+          Input({"role": "snapshot-selector", "page": translations_key}, "data"),)
 def equipment_changed(equipment: int|None, selected_lot: str|None, snapshot: str|None):
     snapshot = DatetimeUtils.parse_date(snapshot)
     if not dash_authenticated(config) or equipment is None or not snapshot or not selected_lot:
@@ -185,7 +185,7 @@ def equipment_changed(equipment: int|None, selected_lot: str|None, snapshot: str
 @callback(Output("lots-backlog-planning-start", "data"),
         Input("lots-backlog-planning-start-date", "value"),
         Input("lots-backlog-planning-start-time", "value"),
-        State("selected-snapshot", "data"))
+        Input({"role": "snapshot-selector", "page": translations_key}, "data"))
 def start_time_changed(dat: str | None, time: str | None, snapshot: str|None):
     if dat is None or time is None:
         snapshot = DatetimeUtils.parse_date(snapshot)
@@ -202,7 +202,7 @@ def start_time_changed(dat: str | None, time: str | None, snapshot: str|None):
           Input("lots-backlog-later-stages", "value"),
           Input("lots-backlog-unknown-eq", "value"),
           Input("lang", "data"),
-          State("selected-snapshot", "data"))
+          Input({"role": "snapshot-selector", "page": translations_key}, "data"))
 def update_table(equipment: int|None, start_date0: str|None,
                  not_appl: Sequence[Literal[""]], later_stages: Sequence[Literal[""]], unknown_eq: Sequence[Literal[""]], lang: str|None, snapshot: str|None):
     snapshot = DatetimeUtils.parse_date(snapshot)

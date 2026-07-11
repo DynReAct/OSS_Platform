@@ -21,6 +21,9 @@ if "transport_times" in _st0 and "unit" in _st0["transport_times"] and isinstanc
 site: dcc.Store = dcc.Store(id="site-store", storage_type="memory", data=_st0)
 # Type: datetime (the snapshot id)
 selected_snapshot: dcc.Store = dcc.Store(id="selected-snapshot", storage_type="memory")
+selected_snapshot_next: dcc.Store = dcc.Store(id="selected-snapshot-next", storage_type="memory")
+selected_snapshot_prev: dcc.Store = dcc.Store(id="selected-snapshot-prev", storage_type="memory")
+# XXX used at all?
 selected_snapshot_obj: dcc.Store = dcc.Store(id="selected-snapshot-obj", storage_type="memory")
 selected_process: dcc.Store = dcc.Store(id="selected-process", storage_type="memory")
 

@@ -1,14 +1,11 @@
 import types
 import typing
-from datetime import timedelta, datetime
 from typing import Sequence, Any
 
-import dash_ag_grid as dash_ag
 
 import dash
 import numpy as np
 from dash import html, clientside_callback, ClientsideFunction, Output, Input, State, dcc, callback, ALL
-import plotly.express as px
 import plotly.graph_objects as go
 from pydantic import BaseModel
 
@@ -17,6 +14,7 @@ from dynreact.auth.authentication import dash_authenticated
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Equipment, Site, LotTimes
+from dynreact.gui.gui_utils import GuiUtils
 
 dash.register_page(__name__, path="/lots/ts-plots")
 translations_key = "ts-plots"
@@ -35,7 +33,7 @@ def layout(*args, **kwargs):
             html.Div([
                 html.H2("Equipment", id=f"{translations_key}-eq-header"),
                 html.Div([
-                    html.Span("Snapshot"), html.Span(id=f"{translations_key}-snapshot"),
+                    html.Span("Snapshot"), GuiUtils.create_snapshots_selector_prev_next(translations_key),
                     html.Span("Select process:", id=f"{translations_key}-proc-select-label"),
                     dcc.Dropdown(options=[{"value": p.name_short, "label": p.name_short} for p in processes],
                                  value=process, id=f"{translations_key}-proc-select", style={"min-width": "12em"}),
@@ -66,10 +64,8 @@ def layout(*args, **kwargs):
     ], id=translations_key)
 
 
-@callback(Output("ts-plots-snapshot", "children"),
-          Input("selected-snapshot", "data"))
-def snapshot_changed(snapshot):
-    return snapshot
+GuiUtils.create_snapshot_callbacks(translations_key)
+
 
 @callback(Output("ts-plots-eq-select", "options"),
           Output("ts-plots-eq-select", "value"),
@@ -88,7 +84,7 @@ def process_changed(proc: str|None, selected_plants: Sequence[int]|None):
 
 @callback(Output("ts-plots-endlots-section", "children"),
           Input("ts-plots-eq-select", "value"),
-          State("selected-snapshot", "data"),
+          Input({"role": "snapshot-selector", "page": translations_key}, "data"),
           State({"role": "lot-select", "equipment": ALL}, "value"),)
 def set_lot_selection(equipment: Sequence[int]|None, snapshot: str|None, previous_end_lots: Sequence[str|None]|None):
     snapshot = DatetimeUtils.parse_date(snapshot)
@@ -114,7 +110,7 @@ def set_lot_selection(equipment: Sequence[int]|None, snapshot: str|None, previou
 
 @callback(Output("ts-plots-endtime", "children"),
           Input({"role": "lot-select", "equipment": ALL}, "value"),
-          State("selected-snapshot", "data"))
+          Input({"role": "snapshot-selector", "page": translations_key}, "data"))
 def lot_changed(selected_lots: Sequence[str|None]|None, snapshot: str|None):
     snapshot = DatetimeUtils.parse_date(snapshot)
     if not dash_authenticated(config) or not snapshot or not selected_lots:
@@ -128,9 +124,9 @@ def lot_changed(selected_lots: Sequence[str|None]|None, snapshot: str|None):
 @callback(Output("ts-plots-data-select", "options"),
           Output("ts-plots-data-select", "value"),
           Input("ts-plots-eq-select", "value"),
-          State("ts-plots-data-select", "value"),
-          State("selected-snapshot", "data"))
-def equipment_changed(equipment: Sequence[int]|None, previous_selected: Sequence[str]|None, snapshot: str|None):
+          Input({"role": "snapshot-selector", "page": translations_key}, "data"),
+          State("ts-plots-data-select", "value"))
+def equipment_changed(equipment: Sequence[int]|None, snapshot: str|None, previous_selected: Sequence[str]|None):
     if not dash_authenticated(config):
         return [], None
     site = state.get_site()
@@ -181,7 +177,7 @@ def equipment_changed(equipment: Sequence[int]|None, previous_selected: Sequence
           Input("ts-plots-eq-select", "value"),
           Input("ts-plots-data-select", "value"),
           Input({"role": "lot-select", "equipment": ALL}, "value"),
-          State("selected-snapshot", "data"),
+          Input({"role": "snapshot-selector", "page": translations_key}, "data"),
           State("ts-plots-proc-select", "value"),
           State("lang", "data"),)
 def data_changed(equipments: Sequence[int]|None, data: Sequence[str]|None, end_lots: Sequence[str|None]|None, snapshot: str|None, process: str|None, lang: str|None):

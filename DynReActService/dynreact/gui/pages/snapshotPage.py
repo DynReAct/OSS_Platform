@@ -1,5 +1,5 @@
 from datetime import timedelta, datetime, date
-from typing import Literal
+from typing import Literal, Mapping
 from zoneinfo import ZoneInfo
 
 import dash
@@ -72,6 +72,7 @@ def layout(*args, **kwargs):
             # "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
         ),
         dcc.Interval(id="snapshot-init-interval", interval=100),  # snapshot selector init
+        dcc.Store(id={"role": "snapshot-selector", "page": "snapshot"}, storage_type="memory")
     ], id="snapshot")
 
 def _material_overview(categories: list[MaterialCategory]):
@@ -119,30 +120,21 @@ def lang_changed(lang: str|None):
     Output("snapshot-init-interval", "interval"),
     #Input("client-tz", "data"),  # client timezone, defined in dash_app
     Input("snapshot-init-interval", "n_intervals"),
-    Input("snapshots-selector", "value"),
-    # this would best be an input, but we need to avoid the circular dependency, since it is updated by snapshots-selector.value
+    State("snapshots-selector", "value"),
     State("selected-snapshot", "data")
 )
-def set_snapshot_options( _, snap0, snapshot: str|None):  # tz: str|None,
-    if not dash_authenticated(config):
-        return dash.no_update, dash.no_update,dash.no_update,dash.no_update, 30_000
+def set_snapshot_options( _, snap0, snapshot: str|None):
+    if not dash_authenticated(config) or snap0 is not None:
+        return dash.no_update, dash.no_update,dash.no_update,dash.no_update, 30_000 if snap0 is None else 3_600_000
     if snapshot is None:
         return dash.no_update, dash.no_update,dash.no_update,dash.no_update,dash.no_update
-    #zi = None
-    #try:
-    #    zi = ZoneInfo(tz)
-    #except:
-    #    pass
-    start_date, end_date, snap_options, selected_snap = get_date_range(snapshot)  #, zi=zi)
-    if "snapshots-selector" in GuiUtils.changed_ids():
-        selected_snap = dash.no_update
+    start_date, end_date, snap_options, selected_snap = get_date_range(snapshot)
     return snap_options, selected_snap, start_date, end_date, 7_200_000
 
 
 @callback(
-    Output("snapshot_selected-snapshot", "data"),  # defined in session_state
+    Output({"role": "snapshot-selector", "page": "snapshot"}, "data"),
     Input("snapshots-selector", "value"),
-    config_prevent_initial_callbacks=True
 )
 def set_snapshot(snapshot_id: str):
     return snapshot_id
@@ -151,7 +143,7 @@ def set_snapshot(snapshot_id: str):
 @callback(
     Output("snapshot-table", "columnDefs"),
     Output("snapshot-table", "rowData"),
-    Input("selected-snapshot", "data"),
+    Input("snapshots-selector", "value"),
     Input("order-coil-selector", "value"),
 
 )
@@ -204,7 +196,7 @@ def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["order
 @callback(
     Output("snapshot-mat-table", "columnDefs"),
     Output("snapshot-mat-table", "rowData"),
-    Input("selected-snapshot", "data"),
+    Input("snapshots-selector", "value"),
     Input("snapshot_matcat-selector", "value"),  #
     Input("snapshot_mat_level-selector", "value"),  # storage, equipment or process
 )

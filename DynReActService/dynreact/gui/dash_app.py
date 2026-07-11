@@ -1,9 +1,12 @@
+import json
 import logging
 import os
+from datetime import timedelta
 from typing import Sequence
 
 import dash
-from dash import dcc, html, Output, Input, State, clientside_callback, ClientsideFunction, callback
+from dash import dcc, html, Output, Input, State, clientside_callback, ClientsideFunction, callback, ALL, \
+    callback_context
 from flask import Flask
 
 
@@ -11,8 +14,8 @@ from dynreact.app import config, state
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Snapshot, Lot
 from dynreact.gui.gui_utils import GuiUtils
-from dynreact.gui.pages.session_state import language, site, selected_snapshot, selected_snapshot_obj, selected_process, \
-    snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector
+from dynreact.gui.pages.session_state import language, site, selected_snapshot, selected_process, \
+    snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector, selected_snapshot_obj, selected_snapshot_next, selected_snapshot_prev
 
 server = Flask(__name__)
 
@@ -132,7 +135,8 @@ def _layout():
         #dcc.Store(id="lang2", storage_type="memory"),
         dcc.Store(id="lang3", storage_type="memory"),  # dummy output for client side callbacks?
         # dcc.Store(id="client-tz", storage_type="memory", data="UTC"),  # Initialize with UTC, will be overridden by client
-        site, selected_snapshot, selected_snapshot_obj, selected_process, snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector,
+        site, selected_snapshot, selected_process, snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector,
+        selected_snapshot_obj, selected_snapshot_prev, selected_snapshot_next,
         #html.Div("DynReAct", className="dynreact-header"),
         html.Img(src=app.get_asset_url(DYNREACT_LOGO), className="menu-logo"),
         html.Img(src=app.get_asset_url(DYNREACT_LOGO_SMALL), className="menu-logo menu-logo-small"),
@@ -191,26 +195,34 @@ clientside_callback(
     Output("selected-snapshot-obj", "data"),
     Output("selected-process", "data"),
     Input("menu-url", "search"),
-    Input("snapshot_selected-snapshot", "data"),
+    Input({"role": "snapshot-selector", "page": ALL}, "data"),
+    #Input("snapshot_selected-snapshot", "data"),
     Input("create_process-selector", "data"),
     Input("lotplanning_process-selector", "data"),
-    #Input("client-tz", "data"),
     State("selected-snapshot", "data"),
-    prevent_initial_call=False
+    #prevent_initial_call=False
 )
-def params_changed(params: str|None, user_set_snapshot: str|None, create_process: str|None, planning_process: str|None, old_snapshot: str|None):  # , client_tz: str|None
+def params_changed(params: str|None, user_set_snapshots: Sequence[str|None]|None,
+                   create_process: str|None, planning_process: str|None, old_snapshot: str|None):
     """
     Setting shared state between pages
     """
     changed = GuiUtils.changed_ids()
-    
-    ## If only client-tz changed, don't update anything
-    #if changed == ["client-tz"]:
-    #    return dash.no_update, dash.no_update, dash.no_update
-    
+    user_snapshot_selection = next((_id for _id in GuiUtils.changed_ids() if "\"snapshot-selector\"" in _id), None)
+    user_selected_snapshot = user_snapshot_selection is not None
     process_changed_by_user = "create_process-selector" in changed or  "lotplanning_process-selector" in changed
-    if "snapshot_selected-snapshot" in changed:
-        snapshot, process = user_set_snapshot, dash.no_update
+    if user_selected_snapshot:
+        process = dash.no_update
+        changed_id = json.loads(user_snapshot_selection)
+        changed_page = changed_id.get("page")
+        user_snap_inputs: Sequence[dict[str, dict[str, str]]] = callback_context.inputs_list[1]
+        changed_idx = next((idx for idx, inp in enumerate(user_snap_inputs) if inp is not None and "id" in inp and inp["id"].get("page") == changed_page), None)
+        if changed_idx is not None and changed_idx < len(user_set_snapshots):
+            snapshot = user_set_snapshots[changed_idx]
+            if snapshot == old_snapshot and snapshot is not None:
+                return dash.no_update, dash.no_update, dash.no_update
+        else:
+            return dash.no_update, dash.no_update, dash.no_update
     elif process_changed_by_user:
         snapshot, process = dash.no_update, create_process if "create_process-selector" in changed else planning_process
         if process is None:
@@ -247,6 +259,34 @@ def params_changed(params: str|None, user_set_snapshot: str|None, create_process
             lots_copy[eq] = new_lots
         snap["lots"] = lots_copy
     return snapshot, snap, process
+
+
+@callback(
+    Output("selected-snapshot-next", "data"),
+    Output("selected-snapshot-prev", "data"),
+    Input("selected-snapshot", "data"),
+)
+def set_next_prev_snaps(snapshot: str|None):
+    snapshot = DatetimeUtils.parse_date(snapshot)
+    if snapshot is None:
+        return None, None
+    sp = state.get_snapshot_provider()
+    delta = timedelta(minutes=1)
+    next_t = snapshot + delta
+    next_snap = sp.next(next_t)
+    while next_snap is not None and next_snap <= snapshot:
+        next_t = next_t + delta
+        next_snap = sp.next(next_t)
+    prev_t = snapshot - delta
+    prev_snap = sp.previous(prev_t)
+    while prev_snap is not None and prev_snap >= snapshot:
+        prev_t = prev_t - delta
+        prev_snap = sp.previous(prev_t)
+    if next_snap is not None:
+        next_snap = state.as_timezone(next_snap)
+    if prev_snap is not None:
+        prev_snap = state.as_timezone(prev_snap)
+    return next_snap, prev_snap
 
 
 def _get_snapshot(snapshot_id: str|None) -> Snapshot|None:

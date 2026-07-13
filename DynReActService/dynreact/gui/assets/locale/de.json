@@ -17,6 +17,7 @@
     "snaps_header": { "text": "Snapshot", "title": "Snapshot Tab öffnen" },
     "snaps_gantt_header": {"text": "Lose", "title": "Tab zu Losen öffnen"},
     "snaps-import_header": {"text": "Importe", "title": "Snapshot-Import Tab öffnen"},
+    "snaps-batch_header": {"text":  "Periodische Loserzeugung", "title": "Tab für die perioodische Loserzeugung öffnen"},
     "perf_header": {"text":  "Performance-Modelle", "title": "Anlagenperformance-Modelle anzeigen"},
     "perf-equipment_header": {"text": "Anlagen", "title": "Anlagenperformance-Modelle anzeigen"},
     "perf-energy_header": {"text": "Energie", "title": "Energievorhersage-Tab öffnen"},
@@ -153,6 +154,17 @@
     "endtime-label": "Endzeit:",
     "data-header": "Datenpunkte",
     "data-select-label": "Datenpunkte:"
+  },
+  "lotbatch": {
+    "title": "Periodische Loserzeugung",
+    "trigger": "Starten",
+    "status-header": "Status automatische Loserzeugung",
+    "running-label": "Loserzeugung läuft aktuell:",
+    "prev-label": "Letzte Ausführung:",
+    "next-label": "Nächste geplante Ausführung:",
+    "prev-snap-label": "Letzter Snapshot:",
+    "sol-label": "Lösung:",
+    "processes-header": "Anlagenstufen"
   },
   "temprest": {
     "title": "Temporäre Regeln",

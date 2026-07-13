@@ -47,14 +47,13 @@ def layout(*args, **kwargs):
     process: str|None = kwargs.get("process")
     lot_size: str|None = kwargs.get("lotsize", "weight")   # constant, weight, orders, coils are allowed values
     site = state.get_site()
-    snap = GuiUtils.format_snapshot(kwargs["snapshot"], None, state=state) if "snapshot" in kwargs else None
     return html.Div([
         html.H1("Lots planning", id=f"{translations_key}-title"),
         html.Div([
-            html.Div([html.Div("Snapshot: "), html.Div(snap, id="current_snapshot_lotplanning")]),
+            html.Div([html.Div("Snapshot: "), GuiUtils.create_snapshots_selector_prev_next(translations_key)]),
             html.Div([html.Div("Process: ", id="lotsplanning-process-selector-label"), dcc.Dropdown(id="process-selector-lotplanning",
-                            options=[{"value": p.name_short, "label": p.name_short, "title": p.name if p.name is not None else p.name_short} for p in site.processes],
-                            value=process, className="process-selector", persistence=True)]),
+                            # options=[{"value": p.name_short, "label": p.name_short, "title": p.name if p.name is not None else p.name_short} for p in site.processes],
+                            className="process-selector", persistence=True)]),
             html.Div([
                 dcc.Link(html.Button("Open lot creation", className="dynreact-button", id=f"{translations_key}-create-link"), id=f"{translations_key}-plan-link-create",
                          href="/dash/lots/create2", target="_blank")
@@ -153,6 +152,7 @@ def layout(*args, **kwargs):
         ], id="lotsplanning-lots-table-wrapper", hidden=True),
         transfer_popup(),
         dcc.Store(id="lotsplanning-initial_solution", data=initial_solution, storage_type="memory"),  # str|None
+        dcc.Store(id="lotsplanning-initial_process", data=process, storage_type="memory"),  # str|None
         dcc.Store(id="lotsplanning-selected-solution", storage_type="memory"),  # str
         dcc.Store(id="lotsplanning-solution-data", storage_type="memory"),      # rowData, list of dicts, one row per lot
         dcc.Store(id="lotsplanning-selected-lot", storage_type="memory"),       # lot id; selected by clicking a row in the lots table
@@ -167,7 +167,6 @@ def layout(*args, **kwargs):
         dcc.Store(id="lotsplanning-shifts", storage_type="memory"),
 
         dcc.Interval(id="lotsplanning-interval", n_intervals=3_600_000),  # for polling when lot transfer is running
-        dcc.Interval(id="lotsplanning-process-init", interval=100),
     ], id=translations_key)
 
 
@@ -214,19 +213,29 @@ def transfer_popup():
         id="lotsplanning-transfer-dialog", className="dialog-filled lotplanning-transfer-dialog", open=False)
 
 
-# init the process, if not done yet
-@callback(Output("process-selector-lotplanning", "value"),
-          Output("lotsplanning-process-init", "interval"),
-          Input("lotsplanning-process-init", "n_intervals"),
-          State("selected-process", "data"),
-          State("process-selector-lotplanning", "value"))
-def proc_changed(update_cnt: int, process: str|None, old_process) -> tuple[str, float]:
-    if process is not None:
-        return process, 7_200_000
-    update_cnt = update_cnt or 0
-    # wait for up to 4 seconds for external initialization, then abort
-    interval = 7_200_00 if (old_process is not None and update_cnt > 5) or (process is None and update_cnt > 40) else dash.no_update
-    return dash.no_update, interval
+GuiUtils.create_snapshot_callbacks(translations_key)
+
+@callback(Output("process-selector-lotplanning", "options"),
+        Output("process-selector-lotplanning", "value"),
+          Input({"role": "snapshot-selector", "page": translations_key}, "data"),
+          State("process-selector-lotplanning", "value"),
+          State("lotsplanning-initial_process", "data"),
+          State("lang", "data"))
+def update_process_options(snapshot: str|None, value: str|None, initial_value: str|None, lang: str|None):
+    site = state.get_site()
+    has_solutions: dict[str, bool] = {}
+    if snapshot is not None:
+        snapshot = DatetimeUtils.parse_date(snapshot)
+        persistence = state.get_results_persistence_aggregate()
+        has_solutions = {p.name_short: len(persistence.solutions(snapshot, p.name_short)) > 0 for p in site.processes}
+    is_de = lang and lang.startswith("de")
+    sol_exists = ": erzeugte Lose vorhanden" if is_de else ": lot results available"
+    no_sols_exists = ": noch keine Lose erzeugt" if is_de else ": no lots created yet"
+    processes = ((p.name_short, p.name or p.name_short, has_solutions.get(p.name_short, False)) for p in site.processes)
+    options = [{"value": proc_id, "label": html.Span(proc_id, className="lotplanning-procopt-sol" if proc_solutions else "lotplanning-procopt-nosol"),
+                            "title": proc_name + (sol_exists if proc_solutions else no_sols_exists)} for proc_id, proc_name, proc_solutions in processes]
+    value = value or initial_value or next((k for k, v in has_solutions.items() if v), None) or options[0]["value"]
+    return options, value
 
 
 @callback(Output("lotplanning_process-selector", "data"),  # defined in session state => this will set the global process property
@@ -236,26 +245,18 @@ def proc_changed2(process: str|None) -> str:
     return process if process is not None else dash.no_update
 
 
-@callback(Output("current_snapshot_lotplanning", "children"),
-          Input("selected-snapshot", "data")
-          #Input("client-tz", "data")  # client timezone, global store
-)
-def snapshot_changed(snapshot: datetime|str|None) -> str:  #, tz: str|None
-    return GuiUtils.format_snapshot(snapshot, None, state=state)
-
-
 @callback(
     Output("lotsplanning-plan-link-create", "href"),
     Output("lotsplanning-shifts", "data"),
     Input("process-selector-lotplanning", "value"),
-    Input("selected-snapshot", "data"),
+    Input({"role": "snapshot-selector", "page": translations_key}, "data"),
     #Input("create-existing-sols", "value"),
 )
 def update_link(process: str|None, snapshot: str|datetime|None):
     url = "/dash/lots/create2"
-    if not dash_authenticated(config):
-        return url, None
     snapshot = DatetimeUtils.parse_date(snapshot)
+    if not dash_authenticated(config) or not snapshot:
+        return url, None
     added: bool=False
     if snapshot is not None:
         url += "?snapshot=" + DatetimeUtils.format(snapshot)
@@ -272,7 +273,7 @@ def update_link(process: str|None, snapshot: str|datetime|None):
     Output("lotsplanning-solutions-table", "columnDefs"),
     Output("lotsplanning-solutions-table", "rowData"),
     Output("lotsplanning-solutions-table", "selectedRows"),
-    Input("selected-snapshot", "data"),
+    Input({"role": "snapshot-selector", "page": translations_key}, "data"),
     Input("process-selector-lotplanning", "value"),
     Input("lotsplanning-initial_solution", "data"),
     Input("lang", "data")
@@ -422,7 +423,7 @@ def lots_transfer_table_col_defs(lang: str | None):
     Output("lotsplanning-material-structure", "data"),
     Output("lotsplanning-material-targets", "data"),
     Output("lotsplanning-structure-container", "hidden"),
-    State("selected-snapshot", "data"),
+    Input({"role": "snapshot-selector", "page": translations_key}, "data"),
     Input("process-selector-lotplanning", "value"),
     Input("lotsplanning-selected-solution", "data"),
     Input("lotsplanning-relevant-fields-check", "value"),
@@ -629,7 +630,7 @@ def _append_lot_info_for_order(row: dict[str, Any], o: Order, process: str, snap
     Output("lotsplanning-lots-table", "exportDataAsCsv"),
     Output("lotsplanning-lots-table", "csvExportParams"),
     Input("lotsplanning-download-csv", "n_clicks"),
-    State("selected-snapshot", "data"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
     State("process-selector-lotplanning", "value"),
     State("lotsplanning-selected-solution", "data"),
     prevent_initial_call=True,
@@ -650,7 +651,7 @@ def export_data_as_csv(n_clicks, snapshot: str|None, process: str|None, solution
     Output("lotsplanning-lots-order-table", "exportDataAsCsv"),
     Output("lotsplanning-lots-order-table", "csvExportParams"),
     Input("lotsplanning-download-orders-csv", "n_clicks"),
-    State("selected-snapshot", "data"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
     State("process-selector-lotplanning", "value"),
     State("lotsplanning-selected-solution", "data"),
     prevent_initial_call=True,
@@ -713,7 +714,7 @@ clientside_callback(
     Input("lotsplanning-lots-table", "selectedRows"),
     State("lotsplanning-selected-solution", "data"),
     State("lotsplanning-transferred-lot", "data"),
-    State("selected-snapshot", "data"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
     State("process-selector-lotplanning", "value"),
     prevent_initial_call=True,
 )
@@ -784,7 +785,7 @@ clientside_callback(
 @callback(
     Output("lotsplanning-scenario-json", "data"),
     Input("lotsplanning-download-scenario", "n_clicks"),
-    State("selected-snapshot", "data"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
     State("process-selector-lotplanning", "value"),
     State("lotsplanning-selected-solution", "data"),   # TODO need ProductionTargets, order backlog, reduced snapshot and solution
     prevent_initial_call=True
@@ -849,7 +850,7 @@ clientside_callback(
     ),
     Output("lotsplanning-download-scenario", "title"),
     Input("lotsplanning-scenario-json", "data"),
-    State("selected-snapshot", "data"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
     State("lotsplanning-selected-solution", "data"),
 )
 
@@ -894,7 +895,7 @@ def disable_transfer_button(lot: str, new_lotname: str, orders: list[str]|str, t
     Input("lotsplanning-transfer-lotname", "value"),
     Input("lotsplanning-transfer-oders", "value"),
     Input("lotsplanning-transfer-target", "value"),
-    State("selected-snapshot", "data"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
     State("process-selector-lotplanning", "value"),
     State("lotsplanning-selected-solution", "data"),
     State("lotsplanning-transferred-lot", "data"),

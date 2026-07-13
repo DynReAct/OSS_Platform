@@ -15,7 +15,8 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Snapshot, Lot
 from dynreact.gui.gui_utils import GuiUtils
 from dynreact.gui.pages.session_state import language, site, selected_snapshot, selected_process, \
-    snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector, selected_snapshot_obj, selected_snapshot_next, selected_snapshot_prev
+    snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector, selected_snapshot_obj, \
+    selected_snapshot_next, selected_snapshot_prev, snapshot_update_active
 
 server = Flask(__name__)
 
@@ -132,6 +133,7 @@ def _layout():
     menu_container = html.Div([
         dcc.Location(id="menu-url"),
         language,
+        snapshot_update_active,
         #dcc.Store(id="lang2", storage_type="memory"),
         dcc.Store(id="lang3", storage_type="memory"),  # dummy output for client side callbacks?
         # dcc.Store(id="client-tz", storage_type="memory", data="UTC"),  # Initialize with UTC, will be overridden by client
@@ -195,12 +197,18 @@ clientside_callback(
     Output("selected-snapshot-obj", "data"),
     Output("selected-process", "data"),
     Input("menu-url", "search"),
+    # interestingly, missing input elements are not a problem
     Input({"role": "snapshot-selector", "page": ALL}, "data"),
     #Input("snapshot_selected-snapshot", "data"),
     Input("create_process-selector", "data"),
     Input("lotplanning_process-selector", "data"),
     State("selected-snapshot", "data"),
-    #prevent_initial_call=False
+    ## would be really useful, but breaks pages without these snapshot selectors => need workaround with store snapshot-update-active
+    #running=[
+    #    (Output({"role": "snapshot-prev-selector", "page": ALL}, "disabled"), True, False),
+    #    (Output({"role": "snapshot-next-selector", "page": ALL}, "disabled"), True, False),
+    #]
+    running=[(Output("snapshot-update-active", "data"), True, False)]
 )
 def params_changed(params: str|None, user_set_snapshots: Sequence[str|None]|None,
                    create_process: str|None, planning_process: str|None, old_snapshot: str|None):
@@ -259,6 +267,14 @@ def params_changed(params: str|None, user_set_snapshots: Sequence[str|None]|None
             lots_copy[eq] = new_lots
         snap["lots"] = lots_copy
     return snapshot, snap, process
+
+@callback(
+    Output({"role": "snapshot-prev-selector", "page": ALL}, "disabled"),
+    Output({"role": "snapshot-next-selector", "page": ALL}, "disabled"),
+    Input("snapshot-update-active", "data"),
+    State({"role": "snapshot-prev-selector", "page": ALL}, "id"),)
+def update_running(running: bool, ids: Sequence[str]):
+    return [running for _id in ids], [running for _id in ids]
 
 
 @callback(

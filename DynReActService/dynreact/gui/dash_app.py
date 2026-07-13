@@ -14,8 +14,7 @@ from dynreact.app import config, state
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Snapshot, Lot
 from dynreact.gui.gui_utils import GuiUtils
-from dynreact.gui.pages.session_state import language, site, selected_snapshot, selected_process, \
-    snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector, selected_snapshot_obj, \
+from dynreact.gui.pages.session_state import language, site, selected_snapshot, selected_process, selected_snapshot_obj, \
     selected_snapshot_next, selected_snapshot_prev, snapshot_update_active
 
 server = Flask(__name__)
@@ -137,8 +136,7 @@ def _layout():
         #dcc.Store(id="lang2", storage_type="memory"),
         dcc.Store(id="lang3", storage_type="memory"),  # dummy output for client side callbacks?
         # dcc.Store(id="client-tz", storage_type="memory", data="UTC"),  # Initialize with UTC, will be overridden by client
-        site, selected_snapshot, selected_process, snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector,
-        selected_snapshot_obj, selected_snapshot_prev, selected_snapshot_next,
+        site, selected_snapshot, selected_process, selected_snapshot_obj, selected_snapshot_prev, selected_snapshot_next,
         #html.Div("DynReAct", className="dynreact-header"),
         html.Img(src=app.get_asset_url(DYNREACT_LOGO), className="menu-logo"),
         html.Img(src=app.get_asset_url(DYNREACT_LOGO_SMALL), className="menu-logo menu-logo-small"),
@@ -288,9 +286,7 @@ def process_params_changed(params: str|None, user_set_processes: Sequence[str|No
         process = params_dict.get("process") or old_process
     if process is None:
         process = old_process or state.get_site().processes[0].name_short
-    if process == old_process and process is not None:
-        return dash.no_update
-    return process
+    return dash.no_update if process == old_process else process
 
 
 @callback(

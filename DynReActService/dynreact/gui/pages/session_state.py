@@ -28,13 +28,6 @@ snapshot_update_active: dcc.Store = dcc.Store(id="snapshot-update-active", stora
 selected_process: dcc.Store = dcc.Store(id="selected-process", storage_type="memory")
 
 
-# XXX this one is a bit ugly, but to be able to set the value of selected_snapshot from the snapshot page
-# and also from url params we need an intermediate second global store which is only manipulated by the snapshot page
-snapshot_page_selector: dcc.Store = dcc.Store(id="snapshot_selected-snapshot", storage_type="memory")
-# These are updated from the respective pages via the dropdown, and they update the global process selector
-lotcreation_process_selector: dcc.Store = dcc.Store(id="create_process-selector", storage_type="memory")
-lotplanning_process_selector: dcc.Store = dcc.Store(id="lotplanning_process-selector", storage_type="memory")
-
 # Type: str
 #selected_process = dcc.Store(id="selected-process", storage_type="session")
 

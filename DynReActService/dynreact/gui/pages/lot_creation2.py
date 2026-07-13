@@ -64,12 +64,8 @@ def layout(*args, **kwargs):
         html.H1("Lot creation", id="lots2-title"),
         # ======= Top row: snapshot and process selector =========
         html.Div([
-            html.Div([html.Div("Snapshot: "), html.Div(snap, id="lots2-current_snapshot")]),
-            html.Div([html.Div("Process: ", id="lots2-process-selector-label"), dcc.Dropdown(id="lots2-process-selector",
-                        options=[{"value": p.name_short, "label": p.name_short,
-                                  "title": p.name if p.name is not None else p.name_short} for p in procs],
-                        value=process,
-                        className="lots2-process-selector", persistence=True)]),
+            html.Div([html.Div("Snapshot: "), GuiUtils.create_snapshots_selector_prev_next(translations_key)]),
+            html.Div([html.Div("Process: ", id="lots2-process-selector-label"), GuiUtils.create_process_selector(translations_key, set_options=True)]),
             # TODO display here the state of the optimization for the selected process
             # has it been run yet, which settings, etc.?
             # html.Div([html.Div("Results: "), html.Div(id="create_result")]),
@@ -144,7 +140,6 @@ def layout(*args, **kwargs):
         dcc.Store(id="lots2-active-plants", storage_type="memory", data=tuple()),    # Sequence[int], never None
 
         dcc.Interval(id="lots2-interval", interval=3_600_000),  # for polling when optimization is running
-        dcc.Interval(id="lots2-process-init", interval=100),
 
         # Material structure setpoints
         ####################
@@ -489,41 +484,15 @@ def structure_portfolio_popup(initial_weight: float):
         ], title=""),
         id="lots2-structure-dialog", className="dialog-filled", open=False)
 
-# init the process, if not done yet
-@callback(Output("lots2-process-selector", "value"),
-          Output("lots2-process-init", "interval"),
-          Input("lots2-process-init", "n_intervals"),
-          State("selected-process", "data"),
-          State("lots2-process-selector", "value"))
-def proc_changed(update_cnt: int, process: str|None, old_process) -> tuple[str, float]:
-    if process is not None:
-        return process, 7_200_000
-    update_cnt = update_cnt or 0
-    # wait for up to 4 seconds for external initialization, then abort
-    interval = 7_200_00 if (old_process is not None and update_cnt > 5) or (process is None and update_cnt > 40) else dash.no_update
-    return dash.no_update, interval
-
-
-@callback(Output("create_process-selector", "data"),  # defined in session state => this will set the global process property
-          Input("lots2-process-selector", "value"),
-          config_prevent_initial_callbacks=True)
-def proc_changed2(process: str|None) -> str:
-    return process if process is not None else dash.no_update
-
-
-@callback(Output("lots2-current_snapshot", "children"),
-          Input("selected-snapshot", "data")) #     selected-snapshot is a page-global store
-          # Input("client-tz", "data"))  # client timezone, global store
-def snapshot_changed(snapshot: datetime|None) -> str:  # , tz: str|None
-    #snapshot = selected_snapshot.data if hasattr(selected_snapshot, "data") else snapshot
-    return GuiUtils.format_snapshot(snapshot, None, state=state)
+GuiUtils.create_snapshot_callbacks(translations_key)
+GuiUtils.create_process_selector_callbacks(translations_key)
 
 
 @callback(
           Output("lots2-settings-tabs", "hidden"),
           Output("lots2-shifts", "data"),
-          Input("selected-snapshot", "data"),
-          Input("lots2-process-selector", "value")
+          Input({"role": "snapshot-selector", "page": translations_key}, "data"),
+          Input({"role": "process-selector", "page": translations_key}, "value"),
 )
 def toggle_settings_tabs_visibility(snapshot: str|datetime|None, process: str|None):
     if not dash_authenticated(config):
@@ -546,7 +515,7 @@ def toggle_settings_tabs_visibility(snapshot: str|datetime|None, process: str|No
           Input("lots2-tabbutton-settings", "n_clicks"),
           Input("lots2-tabsnav-prev", "n_clicks"),
           Input("lots2-tabsnav-next", "n_clicks"),
-          Input("lots2-process-selector", "value")
+          Input({"role": "process-selector", "page": translations_key}, "value"),
 )
 def select_settings_tab(active_tab: Literal["targets", "orders", "settings"]|None,  _, __, ___, ____, _v, v) -> Literal["targets", "orders", "settings"]:
     if not dash_authenticated(config):
@@ -555,7 +524,7 @@ def select_settings_tab(active_tab: Literal["targets", "orders", "settings"]|Non
     if len(changed_ids) == 0:  # initial callback
         return active_tab  # must not return no_update here, because it blocks dependent callbacks
     button_id = next((bid for bid in changed_ids if bid.startswith("lots2-tabbutton-")), None)
-    if button_id is None and "selected-process" in changed_ids:
+    if button_id is None and any("\"selected-process\"" in c for c in changed_ids):
         button_id = "lots2-tabbutton-targets"
     new_active_tab: Literal["targets", "orders", "settings"] = "targets"
     if button_id is not None:
@@ -609,8 +578,8 @@ def select_settings_tab(active_tab: Literal["targets", "orders", "settings"]|Non
     Output("lots2-orders-backlog-structure-data", "data"),
     Input("lots2-active-tab", "data"),
     Input("lots2-orders-table", "selectedRows"),
-    State("selected-snapshot", "data"),
-    State("lots2-process-selector", "value")
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
+    State({"role": "process-selector", "page": translations_key}, "value"),
 )
 def show_structure_overview(active_tab: Literal["targets", "orders", "settings"]|None,
                             selected_rows: list[dict[str, any]] | None,
@@ -664,8 +633,8 @@ clientside_callback(
 @callback(
     Output("lots2-ltp-table", "rowData"),
     Input("lots2-targets-init-ltp", "n_clicks"),
-    State("selected-snapshot", "data"),
-    State("lots2-process-selector", "value"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
+    State({"role": "process-selector", "page": translations_key}, "value"),
     State("lots2-horizon-hours", "value"),
 )
 def ltp_table_opened(_, snapshot: str, process: str, horizon_hours: int):
@@ -721,7 +690,7 @@ def ltp_table_row_selected(ltp_solution: dict[str, any]|None):
 @callback(
     Output("lots2-material-setpoints-memory", "clear_data"),
     Input("lots2-materials-clear", "n_clicks"),
-    Input("lots2-process-selector", "value")
+    Input({"role": "process-selector", "page": translations_key}, "value"),
 )
 def clear_setpoints(n_click_clear, process: str|None) -> bool:
     if n_click_clear is not None and n_click_clear > 0:
@@ -734,8 +703,8 @@ def clear_setpoints(n_click_clear, process: str|None) -> bool:
     Output("lots2-ltp-selected-solution", "data"),
     Output("lots2-ltp-submit", "disabled"),
     Input("lots2-ltp-table", "selectedRows"),
-    State("selected-snapshot", "data"), # TODO
-    State("lots2-process-selector", "value"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
+    State({"role": "process-selector", "page": translations_key}, "value"),
     State("lots2-horizon-hours", "value"),
     State("lots2-planning-itv-start", "data"),
 )
@@ -776,12 +745,12 @@ def ltp_row_selected(selected_rows: list[dict[str, any]]|None, snapshot: datetim
     #Output("lots2-planning-itv-start-date", "value"),
     #Output("lots2-planning-itv-start-time", "value"),
     Output("lots2-material-setpoints-ltp", "data"),
-    State("selected-snapshot", "data"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
     State("lots2-horizon-hours", "value"),
     State("lots2-details-plants", "children"),
     State("lots2-planning-itv-start", "data"),
     State("lots2-ltp-selected-solution", "data"),
-    Input("lots2-process-selector", "value"),
+    Input({"role": "process-selector", "page": translations_key}, "value"),
     # Input("lots2-active-tab", "data"),
     # Input("lots2-targets-init-lots", "n_clicks"),
     Input("lots2-ltp-submit", "n_clicks"),
@@ -800,7 +769,7 @@ def update_plants(snapshot: str,
                   lang: str|None
                   ) -> tuple[list[Component], list[any], list[Literal[""]], str, str, dict|None]:
     changed = GuiUtils.changed_ids()
-    process_changed = "lots2-process-selector" in changed
+    process_changed = any("\"process-selector\"" in c for c in changed)
     use_lot_range: bool = len(use_lot_range0) > 0 and not process_changed
     init_lot_size_from_settings: bool = False
     site = state.get_site()
@@ -818,7 +787,7 @@ def update_plants(snapshot: str,
         return no_update, my_parent_classname, no_update, ltp_structure  # no_update, no_update, ltp_structure
     is_ltp_init = "lots2-ltp-submit" in changed and ltp_solution is not None   # TODO already contains all the relevant data
     re_init: bool = "lots2-targets-init-lots" in changed or is_ltp_init
-    init_dates = current_start is None or re_init or "lots2-process-selector" in changed
+    init_dates = current_start is None or re_init or process_changed
     toggle_lot_range: bool = "lots2-check-use-lot-range" in changed
     site = state.get_site()
     plants: list[Equipment] = site.get_process_equipment(process)
@@ -1008,7 +977,7 @@ def _targets_from_ltp(selected_row: dict[str, any], process: str, snapshot: Snap
           Output("lots2-material-setpoints-memory", "data"),
           Input("lots2-material-setpoints-ltp", "data"),
           Input("lots2-target-weight", "data"),
-          Input("lots2-process-selector", "value"),
+          Input({"role": "process-selector", "page": translations_key}, "value"),
           Input("lots2-active-plants", "data"),
           Input("lots2-material-setpoints-user", "data"),
           State("lots2-material-setpoints-memory", "data"),
@@ -1018,7 +987,7 @@ def ltp_submit(ltp_structure: dict[str, float]|None, target_weight: float|None, 
     if not target_weight or not process or not dash_authenticated(config):
         return None
     changed = GuiUtils.changed_ids()
-    process_changed = "lots2-process-selector" in changed
+    process_changed = any("\"process-selector\"" in c for c in changed)
     plants_changed = "lots2-active-plants" in changed
     ltp_structure_set: bool = ltp_structure is not None and "lots2-material-setpoints-ltp" in changed and not process_changed
     user_structure_set: bool = not ltp_structure_set and user_structure is not None and "lots2-material-setpoints-user" in changed and not process_changed
@@ -1132,7 +1101,7 @@ def init_method_changed(method: Literal["active_process", "active_plant", "inact
     Output("lots2-init-prev-proc-selector_lot", "value"),
     Output("lots2-init-prev-proc-selector_all", "options"),
     Output("lots2-init-prev-proc-selector_all", "value"),
-    Input("lots2-process-selector", "value"),
+    Input({"role": "process-selector", "page": translations_key}, "value"),
     Input("lots2-orders-init-method", "value")  # this one is not really needed, but for some reason the initial callback does not work here
 )
 def set_predecessor_procs_for_backlog_init(process: str|None, _):
@@ -1184,8 +1153,8 @@ def _find_predecessor_processes(process: str|None, recursive: bool = True, skip_
     Input("lots2-active-tab", "data"),
     Input("lots2-check-hide-released-lots", "value"),
     # Input("create-details-trigger", "n_clicks"), # => TODO replace maybe by tab state?
-    Input("lots2-process-selector", "value"),
-    State("selected-snapshot", "data")
+    Input({"role": "process-selector", "page": translations_key}, "value"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
 )
 def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] | None, active_tab: Literal["targets", "orders", "settings"]|None,
                                  check_hide_list: list[Literal["hide_released"]], process: str, snapshot: str):
@@ -1222,8 +1191,8 @@ def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] 
     Output("lots2-orders-lots-order-total", "children"),
     Input("lots2-oders-lots-lots", "value"),
     Input("lots2-orders-table", "selectedRows"),
-    Input("lots2-process-selector", "value"),
-    State("selected-snapshot", "data"),
+    Input({"role": "process-selector", "page": translations_key}, "value"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
     config_prevent_initial_callbacks=True
 )
 def lot_buttons_disabled_check(selected_lots: list[str]|None, selected_rows: list[dict[str, any]]|None, process: str|None, snapshot: str|None):
@@ -1245,8 +1214,8 @@ def lot_buttons_disabled_check(selected_lots: list[str]|None, selected_rows: lis
 
 @callback(
     Output("lots2-orders-data", "data"),
-    Input("selected-snapshot", "data"),
-    Input("lots2-process-selector", "value"),
+    Input({"role": "snapshot-selector", "page": translations_key}, "data"),
+    Input({"role": "process-selector", "page": translations_key}, "value"),
     Input("lots2-orders-table", "selectedRows"),
     State("lots2-orders-data", "data"),
 )
@@ -1291,8 +1260,8 @@ def update_backlog_state(snapshot: str, process: str, rows: list[dict[str, any]]
             #Output("lots2-itv-start", "children"),
             # Output("lots2-orders-data", "data"),
 
-            Input("selected-snapshot", "data"),
-            Input("lots2-process-selector", "value"),
+            Input({"role": "snapshot-selector", "page": translations_key}, "data"),
+            Input({"role": "process-selector", "page": translations_key}, "value"),
             Input("lots2-active-tab", "data"),
             Input("lots2-check-hide-released-lots", "value"),
             Input("lots2-orders-backlog-init", "n_clicks"),
@@ -1783,8 +1752,8 @@ clientside_callback(
     Output("lots2-objectives-history", "data"),
     Output("lots2-lots-data", "data"),
     Output("lots2-lotsview-header", "hidden"),
-    State("selected-snapshot", "data"),
-    State("lots2-process-selector", "value"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
+    State({"role": "process-selector", "page": translations_key}, "value"),
     Input("lots2-interval", "n_intervals"),
     Input("lots2-init-selector", "value"),
     #Input("lots2-existing-sols", "value")
@@ -1860,8 +1829,8 @@ def update_figure(history: list[float]|None):
           Output("lots2-stop", "disabled"),
           Output("lots2-continue", "hidden"),
           #Output("lots2-process-selector", "value"),  # causes a lot of problems
-          Output("lots2-process-selector", "disabled"),
-          #Output("lots2-iterations-value", "children"),
+          Output({"role": "process-selector", "page": translations_key}, "disabled"),  # ok?
+          #Output("lots2-process-selector", "disabled"),  #
           Output("lots2-num-iterations", "value"),
           Output("lots2-iterations", "data"),
           Output("lots2-iterations-value", "children"),
@@ -1880,7 +1849,7 @@ def update_figure(history: list[float]|None):
           Output("lots2-warning-message", "children"),
           Output("lots2-warning-message", "className"),
 
-          State("selected-snapshot", "data"),
+          State({"role": "snapshot-selector", "page": translations_key}, "data"),
           State("lots2-check-use-lot-range", "value"),
           State("lots2-check-append_to_lot", "value"),
           State("lots2-details-plants", "children"),
@@ -1902,7 +1871,7 @@ def update_figure(history: list[float]|None):
           Input("lots2-horizon-hours", "value"),
           Input("lots2-num-iterations", "value"),
           Input("lots2-iterations", "data"),
-          Input("lots2-process-selector", "value"),
+          Input({"role": "process-selector", "page": translations_key}, "value"),
           Input("lots2-init-selector", "value"),
           Input("lots2-existing-sols", "value"),
           Input("lots2-start", "n_clicks"),
@@ -2300,7 +2269,7 @@ def plant_settings_changed0(plants, checked: Sequence[Sequence[Literal[""]]], in
           Output("lots2-planning-itv-start2", "data"),
           Input("lots2-plant-settings", "data"),
           State("lots2-active-plants", "data"),
-          State("selected-snapshot", "data")
+          State({"role": "snapshot-selector", "page": translations_key}, "data"),
 )
 def plant_settings_changed(settings: dict[int, Any]|None, active_plants: Sequence[str], snapshot: str|None) -> tuple[Sequence[int], str]:
     if settings is None or len(settings) == 0:
@@ -2353,7 +2322,7 @@ clientside_callback(
     Input("lots2-lots-data", "data"),
     State("lots2-shifts", "data"),
     State("lots2-lots-swimlane", "id"),
-    State("lots2-process-selector", "value"),
+    State({"role": "process-selector", "page": translations_key}, "value"),
     State("lots2-swimlane-mode", "value")
 )
 
@@ -2413,7 +2382,7 @@ clientside_callback(
     ),
     Output("lots2-materials-grid", "title"),
     Input("lots2-structure-btn", "n_clicks"),
-    State("lots2-process-selector", "value"),
+    State({"role": "process-selector", "page": translations_key}, "value"),
     State("lots2-target-weight", "data"),
     State("lots2-material-setpoints-memory", "data"),
     State("lots2-materials-grid", "id"),

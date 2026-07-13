@@ -90,3 +90,7 @@ dialog.dialog-filled>* {
     padding: 1em;
 }
 
+.process-selector {
+    min-width: 6em;
+}
+

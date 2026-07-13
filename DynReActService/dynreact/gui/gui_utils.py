@@ -302,3 +302,31 @@ class GuiUtils:
         def display_snapshot(snapshot):
             return snapshot
 
+
+    @staticmethod
+    def create_process_selector(page_prefix: str, set_options: bool=False):
+        opts = [] if not set_options else [{"value": p.name_short, "label": p.name_short, "title": p.name or p.name_short} for p in state.get_site().processes]
+        return html.Div([
+            dcc.Dropdown(id={"role": "process-selector", "page": page_prefix}, options=opts, className="process-selector"),
+            dcc.Interval(id=f"{page_prefix}-process-init-interval", interval=100),  # process selector init
+        ])
+
+    @staticmethod
+    def create_process_selector_callbacks(page_prefix: str):
+
+        @callback(
+                  Output({"role": "process-selector", "page": page_prefix}, "value"),
+                  Output(f"{page_prefix}-process-init-interval", "interval"),
+                  Input(f"{page_prefix}-process-init-interval", "n_intervals"),
+                  State({"role": "process-selector", "page": page_prefix}, "options"),
+                  State({"role": "process-selector", "page": page_prefix}, "value"),
+                  State("selected-process", "data"),)
+        def process_changed(_, options: Sequence[dict[str, Any]]|None, selected: str | None, global_selection: str | None):
+            if (selected is None and global_selection is None) or options is None or len(options) == 0:
+                return dash.no_update, dash.no_update
+            new_interval = 3_600_000
+            if selected is None:
+                selected = global_selection
+            else:
+                selected = dash.no_update
+            return selected, new_interval

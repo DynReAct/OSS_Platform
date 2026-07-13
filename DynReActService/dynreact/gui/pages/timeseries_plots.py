@@ -34,9 +34,7 @@ def layout(*args, **kwargs):
                 html.H2("Equipment", id=f"{translations_key}-eq-header"),
                 html.Div([
                     html.Span("Snapshot"), GuiUtils.create_snapshots_selector_prev_next(translations_key),
-                    html.Span("Select process:", id=f"{translations_key}-proc-select-label"),
-                    dcc.Dropdown(options=[{"value": p.name_short, "label": p.name_short} for p in processes],
-                                 value=process, id=f"{translations_key}-proc-select", style={"min-width": "12em"}),
+                    html.Span("Select process:", id=f"{translations_key}-proc-select-label"), GuiUtils.create_process_selector(translations_key, set_options=True),
                     html.Span("Select equipment:", id=f"{translations_key}-eq-select-label"),
                     dcc.Dropdown(options=[{"value": e.id, "label": e.name_short} for e in state.get_site().get_process_equipment(process)], value=[e.id for e in equipment], multi=True,
                                  id=f"{translations_key}-eq-select", style={"min-width": "12em"}),
@@ -65,11 +63,12 @@ def layout(*args, **kwargs):
 
 
 GuiUtils.create_snapshot_callbacks(translations_key)
+GuiUtils.create_process_selector_callbacks(translations_key)
 
 
 @callback(Output("ts-plots-eq-select", "options"),
           Output("ts-plots-eq-select", "value"),
-          Input("ts-plots-proc-select", "value"),
+          Input({"role": "process-selector", "page": translations_key}, "value"),
           State("ts-plots-eq-select", "value"))
 def process_changed(proc: str|None, selected_plants: Sequence[int]|None):
     if proc is None or not dash_authenticated(config):
@@ -178,7 +177,7 @@ def equipment_changed(equipment: Sequence[int]|None, snapshot: str|None, previou
           Input("ts-plots-data-select", "value"),
           Input({"role": "lot-select", "equipment": ALL}, "value"),
           Input({"role": "snapshot-selector", "page": translations_key}, "data"),
-          State("ts-plots-proc-select", "value"),
+          State({"role": "process-selector", "page": translations_key}, "value"),
           State("lang", "data"),)
 def data_changed(equipments: Sequence[int]|None, data: Sequence[str]|None, end_lots: Sequence[str|None]|None, snapshot: str|None, process: str|None, lang: str|None):
     snapshot = DatetimeUtils.parse_date(snapshot)

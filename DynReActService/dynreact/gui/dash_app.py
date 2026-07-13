@@ -192,16 +192,14 @@ clientside_callback(
     State("site-store", "data"),
 )
 
+
+
 @callback(
     Output("selected-snapshot", "data"),
     Output("selected-snapshot-obj", "data"),
-    Output("selected-process", "data"),
     Input("menu-url", "search"),
     # interestingly, missing input elements are not a problem
     Input({"role": "snapshot-selector", "page": ALL}, "data"),
-    #Input("snapshot_selected-snapshot", "data"),
-    Input("create_process-selector", "data"),
-    Input("lotplanning_process-selector", "data"),
     State("selected-snapshot", "data"),
     ## would be really useful, but breaks pages without these snapshot selectors => need workaround with store snapshot-update-active
     #running=[
@@ -210,17 +208,14 @@ clientside_callback(
     #]
     running=[(Output("snapshot-update-active", "data"), True, False)]
 )
-def params_changed(params: str|None, user_set_snapshots: Sequence[str|None]|None,
-                   create_process: str|None, planning_process: str|None, old_snapshot: str|None):
+def snapshot_params_changed(params: str|None, user_set_snapshots: Sequence[str|None]|None, old_snapshot: str|None):
     """
     Setting shared state between pages
     """
     changed = GuiUtils.changed_ids()
-    user_snapshot_selection = next((_id for _id in GuiUtils.changed_ids() if "\"snapshot-selector\"" in _id), None)
+    user_snapshot_selection = next((_id for _id in changed if "\"snapshot-selector\"" in _id), None)
     user_selected_snapshot = user_snapshot_selection is not None
-    process_changed_by_user = "create_process-selector" in changed or  "lotplanning_process-selector" in changed
     if user_selected_snapshot:
-        process = dash.no_update
         changed_id = json.loads(user_snapshot_selection)
         changed_page = changed_id.get("page")
         user_snap_inputs: Sequence[dict[str, dict[str, str]]] = callback_context.inputs_list[1]
@@ -228,24 +223,19 @@ def params_changed(params: str|None, user_set_snapshots: Sequence[str|None]|None
         if changed_idx is not None and changed_idx < len(user_set_snapshots):
             snapshot = user_set_snapshots[changed_idx]
             if snapshot == old_snapshot and snapshot is not None:
-                return dash.no_update, dash.no_update, dash.no_update
+                return dash.no_update, dash.no_update
         else:
-            return dash.no_update, dash.no_update, dash.no_update
-    elif process_changed_by_user:
-        snapshot, process = dash.no_update, create_process if "create_process-selector" in changed else planning_process
-        if process is None:
-            process = dash.no_update
+            return dash.no_update, dash.no_update
     elif params is None or len(params) == 0:
-        snapshot, process = dash.no_update, dash.no_update
+        snapshot = dash.no_update
     else:
         params = params[1:]
         params_dict: dict[str, str] = {arr[0].lower(): arr[1] for arr in (val.split("=") for val in params.split("&")) if len(arr) == 2 and len(arr[0]) > 0}
         snapshot = params_dict.get("snapshot") or dash.no_update
-        process = params_dict.get("process") or dash.no_update
     if snapshot == old_snapshot:
         snapshot = dash.no_update
     snap = dash.no_update
-    if snapshot == dash.no_update and old_snapshot is None and not process_changed_by_user:
+    if snapshot == dash.no_update and old_snapshot is None:
         ## init snapshot
         snap = state.get_snapshot()
         snapshot = GuiUtils.format_snapshot(snap.timestamp, None, state=state) if snap is not None else None
@@ -266,7 +256,42 @@ def params_changed(params: str|None, user_set_snapshots: Sequence[str|None]|None
                 new_lots.append(dump)
             lots_copy[eq] = new_lots
         snap["lots"] = lots_copy
-    return snapshot, snap, process
+    return snapshot, snap
+
+
+@callback(
+    Output("selected-process", "data"),
+    Input("menu-url", "search"),
+    Input({"role": "process-selector", "page": ALL}, "value"),
+    State("selected-process", "data"),
+)
+def process_params_changed(params: str|None, user_set_processes: Sequence[str|None]|None, old_process: str|None):
+    """
+    Setting shared state between pages
+    """
+    changed = GuiUtils.changed_ids()
+    user_proc_selection = next((_id for _id in changed if "\"process-selector\"" in _id), None)
+    user_selected_procs = user_proc_selection is not None
+    explicitly_set = False
+    process = old_process
+    if user_selected_procs:
+        changed_id = json.loads(user_proc_selection)
+        changed_page = changed_id.get("page")
+        user_proc_inputs: Sequence[dict[str, dict[str, str]]] = callback_context.inputs_list[1]
+        changed_idx = next((idx for idx, inp in enumerate(user_proc_inputs) if inp is not None and "id" in inp and inp["id"].get("page") == changed_page), None)
+        if changed_idx is not None and changed_idx < len(user_set_processes):
+            process = user_set_processes[changed_idx]
+            explicitly_set = process is not None
+    if not explicitly_set and params is not None and len(params) > 0:
+        params = params[1:]
+        params_dict: dict[str, str] = {arr[0].lower(): arr[1] for arr in (val.split("=") for val in params.split("&")) if len(arr) == 2 and len(arr[0]) > 0}
+        process = params_dict.get("process") or old_process
+    if process is None:
+        process = old_process or state.get_site().processes[0].name_short
+    if process == old_process and process is not None:
+        return dash.no_update
+    return process
+
 
 @callback(
     Output({"role": "snapshot-prev-selector", "page": ALL}, "disabled"),

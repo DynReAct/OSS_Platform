@@ -29,8 +29,7 @@ def layout(*args, **kwargs):
                 html.Div([
                     html.Span("Snapshot"), GuiUtils.create_snapshots_selector_prev_next(translations_key),
                     html.Span("Select process:", id=f"{translations_key}-proc-select-label"),
-                    dcc.Dropdown(options=[{"value": p.name_short, "label": p.name_short} for p in processes],
-                                 value=process, id=f"{translations_key}-proc-select", style={"min-width": "12em"}),
+                    GuiUtils.create_process_selector(translations_key, set_options=True),
                     html.Span("Select equipment:", id=f"{translations_key}-eq-select-label"),
                     dcc.Dropdown(options=[{"value": e.id, "label": e.name_short} for e in
                                           state.get_site().get_process_equipment(process)], value=equipment.id,
@@ -98,6 +97,7 @@ def _plant_for_id(plants: list[Equipment], plant_id0: str|None) -> Equipment|Non
 
 
 GuiUtils.create_snapshot_callbacks(translations_key)
+GuiUtils.create_process_selector_callbacks(translations_key)
 
 
 @callback(Output("lots-backlog-orders-table", "columnDefs"),
@@ -135,7 +135,7 @@ def table_columns(lang: str|None):
 
 @callback(Output("lots-backlog-eq-select", "options"),
           Output("lots-backlog-eq-select", "value"),
-          Input("lots-backlog-proc-select", "value"),
+          Input({"role": "process-selector", "page": translations_key}, "value"),
           State("lots-backlog-eq-select", "value"))
 def process_changed(proc: str|None, selected_plant: int|None):
     if proc is None or not dash_authenticated(config):
@@ -268,7 +268,7 @@ def update_table(equipment: int|None, start_date0: str|None,
                 o_times: LotTimes|None = times[order.id].get(prev_proc)
                 if o_times is not None:
                     od["order_end"] = DatetimeUtils.format(state.as_timezone(o_times.end), use_zone=False).replace("T", " ")
-                available_at = o_times.end + tt
+                    available_at = o_times.end + tt
         if is_at_follow_up_stage:
             od["available"] = False
             od["later_stage"] = True

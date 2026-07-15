@@ -53,7 +53,7 @@ class TemporaryRestrictionsProvider:
         Returns:
              Restriction plus active status
         """
-        return next(((rule, active) for rule, active in self.equipment_restrictions() if rule.id == rule_id), (None, False))
+        return next(((rule, settings) for rule, settings in self.equipment_restrictions() if rule.id == rule_id), (None, tuple()))
 
     def activate(self, rule: str, settings: RuleSettings, rule_index: int|None=None) -> bool:
         """
@@ -92,11 +92,15 @@ class RestrictionUtils:
         return EquipmentRestriction.model_validate(content2)
 
     @staticmethod
-    def equipment_allowed(rule: EquipmentRestriction|Sequence[EquipmentRestriction], equipment: int, order: Order) -> bool:
-        if isinstance(rule, Sequence):
-            return all(RestrictionUtils.equipment_allowed(r, equipment, order) for r in rule)
+    def equipment_allowed(rule: EquipmentRestriction, settings: Sequence[RuleSettings], equipment: int, order: Order) -> bool:
         equipment_match = equipment in rule.equipment if isinstance(rule.equipment, Sequence) else equipment == rule.equipment
         if equipment_match == rule.allowed:
             return True
-        applies = ConditionUtils.applies(rule.condition, order)
-        return (not rule.allowed and not applies) or (rule.allowed and applies)
+        for setting in settings:
+            params = list(setting.parameters) if setting.parameters else None
+            condition = ConditionUtils.apply_parameters(rule.condition, params)
+            applies = ConditionUtils.applies(condition, order)
+            allowed = (not rule.allowed and not applies) or (rule.allowed and applies)
+            if not allowed:
+                return allowed
+        return True

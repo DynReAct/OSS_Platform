@@ -46,7 +46,7 @@ def layout(*args, **kwargs):
     for rst, settings in restrictions:
         active = settings and len(settings) > 0
         material_filter = "" if not isinstance(rst.condition, MaterialCondition) else rst.condition.material_class
-        parameter_values = settings[0].parameters if active else None
+        parameter_values = list(settings[0].parameters) if active and settings[0].parameters else None
         try:
             order_attribute, counter = _print_rule_condition(rst.condition, parameter_values, rst.id)
         except:
@@ -61,7 +61,7 @@ def layout(*args, **kwargs):
         #if dummy_selector:
         #    dummy_selector.children.value = equipment_as_list
         if is_rule_configurable:
-            equipment_selector = html.Div(dcc.Dropdown(options=[{"value": e, "label": _equipment_text(e, site)[0]} for e in equipment_as_list], value=[], multi=True, style={"min-width": "12em"},
+            equipment_selector = html.Div(dcc.Dropdown(options=[{"value": e, "label": _equipment_text(e, site)[0]} for e in equipment_as_list], value=[], multi=True, style={"min-width": "12em", "max-width": "20em"},
                                               id={"role": "temprest-equipment-selector", "id": rst.id}))
             equipment_text = equipment_selector
             equipment_title = "Select equipment"
@@ -278,7 +278,7 @@ def snapshot_changed(snapshot: str|None, rule_id: str|None, lang: str|None):
             equipment = (equipment, )
 
         def order_affected(order: Order) -> bool:
-            return any(not RestrictionUtils.equipment_allowed(rule, e, order) for e in equipment)
+            return not all(RestrictionUtils.equipment_allowed(rule, settings, e, order) for e in equipment)
         # sort orders: affected ones first
         orders_affected = [o.id for o in orders if order_affected(o)]
         orders = sorted(orders, key=lambda order: -1 if order.id in orders_affected else 1)
@@ -338,7 +338,7 @@ def _print_rule_leaf_condition_with_parameters(condition: Condition, parameter_v
                     values.insert(idx, html.Span(", "))
             values = html.Div([html.Span("[")] + values + [html.Span("]")])
             children.append(values)
-    return html.Div(children, style={"display": "flex", "column-gap": "0.3em", "flex-wrap": "no-wrap"})
+    return html.Div(children, style={"display": "flex", "column-gap": "0.3em", "row-gap": "0.5em", "flex-wrap": "wrap"})
 
 
 def _print_rule_condition(condition: Condition, parameter_values: list[Any]|None, rule_id: str, counter: Iterator[int]|None=None) -> tuple[Any, Iterator[int]]:

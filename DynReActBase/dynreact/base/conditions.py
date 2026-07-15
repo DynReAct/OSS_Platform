@@ -104,6 +104,12 @@ class ConditionUtils:
 
     @staticmethod
     def applies(condition: Condition, obj: Any):
+        """
+        Note: the passed condition must not be parametrized, i.e., all ParameterValues must be replaced by actual values first
+        :param condition:
+        :param obj:
+        :return:
+        """
         if isinstance(condition, And):
             return all(ConditionUtils.applies(c, obj) for c in condition.conditions)
         if isinstance(condition, Or):
@@ -141,7 +147,7 @@ class ConditionUtils:
                 return False
             if (value == rng[0] and condition.operators[0] == "<=") or (value == rng[1] and condition.operators[1] == "<="):
                 return True
-            return False
+            return True
         raise ValueError(f"Condition type not supported: {type(condition)}")
 
     @staticmethod
@@ -168,6 +174,41 @@ class ConditionUtils:
         return False
 
     @staticmethod
-    def parameters_for_condition(condition: Condition) -> Sequence[ParameterValue]:
+    def apply_parameters(condition: Condition, parameter_values: list[ConditionValue]|None) -> Condition:
+        """
+        Parameters:
+            condition:
+            parameter_values: Note: this argument will be mutated by the function. Do not pass RuleSettings.parameters directly.
+
+        Returns:
+            a new condition with all ParameterValue fields replaced by actual values
+
+        Raises:
+            ValueError if the length of parameter_values does not match the number of parameters in condition
+        """
+        if not parameter_values or len(parameter_values) == 0:
+            if not ConditionUtils.condition_has_parameters(condition):
+                return condition
+            raise ValueError("No or insufficient parameter values supplied, cannot apply them to parametrized rule")
+        if isinstance(condition, NotCondition):
+            return condition.model_copy(update={"base": ConditionUtils.apply_parameters(condition.base, parameter_values)})
         if isinstance(condition, CompositeCondition):
-            return
+            return condition.model_copy(update={"conditions": [ConditionUtils.apply_parameters(c, parameter_values) for c in condition.conditions]})
+        if isinstance(condition, ThresholdCondition):
+            if not isinstance(condition.value, ParameterValue):
+                return condition
+            value = parameter_values.pop(0)
+            return condition.model_copy(update={"value": value})
+        if isinstance(condition, ListCondition):
+            if not any(isinstance(v, ParameterValue) for v in condition.values):
+                return condition
+            values = [parameter_values.pop(0) if isinstance(v, ParameterValue) else v for v in condition.values]
+            return condition.model_copy(update={"values": values})
+        if isinstance(condition, RangeCondition):
+            if not any(isinstance(v, ParameterValue) for v in condition.value_range):
+                return condition
+            values = tuple([parameter_values.pop(0) if isinstance(v, ParameterValue) else v for v in condition.value_range])
+            return condition.model_copy(update={"value_range": values})
+        return condition
+
+

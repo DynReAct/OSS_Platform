@@ -54,9 +54,9 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
     def _settings_for_rule(self, rule_id: str) -> Sequence[RuleSettings]:
         active = self._active_rules
         if rule_id not in active:
-            return []
+            return tuple()
         settings = active[rule_id]
-        return settings if settings is not None else [RuleSettings(active=True)]
+        return settings if settings is not None else (RuleSettings(active=True), )
 
     def _active_status_for_rules(self, rules: Sequence[EquipmentRestriction], active_only: bool) -> Sequence[tuple[EquipmentRestriction, Sequence[RuleSettings]]]:
         return [(rule, tuple(self._settings_for_rule(rule.id))) for rule in rules if not active_only or rule.id in self._active_rules]
@@ -107,11 +107,11 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
             rules[rule_id] = rule
         return rules
 
-    def get_restriction(self, rule_id: str) -> tuple[EquipmentRestriction, Sequence[RuleSettings]] | None:
+    def get_restriction(self, rule_id: str) -> tuple[EquipmentRestriction|None, Sequence[RuleSettings]]:
         self._check_parse()
         rule = self._rules.get(rule_id)
         if rule is None:
-            return None
+            return None, tuple()
         return rule, self._settings_for_rule(rule_id)
 
     def equipment_restrictions(self, equipment: int | Sequence[int] | None = None, active_only: bool=False) ->Sequence[tuple[EquipmentRestriction, Sequence[RuleSettings]]]:

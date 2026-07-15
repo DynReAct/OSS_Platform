@@ -16,6 +16,15 @@ ConditionValue = str | int | float | bool | datetime | date | None
 NumericValue = int | float | datetime | date
 
 
+CV = TypeVar("CV", bound=ConditionValue)
+
+
+class ParameterValue(BaseModel, Generic[CV], use_attribute_docstrings=True):
+    parameter_type: Literal["string", "int", "float", "bool", "datetime", "date"]
+    default_value: CV|None = None
+    allowed_range: tuple[CV|None, CV|None]|None = None
+
+
 class BaseCondition(BaseModel, use_attribute_docstrings=True):
     type: str
 
@@ -24,7 +33,7 @@ class PropertyCondition(BaseCondition):
     attribute: str
 
 
-V = TypeVar("V", bound=ConditionValue)
+V = TypeVar("V", bound=ConditionValue|ParameterValue)
 N = TypeVar("N", bound=NumericValue)
 
 
@@ -143,3 +152,17 @@ class ConditionUtils:
             if obj is None:
                 return None
         return obj
+
+    @staticmethod
+    def condition_has_parameters(condition: Condition) -> bool:
+        if isinstance(condition, NotCondition):
+            return ConditionUtils.condition_has_parameters(condition.base)
+        if isinstance(condition, CompositeCondition):
+            return any(ConditionUtils.condition_has_parameters(c) for c in condition.conditions)
+        if isinstance(condition, ThresholdCondition):
+            return isinstance(condition.value, ParameterValue)
+        if isinstance(condition, ListCondition):
+            return any(isinstance(v, ParameterValue) for v in condition.values)
+        if isinstance(condition, RangeCondition):
+            return any(isinstance(v, ParameterValue) for v in condition.value_range)
+        return False

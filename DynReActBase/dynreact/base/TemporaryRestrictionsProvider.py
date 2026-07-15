@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-from typing import Sequence, Any
+from typing import Sequence, Any, Mapping
 
 from pydantic import BaseModel
 
-from dynreact.base.conditions import Condition, ConditionUtils
+from dynreact.base.conditions import Condition, ConditionUtils, ConditionValue
 from dynreact.base.model import Site, Order
 
 
 class EquipmentRestriction(BaseModel, use_attribute_docstrings=True):
     """
     A restriction for a subset of orders that excludes certain equipment from processing them.
+    There are essentially two types of restrictions, static ones (fixed values in condition) and parametrizable
+    ones (ParameterValue values in condition).
     """
 
     id: str
@@ -19,10 +21,20 @@ class EquipmentRestriction(BaseModel, use_attribute_docstrings=True):
 
     equipment: int|Sequence[int]
     "A filter for the equipment unit(s) this rule applies to"
+    equipment_selectable: bool = False
+    "If set to true and equipment is a list, then the user may select the applicable equipment"
     allowed: bool = False
     """By default, the restriction excludes certain equipment (value = false). 
         If this is set to true, then only the specified equipment is allowed."""
     condition: Condition
+
+
+class RuleSettings(BaseModel, use_attribute_docstrings=True):
+    active: bool
+    active_equipment: Sequence[int]|None=None
+    "If none, all equipments are considered selected"
+    parameters: Sequence[ConditionValue]|None=None
+    "TODO: nested parameters"
 
 
 class TemporaryRestrictionsProvider:
@@ -31,7 +43,7 @@ class TemporaryRestrictionsProvider:
         self._url = url
         self._site = site
 
-    def equipment_restrictions(self, equipment: int|Sequence[int]|None=None, active_only: bool=False) -> Sequence[tuple[EquipmentRestriction, bool]]:
+    def equipment_restrictions(self, equipment: int|Sequence[int]|None=None, active_only: bool=False) -> Sequence[tuple[EquipmentRestriction, Sequence[RuleSettings]]]:
         """
         Parameters:
             equipment:
@@ -41,7 +53,7 @@ class TemporaryRestrictionsProvider:
         """
         raise NotImplementedError
 
-    def get_restriction(self, rule_id: str) -> tuple[EquipmentRestriction|None, bool]:
+    def get_restriction(self, rule_id: str) -> tuple[EquipmentRestriction|None, Sequence[RuleSettings]]:
         """
         Parameters:
             rule_id:
@@ -51,15 +63,21 @@ class TemporaryRestrictionsProvider:
         """
         return next(((rule, active) for rule, active in self.equipment_restrictions() if rule.id == rule_id), (None, False))
 
-
-    def set_active_status(self, rule: str|Sequence[str], active: bool):
+    def activate(self, rule: str, settings: RuleSettings, rule_index: int|None=None) -> bool:
         """
         Activate or deactivate a rule, identified by its id
 
         Parameters:
             rule:
-            active:
+            settings:
+            rule_index: if not None, the respective configuration will be updated
         """
+        raise NotImplementedError
+
+    def deactivate(self, rule: str, rule_index: int = 0) -> bool:
+        raise NotImplementedError
+
+    def is_active(self, rule_id: str) -> bool:
         raise NotImplementedError
 
 

@@ -29,14 +29,6 @@ class EquipmentRestriction(BaseModel, use_attribute_docstrings=True):
     condition: Condition
 
 
-class RuleSettings(BaseModel, use_attribute_docstrings=True):
-    active: bool
-    active_equipment: Sequence[int]|None=None
-    "If none, all equipments are considered selected"
-    parameters: Sequence[ConditionValue]|None=None
-    "TODO: nested parameters"
-
-
 class TemporaryRestrictionsProvider:
 
     def __init__(self, url: str, site: Site):
@@ -79,6 +71,14 @@ class TemporaryRestrictionsProvider:
 
     def is_active(self, rule_id: str) -> bool:
         raise NotImplementedError
+
+
+class RuleSettings(BaseModel, use_attribute_docstrings=True):
+    active: bool
+    active_equipment: Sequence[int]|None=None
+    "If none, all equipments are considered selected"
+    parameters: Sequence[ConditionValue]|None=None
+    "TODO: nested parameters"
 
 
 class RestrictionUtils:

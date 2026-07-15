@@ -34,7 +34,7 @@ class PropertyCondition(BaseCondition):
 
 
 V = TypeVar("V", bound=ConditionValue|ParameterValue)
-N = TypeVar("N", bound=NumericValue)
+N = TypeVar("N", bound=NumericValue|ParameterValue)
 
 
 class ThresholdCondition(PropertyCondition, Generic[V]):
@@ -166,3 +166,8 @@ class ConditionUtils:
         if isinstance(condition, RangeCondition):
             return any(isinstance(v, ParameterValue) for v in condition.value_range)
         return False
+
+    @staticmethod
+    def parameters_for_condition(condition: Condition) -> Sequence[ParameterValue]:
+        if isinstance(condition, CompositeCondition):
+            return

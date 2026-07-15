@@ -149,8 +149,8 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
         rule_obj = self._rules[rule]
         has_parameters = ConditionUtils.condition_has_parameters(rule_obj.condition)
         has_equipment_selection = rule_obj.equipment_selectable
-        if not has_equipment_selection and settings.active_equipment is not None:
-            raise ValueError(f"Must not specifiy equipment when it is not applicable. Rule: {rule_obj}")
+        #if not has_equipment_selection and settings.active_equipment is not None:
+        #    raise ValueError(f"Must not specifiy equipment when it is not applicable. Rule: {rule_obj}")
         if has_equipment_selection:
             if settings.active_equipment is None:
                 raise ValueError(f"Must specify equipment for rule {rule_obj}")
@@ -161,7 +161,7 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
                 raise ValueError(f"Selected equipment {not_applicable} not applicable to rule {rule_obj}")
         if not has_parameters and settings.parameters is not None:
             raise ValueError(f"Must not specifiy parameters when they are not applicable. Rule: {rule_obj}")
-        if has_parameters and settings.parameters is None:
+        if has_parameters and (settings.parameters is None or len(settings.parameters) == 0):
             raise ValueError(f"Parameters not specified for rule {rule_obj}")
         with self._active_rules_lock:
             current_rules = self._active_rules

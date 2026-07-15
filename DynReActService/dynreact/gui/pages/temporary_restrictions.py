@@ -1,5 +1,8 @@
+import itertools
 import json
-from typing import Sequence
+import logging
+import traceback
+from typing import Sequence, Any, Iterator
 
 from dash import html, callback, Output, ALL, Input, dcc, State, clientside_callback, ClientsideFunction, MATCH, \
     callback_context
@@ -10,7 +13,7 @@ from dynreact.app import config, state
 from dynreact.auth.authentication import dash_authenticated
 from dynreact.base.TemporaryRestrictionsProvider import EquipmentRestriction, RestrictionUtils, RuleSettings
 from dynreact.base.conditions import MaterialCondition, PropertyCondition, ThresholdCondition, ListCondition, \
-    RangeCondition, Condition, CompositeCondition, NotCondition, ConditionUtils
+    RangeCondition, Condition, CompositeCondition, NotCondition, ConditionUtils, LeafCondition, ParameterValue
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Site, Order
 from dynreact.gui.gui_utils import GuiUtils
@@ -41,27 +44,37 @@ def layout(*args, **kwargs):
     ]
     rule_options = []
     for rst, settings in restrictions:
+        active = settings and len(settings) > 0
         material_filter = "" if not isinstance(rst.condition, MaterialCondition) else rst.condition.material_class
-        order_attribute = _print_order_attribute(rst.condition)
+        parameter_values = settings[0].parameters if active else None
+        try:
+            order_attribute, counter = _print_rule_condition(rst.condition, parameter_values, rst.id)
+        except:
+            logging.getLogger(__name__).exception(f"Failed to display rule settings for rule {rst} with settings {settings}")
+            continue
+        num_params = next(counter)-1
         equipment = rst.equipment
         is_rule_configurable: bool = (rst.equipment_selectable and isinstance(rst.equipment, Sequence)) or ConditionUtils.condition_has_parameters(rst.condition)
-        equipment_as_list = [rst.equipment] if not isinstance(rst.equipment, Sequence) else rst.equipment
-        equipment_selector = html.Div(dcc.Dropdown(options=[{"value": e, "label": _equipment_text(e, site)[0]} for e in equipment_as_list], value=[], multi=True, style={"min-width": "12em"},
-                                              id={"role": "temprest-equipment-selector", "id": rst.id}), hidden=not rst.equipment_selectable) if is_rule_configurable else None
-        dummy_selector = equipment_selector if equipment_selector is not None and not rst.equipment_selectable else None
-        if isinstance(equipment, Sequence):
-            if rst.equipment_selectable:
-                equipment_text = equipment_selector
-                equipment_title="Select equipment"
-                if len(settings) > 0:
-                    equipment_selector.children.value = settings[0].active_equipment
-            else:
-                equipment_texts = [_equipment_text(e, site) for e in equipment]
-                equipment_text = ", ".join([label for label, title in equipment_texts])
-                equipment_title = ", ".join([title for label, title in equipment_texts if title is not None])
+        equipment_as_list = [rst.equipment] if not isinstance(rst.equipment, Sequence) else list(rst.equipment)
+        #dummy_selector = equipment_selector if equipment_selector is not None and not rst.equipment_selectable else None
+        dummy_parameters = dcc.Input(id={"role": "temprest-parameter-control", "id": rst.id, "count": 0}) if num_params == 0 and is_rule_configurable else None
+        #if dummy_selector:
+        #    dummy_selector.children.value = equipment_as_list
+        if is_rule_configurable:
+            equipment_selector = html.Div(dcc.Dropdown(options=[{"value": e, "label": _equipment_text(e, site)[0]} for e in equipment_as_list], value=[], multi=True, style={"min-width": "12em"},
+                                              id={"role": "temprest-equipment-selector", "id": rst.id}))
+            equipment_text = equipment_selector
+            equipment_title = "Select equipment"
+            if len(settings) > 0:
+                equipment_selector.children.value = settings[0].active_equipment
+            elif not active:
+                equipment_selector.children.value = rst.equipment
+        elif isinstance(equipment, Sequence):
+            equipment_texts = [_equipment_text(e, site) for e in equipment]
+            equipment_text = ", ".join([label for label, title in equipment_texts])
+            equipment_title = ", ".join([title for label, title in equipment_texts if title is not None])
         else:
             equipment_text, equipment_title = _equipment_text(equipment, site)
-        active = settings and len(settings) > 0
         active_text = "✔" if active else "✖"
         active_status = "active" if active else "inactive"
         active_role = "temprest-active" if not is_rule_configurable else "temprest-cfg-active"
@@ -79,7 +92,7 @@ def layout(*args, **kwargs):
                                     id={"role": "temprest-toggle" if not is_rule_configurable else "temprest-save", "id": rst.id},
                                     title=f"Toggle active status of rule: {rst.label or rst.id}" if not is_rule_configurable else "Save changes"),
                         dcc.Store(id={"role": msg_role, "id": rst.id},),
-                        dummy_selector
+                        dummy_parameters
                     ], className="temprest-cell")
         ]))
         rule_options.append({"value": rst.id, "label": rst.label or rst.id})
@@ -185,34 +198,37 @@ def error_msg_changed(messages):
          Output({"role": "temprest-cfg-error-msg", "id": MATCH}, "data"),
          Input({"role": "temprest-save", "id": MATCH}, "n_clicks"),
          State({"role": "temprest-equipment-selector", "id": MATCH}, "value"),
+         State({"role": "temprest-parameter-control", "id": MATCH, "count": ALL}, "value"),
+         #State({"role": "parameter-control", "rule": MATCH}, "value"),
          running=[  # TODO here we could enable ALL by using an intermediate store maybe
               (Output({"role": "temprest-save", "id": MATCH}, "disabled"), True, False),
          ],
          config_prevent_initial_callbacks=True)
-def save_rule_configurable(clicks, selected_equipment: list[int]|None):
+def save_rule_configurable(clicks, selected_equipment: list[int], parameters):
     changed = GuiUtils.changed_ids(excluded_ids=("",))
-    # FIXME
-    print("   SAVING configurable rule", changed)
     if len(changed) == 0 or not dash_authenticated(config):
         return None, None, None, None
-    # FIXME
-    print("   EQUIPMENT selected", selected_equipment)
     triggered = json.loads(changed[0])["id"]
     restrictions = state.get_temporary_restrictions()
     rule, settings = restrictions.get_restriction(triggered)
     if not rule:
         msg = {"type": "error", "msg": f"Rule {triggered} unknown"}
     else:
+        if isinstance(selected_equipment, int):
+            selected_equipment = [selected_equipment]
         active = settings and len(settings) > 0
-        equipment_configurable: bool = rule.equipment_selectable and isinstance(rule.equipment, Sequence) and len(rule.equipment) > 1
         has_parameters: bool = ConditionUtils.condition_has_parameters(rule.condition)
         msg = None
         active = len(selected_equipment) > 0
-        new_settings = RuleSettings(active=active, active_equipment=selected_equipment)
+        params = None if not has_parameters else parameters
+        if has_parameters:  # TODO validate appropriate number of parameters
+            pass
+        new_settings = RuleSettings(active=active, active_equipment=selected_equipment, parameters=params)
         try:
             restrictions.activate(triggered, new_settings, rule_index=0)
             # msg = {"type": "success", "msg": f"Status toggled: {triggered} = {not active}"}  # the alert is too ugly here
         except Exception as e:
+            traceback.print_exc()
             msg = {"type": "error", "msg": f"Failed to toggle status: {e}"}
     rule_active = restrictions.is_active(triggered)
     status = "✔" if rule_active else "✖"
@@ -273,23 +289,82 @@ def snapshot_changed(snapshot: str|None, rule_id: str|None, lang: str|None):
                 row["affectedOrder"] = True
     return cols, rows
 
-def _print_order_attribute(condition: Condition):
+
+def _parameter_control(param: ParameterValue[Any], parameter: Any|None, rule_id: str, counter: Iterator[int]):
+    cnt = next(counter)
+    el_id = {"role": "temprest-parameter-control", "id": rule_id, "count": cnt}
+    value = parameter if parameter is not None else param.default_value
+    if param.parameter_type == "bool":
+        return dcc.Checklist(options=[""], value=[""] if value else [], id=el_id)
+    if param.parameter_type == "string":
+        return dcc.Input(value=value, id=el_id, style={"max-width": "5em"})
+    if param.parameter_type in ("float", "int", "date", "datetime"):
+        is_date = param.parameter_type in ("date", "datetime")
+        inp = dcc.Input(value=value, id=el_id, type="number" if not is_date else "datetime-local", style={"max-width": "5em"} if not is_date else None)
+        if param.allowed_range:
+            if param.allowed_range[0] is not None:
+                inp.min = param.allowed_range[0]
+            if param.allowed_range[1] is not None:
+                inp.max = param.allowed_range[1]
+        return inp
+    logging.getLogger(__name__).warning(f"Unknown parameter type for temporary restrictions {param.parameter_type} in rule {rule_id}")
+    return None
+
+
+def _print_rule_leaf_condition_with_parameters(condition: Condition, parameter_values: list[Any]|None, rule_id: str, counter: Iterator[int]):
+    children = []
+    if isinstance(condition, RangeCondition):
+        val0 = condition.value_range[0]
+        val1 = condition.value_range[1]
+        param_value0 = parameter_values.pop(0) if isinstance(val0, ParameterValue) and parameter_values is not None else None
+        param_value1 = parameter_values.pop(0) if isinstance(val1, ParameterValue) and parameter_values is not None else None
+        val0_el = _parameter_control(val0, param_value0, rule_id, counter) if isinstance(val0, ParameterValue) else html.Span(str(val0))
+        val1_el = _parameter_control(val1, param_value1, rule_id, counter) if isinstance(val1, ParameterValue) else html.Span(str(val1))
+        children.extend([val0_el, html.Span(condition.operators[0]), html.Span(condition.attribute), html.Span(condition.operators[1]), val1_el])
+    elif isinstance(condition, PropertyCondition):
+        children.append(html.Span(condition.attribute))
+        if isinstance(condition, ThresholdCondition):
+            children.append(condition.operator)
+            value = condition.value
+            if isinstance(value, ParameterValue):
+                param_value = parameter_values.pop(0) if parameter_values is not None else None
+                children.append(_parameter_control(value, param_value, rule_id, counter))
+            else:
+                children.append(html.Span(str(value)))
+        elif isinstance(condition, ListCondition):
+            values = [_parameter_control(v, parameter_values.pop(0) if parameter_values is not None else None, rule_id, counter) if isinstance(v, ParameterValue) else html.Span(str(v)) for v in condition.values]
+            for idx in reversed(range(len(values))):
+                if idx > 0:
+                    values.insert(idx, html.Span(", "))
+            values = html.Div([html.Span("[")] + values + [html.Span("]")])
+            children.append(values)
+    return html.Div(children, style={"display": "flex", "column-gap": "0.3em", "flex-wrap": "no-wrap"})
+
+
+def _print_rule_condition(condition: Condition, parameter_values: list[Any]|None, rule_id: str, counter: Iterator[int]|None=None) -> tuple[Any, Iterator[int]]:
+    if counter is None:
+        counter = itertools.count()
     if isinstance(condition, CompositeCondition):
         return html.Div([html.Span(condition.type.upper() + ":")] +
-                 [html.Div(_print_order_attribute(c), style={"padding-left": "1em"}) for c in condition.conditions],
-                 style={"display": "flex", "flex-direction": "column"})
+                        [html.Div(_print_rule_condition(c, parameter_values, rule_id, counter=counter)[0], style={"padding-left": "1em"}) for c in condition.conditions],
+                        style={"display": "flex", "flex-direction": "column"}), counter
     if isinstance(condition, NotCondition):
-        return html.Div([html.Span("!("), _print_order_attribute(condition.base), html.Span(")")])
+        return html.Div([html.Span("!("), _print_rule_condition(condition.base, parameter_values, rule_id, counter=counter)[0], html.Span(")")]), counter
+    return _print_rule_leaf_condition(condition, parameter_values, rule_id, counter), counter
+
+
+def _print_rule_leaf_condition(condition: LeafCondition, parameter_values: list[Any]|None, rule_id: str, counter: Iterator[int]):
+    if ConditionUtils.condition_has_parameters(condition):
+        return _print_rule_leaf_condition_with_parameters(condition, parameter_values, rule_id, counter)
     order_attribute = ""
-    if isinstance(condition, PropertyCondition):
+    if isinstance(condition, RangeCondition):
+        order_attribute += str(condition.value_range[0]) + " " + condition.operators[0] + " " + condition.attribute + " " + condition.operators[1] + str(condition.value_range[1])
+    elif isinstance(condition, PropertyCondition):
         order_attribute = condition.attribute + " "
         if isinstance(condition, ThresholdCondition):
             order_attribute += condition.operator + " " + str(condition.value)
         elif isinstance(condition, ListCondition):
             order_attribute += condition.operator + " [" + ", ".join(condition.values) + "]"
-        elif isinstance(condition, RangeCondition):
-            order_attribute += str(condition.value_range[0]) + " " + condition.operators[0] + \
-                               " x " + condition.operators[1] + str(condition.value_range[1])
     return order_attribute
 
 

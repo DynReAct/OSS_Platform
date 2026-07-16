@@ -181,16 +181,20 @@ def toggle_rule_nonconfigurable(clicks):
 
 @callback(
          Output("temprest-error-msg", "data"),
-         Input({"role": "temprest-error-msg", "id": ALL}, "data"))
-def error_msg_changed(messages):
+         Input({"role": "temprest-error-msg", "id": ALL}, "data"),
+         Input({"role": "temprest-cfg-error-msg", "id": ALL}, "data"))
+def error_msg_changed(messages0, messages1):
     changed = GuiUtils.changed_ids(excluded_ids=("",))
     if len(changed) == 0:
         return None
-    message_inputs: Sequence[dict[str, dict[str, str]]] = callback_context.inputs_list[0]
+    message_inputs0: Sequence[dict[str, dict[str, str]]] = callback_context.inputs_list[0]
+    message_inputs1: Sequence[dict[str, dict[str, str]]] = callback_context.inputs_list[1]
     changed_id = json.loads(changed[0])["id"]
-    changed_idx = next((idx for idx, inp in enumerate(message_inputs) if
+    changed_idx0 = next((idx for idx, inp in enumerate(message_inputs0) if
                         inp is not None and "id" in inp and inp["id"].get("id") == changed_id), None)
-    return None if changed_idx is None else messages[changed_idx]
+    changed_idx1 = next((idx for idx, inp in enumerate(message_inputs1) if
+                         inp is not None and "id" in inp and inp["id"].get("id") == changed_id), None)
+    return messages0[changed_idx0] if changed_idx0 is not None else messages1[changed_idx1] if changed_idx1 is not None else None
 
 
 @callback(Output({"role": "temprest-cfg-active", "id": MATCH}, "children"),
@@ -201,7 +205,7 @@ def error_msg_changed(messages):
          State({"role": "temprest-equipment-selector", "id": MATCH}, "value"),
          State({"role": "temprest-parameter-control", "id": MATCH, "count": ALL}, "value"),
          #State({"role": "parameter-control", "rule": MATCH}, "value"),
-         running=[  # TODO here we could enable ALL by using an intermediate store maybe
+         running=[
               (Output({"role": "temprest-save", "id": MATCH}, "disabled"), True, False),
          ],
          config_prevent_initial_callbacks=True)
@@ -214,22 +218,23 @@ def save_rule_configurable(clicks, selected_equipment: list[int], parameters):
     rule, settings = restrictions.get_restriction(triggered)
     if not rule:
         msg = {"type": "error", "msg": f"Rule {triggered} unknown"}
+    elif parameters is not None and any(p is None for p in parameters):
+        msg = {"type": "error", "msg": f"Invalid parameter(s) passed."}
     else:
         if isinstance(selected_equipment, int):
             selected_equipment = [selected_equipment]
-        active = settings and len(settings) > 0
-        has_parameters: bool = ConditionUtils.condition_has_parameters(rule.condition)
-        msg = None
-        active = len(selected_equipment) > 0
-        if has_parameters and isinstance(rule.condition, ListCondition) and parameters is not None and len(parameters) > 0:  # TODO recursive...
-            param_value = next(v for v in rule.condition.values if isinstance(v, ParameterValue))
-            params0: str = parameters[0]
-            parameters = [ConditionUtils.convert_to_parameter_type(param_value.parameter_type, p) for p in (p.strip() for p in params0.split(";")) if p]
-        params = None if not has_parameters else parameters
-        if has_parameters:  # TODO validate appropriate number of parameters
-            pass
-        new_settings = RuleSettings(active=active, active_equipment=selected_equipment, parameters=params)
         try:
+            has_parameters: bool = ConditionUtils.condition_has_parameters(rule.condition)
+            msg = None
+            if has_parameters and isinstance(rule.condition, ListCondition) and parameters is not None and len(parameters) > 0:  # TODO recursive...
+                param_value = next(v for v in rule.condition.values if isinstance(v, ParameterValue))
+                params0: str = parameters[0]
+                parameters = [ConditionUtils.convert_to_parameter_type(param_value.parameter_type, p) for p in (p.strip() for p in params0.split(";")) if p]
+            active = len(selected_equipment) > 0 and (not has_parameters or (parameters is not None and len(parameters) > 0))
+            params = None if not has_parameters else parameters
+            if has_parameters:  # TODO validate appropriate number of parameters
+                pass
+            new_settings = RuleSettings(active=active, active_equipment=selected_equipment, parameters=params)
             restrictions.activate(triggered, new_settings, rule_index=0)
             # msg = {"type": "success", "msg": f"Status toggled: {triggered} = {not active}"}  # the alert is too ugly here
         except Exception as e:

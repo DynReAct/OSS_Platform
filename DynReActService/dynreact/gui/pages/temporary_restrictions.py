@@ -52,12 +52,13 @@ def layout(*args, **kwargs):
         except:
             logging.getLogger(__name__).exception(f"Failed to display rule settings for rule {rst} with settings {settings}")
             continue
-        num_params = next(counter)-1
+        num_params = next(counter)   #  starts at 0
         equipment = rst.equipment
         is_rule_configurable: bool = (rst.equipment_selectable and isinstance(rst.equipment, Sequence)) or ConditionUtils.condition_has_parameters(rst.condition)
         equipment_as_list = [rst.equipment] if not isinstance(rst.equipment, Sequence) else list(rst.equipment)
         #dummy_selector = equipment_selector if equipment_selector is not None and not rst.equipment_selectable else None
-        dummy_parameters = dcc.Input(id={"role": "temprest-parameter-control", "id": rst.id, "count": 0}) if num_params == 0 and is_rule_configurable else None
+        # TODO check: is this really required for receiving the callbacks?
+        dummy_parameters = html.Div(dcc.Input(id={"role": "temprest-parameter-control", "id": rst.id, "count": 0}), hidden=True) if num_params == 0 and is_rule_configurable else None
         #if dummy_selector:
         #    dummy_selector.children.value = equipment_as_list
         if is_rule_configurable:
@@ -220,6 +221,10 @@ def save_rule_configurable(clicks, selected_equipment: list[int], parameters):
         has_parameters: bool = ConditionUtils.condition_has_parameters(rule.condition)
         msg = None
         active = len(selected_equipment) > 0
+        if has_parameters and isinstance(rule.condition, ListCondition) and parameters is not None and len(parameters) > 0:  # TODO recursive...
+            param_value = next(v for v in rule.condition.values if isinstance(v, ParameterValue))
+            params0: str = parameters[0]
+            parameters = [ConditionUtils.convert_to_parameter_type(param_value.parameter_type, p) for p in (p.strip() for p in params0.split(";")) if p]
         params = None if not has_parameters else parameters
         if has_parameters:  # TODO validate appropriate number of parameters
             pass
@@ -269,16 +274,20 @@ def snapshot_changed(snapshot: str|None, rule_id: str|None, lang: str|None):
     orders = snap_obj.orders
     temporary_restrictions = state.get_temporary_restrictions()
     rule, settings = temporary_restrictions.get_restriction(rule_id)
-    rules = [r for r in (RestrictionUtils.apply_settings(rule, setting) for setting in settings) if r is not None]
+    active = settings is not None and any(s.active for s in settings)
+    if not active and ConditionUtils.condition_has_parameters(rule.condition):
+        rules = []  # we need to specify the parameters in this case (TODO apply default params, if possible)
+    else:
+        rules = [r for r in (RestrictionUtils.apply_settings(rule, setting) for setting in settings) if r is not None] if active else [rule]
     relevant_fields = None
     orders_affected: Sequence[str] = tuple()
     if rule is not None:
         relevant_fields = _relevant_fields_for_condition(rule.condition)
-        equipment = rule.equipment
-        if isinstance(equipment, int):
-            equipment = (equipment, )
+        equipment = set([eq for rl in rules for eq in (rl.equipment if isinstance(rl.equipment, Sequence) else [rl.equipment])])
 
         def order_affected(order: Order) -> bool:
+            if not any(e in equipment for e in order.allowed_equipment):
+                return False
             return not all(RestrictionUtils.equipment_allowed(rl, None, e, order) for e in equipment for rl in rules)
         # sort orders: affected ones first
         orders_affected = [o.id for o in orders if order_affected(o)]
@@ -333,12 +342,20 @@ def _print_rule_leaf_condition_with_parameters(condition: Condition, parameter_v
             else:
                 children.append(html.Span(str(value)))
         elif isinstance(condition, ListCondition):
-            values = [_parameter_control(v, parameter_values.pop(0) if parameter_values is not None else None, rule_id, counter) if isinstance(v, ParameterValue) else html.Span(str(v)) for v in condition.values]
-            for idx in reversed(range(len(values))):
-                if idx > 0:
-                    values.insert(idx, html.Span(", "))
-            values = html.Div([html.Span("[")] + values + [html.Span("]")])
-            children.append(values)
+            param_value = next(v for v in condition.values if isinstance(v, ParameterValue))
+            values = None
+            if parameter_values:
+                values = [str(v) for v in parameter_values] if parameter_values is not None else None
+                values = "; ".join(values)
+                parameter_values.clear()
+            ctrl = _parameter_control(param_value, values, rule_id, counter)
+            ctrl.type = "string"
+            ctrl.style = {"min-width": "12em"}
+            ctrl.placeholder = "3; 1; 5; 17; ..." if param_value.parameter_type == "int" else "2.12; 34.6; ..." if param_value.parameter_type == "float" else \
+                    "true; false; false; ..." if param_value.parameter_type.startswith("bool") else "value1; value2; ..."
+            ctrl.title = "Separate multiple values by a semi-colon: ;"
+            children.append(html.Span(" " + condition.operator + " "))
+            children.append(ctrl)
     return html.Div(children, style={"display": "flex", "column-gap": "0.3em", "row-gap": "0.5em", "flex-wrap": "wrap"})
 
 

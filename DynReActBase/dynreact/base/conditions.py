@@ -6,6 +6,8 @@ from typing import Sequence, Literal, TypeVar, Any, Mapping, Generic
 
 from pydantic import BaseModel
 
+from dynreact.base.impl.DatetimeUtils import DatetimeUtils
+
 #type
 ConditionOperator = Literal["=", "<", "<=", ">", ">=", "!="]
 #type
@@ -174,6 +176,25 @@ class ConditionUtils:
         return False
 
     @staticmethod
+    def convert_to_parameter_type(param_type: Literal["string", "int", "float", "bool", "datetime", "date"], value: Any):
+        if value is None:
+            return None
+        if param_type == "string":
+            return str(value)
+        if param_type == "float":
+            if isinstance(value, str):
+                value = value.replace(",", ".")
+            return float(value)
+        if param_type == "int":
+            return int(value)
+        if param_type in ("datetime", "date") and isinstance(value, str):
+            dt = DatetimeUtils.parse_date(value)
+            return dt if param_type != "date" else dt.date()
+        if param_type == "bool" or param_type == "boolean":
+            return bool(value) and not (isinstance(value, str) and value.lower() == "false")
+        raise ValueError(f"Unsupported parameter type {param_type}")
+
+    @staticmethod
     def apply_parameters(condition: Condition, parameter_values: list[ConditionValue]|None, _list_safe: bool=False) -> Condition:
         """
         Parameters:
@@ -199,16 +220,20 @@ class ConditionUtils:
             if not isinstance(condition.value, ParameterValue):
                 return condition
             value = parameter_values.pop(0)
-            return condition.model_copy(update={"value": value})
+            return condition.model_copy(update={"value": ConditionUtils.convert_to_parameter_type(condition.value.parameter_type, value)})
         if isinstance(condition, ListCondition):
             if not any(isinstance(v, ParameterValue) for v in condition.values):
                 return condition
-            values = [parameter_values.pop(0) if isinstance(v, ParameterValue) else v for v in condition.values]
-            return condition.model_copy(update={"values": values})
+            param = next(v for v in condition.values if isinstance(v, ParameterValue))
+            param_type = param.parameter_type
+            # FIXME this will not work for nested conditions
+            new_values = [ConditionUtils.convert_to_parameter_type(param_type, v) for v in parameter_values]
+            parameter_values.clear()
+            return condition.model_copy(update={"values": new_values})
         if isinstance(condition, RangeCondition):
             if not any(isinstance(v, ParameterValue) for v in condition.value_range):
                 return condition
-            values = tuple([parameter_values.pop(0) if isinstance(v, ParameterValue) else v for v in condition.value_range])
+            values = tuple([ConditionUtils.convert_to_parameter_type(v.parameter_type, parameter_values.pop(0)) if isinstance(v, ParameterValue) else v for v in condition.value_range])
             return condition.model_copy(update={"value_range": values})
         return condition
 

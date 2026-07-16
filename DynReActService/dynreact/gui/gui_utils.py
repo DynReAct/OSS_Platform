@@ -147,8 +147,8 @@ class GuiUtils:
         is_de = lang and lang.startswith("de")
 
         def column_def_for_field(field: str, info: FieldInfo):
-            filter_id = "agNumberColumnFilter" if _is_numeric(
-                info.annotation) else "agDateColumnFilter" if info.annotation == datetime or info.annotation == date else "agTextColumnFilter"
+            filter_id = "agNumberColumnFilter" if _is_numeric(info.annotation) else \
+                "agDateColumnFilter" if info.annotation == datetime or info.annotation == date else "agTextColumnFilter"
             col_def = {"field": field, "filter": filter_id, "filterParams": {"buttons": ["reset"]}}
             if field == "lots":
                 col_def["filterParams"]["maxNumConditions"] = 50
@@ -158,6 +158,29 @@ class GuiUtils:
             fields = [column_def_for_field(key, info) for key, info in orders[0].model_fields.items() if
                     (key not in ["material_properties", "lot", "lot_position", "material_status", "follow_up_processes"])] + \
                     ([column_def_for_field(key, info) for key, info in orders[0].material_properties.model_fields.items()] if isinstance(orders[0].material_properties, BaseModel) else [])
+            if relevant_fields is not None:
+
+                def field_to_id(f: str):
+                    if f.startswith("material_properties.") or f.startswith("job_properties."):
+                        f = f[f.index(".")+1:]
+                    return f
+
+                converted_fields = {f: field_to_id(f) for f in relevant_fields}
+                missing_fields = {f: f_id for f, f_id in converted_fields.items() if not any(field["field"] == f_id for field in fields)}
+                first_orders = orders[:50]
+                for f, f_id in missing_fields.items():
+                    value = None
+                    for o in first_orders:
+                        try:
+                            obj = o.material_properties if f.startswith("material_properties.") else o
+                            value = getattr(obj, f_id)
+                            if value is not None:
+                                break
+                        except:
+                            pass
+                    if value is not None:
+                        filter_id = "agNumberColumnFilter" if isinstance(value, int|float) else "agDateColumnFilter" if isinstance(value, datetime|date) else "agTextColumnFilter"
+                        fields.append({"field": f_id, "filter": filter_id, "filterParams": {"buttons": ["reset"]}})
         else:
             fields = [{"field": "id"}]
 
@@ -198,7 +221,17 @@ class GuiUtils:
             if o.current_equipment is not None:
                 as_dict["current_equipment"] = [plants[p].name_short if p in plants else str(p) for p in o.current_equipment]
             if isinstance(o.material_properties, BaseModel):
-                as_dict.update(o.material_properties.model_dump(exclude_none=True, exclude_unset=True))
+                custom_dict = o.material_properties.model_dump(exclude_none=True, exclude_unset=True)
+                as_dict.update(custom_dict)
+                if relevant_fields is not None:   # add relevant property values
+                    missing = [f for f in relevant_fields if f.startswith("material_properties.") and f[20:] not in custom_dict]
+                    for f in missing:
+                        try:
+                            value = getattr(o.material_properties, f[20:])
+                            if value is not None:
+                                as_dict[f[20:]] = value
+                        except:
+                            pass
             elif isinstance(o.material_properties, dict):
                 as_dict.update(o.material_properties)
             if process is not None and o.lots is not None:

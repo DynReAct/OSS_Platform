@@ -110,14 +110,31 @@ class RestrictionUtils:
         return EquipmentRestriction.model_validate(content2)
 
     @staticmethod
-    def equipment_allowed(rule: EquipmentRestriction, settings: Sequence[RuleSettings], equipment: int, order: Order) -> bool:
-        equipment_match = equipment in rule.equipment if isinstance(rule.equipment, Sequence) else equipment == rule.equipment
-        if equipment_match == rule.allowed:
-            return True
-        for setting in settings:
-            condition = ConditionUtils.apply_parameters(rule.condition, setting.parameters)
-            applies = ConditionUtils.applies(condition, order)
-            allowed = (not rule.allowed and not applies) or (rule.allowed and applies)
+    def apply_settings(rule: EquipmentRestriction, setting: RuleSettings) -> EquipmentRestriction|None:
+        """Returns a non-parametrized restriction"""
+        if not setting.active or (setting.active_equipment is not None and len(setting.active_equipment) == 0):
+            return None
+        rule_equipments = 1 if isinstance(rule.equipment, int) else len(rule.equipment)
+        new_equipment = rule.equipment if setting.active_equipment is None or len(setting.active_equipment) == rule_equipments else tuple(setting.active_equipment)
+        condition = ConditionUtils.apply_parameters(rule.condition, setting.parameters)
+        return rule.model_copy(update={"equipment": new_equipment, "condition": condition})
+
+    @staticmethod
+    def equipment_allowed(rule: EquipmentRestriction, settings: Sequence[RuleSettings]|None, equipment: int, order: Order) -> bool:
+        """
+        Note: if the settings arguments is None, the rule condition must not be parametrized
+        """
+        if not rule.allowed:
+            equipment_match0 = equipment in rule.equipment if isinstance(rule.equipment, Sequence) else equipment == rule.equipment
+            if not equipment_match0:
+                return True
+        rules = [r for r in (RestrictionUtils.apply_settings(rule, setting) for setting in settings) if r is not None] if settings is not None else [rule]
+        for rl in rules:
+            equipment_match = equipment in rl.equipment if isinstance(rl.equipment, Sequence) else equipment == rl.equipment
+            if equipment_match == rl.allowed:
+                continue
+            applies = ConditionUtils.applies(rl.condition, order)
+            allowed = (not rl.allowed and not applies) or (rl.allowed and applies)
             if not allowed:
                 return allowed
         return True

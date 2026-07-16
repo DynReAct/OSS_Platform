@@ -269,6 +269,7 @@ def snapshot_changed(snapshot: str|None, rule_id: str|None, lang: str|None):
     orders = snap_obj.orders
     temporary_restrictions = state.get_temporary_restrictions()
     rule, settings = temporary_restrictions.get_restriction(rule_id)
+    rules = [r for r in (RestrictionUtils.apply_settings(rule, setting) for setting in settings) if r is not None]
     relevant_fields = None
     orders_affected: Sequence[str] = tuple()
     if rule is not None:
@@ -278,7 +279,7 @@ def snapshot_changed(snapshot: str|None, rule_id: str|None, lang: str|None):
             equipment = (equipment, )
 
         def order_affected(order: Order) -> bool:
-            return not all(RestrictionUtils.equipment_allowed(rule, settings, e, order) for e in equipment)
+            return not all(RestrictionUtils.equipment_allowed(rl, None, e, order) for e in equipment for rl in rules)
         # sort orders: affected ones first
         orders_affected = [o.id for o in orders if order_affected(o)]
         orders = sorted(orders, key=lambda order: -1 if order.id in orders_affected else 1)

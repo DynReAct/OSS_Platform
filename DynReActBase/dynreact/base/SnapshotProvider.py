@@ -334,12 +334,14 @@ class SnapshotProvider:
         equipment: list[int] = equipment if equipment is not None else plants
         process_lots: dict[str, Lot] = {lot.id: lot for eq, eq_lots in all_lots.items() if eq in plants for lot in eq_lots}
         #restrictions: Sequence[EquipmentRestriction]|None = None
-        restrictions: dict[int, list[tuple[EquipmentRestriction, Sequence[RuleSettings]]]]|None = None
+        restrictions: dict[int, list[EquipmentRestriction]]|None = None  # unparametrized restrictions
         if temporary_restrictions is not None:
             restrictions0 = temporary_restrictions.equipment_restrictions(equipment=equipment, active_only=True)
-            if len(restrictions0) > 0:
-                affected_equipments = [eq for plants in ((rule.equipment, ) if isinstance(rule.equipment, int) else rule.equipment for rule, settings in restrictions0) for eq in plants]
-                restrictions = {e: [(r, settings) for r, settings in restrictions0 if r.equipment == e or (isinstance(r.equipment, Sequence) and e in r.equipment)] for e in affected_equipments}
+            restrictions1 = [(r, setting) for r, settings in restrictions0 for setting in settings]
+            final_restrictions = [r for r in (RestrictionUtils.apply_settings(rule, settings) for rule, settings in restrictions1) if r is not None]
+            if len(final_restrictions) > 0:
+                affected_equipments = [eq for plants in ((rule.equipment, ) if isinstance(rule.equipment, int) else rule.equipment for rule in final_restrictions) for eq in plants]
+                restrictions = {e: [r for r in final_restrictions if r.equipment == e or (isinstance(r.equipment, Sequence) and e in r.equipment)] for e in affected_equipments}
         previous_steps: list[Process] = [p for p in self._site.processes if p.next_steps is not None and process in p.next_steps]
         previous_process_names = [p.name_short for p in previous_steps]
         proc = self._site.get_process(process, do_raise=True)
@@ -352,7 +354,7 @@ class SnapshotProvider:
             order_equipment = [e for e in equipment if e in order.allowed_equipment]
             if restrictions:
                 affected_equipment: list[int] = [e for e in order_equipment if e in restrictions]
-                forbidden = [e for e in affected_equipment if not all(RestrictionUtils.equipment_allowed(rule, settings, e, order) for rule, settings in restrictions[e])]
+                forbidden = [e for e in affected_equipment if not all(RestrictionUtils.equipment_allowed(rule, None, e, order) for rule in restrictions[e])]
                 order_equipment = [e for e in order_equipment if e not in forbidden]
             if len(order_equipment) == 0:
                 continue

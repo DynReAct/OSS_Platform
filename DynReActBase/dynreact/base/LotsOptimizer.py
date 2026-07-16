@@ -573,23 +573,25 @@ class LotsOptimizationAlgo:
     def orders_apply_temporary_constraints(orders: list[Order]|dict[str, Order], temporary_constraints: TemporaryRestrictionsProvider|None, equipment: Sequence[int]|None=None) -> list[Order]|dict[str, Order]:
         if temporary_constraints is None:
             return orders
-        rules: Sequence[tuple[EquipmentRestriction, Sequence[RuleSettings]]] = temporary_constraints.equipment_restrictions(equipment=equipment, active_only=True)
+        rules0: Sequence[tuple[EquipmentRestriction, Sequence[RuleSettings]]] = temporary_constraints.equipment_restrictions(equipment=equipment, active_only=True)
+        rules1 = ((rule, setting) for rule, settings in rules0 for setting in settings)
+        rules = [r for r in (RestrictionUtils.apply_settings(rule, setting) for rule, setting in rules1) if r is not None]
         if len(rules) == 0:
             return orders
         is_list = isinstance(orders, list)
-        rules_by_equipment: dict[int, list[tuple[EquipmentRestriction, Sequence[RuleSettings]]]] = {}
-        for rule, settings in rules:
+        rules_by_equipment: dict[int, list[EquipmentRestriction]] = {}  # unparametrized rules
+        for rule in rules:
             eq = rule.equipment
             eq = [eq] if not isinstance(eq, Sequence) else eq
             for e in eq:
                 if e not in rules_by_equipment:
                     rules_by_equipment[e] = []
-                rules_by_equipment[e].append((rule, settings))
+                rules_by_equipment[e].append(rule)
         equipment_updates: dict[int|str, list[int]] = {}  # key: order idx or order id, values: allowed equipments
         iterator = enumerate(orders) if is_list else orders.items()
         for idx, order in iterator:
             applicable_equipments = [e for e in order.allowed_equipment if (equipment is None or e in equipment) and e in rules_by_equipment]
-            forbidden_equipments = [e for e in applicable_equipments if not all(RestrictionUtils.equipment_allowed(rule, settings, e, order) for rule, settings in rules_by_equipment[e])]
+            forbidden_equipments = [e for e in applicable_equipments if not all(RestrictionUtils.equipment_allowed(rule, None, e, order) for rule in rules_by_equipment[e])]
             if len(forbidden_equipments) > 0:
                 equipment_updates[idx] = [e for e in order.allowed_equipment if e not in forbidden_equipments]
         if len(equipment_updates) == 0:

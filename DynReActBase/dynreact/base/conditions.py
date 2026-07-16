@@ -174,11 +174,11 @@ class ConditionUtils:
         return False
 
     @staticmethod
-    def apply_parameters(condition: Condition, parameter_values: list[ConditionValue]|None) -> Condition:
+    def apply_parameters(condition: Condition, parameter_values: list[ConditionValue]|None, _list_safe: bool=False) -> Condition:
         """
         Parameters:
             condition:
-            parameter_values: Note: this argument will be mutated by the function. Do not pass RuleSettings.parameters directly.
+            parameter_values:
 
         Returns:
             a new condition with all ParameterValue fields replaced by actual values
@@ -190,10 +190,11 @@ class ConditionUtils:
             if not ConditionUtils.condition_has_parameters(condition):
                 return condition
             raise ValueError("No or insufficient parameter values supplied, cannot apply them to parametrized rule")
+        parameter_values = list(parameter_values) if not _list_safe else parameter_values
         if isinstance(condition, NotCondition):
-            return condition.model_copy(update={"base": ConditionUtils.apply_parameters(condition.base, parameter_values)})
+            return condition.model_copy(update={"base": ConditionUtils.apply_parameters(condition.base, parameter_values, _list_safe=True)})
         if isinstance(condition, CompositeCondition):
-            return condition.model_copy(update={"conditions": [ConditionUtils.apply_parameters(c, parameter_values) for c in condition.conditions]})
+            return condition.model_copy(update={"conditions": [ConditionUtils.apply_parameters(c, parameter_values, _list_safe=True) for c in condition.conditions]})
         if isinstance(condition, ThresholdCondition):
             if not isinstance(condition.value, ParameterValue):
                 return condition

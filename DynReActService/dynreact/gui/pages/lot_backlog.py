@@ -68,7 +68,7 @@ def layout(*args, **kwargs):
         html.H2("Order backlog", id=f"{translations_key}-backlog-header"),
         dash_ag.AgGrid(
             id=f"{translations_key}-orders-table",
-            columnDefs=table_columns(None),
+            columnDefs=table_columns(None, equipment.id if equipment is not None else None),
             rowData=[],
             getRowId="params.data.id",
             className="ag-theme-alpine",  # ag-theme-alpine-dark
@@ -101,8 +101,9 @@ GuiUtils.create_process_selector_callbacks(translations_key)
 
 
 @callback(Output("lots-backlog-orders-table", "columnDefs"),
-          Input("lang", "data"))
-def table_columns(lang: str|None):
+          Input("lang", "data"),
+          Input("lots-backlog-eq-select", "value"))
+def table_columns(lang: str|None, equipment: int|None):
     is_de: bool = lang and lang.startswith("de")
     #  "agDateColumnFilter", "agNumberColumnFilter"
     table_cols = [
@@ -130,6 +131,16 @@ def table_columns(lang: str|None):
         {"field": "transport_time", "headerName": "Transportzeit / h" if is_de else "Transport time / h", "filter": "agNumberColumnFilter",
                 "headerTooltip": "Transportzeit von der Vorängeranlage in Stunden" if is_de else "Transport time from previous equipment in hours"},
     ]
+    eq_obj = state.get_site().get_equipment(equipment) if equipment is not None else None
+    try:
+        costs = state.get_cost_provider()
+        relevant_fields = costs.relevant_fields(eq_obj)
+        mat_props = "material_properties."
+        mat_props_length = len(mat_props)
+        if relevant_fields is not None:
+            table_cols.extend([{"field": f} for f in (f[mat_props_length:] if f.startswith(mat_props) else f for f in relevant_fields)])
+    except:
+        pass
     return table_cols
 
 
@@ -224,6 +235,13 @@ def update_table(equipment: int|None, start_date0: str|None,
     all_lots: dict[str, Lot] = {lot.id: lot for lots in snap_obj.lots.values() for lot in lots}
     snap_provider = state.get_snapshot_provider()
     zero = timedelta()
+    temp_rest = state.get_temporary_restrictions()
+    relevant_fields = None
+    try:
+        costs = state.get_cost_provider()
+        relevant_fields = costs.relevant_fields(plant)
+    except:
+        pass
 
     def data_for_order(order: Order):
         process_match = any(p in proc.process_ids for p in order.current_processes)
@@ -269,6 +287,22 @@ def update_table(equipment: int|None, start_date0: str|None,
                 if o_times is not None:
                     od["order_end"] = DatetimeUtils.format(state.as_timezone(o_times.end), use_zone=False).replace("T", " ")
                     available_at = o_times.end + tt
+        if relevant_fields is not None:
+            mat_props = "material_properties."
+            mat_props_length = len(mat_props)
+            for f in relevant_fields:
+                try:
+                    if f.startswith(mat_props):
+                        f = f[mat_props_length:]
+                        od[f] = getattr(order.material_properties, f)
+                    else:
+                        od[f] = getattr(order, f)
+                except:
+                    pass
+        allowed_by_temp_restrictions = True
+        temporary_rule = None
+        if temp_rest is not None and not is_at_follow_up_stage and equipment in order.allowed_equipment:
+            allowed_by_temp_restrictions, temporary_rule = temp_rest.equipment_allowed(equipment, order)
         if is_at_follow_up_stage:
             od["available"] = False
             od["later_stage"] = True
@@ -284,6 +318,9 @@ def update_table(equipment: int|None, start_date0: str|None,
         elif not_reschedulable:
             od["available"] = False
             od["reason"] = f"Bereits verplant an Zielstufe; Los {current_lot} darf nicht verändet werden." if is_de else f"Already scheduled at target stage; cannot change lot {current_lot}"
+        elif not allowed_by_temp_restrictions:
+            od["available"] = False
+            od["reason"] = f"Temporäre Einschränkung {temporary_rule.id} verbietet die Bearbeitung an der Anlage" if is_de else f"Temporary restriction {temporary_rule.id} forbids use of the equipment."
         elif is_at_previous_stage and not process_match and prev_lot is None:
             od["available"] = False
             od["reason"] = "Noch kein Vorgängerlos vorhanden" if is_de else "Not scheduled yet at previous process stage"

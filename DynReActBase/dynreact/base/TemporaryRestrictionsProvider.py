@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Sequence, Any, Mapping
+from typing import Sequence, Any, Mapping, Iterator
 
 from pydantic import BaseModel
 
@@ -72,6 +72,24 @@ class TemporaryRestrictionsProvider:
     def is_active(self, rule_id: str) -> bool:
         raise NotImplementedError
 
+    def equipment_allowed(self, equipment: int, order: Order) -> tuple[bool, EquipmentRestriction|None]:
+        """
+        Parameters:
+            equipment:
+            order:
+
+        Returns:
+              Returns whether or not the equipment is allowed for the order, and if applicable, the rule that forbids it.
+        """
+        rules: Sequence[tuple[EquipmentRestriction, Sequence[RuleSettings]]] = self.equipment_restrictions(equipment=equipment, active_only=True)
+        rules2: Iterator[tuple[EquipmentRestriction, RuleSettings]] = ((rule, setting) for rule, settings in rules for setting in settings)
+        r, s = next(((rule, setting) for rule, setting in rules2 if not RestrictionUtils.equipment_allowed(rule, (setting, ), equipment, order)), (None, None))
+        if r is None:
+            return True, None
+        adapted_condition = ConditionUtils.apply_parameters(r.condition, s.parameters)
+        if adapted_condition != r.condition:
+            r = r.model_copy(update={"condition": adapted_condition})
+        return False, r
 
 class RuleSettings(BaseModel, use_attribute_docstrings=True):
     active: bool
@@ -97,8 +115,7 @@ class RestrictionUtils:
         if equipment_match == rule.allowed:
             return True
         for setting in settings:
-            params = list(setting.parameters) if setting.parameters else None
-            condition = ConditionUtils.apply_parameters(rule.condition, params)
+            condition = ConditionUtils.apply_parameters(rule.condition, setting.parameters)
             applies = ConditionUtils.applies(condition, order)
             allowed = (not rule.allowed and not applies) or (rule.allowed and applies)
             if not allowed:

@@ -21,6 +21,7 @@ from dynreact.base.ProductionHistoryReader import ProductionHistoryReader
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.SnapshotProvider import SnapshotProvider
+from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider
 from dynreact.base.impl.AggregationPersistence import AggregationPersistence
 from dynreact.base.impl.DummyHistoryReader import DummyHistoryReader
 from dynreact.base.impl.DummyShiftsProvider import DummyShiftsProvider
@@ -43,9 +44,9 @@ class Plugins:
 
     _LOG_ID = "dynreact.plugins.Plugins"
 
-    def __init__(self, config: DynReActSrvConfig):
-        self._config = config
-        self._profile: str|None = config.profile
+    def __init__(self, config: DynReActSrvConfig|None=None):
+        self._config = config or DynReActSrvConfig()
+        self._profile: str|None = self._config.profile
         self._config_provider: ConfigurationProvider | None = None
         self._snapshot_provider: SnapshotProvider | None = None
         self._downtime_provider: DowntimeProvider | None = None
@@ -59,6 +60,8 @@ class Plugins:
         self._plant_performance_models: list[PlantPerformanceModel]|None = None
         self._lot_sinks: dict[str, LotSink]|None = None
         self._aggregation_persistence: AggregationPersistence|None = None
+        self._temporary_restrictions: TemporaryRestrictionsProvider|None = None
+        self._temporary_restrictions_loaded: bool = False
         self._permissions: PermissionManager|None = None
         self._energy_services: dict[str, EnergyService|None] = {}  # keys: energy type (electric, heat, ...)
         self._energy_cost_services: dict[str, EnergyCostService|None] = {}
@@ -123,7 +126,7 @@ class Plugins:
             if cfg == "default:tabu-search":
                 cfg = f"class:dynreact.lotcreation.LotsOptimizerImpl,{cfg}"
             self._lots_optimizer = Plugins._load_module("dynreact.lotcreation", cfg, self._profile, LotsOptimizationAlgo,
-                                                        self.get_config_provider().site_config(), do_raise=True)
+                                                        self.get_config_provider().site_config(), temporary_restrictions=self.get_temporary_restrictions(), do_raise=True)
         return self._lots_optimizer
 
     def get_long_term_planning(self) -> LongTermPlanning:
@@ -206,6 +209,23 @@ class Plugins:
             else:
                 self._history_reader = Plugins._load_module("dynreact.history", self._config.history_reader, self._profile, ProductionHistoryReader, site, do_raise=True)
         return self._history_reader
+
+    def get_temporary_restrictions(self) -> TemporaryRestrictionsProvider:
+        if not self._temporary_restrictions_loaded:
+            self._temporary_restrictions_loaded = True
+            site = self.get_config_provider().site_config()
+            if isinstance(self._config.temporary_restrictions, TemporaryRestrictionsProvider):
+                self._temporary_restrictions = self._config.temporary_restrictions
+            elif self._config.temporary_restrictions and self._config.temporary_restrictions.startswith("file:"):
+                from dynreact.base.impl.FileBasedTemporaryRestrictionsProvider import FileBasedTemporaryRestrictionsProvider
+                try:
+                    self._temporary_restrictions = FileBasedTemporaryRestrictionsProvider(self._config.temporary_restrictions, site)
+                except NotApplicableException:
+                    pass
+            else:
+                self._temporary_restrictions = Plugins._load_module("dynreact.restrictions", self._config.temporary_restrictions,
+                                                                    self._profile, TemporaryRestrictionsProvider, site, do_raise=False)
+        return self._temporary_restrictions
 
     def get_permission_manager(self) -> PermissionManager:
         if self._permissions is None:

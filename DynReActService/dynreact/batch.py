@@ -53,7 +53,7 @@ class LotsBatchOptimizationJob:
     TODO use logging over print
     """
 
-    _base_stats: LotCreationProcessStatistics = LotCreationProcessStatistics(solution_id="", order_backlog_count=0, order_backlog_tons=0., lots_created=0,
+    _base_stats: LotCreationProcessStatistics = LotCreationProcessStatistics(solution_id="", duration=timedelta(), order_backlog_count=0, order_backlog_tons=0., lots_created=0,
         orders_assigned=0, tons_assigned=0., tons_target=0.,  objective_value=0., equipment=tuple(), missing_material=0,
         material_insufficient_for_target=0, lots_exceed_planning_horizon=0, errors=0)
 
@@ -68,6 +68,7 @@ class LotsBatchOptimizationJob:
         self._initial_solutions = initial_solutions
         self._snapshot_provider = state.get_snapshot_provider()
         self._stopped = threading.Event()
+        self._user_interrupted = threading.Event()
         overall_results: dict[str, LotCreationProcessStatistics] = {}
         self._overall_results = overall_results
         self._stats = LotsBatchJobStatistics(start_time=DatetimeUtils.now().astimezone(), total_invocations=0, overall_process_results=overall_results)
@@ -82,17 +83,21 @@ class LotsBatchOptimizationJob:
         next_planned_invocation = self._next_invocation(DatetimeUtils.now())
         snaps_provider = self._snapshot_provider
         wait_cnt: int = 0
-        while True:
+        while not self._stopped.is_set():
+            self._user_interrupted.clear()
+            is_user_interrupted = False
             now = DatetimeUtils.now()
             while next_planned_invocation > now:
-                self._stopped.wait((next_planned_invocation-now).total_seconds())
-                if self._stopped.is_set():
+                self._user_interrupted.wait((next_planned_invocation-now).total_seconds())
+                is_user_interrupted = self._user_interrupted.is_set()
+                if self._stopped.is_set() or is_user_interrupted:
                     break
                 now = DatetimeUtils.now()
             if self._stopped.is_set():
                 break
             try:
-                start = next_planned_invocation - self._config.max_snapshot_age if not (self._config.test and self._runs == 0) else now - timedelta(days=10*365)
+                start = next_planned_invocation - self._config.max_snapshot_age if not ((self._config.test and self._runs == 0) or is_user_interrupted)  \
+                            else now - timedelta(days=10*365)
                 snap = next(snaps_provider.snapshots(start, now, order="desc"))
             except StopIteration:
                 if wait_cnt > 30:   # TODO  configurable?
@@ -115,9 +120,16 @@ class LotsBatchOptimizationJob:
 
     def stop(self):
         self._stopped.set()
+        self._user_interrupted.set()
 
     def is_active(self) -> bool:
         return self._thread is not None and not self._stopped.is_set()
+
+    def trigger(self):
+        if self._stats.is_active:
+            return False
+        self._user_interrupted.set()
+        return True
 
     def wait(self, timeout: timedelta|None=None):
         self._thread.join(timeout=timeout.total_seconds() if timeout is not None else None)
@@ -140,6 +152,7 @@ class LotsBatchOptimizationJob:
         planning_horizon: timedelta = self._config.period
         now = DatetimeUtils.now().astimezone()
         snap_now = snapshot.astimezone()
+        temporary_restrictions = state.get_temporary_restrictions()
         # this is the generic period, but we'll adapt it further for each process stage depending on the horizon of existing lots
         period = (snap_now, snap_now + planning_horizon)
         lot_size_to_tuple = lambda x: x if x is None else (x.min, x.max)
@@ -153,6 +166,7 @@ class LotsBatchOptimizationJob:
                 break
             process = proc.process
             stat = stats[process]
+            start_t = datetime.now()
             try:
                 settings: ProcessLotCreationSettings = proc_settings.get(process) if proc_settings is not None else None
                 equipment = site.get_process_equipment(process)
@@ -247,7 +261,8 @@ class LotsBatchOptimizationJob:
                     initial_solution = initial_solutions[proc.process]
                     eligible_orders: list[str] = list(initial_solution.order_assignments.keys())
                 else:
-                    eligible_orders = self._snapshot_provider.eligible_orders2(snap, proc.process, process_period, equipment=equipment_ids, transport_times=transport_times)
+                    eligible_orders = self._snapshot_provider.eligible_orders2(snap, proc.process, process_period, equipment=equipment_ids,
+                                                        transport_times=transport_times, temporary_restrictions=temporary_restrictions)
                     eligible_orders = [o for o in eligible_orders if o in all_orders and any(e in equipment_ids for e in all_orders[o].allowed_equipment)]
                     initial_solution, _ = algo.heuristic_solution(proc.process, snap, process_period[1]-process_period[0], costs, self._snapshot_provider, final_targets, eligible_orders, previous_orders=last_orders)
                 if len(eligible_orders) <= 2:   # TODO configurable, maybe also minimum amount of material
@@ -273,6 +288,8 @@ class LotsBatchOptimizationJob:
                 seconds = time.time() - t0
                 history = listener.history()
                 sol, objective = listener.best_solution()
+                duration = timedelta(seconds=seconds)
+                stat.duration = duration
                 print(f"Batch lot creation job finished for process {proc.process} with {len(eligible_orders)} orders after {len(history)} iterations and {int(seconds/60)} minutes. Id: {listener._id}")
                 if sol is not None:
                     all_lots = [lot for lots in sol.get_lots(orders=all_orders).values() for lot in lots]
@@ -292,9 +309,14 @@ class LotsBatchOptimizationJob:
                 print(f"Error in lots batch job for proc {proc.process}")
                 traceback.print_exc()
         total_invocations = self._stats.total_invocations + 1
+        last_results = dict(self._stats.previous_process_results)
+        if len(last_results) > 5:
+            first = sorted(list(last_results.keys()))[0]
+            last_results.pop(first)
+        last_results[now] = stats
         # TODO overall process results
         self._stats = self._stats.model_copy(update={"is_active": False, "previous_invocation": now,
-                                    "previous_snapshot": snapshot, "previous_process_results": stats, "total_invocations": total_invocations})
+                                    "previous_snapshot": snapshot, "previous_process_results": last_results, "total_invocations": total_invocations})
 
 
     # TODO support multiple configs

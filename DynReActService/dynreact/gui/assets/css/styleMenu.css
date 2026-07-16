@@ -73,7 +73,6 @@ div.main-menu {
     display: inline;
 }
 
-
 .menu-logo {
     position: absolute;
     top: 1em;
@@ -83,6 +82,9 @@ div.main-menu {
     width: 400px;
 }
 
+.menu-logo-small {
+     visibility: hidden;
+}
 
 .login-row {
     display: flex;
@@ -110,3 +112,37 @@ div.main-menu {
 .menu-link:hover .submenu-content {
     display: block;
 }
+
+/* TODO below 1450 or so we need to collapse the menu */
+@media (max-width: 1600px) {
+    .menu-logo {
+        width: unset;
+        visibility: hidden;
+    }
+    .menu-logo-small {
+        visibility: visible;
+    }
+}
+
+@media (max-width: 1400px) {
+    .menu-link {
+        min-width: 4em;
+        max-width: 7em;
+        overflow-wrap: anywhere;
+    }
+    .menu-logo {
+        width: unset;
+        visibility: hidden;
+    }
+    .menu-logo-small {
+        visibility: visible;
+    }
+}
+
+@media (max-width: 1300px) {
+    .main-menu {
+        flex-direction: column;
+        row-gap: 0.2em;
+    }
+}
+

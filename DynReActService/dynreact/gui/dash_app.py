@@ -1,9 +1,12 @@
+import json
 import logging
 import os
+from datetime import timedelta
 from typing import Sequence
 
 import dash
-from dash import dcc, html, Output, Input, State, clientside_callback, ClientsideFunction, callback
+from dash import dcc, html, Output, Input, State, clientside_callback, ClientsideFunction, callback, ALL, \
+    callback_context
 from flask import Flask
 
 
@@ -11,8 +14,8 @@ from dynreact.app import config, state
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model import Snapshot, Lot
 from dynreact.gui.gui_utils import GuiUtils
-from dynreact.gui.pages.session_state import language, site, selected_snapshot, selected_snapshot_obj, selected_process, \
-    snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector
+from dynreact.gui.pages.session_state import language, site, selected_snapshot, selected_process, selected_snapshot_obj, \
+    selected_snapshot_next, selected_snapshot_prev, snapshot_update_active
 
 server = Flask(__name__)
 
@@ -47,11 +50,12 @@ if config.auth_method is not None:
         return User(username)
 
 DYNREACT_LOGO = "img/dynreact_logo2.png"
+DYNREACT_LOGO_SMALL = "img/dynreact_cropped.jpg"
 DYNREACT_BACKGROUND = "img/dynreact.png"
 translations_key = "menu"
 
 
-def layout(*args, **kwargs):
+def _layout():
     # init_stores(*args, **kwargs)  # it seems that arguments are not passed to the global layout function
     prov = state.get_snapshot_provider()
     is_importer = hasattr(prov, "next_scheduled_import")
@@ -72,11 +76,15 @@ def layout(*args, **kwargs):
                 dcc.Link("Lot creation", id="menu-lots2-creation_header", className="menu-link", href="/dash/lots/create2", title="Lots creation (new)")]
     if state.has_batch_mtp():
         mtp_links.append(dcc.Link("Batch job", id="menu-snaps-batch_header", className="menu-link", href="/dash/lots/batch", title="Lot creation batch jobs"))
+    if config.temporary_restrictions is not None:
+        mtp_links.append(dcc.Link("Temporary restrictions", id="menu-temp-rest-header", className="menu-link", href="/dash/lots/temprest", title="Temporary equipment restrictions"))
+    mtp_links.append(dcc.Link("Order backlog", id="menu-lots-backlog-header", className="menu-link", href="/dash/lots/backlog", title="Order backlog view"))
+    mtp_links.append(dcc.Link("Timeseries plot", id="menu-tsplot-header", className="menu-link", href="/dash/lots/ts-plots", title="Timeseries plots"))
     moa_link = None
     if state.has_material_order_allocation_page():
         moa_link = dcc.Link("Material-order allocation", id="menu-moa_header", className="menu-link login-required", href="/dash/moa", title="Open material order allocation tab")
 
-    performance_pages = [dcc.Link("Equipment models", id="menu-perf-quality_header", className="menu-link", href="/dash/perfmodels", title="Open equipment performance models tab"),
+    performance_pages = [dcc.Link("Equipment models", id="menu-perf-equipment_header", className="menu-link", href="/dash/perfmodels", title="Open equipment performance models tab"),
                     dcc.Link("Energy", id="menu-perf-energy_header", className="menu-link", href="/dash/perfmodels/energy", title="Open energy performance models tab")]
     if len(state.energy_prediction_types()) > 0:
         performance_pages.append(dcc.Link("Energy2", id="menu-perf-energy2_header", className="menu-link", href="/dash/perfmodels/energy2", title="Open energy performance models tab"))
@@ -118,19 +126,22 @@ def layout(*args, **kwargs):
         html.Div([
             html.Img(src="/dash/assets/icons/globe.svg", role="img"),
             dcc.Dropdown(id="menu-lang-select", options=[{"label": "English", "value": "en"},
-                                                         {"label": "Deutsch", "value": "de"},
-                                                         {"label": "Español", "value": "es"}])],
-                className="lang-selector", title="Select the language"),
+                                                                     {"label": "Deutsch", "value": "de"},
+                                                                     {"label": "Español", "value": "es"}],
+                                     persistence=True)],  # , persisted_props="value"
+            className="lang-selector", title="Select the language"),
     ]
     menu_container = html.Div([
         dcc.Location(id="menu-url"),
         language,
+        snapshot_update_active,
         #dcc.Store(id="lang2", storage_type="memory"),
         dcc.Store(id="lang3", storage_type="memory"),  # dummy output for client side callbacks?
         # dcc.Store(id="client-tz", storage_type="memory", data="UTC"),  # Initialize with UTC, will be overridden by client
-        site, selected_snapshot, selected_snapshot_obj, selected_process, snapshot_page_selector, lotcreation_process_selector, lotplanning_process_selector,
+        site, selected_snapshot, selected_process, selected_snapshot_obj, selected_snapshot_prev, selected_snapshot_next,
         #html.Div("DynReAct", className="dynreact-header"),
         html.Img(src=app.get_asset_url(DYNREACT_LOGO), className="menu-logo"),
+        html.Img(src=app.get_asset_url(DYNREACT_LOGO_SMALL), className="menu-logo menu-logo-small"),
         html.Img(src=app.get_asset_url(DYNREACT_BACKGROUND), className="menu-background"),
         html.Div(menu_entries, id="main-menu", className="main-menu")
     ],
@@ -141,7 +152,7 @@ def layout(*args, **kwargs):
     return layout_menu
 
 
-app.layout = layout
+app.layout = _layout()
 
 
 @callback(
@@ -181,46 +192,50 @@ clientside_callback(
     State("site-store", "data"),
 )
 
+
+
 @callback(
     Output("selected-snapshot", "data"),
     Output("selected-snapshot-obj", "data"),
-    Output("selected-process", "data"),
     Input("menu-url", "search"),
-    Input("snapshot_selected-snapshot", "data"),
-    Input("create_process-selector", "data"),
-    Input("lotplanning_process-selector", "data"),
-    #Input("client-tz", "data"),
+    # interestingly, missing input elements are not a problem
+    Input({"role": "snapshot-selector", "page": ALL}, "data"),
     State("selected-snapshot", "data"),
-    prevent_initial_call=False
+    ## would be really useful, but breaks pages without these snapshot selectors => need workaround with store snapshot-update-active
+    #running=[
+    #    (Output({"role": "snapshot-prev-selector", "page": ALL}, "disabled"), True, False),
+    #    (Output({"role": "snapshot-next-selector", "page": ALL}, "disabled"), True, False),
+    #]
+    running=[(Output("snapshot-update-active", "data"), True, False)]
 )
-def params_changed(params: str|None, user_set_snapshot: str|None, create_process: str|None, planning_process: str|None, old_snapshot: str|None):  # , client_tz: str|None
+def snapshot_params_changed(params: str|None, user_set_snapshots: Sequence[str|None]|None, old_snapshot: str|None):
     """
     Setting shared state between pages
     """
     changed = GuiUtils.changed_ids()
-    
-    ## If only client-tz changed, don't update anything
-    #if changed == ["client-tz"]:
-    #    return dash.no_update, dash.no_update, dash.no_update
-    
-    process_changed_by_user = "create_process-selector" in changed or  "lotplanning_process-selector" in changed
-    if "snapshot_selected-snapshot" in changed:
-        snapshot, process = user_set_snapshot, dash.no_update
-    elif process_changed_by_user:
-        snapshot, process = dash.no_update, create_process if "create_process-selector" in changed else planning_process
-        if process is None:
-            process = dash.no_update
+    user_snapshot_selection = next((_id for _id in changed if "\"snapshot-selector\"" in _id), None)
+    user_selected_snapshot = user_snapshot_selection is not None
+    if user_selected_snapshot:
+        changed_id = json.loads(user_snapshot_selection)
+        changed_page = changed_id.get("page")
+        user_snap_inputs: Sequence[dict[str, dict[str, str]]] = callback_context.inputs_list[1]
+        changed_idx = next((idx for idx, inp in enumerate(user_snap_inputs) if inp is not None and "id" in inp and inp["id"].get("page") == changed_page), None)
+        if changed_idx is not None and changed_idx < len(user_set_snapshots):
+            snapshot = user_set_snapshots[changed_idx]
+            if snapshot == old_snapshot and snapshot is not None:
+                return dash.no_update, dash.no_update
+        else:
+            return dash.no_update, dash.no_update
     elif params is None or len(params) == 0:
-        snapshot, process = dash.no_update, dash.no_update
+        snapshot = dash.no_update
     else:
         params = params[1:]
         params_dict: dict[str, str] = {arr[0].lower(): arr[1] for arr in (val.split("=") for val in params.split("&")) if len(arr) == 2 and len(arr[0]) > 0}
         snapshot = params_dict.get("snapshot") or dash.no_update
-        process = params_dict.get("process") or dash.no_update
     if snapshot == old_snapshot:
         snapshot = dash.no_update
     snap = dash.no_update
-    if snapshot == dash.no_update and old_snapshot is None and not process_changed_by_user:
+    if snapshot == dash.no_update and old_snapshot is None:
         ## init snapshot
         snap = state.get_snapshot()
         snapshot = GuiUtils.format_snapshot(snap.timestamp, None, state=state) if snap is not None else None
@@ -241,7 +256,76 @@ def params_changed(params: str|None, user_set_snapshot: str|None, create_process
                 new_lots.append(dump)
             lots_copy[eq] = new_lots
         snap["lots"] = lots_copy
-    return snapshot, snap, process
+    return snapshot, snap
+
+
+@callback(
+    Output("selected-process", "data"),
+    Input("menu-url", "search"),
+    Input({"role": "process-selector", "page": ALL}, "value"),
+    State("selected-process", "data"),
+)
+def process_params_changed(params: str|None, user_set_processes: Sequence[str|None]|None, old_process: str|None):
+    """
+    Setting shared state between pages
+    """
+    changed = GuiUtils.changed_ids()
+    user_proc_selection = next((_id for _id in changed if "\"process-selector\"" in _id), None)
+    user_selected_procs = user_proc_selection is not None
+    explicitly_set = False
+    process = old_process
+    if user_selected_procs:
+        changed_id = json.loads(user_proc_selection)
+        changed_page = changed_id.get("page")
+        user_proc_inputs: Sequence[dict[str, dict[str, str]]] = callback_context.inputs_list[1]
+        changed_idx = next((idx for idx, inp in enumerate(user_proc_inputs) if inp is not None and "id" in inp and inp["id"].get("page") == changed_page), None)
+        if changed_idx is not None and changed_idx < len(user_set_processes):
+            process = user_set_processes[changed_idx]
+            explicitly_set = process is not None
+    if not explicitly_set and params is not None and len(params) > 0:
+        params = params[1:]
+        params_dict: dict[str, str] = {arr[0].lower(): arr[1] for arr in (val.split("=") for val in params.split("&")) if len(arr) == 2 and len(arr[0]) > 0}
+        process = params_dict.get("process") or old_process
+    if process is None:
+        process = old_process or state.get_site().processes[0].name_short
+    return dash.no_update if process == old_process else process
+
+
+@callback(
+    Output({"role": "snapshot-prev-selector", "page": ALL}, "disabled"),
+    Output({"role": "snapshot-next-selector", "page": ALL}, "disabled"),
+    Input("snapshot-update-active", "data"),
+    State({"role": "snapshot-prev-selector", "page": ALL}, "id"),)
+def update_running(running: bool, ids: Sequence[str]):
+    return [running for _id in ids], [running for _id in ids]
+
+
+@callback(
+    Output("selected-snapshot-next", "data"),
+    Output("selected-snapshot-prev", "data"),
+    Input("selected-snapshot", "data"),
+)
+def set_next_prev_snaps(snapshot: str|None):
+    snapshot = DatetimeUtils.parse_date(snapshot)
+    if snapshot is None:
+        return None, None
+    sp = state.get_snapshot_provider()
+    delta = timedelta(minutes=1)
+    next_t = snapshot + delta
+    next_snap = sp.next(next_t)
+    while next_snap is not None and next_snap <= snapshot:
+        next_t = next_t + delta
+        next_snap = sp.next(next_t)
+    prev_t = snapshot - delta
+    prev_snap = sp.previous(prev_t)
+    while prev_snap is not None and prev_snap >= snapshot:
+        prev_t = prev_t - delta
+        prev_snap = sp.previous(prev_t)
+    if next_snap is not None:
+        next_snap = state.as_timezone(next_snap)
+    if prev_snap is not None:
+        prev_snap = state.as_timezone(prev_snap)
+    return next_snap, prev_snap
 
 
 def _get_snapshot(snapshot_id: str|None) -> Snapshot|None:
@@ -251,10 +335,13 @@ def _get_snapshot(snapshot_id: str|None) -> Snapshot|None:
 
 # Looks circular, but apparently it is possible...
 """
-@callback(Output("lang", "data"), Output("lang-select", "value"), State("menu-url", "search"), Input("lang-select", "value"))
+@callback(Output("lang", "data"),
+          Output("lang-select", "value"),
+          State("menu-url", "search"),
+          Input("lang-select", "value"))
 def set_lang(search: str, value: str):
     if value is not None and len(value) > 0:
-        return value, value
+        return value, dash.no_update
     if search is not None and search.startswith("?"):
         search = search[1:]
         for params in search.split("&"):
@@ -266,7 +353,6 @@ def set_lang(search: str, value: str):
     return "en", "en"
 """
 
-
 clientside_callback(
     ClientsideFunction(
         namespace="locale",
@@ -275,7 +361,8 @@ clientside_callback(
     Output("lang", "data"),
     Output("menu-lang-select", "value"),
     Input("menu-lang-select", "value"),
-    Input("menu-url", "href")   # problem: this triggers the callback before the new page is loaded
+    Input("menu-url", "href"),
+    State("lang", "data")
 )
 
 # Set client timezone once on page load

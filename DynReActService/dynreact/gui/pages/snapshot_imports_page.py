@@ -29,14 +29,19 @@ def layout(*args, **kwargs):
     return html.Div([
         html.H1("Snapshot imports", id=translations_key + "-title"),
         html.Div([
-            html.Div("Latest snapshot:"), html.Div(id=translations_key + "-lastsnap"),
-            html.Div("Upcoming snapshot:"), html.Div(id=translations_key + "-nextsnap"),
-            html.Div("Imports active:"), html.Div(id=translations_key + "-importactive"),
-            html.Div("Import running:"), html.Div(id=translations_key + "-importrunning"),
+            html.Div("Latest snapshot:", id=translations_key + "-lastsnap-label"),
+                    html.Div(id=translations_key + "-lastsnap"),
+            html.Div("Upcoming snapshot:", id=translations_key + "-nextsnap-label"),
+                    html.Div(id=translations_key + "-nextsnap"),
+            html.Div("Imports active:", id=translations_key + "-importactive-label"),
+                    html.Div(id=translations_key + "-importactive"),
+            html.Div("Import running:", id=translations_key + "-importrunning-label"),
+                    html.Div(id=translations_key + "-importrunning"),
         ], className="snapimp-infogrid"),
         html.Div([
-            html.Div("Pause imports:"), html.Div(html.Button("Pause", id="snapimp-pause", className="dynreact-button dynreact-button-small", title="Pause snapshot imports")),
-            html.Div("New snapshot:", title="Trigger new snapshot import"),
+            html.Div("Pause imports:", title="Pause snapshot imports", id=f"{translations_key}-pause-label"),
+            html.Div(html.Button("Pause", id="snapimp-pause", className="dynreact-button dynreact-button-small", title="Pause snapshot imports")),
+            html.Div("New snapshot:", title="Trigger new snapshot import", id=f"{translations_key}-trigger-label"),
                 html.Div(html.Button("Import", id="snapimp-trigger", className="dynreact-button dynreact-button-small", title="Trigger new snapshot import"))
         ], className="snapimp-ctrl-grid"),
         html.Div([
@@ -45,7 +50,7 @@ def layout(*args, **kwargs):
         ], id=translations_key + "-alert-container", className="snapimp-infobox snapimp-hidden"),
         dcc.Interval(id=translations_key + "-interval", interval=30_000),
 
-    ])
+    ], id=translations_key)
 
 
 @callback(
@@ -64,8 +69,9 @@ def layout(*args, **kwargs):
     Input("snapimp-pause", "n_clicks"),
     Input("snapimp-trigger", "n_clicks"),
     Input("snapimp-alert-close", "n_clicks"),
+    Input("lang", "data")
 )
-def status(_, __, ___, ____):
+def status(_, __, ___, ____, lang: str|None):
     if not dash_authenticated(config):
         return None, None, None, None, None, None, True, True, dash.no_update, None, "snapimp-infobox snapimp-hidden"
     prov = state.get_snapshot_provider()
@@ -89,6 +95,7 @@ def status(_, __, ___, ____):
     msg: str = dash.no_update
     info_class: str = dash.no_update
     changed_ids = GuiUtils.changed_ids()
+    is_de: bool = lang and lang.startswith("de")
     if result is None and "snapimp-alert-close" in changed_ids:
         msg = ""
         info_class = "snapimp-infobox snapimp-hidden"
@@ -97,19 +104,21 @@ def status(_, __, ___, ____):
             prov2.resume()
             scheduled = prov2.next_scheduled_import()
             if scheduled is not None:
-                scheduled = state.as_timezone(scheduled.astimezone)
-            msg = "Snapshot imports resumed. Next scheduled import: " + (DatetimeUtils.format(scheduled) if scheduled is not None else "None")
+                scheduled = state.as_timezone(scheduled)
+            msg = ("Snapshot-Importe wieder aufgenommen. Nächster geplanter Import: " if is_de else
+                        "Snapshot imports resumed. Next scheduled import: " ) + \
+                  (DatetimeUtils.format(scheduled) if scheduled is not None else "None")
         else:
             prov2.pause()
-            msg = "Snapshot imports paused."
+            msg = "Snapshot-Importe pausiert" if is_de else "Snapshot imports paused."
         is_paused = prov2.is_paused()
         info_class = "snapimp-infobox"
     elif "snapimp-trigger" in changed_ids:
         if prov2.import_running():
-            msg = "Import is already running"
+            msg = "Import läuft bereits" if is_de else "Import is already running"
         else:
             _start_import(prov2)
-            msg = "Import started"
+            msg = "Import gestartet" if is_de else "Import started"
         is_running = True
         info_class = "snapimp-infobox"
     elif result is not None:
@@ -117,13 +126,14 @@ def status(_, __, ___, ____):
         if success:
             result = state.as_timezone(result)
             result_str = DatetimeUtils.format(result, use_zone=False).replace("T", " ")
-            msg = f"New snapshot {result_str}"
+            msg = f"Neuer Snapshot {result_str}" if is_de else f"New snapshot {result_str}"
             info_class = "snapimp-infobox"
         elif isinstance(result, Exception):
             msg = f"Error importing snapshot: {result}"
             info_class = "snapimp-infobox snapimp-alert"
-    btn_label = "Pause" if not is_paused else "Restart"
-    btn_title = "Pause snapshot imports" if not is_paused else "Restart snapshot imports"
+    btn_label = "Pause" if not is_paused else ("Aktivieren" if is_de else "Restart")
+    btn_title = ("Keine neuen Snapshots importieren bis auf Weiteres" if is_de else "Pause snapshot imports") if not is_paused \
+        else ("Importe wieder aufnehmen" if is_de else "Restart snapshot imports")
     update_interval: int = 30_000 if not is_running else 5_000
     return last_snap_str, next_snap_str, str(not is_paused), str(is_running), btn_label, btn_title, False, is_running, update_interval, msg, info_class
 

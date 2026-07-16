@@ -1,5 +1,5 @@
 from datetime import timedelta, datetime, date
-from typing import Literal
+from typing import Literal, Mapping
 from zoneinfo import ZoneInfo
 
 import dash
@@ -14,6 +14,7 @@ from pydantic.fields import FieldInfo
 
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
+from dynreact.gui.gui_utils import GuiUtils
 from dynreact.gui.pages.session_state import get_date_range
 
 dash.register_page(__name__, path="/")
@@ -23,19 +24,19 @@ translations_key = "snapshot"
 def layout(*args, **kwargs):
     #init_stores(*args, **kwargs)
     categories = state.get_site().material_categories
+    display_options = [{"label": "Material", "value": "material"}, {"label": "Orders", "value": "orders"}]
+
     return html.Div([
         #selected_snapshot,  # in dash_app layout
         html.H1("Snapshots"),
         html.H2("Snapshot selection", id="snapshot-select_header"),
         html.Div([
             html.Div([html.Div("Active snapshot: ", id="snapshot-active"), dcc.Dropdown(id="snapshots-selector", className="snap-select")]),
-            html.Div([html.Div("Selection range: ", id="snapshot-selection_range"),
-            dcc.DatePickerRange(id="snapshots-date-range", display_format="YYYY-MM-DD")])
+            html.Div([html.Div("Selection range: ", id="snapshot-selection_range"), dcc.DatePickerRange(id="snapshots-date-range", display_format="YYYY-MM-DD")])
         ], className="snapshots-selector-row"),
         html.H2("Snapshot details", id="snapshot-details_header"),
-        html.Div([html.Div("Display: ", id="snapshot-display_label"), dcc.Dropdown(id="order-coil-selector", className="snap-select", options=[
-            # TODO localization of options?
-            {"label": "Coils", "value": "coils", "id": "opt1"}, {"label": "Orders", "value": "orders"}], value="orders")], className="coil-order-row"),
+        html.Div([html.Div("Display: ", id="snapshot-display_label"), dcc.Dropdown(id="order-coil-selector", className="snap-select",
+                                                            options=display_options, value="orders")], className="coil-order-row"),
         html.Br(),
         dash_ag.AgGrid(
             id="snapshot-table",
@@ -71,6 +72,7 @@ def layout(*args, **kwargs):
             # "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
         ),
         dcc.Interval(id="snapshot-init-interval", interval=100),  # snapshot selector init
+        dcc.Store(id={"role": "snapshot-selector", "page": "snapshot"}, storage_type="memory")
     ], id="snapshot")
 
 def _material_overview(categories: list[MaterialCategory]):
@@ -103,6 +105,12 @@ def _material_overview(categories: list[MaterialCategory]):
         # "autoSize"  # "responsiveSizeToFit" => this leads to essentially vanishing column size
     )])
 
+@callback(
+    Output("order-coil-selector", "options"),
+    Input("lang", "data"),
+)
+def lang_changed(lang: str|None):
+    return [{"label": "Material", "value": "material"}, {"label": "Aufträge" if lang and lang.startswith("de") else "Orders", "value": "orders"}]
 
 @callback(
     Output("snapshots-selector", "options"),
@@ -112,27 +120,21 @@ def _material_overview(categories: list[MaterialCategory]):
     Output("snapshot-init-interval", "interval"),
     #Input("client-tz", "data"),  # client timezone, defined in dash_app
     Input("snapshot-init-interval", "n_intervals"),
-    # this would best be an input, but we need to avoid the circular dependency, since it is updated by snapshots-selector.value
+    State("snapshots-selector", "value"),
     State("selected-snapshot", "data")
 )
-def set_snapshot_options( _, snapshot: str|None):  # tz: str|None,
-    if not dash_authenticated(config):
-        return dash.no_update, dash.no_update,dash.no_update,dash.no_update, 30_000
+def set_snapshot_options( _, snap0, snapshot: str|None):
+    if not dash_authenticated(config) or snap0 is not None:
+        return dash.no_update, dash.no_update,dash.no_update,dash.no_update, 30_000 if snap0 is None else 3_600_000
     if snapshot is None:
         return dash.no_update, dash.no_update,dash.no_update,dash.no_update,dash.no_update
-    #zi = None
-    #try:
-    #    zi = ZoneInfo(tz)
-    #except:
-    #    pass
-    start_date, end_date, snap_options, selected_snap = get_date_range(snapshot)  #, zi=zi)
+    start_date, end_date, snap_options, selected_snap = get_date_range(snapshot)
     return snap_options, selected_snap, start_date, end_date, 7_200_000
 
 
 @callback(
-    Output("snapshot_selected-snapshot", "data"),  # defined in session_state
+    Output({"role": "snapshot-selector", "page": "snapshot"}, "data"),
     Input("snapshots-selector", "value"),
-    config_prevent_initial_callbacks=True
 )
 def set_snapshot(snapshot_id: str):
     return snapshot_id
@@ -141,15 +143,16 @@ def set_snapshot(snapshot_id: str):
 @callback(
     Output("snapshot-table", "columnDefs"),
     Output("snapshot-table", "rowData"),
-    Input("selected-snapshot", "data"),
-    Input("order-coil-selector", "value")
+    Input("snapshots-selector", "value"),
+    Input("order-coil-selector", "value"),
+
 )
-def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["orders", "coils"]):
+def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["orders", "material"]):
     if not dash_authenticated(config):
         return [{"field": "id", "pinned": True}], []
     snapshot_id = DatetimeUtils.parse_date(snapshot_id)
     snapshot = state.get_snapshot(snapshot_id) if snapshot_id is not None else None
-    if snapshot is None or len(snapshot.material) == 0:
+    if snapshot is None or len(snapshot.orders) == 0:
         return [{"field": "id", "pinned": True}], []
     site = state.get_site()
 
@@ -159,7 +162,7 @@ def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["order
                 "agTextColumnFilter"
         col_def = {"field": field, "filter": filter_id}
         return col_def
-    if order_coil == "coils":
+    if order_coil == "material":
         fields = [column_def_for_field(key, info) for key, info in snapshot.material[0].model_fields.items()]  # TODO how to sort?
         return fields, [coil.model_dump(exclude_none=True, exclude_unset=True) for coil in snapshot.material]
     # TODO how to sort?
@@ -176,7 +179,7 @@ def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["order
             field["valueFormatter"] = value_formatter_object
 
     def order_to_json(o: Order):
-        as_dict = o.model_dump(exclude_none=True, exclude_unset=True)
+        as_dict = o.model_dump(exclude_none=True, exclude_unset=True, mode="json")
         #for key in ["lots", "lot_positions"]:
         #    if key in as_dict:
         #        as_dict[key] = json.dumps(as_dict[key])
@@ -185,7 +188,7 @@ def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["order
         if o.current_equipment is not None:
             as_dict["current_plants"] = [next((plant.name_short for plant in site.equipment if plant.id == p), str(p)) for p in o.current_equipment]
         if isinstance(o.material_properties, BaseModel):
-            as_dict.update(o.material_properties.model_dump(exclude_none=True, exclude_unset=True))
+            as_dict.update(o.material_properties.model_dump(mode="json", exclude_none=True, exclude_unset=True))
         return as_dict
     return fields, [order_to_json(order) for order in snapshot.orders]
 
@@ -193,7 +196,7 @@ def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["order
 @callback(
     Output("snapshot-mat-table", "columnDefs"),
     Output("snapshot-mat-table", "rowData"),
-    Input("selected-snapshot", "data"),
+    Input("snapshots-selector", "value"),
     Input("snapshot_matcat-selector", "value"),  #
     Input("snapshot_mat_level-selector", "value"),  # storage, equipment or process
 )

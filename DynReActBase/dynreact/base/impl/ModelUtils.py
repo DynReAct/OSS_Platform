@@ -4,7 +4,7 @@ from typing import Mapping, Sequence
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.model import MidTermTargets, ProductionTargets, EquipmentProduction, ProductionPlanning, Site, \
     EquipmentAvailability, MaterialCategory, SUM_MATERIAL, Lot, PlannedWorkingShift, Snapshot, StorageLevel, Storage, \
-    Material
+    Material, LotTimes, Order
 
 
 class ModelUtils:
@@ -85,12 +85,13 @@ class ModelUtils:
     def mid_term_targets_from_ltp_result(
             result: MidTermTargets,
             process: str,
-            snapshot: Snapshot,
+            snapshot: Snapshot|None,
             horizon: timedelta,
             num_shifts: int,
             site: Site,
             snapshot_provider: SnapshotProvider,
             equipment_ids: Sequence[int]|None=None,
+            interval: tuple[datetime, datetime]|None=None,
             max_horizon: timedelta = timedelta(days=8)) -> tuple[ProductionTargets, datetime, dict[int, datetime]]:
         """
         Determines the actual amount of material to be produced by the equipment belonging to the considered
@@ -108,6 +109,7 @@ class ModelUtils:
             snapshot_provider: the snapshot provider
             equipment_ids: optional equipments ids to be included. If not specified, all equipment for the considered
                 process stage is included
+            interval: if interval is specified, then snapshot is optional; the plannign interval is considered fixed then
             max_horizon: maximum time horizon to consider (w.r.t. the snapshot timestamp)
 
         Returns:
@@ -116,18 +118,19 @@ class ModelUtils:
         equipment_ids = equipment_ids if equipment_ids is not None else [p.id for p in site.get_process_equipment(process)]
         if len(equipment_ids) == 0:
             raise Exception("No equipment specified")
-        max_planning_time = snapshot.timestamp + max_horizon
+        max_planning_time = snapshot.timestamp + max_horizon if interval is None else interval[1]
         material_by_equipment_targets: dict[int, dict[str, float]] = {}
         material_by_equipment_existing: dict[int, dict[str, float]] = {}
         scale_factor_by_equipment: dict[int, float] = {}
         total_weight_by_equipment: dict[int, float] = {}
         min_start: datetime = max_planning_time
-        max_end: datetime = snapshot.timestamp + horizon
+        max_end: datetime = snapshot.timestamp + horizon if interval is None else interval[1]
         start_time_by_equipment: dict[int, datetime] = {}
+        start_time = snapshot.timestamp if interval is None else interval[0]
         for equipment in equipment_ids:
-            lots = [lot for lot in snapshot.lots.get(equipment, tuple()) if lot.active and lot.end_time is not None]  # and snapshot_provider.is_lot_complete(lot)
-            eq_horizon = max(lt.end_time for lt in lots) if len(lots) > 0 else snapshot.timestamp
-            if eq_horizon >= max_planning_time:  # nothing to be planned for this equipment, lots already cover the planning horizon
+            lots = [lot for lot in snapshot.lots.get(equipment, tuple()) if lot.active and lot.end_time is not None] if snapshot is not None else []
+            eq_horizon = max(lt.end_time for lt in lots) if len(lots) > 0 else interval[0] if interval is not None else snapshot.timestamp
+            if eq_horizon >= max_planning_time:  # nothing to be planned for this equipment, lots already covered the planning horizon
                 continue
             planning_end = min(eq_horizon + horizon, max_planning_time)
             if eq_horizon < min_start:
@@ -139,7 +142,7 @@ class ModelUtils:
             #    continue
             # need to sum up all targets from now, and then subtract the existing lots
             equipment_horizon: timedelta = planning_end - eq_horizon
-            applicable: dict[int, float] = ModelUtils.applicable_periods(result.sub_periods, snapshot.timestamp, planning_end)
+            applicable: dict[int, float] = ModelUtils.applicable_periods(result.sub_periods, start_time, planning_end)
             if len(applicable) == 0:  # nothing planned for this equipment?
                 continue
             mats_existing: dict[str, float] = {}
@@ -517,3 +520,58 @@ class ModelUtils:
             storage_levels[storage] = level
         return storage_levels
 
+    @staticmethod
+    def get_order_lot_times_with_fallback(site: Site, snapshot_provider: SnapshotProvider, snapshot: datetime | None = None,
+                                          order: str|Sequence[str]|None=None, process: str|None=None) -> dict[str, dict[str, LotTimes]]|None:
+        """
+        Provides the same functionality as SnapshotProvider.get_order_lots(), but with a fallback in case this method is not implemented
+
+        Parameters:
+            site:
+            snapshot_provider:
+            snapshot: snapshot timestamp
+            order:    optional order(s) filter
+            process:  optional process filter
+
+        Returns:
+            A nested dictionary order id -> process -> lot times object
+        """
+        try:
+            return snapshot_provider.get_order_lot_times(snapshot=snapshot, order=order)
+        except NotImplementedError:
+            pass
+        snap_obj = snapshot_provider.load(time=snapshot)
+        if not snap_obj:
+            return None
+        if order is not None and not isinstance(order, Sequence):
+            order = (order, )
+        elif order is None:
+            order = [o.id for o in snap_obj.orders]
+        order_objects: dict[str, Order] = {o.id: o for o in snap_obj.orders}
+        result: dict[str, dict[str, LotTimes]] = {}
+        for equipment, lots in snap_obj.lots.items():
+            eq_obj = site.get_equipment(equipment)
+            lot_process = eq_obj.process if eq_obj else None
+            if not lot_process or (process is not None and lot_process != process):
+                continue
+            for lot in lots:
+                if not lot.active or not lot.start_time or not lot.end_time or not any(o in lot.orders for o in order):
+                    continue
+                lot_weight = lot.weight if lot.weight is not None else sum(order_objects[o].actual_weight for o in lot.orders if o in order_objects)
+                if lot_weight < 1e-2:
+                    continue
+                start_time = lot.start_time
+                lot_delta = lot.end_time - lot.start_time
+                for l_order in lot.orders:
+                    if l_order not in order_objects:
+                        continue
+                    order_obj = order_objects[l_order]
+                    share = order_obj.actual_weight / lot_weight
+                    end_time = start_time + share * lot_delta
+                    if l_order in order:
+                        lot_times = LotTimes(id=l_order, process=lot_process, start=start_time, end=end_time, processing_time=end_time-start_time)
+                        if l_order not in result:
+                            result[l_order] = {}
+                        result[l_order][lot_process] = lot_times
+                    start_time = end_time
+        return result

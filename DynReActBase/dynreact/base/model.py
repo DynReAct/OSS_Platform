@@ -9,9 +9,9 @@ The classes defined in this module are serializable and can be made accessible v
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone, date
 from numbers import Number
-from typing import Any, TypeVar, Generic, Literal, Sequence, Mapping
+from typing import Any, TypeVar, Generic, Literal, Sequence, Mapping, Annotated
 
-from pydantic import BaseModel, Field, ConfigDict, model_validator, PrivateAttr
+from pydantic import BaseModel, Field, ConfigDict, model_validator, PrivateAttr, BeforeValidator, ValidationError
 
 
 class Model(BaseModel):
@@ -38,14 +38,34 @@ class ProcessInformation(Model):
     #throughput_capacity_mat: dict[str, float]|None = None  # key: material class id, value: throughput in ...
 
 
+def _parse_range(rng: str) -> Sequence[int]:
+    if "-" not in rng:
+        return (int(rng), )
+    split = rng.split("-")
+    if len(split) != 2:
+        raise ValidationError(f"Invalid range {rng}")
+    return range(int(split[0]), int(split[1])+1)
+
+
+def _parse_process_ids(inp: Any) -> Sequence[int]:
+    if not isinstance(inp, Sequence):
+        raise ValidationError(f"process_ids input is not a valid sequence: {inp}")
+    str_inputs = [el for el in inp if isinstance(el, str)]
+    if len(str_inputs) == 0:
+        return inp
+    str_as_numbers = [v for el in str_inputs for v in _parse_range(el)]
+    inp = sorted([v for v in inp if isinstance(v, int)] + str_as_numbers)
+    return tuple(inp)
+
+
 class Process(LabeledItem, ProcessInformation):
     name_short: str = Field(..., examples=["VA", "BZ"], min_length=1)
     "Short name uniquely identifying the process."
-    process_ids: list[int]
+    process_ids: Annotated[Sequence[int], BeforeValidator(_parse_process_ids)]
     "Internal process id(s)"
-    synonyms: list[str]|None = Field(None, examples=["VEA"], min_length=1)
+    synonyms: Sequence[str]|None = Field(None, examples=["VEA"], min_length=1)
     "Alternative short names."
-    next_steps: list[str]|None = None
+    next_steps: Sequence[str]|None = None
     "Possible follow-up process steps."
     process_group: str|None = None
     "Id for a group of processes."

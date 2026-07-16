@@ -18,5 +18,18 @@ class ProductionHistoryReader:
                              start: datetime, end: datetime,
                              equipment: Sequence[int]|None=None,
                              material_filter: Sequence[str]|None=None) -> ProductionTargets:
+        """
+        Read production aggregates for a specific time interval.
+
+        Parameters:
+            process: process id
+            start: start time
+            end: end time
+            equipment: optional equipment filter
+            material_filter: optional material type filter; sequence of material class ids
+
+        Returns:
+            aggregated production values
+        """
         raise Exception("not implemented")
 

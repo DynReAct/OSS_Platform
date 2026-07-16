@@ -29,7 +29,7 @@ from pydantic.fields import FieldInfo
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
 from dynreact.gui.gui_utils import GuiUtils
-from dynreact.gui.pages.components import prepare_lots_for_lot_view, lots_view
+from dynreact.gui.pages.components import prepare_lots_for_lot_view, lots_view, ltp_init_dialog, lots_view_options
 #from dynreact.gui.pages.optimization_listener import FrontendOptimizationListener
 from dynreact.lots_optimization import FrontendOptimizationListener
 
@@ -39,7 +39,6 @@ translations_key = "lots2"
 
 # TODO option to record optimizaiton history including lots information and possibility to replay/step to specific optimization steps
 # TODO option to initialize optimization from existing result
-# TODO swimlane visualization
 # TODO init method existing solution
 def layout(*args, **kwargs):
     # init_stores(*args, **kwargs)
@@ -65,21 +64,17 @@ def layout(*args, **kwargs):
         html.H1("Lot creation", id="lots2-title"),
         # ======= Top row: snapshot and process selector =========
         html.Div([
-            html.Div([html.Div("Snapshot: "), html.Div(snap, id="lots2-current_snapshot")]),
-            html.Div([html.Div("Process: "), dcc.Dropdown(id="lots2-process-selector",
-                        options=[{"value": p.name_short, "label": p.name_short,
-                                  "title": p.name if p.name is not None else p.name_short} for p in procs],
-                        value=process,
-                        className="lots2-process-selector", persistence=True)]),
+            html.Div([html.Div("Snapshot: "), GuiUtils.create_snapshots_selector_prev_next(translations_key)]),
+            html.Div([html.Div("Process: ", id="lots2-process-selector-label"), GuiUtils.create_process_selector(translations_key, set_options=True)]),
             # TODO display here the state of the optimization for the selected process
             # has it been run yet, which settings, etc.?
             # html.Div([html.Div("Results: "), html.Div(id="create_result")]),
             html.Div([
                 html.Progress(),
-                html.Div("Optimization running")
+                html.Div("Optimization running", id="lots2-running-label")
             ], id="lots2-running-indicator", hidden=True),
             html.Div([
-                dcc.Link(html.Button("View solutions", className="dynreact-button"), id="lots2-link-solutions", href="/dash/lots/planned", target="_blank")
+                dcc.Link(html.Button("View solutions", id="lots2-link-sol-btn", className="dynreact-button"), id="lots2-link-solutions", href="/dash/lots/planned", target="_blank")
             ], id="lots2-link-solutions-wrapper", hidden=True),
         ], className="lots2-selector-flex"),
         html.Div([
@@ -112,11 +107,12 @@ def layout(*args, **kwargs):
             #    ])
         ], className="lots2-control-row"),
         lots_view("lots2", *args, **kwargs),
-        ltp_dialog(),
+        ltp_init_dialog("lots2"),
         # ========= Stores ================
         dcc.Store(id="lots2-active-tab", data=tab),  # Literal["targets", "orders", "settings"]
         dcc.Store(id="lots2-iterations", data=str(iterations), storage_type="memory"),  # Literal["targets", "orders", "settings"]
-        dcc.Store(id="lots2-planning-itv-start", storage_type="memory"),  # datetime
+        dcc.Store(id="lots2-planning-itv-start", storage_type="memory"),  # datetime   # receives the value from the datetime selector
+        dcc.Store(id="lots2-planning-itv-start2", storage_type="memory"),  # datetime  # initializes the datetime selector
         dcc.Store(id="lots2-orders-data", storage_type="memory"),  # a dict with keys "snapshot", "process", "orders_selected_cnt", "orders_selected_weight"
         dcc.Store(id="lots2-orders-backlog-structure-data", storage_type="memory"),  # { mat category id: { name: str, classes: { mat class id: {name: cl name, weight: aggregated weight} } } }
         dcc.Store(id="lots2-lots-data", storage_type="memory"),    # rowData, list of dicts, one row per lot; input for swim lane
@@ -144,7 +140,6 @@ def layout(*args, **kwargs):
         dcc.Store(id="lots2-active-plants", storage_type="memory", data=tuple()),    # Sequence[int], never None
 
         dcc.Interval(id="lots2-interval", interval=3_600_000),  # for polling when optimization is running
-        dcc.Interval(id="lots2-process-init", interval=100),
 
         # Material structure setpoints
         ####################
@@ -171,41 +166,43 @@ def targets_tab(horizon: int):
 
     return [
         html.Div([
-            html.Div("Planning horizon"),
+            html.Div("Planning horizon", id="lots2-horizon-label"),
             html.Div([
                 dcc.Input(type="number", id="lots2-horizon-hours", min=1, max=1024, value=horizon),
-                html.Div("hours")
+                html.Div("hours", id="lots2-horizon-label-hours")
             ])
         ], className="lots2-horizon"),
         html.Br(),
         html.Div([
-            html.Div("Planning start"),
+            html.Div("Planning start", id="lots2-planning-start-label"),
             dcc.Input(type="date", id="lots2-planning-itv-start-date"),
             dcc.Input(type="time", id="lots2-planning-itv-start-time")
         ], className="lot2-planning-start"),
         html.Div([
             html.Div([
-                html.H4("Target production / t"),
+                html.H4("Target production / t", id="lots2-target-amount-header"),
                 html.Div([
                     html.Button("Initialize: LTP", id="lots2-targets-init-ltp", className="dynreact-button dynreact-button-small", title="Derive from long term planning."),
                     # html.Button("Initialize: lots", id="lots2-targets-init-lots", className="dynreact-button dynreact-button-small", title="Derive from currently planned lots."),
                 ], className="lots2-target-buttons"),
                 html.Div([
                     html.Div(dcc.Checklist(id="lots2-check-use-lot-range", options=checklist_dict, value=[], className="lots2-checkbox")),
-                    html.Div("Use lot weight range ?", title="Check to specify target weight ranges for the new lots to be created."),
+                    html.Div("Use lot weight range ?", id="lots2-check-use-lot-range-label",
+                             title="Check to specify target weight ranges for the new lots to be created."),
                 ], className="lots2-use-range-checkbox"),
                 html.Div([
                     html.Div(dcc.Checklist(id="lots2-check-append_to_lot", options=checklist_dict, value=[],className="lots2-checkbox")),
-                    html.Div("Append to existing lots?", title="Instead of creating new lots, add orders to an existing lot (select via \"Previous lot\" column)"),
+                    html.Div("Append to existing lots?", id="lots2-check-append_to_lot-label",
+                             title="Instead of creating new lots, add orders to an existing lot (select via \"Previous lot\" column)"),
                 ], className="lots2-use-range-checkbox"),
                 html.Div(id="lots2-details-plants", className="lots2-plants-targets grid-items-4"),
                 html.Div([
-                    html.Span("Total production: "),
+                    html.Span("Total production: ", id="lots2-plant-targets-sum-label"),
                     html.Span(id="lots2-plant-targets-sum"),
                     html.Span("t"),
                 ]),
                 html.Div([
-                    html.Div("Structure planning: "),
+                    html.Div("Structure planning: ", id="lots2-check-material-planning-label"),
                     dcc.Checklist(id="lots2-check-material-planning", options=checklist_dict, value=[""])
                 ], className="lots2-structure-toggle"), #
                 html.Div([
@@ -229,26 +226,26 @@ def orders_tab():
     return [
         html.Div([
             html.Div([
-                html.H4("Order backlog", title="Select orders for scheduling from the order backlog."),
+                html.H4("Order backlog", id="lots2-orders-backlog-header", title="Select orders for scheduling from the order backlog."),
 
                 html.Div([
-                    html.Span("Selected orders:"),
+                    html.Span("Selected orders:", id="lots2-orders-backlog-count-label"),
                     html.Span(id="lots2-orders-backlog-count", className="left-space"),
-                    html.Span(", total weight:"),
+                    html.Span(", total weight:", id="lots2-orders-backlog-weight-acc-label"),
                     html.Span(id="lots2-orders-backlog-weight-acc", className="left-space"),
-                    html.Span("t (target:"),
+                    html.Span("t (target:", id="lots2-orders-backlog-target-weight-label"),
                     html.Span(id="lots2-orders-backlog-target-weight", className="left-space"),
                     html.Span("t)")
                 ], className="lots2-orders-selection-overview"),
                 html.Br(),
                 html.Div([
-                    html.Span("Planning interval start:"),
+                    html.Span("Planning interval start:", id="lots2-itv-start-label"),
                     html.Span("", id="lots2-itv-start", className="left-space")
                 ])
             ]),
             html.Div([
                 html.Div([
-                    html.Div("Backlog structure:"),
+                    html.Div("Backlog structure:", id="lots2-backlog-structure-widget-label"),
                     html.Div([
                         html.Div(id="lots2-backlog-structure-widget")
                     ]),
@@ -257,12 +254,12 @@ def orders_tab():
         ], className="lots2-orders-structure-flex"),
 
         html.Fieldset([
-            html.Legend("Initialize orders"),
+            html.Legend("Initialize orders", id="lots2-orders-backlog-init-label"),
             html.Div([
-                html.Div("Select all available orders:", title="Add available orders to backlog"),
+                html.Div("Select all available orders:", title="Add available orders to backlog", id="lots2-orders-backlog-init2-label"),
                 html.Div(html.Button("Init", id="lots2-orders-backlog-init2", className="dynreact-button dynreact-button-small"), title="Add available orders to backlog"),
                 html.Div(),
-                html.Div("Clear backlog:", title="Clear order backlog"),
+                html.Div("Clear backlog:", title="Clear order backlog", id="lots2-orders-backlog-clear2-label"),
                 html.Div(html.Button("Clear", id="lots2-orders-backlog-clear2", className="dynreact-button dynreact-button-small"), title="Clear order backlog"),
                 html.Div(),
             ], className="lots2-orders-init-menu2"),
@@ -313,14 +310,15 @@ def orders_tab():
 
         # TODO hideable?, use icon (https://wiki.selfhtml.org/wiki/SVG/Tutorials/Icons)
         html.Fieldset([
-            html.Legend("Lot-based selection"),
+            html.Legend("Lot-based selection", id="lots2-orders-lots-label"),
             html.Div([
                 html.Div([
-                    html.Div("Processes:"),
+                    html.Div("Processes:", id="lots2-oders-lots-processes-label"),
                     dcc.Dropdown(id="lots2-oders-lots-processes", className="lots2-order-lots-selector", multi=True),
-                    html.Div("Lots:"),
+                    html.Div("Lots:", id="lots2-oders-lots-lots-label"),
                     dcc.Dropdown(id="lots2-oders-lots-lots", className="lots2-order-lots-selector", multi=True),
-                    html.Div(["(", html.Div(id="lots2-orders-lots-order-selected"), "/", html.Div(id="lots2-orders-lots-order-total"), "selected)"], className="flex"),
+                    html.Div(["(", html.Div(id="lots2-orders-lots-order-selected"), "/", html.Div(id="lots2-orders-lots-order-total"),
+                              html.Span("selected)", id="lots2-orders-lots-selected-str")], className="flex"),
                     html.Div(html.Button("Select orders", id="lots2-orders-backlog-add-logs",
                              className="dynreact-button dynreact-button-small", disabled=True), title="Add orders from selected lots to backlog"),
                     html.Div(html.Button("Deselect orders", id="lots2-orders-backlog-rm-logs",
@@ -329,10 +327,10 @@ def orders_tab():
             ]) #, id="lots2-orders-backlog-settings")
         ], className="lots2-orders-grouped-menu"),
         html.Fieldset([
-            html.Legend("Table operations"),
+            html.Legend("Table operations", id="lots2-orders-backlog-table-header"),
             html.Div([
                 html.Div([
-                    html.Div("Backlog operations: "),
+                    html.Div("Backlog operations: ", id="lots2-orders-backlog-table-label2"),
                     # html.Div(html.Button("Clear", id="lots2-orders-backlog-clear", className="dynreact-button dynreact-button-small"),
                     #         title="Clear order backlog"),
                     html.Div(html.Button("Select visible", id="lots2-orders-select-visible",
@@ -349,9 +347,7 @@ def orders_tab():
                 ], className="lots2-orders-backlog-settings-buttons"),
                 html.Br(),
                 html.Div([
-                    html.Div(dcc.Checklist(id="lots2-check-hide-released-lots", options=[{"value": "hide_released", "label": "Hide released lots"},
-                                                    {"value": "hide_unavailable","label": "Hide unavailable orders"},
-                                                    {"value": "hide_next_procs", "label": "Hide orders at later process steps"}],
+                    html.Div(dcc.Checklist(id="lots2-check-hide-released-lots", options=order_backlog_checklist_options(None),
                                            value=["hide_released", "hide_unavailable", "hide_next_procs"],
                                            className="lots2-checkbox"))
                 ], className="lots2-use-range-checkbox"),
@@ -382,19 +378,16 @@ def orders_tab():
         html.Div(id="lots2-details-orders-hidden", className="lots2-details-orders", hidden=True),
 
         html.Fieldset([
-            html.Legend("Custom orders priority"),
+            html.Legend("Custom orders priority", id="lots2-custom-priority-header"),
             html.Br(),
             html.Div([
-                html.Div("Custom priority configuration: "),
-                html.Div(html.Button("Open custom priority", id="lots2-orders-custom-priority-open",
-                                     className="dynreact-button dynreact-button-small"),
-                         title="Set custom orders priority in the table."),
-                html.Div(html.Button("Clear custom priority", id="lots2-orders-custom-priority-clear",
-                                     className="dynreact-button dynreact-button-small"),
-                         title="Clear custom orders priority in the table."),
-                html.Div(html.Button("Save custom priority", id="lots2-orders-custom-priority-save",
-                                     className="dynreact-button dynreact-button-small"),
-                         title="Save custom orders priority for use in optimisation."),
+                html.Div("Custom priority configuration: ", id="lots2-custom-prio-config-label"),
+                html.Div(html.Button("Open custom priority", id="lots2-orders-custom-priority-open", title="Set custom orders priority in the table.",
+                                     className="dynreact-button dynreact-button-small")),
+                html.Div(html.Button("Clear custom priority", id="lots2-orders-custom-priority-clear", title="Clear custom orders priority in the table.",
+                                     className="dynreact-button dynreact-button-small")),
+                html.Div(html.Button("Save custom priority", id="lots2-orders-custom-priority-save",title="Save custom orders priority for use in optimisation.",
+                                     className="dynreact-button dynreact-button-small")),
                 html.Div(dcc.Textarea(id='lots2-prio-logging', value='', className="lots2-prio-textarea")) #&&&&
             ], className="lots2-orders-custom-prio-buttons"),
 
@@ -430,38 +423,35 @@ def orders_tab():
 
 def settings_tab(init_method: Literal["heuristic", "duedate", "snapshot", "result"]|None, iterations: int):
     return [
-        html.H4("Lot creation settings"),
+        html.H4("Lot creation settings", id="lots2-opti-tab-header"),
 
         # Initialization
         html.Div([
-            html.Div("Initialization: ", title="Specify the algorithm for the initialization of the lot creation."),
-            dcc.Dropdown(id="lots2-init-selector", options=[
-                {"value": "heuristic", "label": "Heuristic",
-                 "title": "A heuristic initialization that aims to start with a reasonable assignment of orders already, with low costs, but ignoring global constraints."},
-                {"value": "duedate", "label": "Due date", "title": "Initialization based on the due dates of orders."},
-                {"value": "snapshot", "label": "Snapshot", "title": "Initialization based on planning in current snapshot. "
-                                                                    "This only makes sense if the order selection contains a significant number of orders in currently active lots"},
-                # TODO show this one only if there are existing runs?
-                #{"value": "result", "label": "Existing solution", "title": "Continue a previous optimization run."}
-            ], value=init_method, className="lots2-init-selector"),
+            html.Div("Initialization: ", id="lots2-opti-tab-init",
+                     title="Specify the algorithm for the initialization of the lot creation."),
+            dcc.Dropdown(id="lots2-init-selector", options=init_method_options(None),
+                         value=init_method, className="lots2-init-selector"),
             # Existing results
             html.Div([
-                html.Div("Solution:"),
+                html.Div("Solution:", id="lots2-existing-sols-label"),
                 dcc.Dropdown(id="lots2-existing-sols")
             ], id="lots2-init-results-selector", className="lots2-existing-sol-selector lots2-panel-col", hidden=True),  # classes do not exist yet
-            html.Div("Selected orders:", title="Number of orders selected for the lot creation"),
+            html.Div("Selected orders:", id="lots2-num-orders-label",
+                     title="Number of orders selected for the lot creation"),
             html.Div(id="lots2-num-orders"),
-            html.Div("Iterations:", title="Specify the maximum number of optimization iterations to run."),
+            html.Div("Iterations:", id="lots2-iterations-value-label",
+                     title="Specify the maximum number of optimization iterations to run."),
             html.Div([
                 html.Div(id="lots2-iterations-value"),
                 # Note that 0 iterations actually makes sense... it will result in an optimized arrangement into lots of the selected orders, without altering the order
                 dcc.Input(type="range", id="lots2-num-iterations", min=0, max=1000, value=iterations, list="lots2-iterations-options")
             ], className="lots2-iterations-view"),
-            html.Div("Comment:", title="Add a comment, explaining for instance the settings applied (target weights, orders included, etc)"),
+            html.Div("Comment:", id="lots2-comment-label",
+                     title="Add a comment, explaining for instance the settings applied (target weights, orders included, etc)"),
             html.Div(
                 html.Div(dcc.Textarea(rows=1, cols=10, placeholder="Add a comment", id="lots2-comment", value="",
                                       title="Add a comment, explaining for instance the settings applied (target weights, orders included, etc)"))),
-            html.Div("Store:", title="Store results?"),
+            html.Div("Store:", id="lots2-store-results-label", title="Store results?"),
             html.Div(dcc.Checklist(options=[""], value=[""], id="lots2-store-results"), title="Store results?"),
         ], className="lots2-settings-tab-grid"),
         html.Div(id="lots2-warning-message", className="lots2-message-severe"),
@@ -471,50 +461,6 @@ def settings_tab(init_method: Literal["heuristic", "duedate", "snapshot", "resul
             html.Button("Stop", id="lots2-stop", className="dynreact-button", disabled=True)
         ], id="lots2-control-btns", className="lots2-control-btns"),
     ]
-
-def ltp_dialog():
-    return html.Dialog(
-        html.Div([
-            html.H3("Long term planning results"),
-            html.Div([
-                dash_ag.AgGrid(
-                    id="lots2-ltp-table",
-                    columnDefs=[{"field": "id", "pinned": True},
-                                {"field": "start_time", "filter": "agDateColumnFilter",
-                                 "headerName": "Start time"},
-                                {"field": "end_time", "filter": "agDateColumnFilter",
-                                 "headerName": "End time"},
-                                {"field": "shift_duration", "filter": "agNumberColumnFilter",
-                                 "headerName": "Shift duration / h"},
-                                {"field": "total_production", "filter": "agNumberColumnFilter",
-                                 "headerName": "Total production / t"},
-                                {"field": "production_per_shift", "filter": "agNumberColumnFilter",
-                                 "headerName": "Avg. production per shift / t"},
-                                # {"field": "delete"} # not possible
-                                ],
-                    defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
-                    style={"height": "20em"},
-                    rowData=[],
-                    getRowId="params.data.id",
-                    className="ag-theme-alpine",  # ag-theme-alpine-dark
-                    columnSizeOptions={"defaultMinWidth": 125},
-                    columnSize="responsiveSizeToFit",
-                    dashGridOptions={"rowSelection": "single"}
-                ),
-                html.Br(),
-                html.Div([
-                    html.H3("Selected long-term planning"),
-                    html.Div([html.Span("Total production: "), html.Span(id="lots2-ltp-popup-total"), html.Span("t")], className="lots2-ltp-summary-item"),
-                    html.Div("Material structure for selected planning interval:", className="lots2-ltp-summary-item"),
-                    html.Div(id="lots2-ltp-popup-structure")
-                ], id="lots2-ltp-popup-summary", hidden=True)
-            ]),
-            html.Div([
-                html.Button("Cancel", id="lots2-ltp-cancel", className="dynreact-button"),
-                html.Button("Apply", id="lots2-ltp-submit", className="dynreact-button")
-            ], className="lots2-materials-buttons")
-        ]),
-        id="lots2-ltp-dialog", className="dialog-filled lots2-ltp-dialog", open=False)
 
 
 def structure_portfolio_popup(initial_weight: float):
@@ -538,41 +484,15 @@ def structure_portfolio_popup(initial_weight: float):
         ], title=""),
         id="lots2-structure-dialog", className="dialog-filled", open=False)
 
-# init the process, if not done yet
-@callback(Output("lots2-process-selector", "value"),
-          Output("lots2-process-init", "interval"),
-          Input("lots2-process-init", "n_intervals"),
-          State("selected-process", "data"),
-          State("lots2-process-selector", "value"))
-def proc_changed(update_cnt: int, process: str|None, old_process) -> tuple[str, float]:
-    if process is not None:
-        return process, 7_200_000
-    update_cnt = update_cnt or 0
-    # wait for up to 4 seconds for external initialization, then abort
-    interval = 7_200_00 if (old_process is not None and update_cnt > 5) or (process is None and update_cnt > 40) else dash.no_update
-    return dash.no_update, interval
-
-
-@callback(Output("create_process-selector", "data"),  # defined in session state => this will set the global process property
-          Input("lots2-process-selector", "value"),
-          config_prevent_initial_callbacks=True)
-def proc_changed2(process: str|None) -> str:
-    return process if process is not None else dash.no_update
-
-
-@callback(Output("lots2-current_snapshot", "children"),
-          Input("selected-snapshot", "data")) #     selected-snapshot is a page-global store
-          # Input("client-tz", "data"))  # client timezone, global store
-def snapshot_changed(snapshot: datetime|None) -> str:  # , tz: str|None
-    #snapshot = selected_snapshot.data if hasattr(selected_snapshot, "data") else snapshot
-    return GuiUtils.format_snapshot(snapshot, None, state=state)
+GuiUtils.create_snapshot_callbacks(translations_key)
+GuiUtils.create_process_selector_callbacks(translations_key)
 
 
 @callback(
           Output("lots2-settings-tabs", "hidden"),
           Output("lots2-shifts", "data"),
-          Input("selected-snapshot", "data"),
-          Input("lots2-process-selector", "value")
+          Input({"role": "snapshot-selector", "page": translations_key}, "data"),
+          Input({"role": "process-selector", "page": translations_key}, "value"),
 )
 def toggle_settings_tabs_visibility(snapshot: str|datetime|None, process: str|None):
     if not dash_authenticated(config):
@@ -595,7 +515,7 @@ def toggle_settings_tabs_visibility(snapshot: str|datetime|None, process: str|No
           Input("lots2-tabbutton-settings", "n_clicks"),
           Input("lots2-tabsnav-prev", "n_clicks"),
           Input("lots2-tabsnav-next", "n_clicks"),
-          Input("lots2-process-selector", "value")
+          Input({"role": "process-selector", "page": translations_key}, "value"),
 )
 def select_settings_tab(active_tab: Literal["targets", "orders", "settings"]|None,  _, __, ___, ____, _v, v) -> Literal["targets", "orders", "settings"]:
     if not dash_authenticated(config):
@@ -604,7 +524,7 @@ def select_settings_tab(active_tab: Literal["targets", "orders", "settings"]|Non
     if len(changed_ids) == 0:  # initial callback
         return active_tab  # must not return no_update here, because it blocks dependent callbacks
     button_id = next((bid for bid in changed_ids if bid.startswith("lots2-tabbutton-")), None)
-    if button_id is None and "selected-process" in changed_ids:
+    if button_id is None and any("\"selected-process\"" in c for c in changed_ids):
         button_id = "lots2-tabbutton-targets"
     new_active_tab: Literal["targets", "orders", "settings"] = "targets"
     if button_id is not None:
@@ -658,8 +578,8 @@ def select_settings_tab(active_tab: Literal["targets", "orders", "settings"]|Non
     Output("lots2-orders-backlog-structure-data", "data"),
     Input("lots2-active-tab", "data"),
     Input("lots2-orders-table", "selectedRows"),
-    State("selected-snapshot", "data"),
-    State("lots2-process-selector", "value")
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
+    State({"role": "process-selector", "page": translations_key}, "value"),
 )
 def show_structure_overview(active_tab: Literal["targets", "orders", "settings"]|None,
                             selected_rows: list[dict[str, any]] | None,
@@ -713,8 +633,8 @@ clientside_callback(
 @callback(
     Output("lots2-ltp-table", "rowData"),
     Input("lots2-targets-init-ltp", "n_clicks"),
-    State("selected-snapshot", "data"),
-    State("lots2-process-selector", "value"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
+    State({"role": "process-selector", "page": translations_key}, "value"),
     State("lots2-horizon-hours", "value"),
 )
 def ltp_table_opened(_, snapshot: str, process: str, horizon_hours: int):
@@ -770,7 +690,7 @@ def ltp_table_row_selected(ltp_solution: dict[str, any]|None):
 @callback(
     Output("lots2-material-setpoints-memory", "clear_data"),
     Input("lots2-materials-clear", "n_clicks"),
-    Input("lots2-process-selector", "value")
+    Input({"role": "process-selector", "page": translations_key}, "value"),
 )
 def clear_setpoints(n_click_clear, process: str|None) -> bool:
     if n_click_clear is not None and n_click_clear > 0:
@@ -783,8 +703,8 @@ def clear_setpoints(n_click_clear, process: str|None) -> bool:
     Output("lots2-ltp-selected-solution", "data"),
     Output("lots2-ltp-submit", "disabled"),
     Input("lots2-ltp-table", "selectedRows"),
-    State("selected-snapshot", "data"), # TODO
-    State("lots2-process-selector", "value"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
+    State({"role": "process-selector", "page": translations_key}, "value"),
     State("lots2-horizon-hours", "value"),
     State("lots2-planning-itv-start", "data"),
 )
@@ -822,19 +742,20 @@ def ltp_row_selected(selected_rows: list[dict[str, any]]|None, snapshot: datetim
     Output("lots2-details-plants", "children"),
     Output("lots2-details-plants", "className"),
     Output("lots2-check-use-lot-range", "value"),
-    Output("lots2-planning-itv-start-date", "value"),
-    Output("lots2-planning-itv-start-time", "value"),
+    #Output("lots2-planning-itv-start-date", "value"),
+    #Output("lots2-planning-itv-start-time", "value"),
     Output("lots2-material-setpoints-ltp", "data"),
-    State("selected-snapshot", "data"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
     State("lots2-horizon-hours", "value"),
     State("lots2-details-plants", "children"),
     State("lots2-planning-itv-start", "data"),
     State("lots2-ltp-selected-solution", "data"),
-    Input("lots2-process-selector", "value"),
-    Input("lots2-active-tab", "data"),
+    Input({"role": "process-selector", "page": translations_key}, "value"),
+    # Input("lots2-active-tab", "data"),
     # Input("lots2-targets-init-lots", "n_clicks"),
     Input("lots2-ltp-submit", "n_clicks"),
-    Input("lots2-check-use-lot-range", "value")
+    Input("lots2-check-use-lot-range", "value"),
+    Input("lang", "data")
 )
 def update_plants(snapshot: str,
                   horizon_hours: int,
@@ -842,12 +763,13 @@ def update_plants(snapshot: str,
                   current_start: datetime|None,
                   ltp_solution: dict[str, any]|None,
                   process: str,
-                  active_tab: Literal["targets", "orders", "settings"]|None,
+                  #active_tab: Literal["targets", "orders", "settings"]|None,
                   _,  # __,
-                  use_lot_range0: list[Literal[""]]
+                  use_lot_range0: list[Literal[""]],
+                  lang: str|None
                   ) -> tuple[list[Component], list[any], list[Literal[""]], str, str, dict|None]:
     changed = GuiUtils.changed_ids()
-    process_changed = "lots2-process-selector" in changed
+    process_changed = any("\"process-selector\"" in c for c in changed)
     use_lot_range: bool = len(use_lot_range0) > 0 and not process_changed
     init_lot_size_from_settings: bool = False
     site = state.get_site()
@@ -861,17 +783,22 @@ def update_plants(snapshot: str,
     snapshot = DatetimeUtils.parse_date(snapshot)
     snapshot_obj = state.get_snapshot(snapshot)
     ltp_structure = dash.no_update
-    if not dash_authenticated(config) or process is None or snapshot_obj is None or active_tab != "targets":
-        return no_update, my_parent_classname, no_update, no_update, no_update, ltp_structure
+    if not dash_authenticated(config) or process is None or snapshot_obj is None:  # or active_tab != "targets":
+        return no_update, my_parent_classname, no_update, ltp_structure  # no_update, no_update, ltp_structure
     is_ltp_init = "lots2-ltp-submit" in changed and ltp_solution is not None   # TODO already contains all the relevant data
     re_init: bool = "lots2-targets-init-lots" in changed or is_ltp_init
-    init_dates = current_start is None or re_init or "lots2-process-selector" in changed
+    init_dates = current_start is None or re_init or process_changed
     toggle_lot_range: bool = "lots2-check-use-lot-range" in changed
     site = state.get_site()
     plants: list[Equipment] = site.get_process_equipment(process)
-    elements = [html.Div(), html.Div("Equipment"), html.Div("Production / t"), html.Div("Previous lot", title="The previous lot defines the starting point for the lot creation.")]
+    is_de: bool = lang and lang.startswith("de")
+    elements = [html.Div(), html.Div("Anlage" if is_de else "Equipment"),
+                html.Div("Produktion (t)" if is_de else "Production / t"),
+                html.Div("Vorheriges Los" if is_de else "Previous lot", title="Das vorherige Los definiert den Startpunkt der Loserzeugung" if is_de else \
+                             "The previous lot defines the starting point for the lot creation.")]
     if use_lot_range:
-        elements.extend([html.Div("Min lot size / t"), html.Div("Max lot size / t")])
+        elements.extend([html.Div("Min-Losgröße (t)" if is_de else "Min lot size / t"),
+                         html.Div("Max-Losgröße (t)" if is_de else "Max lot size / t")])
     targets: ProductionTargets|None = None
     targets0 = None
     if not is_ltp_init:
@@ -1011,14 +938,14 @@ def update_plants(snapshot: str,
     # my_parent_classname for formatting purpose
     # todo if input-selector HAS CHANGED ??
     checked_use_lot_range = ([""] if use_lot_range else []) if process_changed else no_update
-    if is_ltp_init:
-        start_date, start_time = DatetimeUtils.format(state.as_timezone(DatetimeUtils.parse_date(ltp_solution["planning_start_time"])), use_zone=False).split("T")
-    elif not init_dates:
-        start_date = no_update
-        start_time = no_update
-    else:
-        start_date, start_time = DatetimeUtils.format(state.as_timezone(earliest_start), use_zone=False).split("T")
-    return elements, my_parent_classname, checked_use_lot_range, start_date, start_time, ltp_structure
+    #if is_ltp_init:
+    #    start_date, start_time = DatetimeUtils.format(state.as_timezone(DatetimeUtils.parse_date(ltp_solution["planning_start_time"])), use_zone=False).split("T")
+    #elif not init_dates:
+    #    start_date = no_update
+    #    start_time = no_update
+    #else:
+    #    start_date, start_time = DatetimeUtils.format(state.as_timezone(earliest_start), use_zone=False).split("T")
+    return elements, my_parent_classname, checked_use_lot_range, ltp_structure # start_date, start_time, ltp_structure
 
 @callback(
          Output("lots2-planning-itv-start", "data"),
@@ -1050,7 +977,7 @@ def _targets_from_ltp(selected_row: dict[str, any], process: str, snapshot: Snap
           Output("lots2-material-setpoints-memory", "data"),
           Input("lots2-material-setpoints-ltp", "data"),
           Input("lots2-target-weight", "data"),
-          Input("lots2-process-selector", "value"),
+          Input({"role": "process-selector", "page": translations_key}, "value"),
           Input("lots2-active-plants", "data"),
           Input("lots2-material-setpoints-user", "data"),
           State("lots2-material-setpoints-memory", "data"),
@@ -1060,7 +987,7 @@ def ltp_submit(ltp_structure: dict[str, float]|None, target_weight: float|None, 
     if not target_weight or not process or not dash_authenticated(config):
         return None
     changed = GuiUtils.changed_ids()
-    process_changed = "lots2-process-selector" in changed
+    process_changed = any("\"process-selector\"" in c for c in changed)
     plants_changed = "lots2-active-plants" in changed
     ltp_structure_set: bool = ltp_structure is not None and "lots2-material-setpoints-ltp" in changed and not process_changed
     user_structure_set: bool = not ltp_structure_set and user_structure is not None and "lots2-material-setpoints-user" in changed and not process_changed
@@ -1174,7 +1101,7 @@ def init_method_changed(method: Literal["active_process", "active_plant", "inact
     Output("lots2-init-prev-proc-selector_lot", "value"),
     Output("lots2-init-prev-proc-selector_all", "options"),
     Output("lots2-init-prev-proc-selector_all", "value"),
-    Input("lots2-process-selector", "value"),
+    Input({"role": "process-selector", "page": translations_key}, "value"),
     Input("lots2-orders-init-method", "value")  # this one is not really needed, but for some reason the initial callback does not work here
 )
 def set_predecessor_procs_for_backlog_init(process: str|None, _):
@@ -1226,8 +1153,8 @@ def _find_predecessor_processes(process: str|None, recursive: bool = True, skip_
     Input("lots2-active-tab", "data"),
     Input("lots2-check-hide-released-lots", "value"),
     # Input("create-details-trigger", "n_clicks"), # => TODO replace maybe by tab state?
-    Input("lots2-process-selector", "value"),
-    State("selected-snapshot", "data")
+    Input({"role": "process-selector", "page": translations_key}, "value"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
 )
 def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] | None, active_tab: Literal["targets", "orders", "settings"]|None,
                                  check_hide_list: list[Literal["hide_released"]], process: str, snapshot: str):
@@ -1264,8 +1191,8 @@ def order_backlog_lots_operation(selected_processes, order_data: dict[str, str] 
     Output("lots2-orders-lots-order-total", "children"),
     Input("lots2-oders-lots-lots", "value"),
     Input("lots2-orders-table", "selectedRows"),
-    Input("lots2-process-selector", "value"),
-    State("selected-snapshot", "data"),
+    Input({"role": "process-selector", "page": translations_key}, "value"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
     config_prevent_initial_callbacks=True
 )
 def lot_buttons_disabled_check(selected_lots: list[str]|None, selected_rows: list[dict[str, any]]|None, process: str|None, snapshot: str|None):
@@ -1287,8 +1214,8 @@ def lot_buttons_disabled_check(selected_lots: list[str]|None, selected_rows: lis
 
 @callback(
     Output("lots2-orders-data", "data"),
-    Input("selected-snapshot", "data"),
-    Input("lots2-process-selector", "value"),
+    Input({"role": "snapshot-selector", "page": translations_key}, "data"),
+    Input({"role": "process-selector", "page": translations_key}, "value"),
     Input("lots2-orders-table", "selectedRows"),
     State("lots2-orders-data", "data"),
 )
@@ -1333,8 +1260,8 @@ def update_backlog_state(snapshot: str, process: str, rows: list[dict[str, any]]
             #Output("lots2-itv-start", "children"),
             # Output("lots2-orders-data", "data"),
 
-            Input("selected-snapshot", "data"),
-            Input("lots2-process-selector", "value"),
+            Input({"role": "snapshot-selector", "page": translations_key}, "data"),
+            Input({"role": "process-selector", "page": translations_key}, "value"),
             Input("lots2-active-tab", "data"),
             Input("lots2-check-hide-released-lots", "value"),
             Input("lots2-orders-backlog-init", "n_clicks"),
@@ -1345,6 +1272,7 @@ def update_backlog_state(snapshot: str, process: str, rows: list[dict[str, any]]
             Input("lots2-orders-deselect-visible", "n_clicks"),
             Input("lots2-orders-backlog-add-logs", "n_clicks"),
             Input("lots2-orders-backlog-rm-logs", "n_clicks"),
+            Input("lang", "data"),
             State("lots2-orders-data", "data"),
             State("lots2-oders-lots-lots", "value"),
             State("lots2-orders-table", "selectedRows"),
@@ -1362,7 +1290,7 @@ def update_backlog_state(snapshot: str, process: str, rows: list[dict[str, any]]
             State("lots2-planning-itv-start", "data")
 )
 def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: list[Literal["hide_released", "hide_unavailable", "hide_next_procs"]],
-                  _1, _2, _3, _4, _5, _6, _7, _8,
+                  _1, _2, _3, _4, _5, _6, _7, _8, lang: str|None,
                   orders_data: dict[str, str]|None, selected_lots: list[str],
                   selected_rows: list[dict[str, any]]|None, filtered_rows: list[dict[str, any]]|None, horizon_hours: int,
                   init_method: Literal["active_process", "active_plant", "inactive_lots", "active_lots", "current_planning"]|None,
@@ -1413,6 +1341,8 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
             return float in args or int in args
         return False
 
+    is_de = lang and lang.startswith("de")
+
     def column_def_for_field(field: str, info: FieldInfo):
         filter_id = "agNumberColumnFilter" if _is_numeric(info.annotation) else "agDateColumnFilter" if info.annotation == datetime or info.annotation == date else "agTextColumnFilter"
         col_def = {"field": field, "filter": filter_id, "filterParams": {"buttons": ["reset"]}}
@@ -1434,11 +1364,11 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
         if field["field"] in ["active_processes", "coil_status", "follow_up_processes", "material_status", "actual_weight", "material_classes"]:
             field["valueFormatter"] = value_formatter_object
         if field["field"] == "current_equipment":
-            field["headerName"]  = "Equipment"
+            field["headerName"]  = "Anlage" if is_de else "Equipment"
     # FIXME tooltipField not working?
-    fields.append({"field": "lot_info", "headerName": "Lot", "tooltipField": "lot_info", "headerTooltip": "Lot of the selected processing stage", "filter":  "agTextColumnFilter"})
-    fields.append({"field": "prev_lot_info", "headerName": "Lot: previous", "tooltipField": "prev_lot_info", "headerTooltip": "Lot of the previous processing stage", "filter": "agTextColumnFilter"})
-    fields.append({"field": "availability", "headerTooltip": "Order availability", "filter": "agDateColumnFilter"})
+    fields.append({"field": "lot_info", "headerName": "Los" if is_de else "Lot", "tooltipField": "lot_info", "headerTooltip": "Los an der ausgewählten Anlagenstufe" if is_de else "Lot of the selected processing stage", "filter":  "agTextColumnFilter"})
+    fields.append({"field": "prev_lot_info", "headerName": "Vorgängerlos" if is_de else "Lot: previous", "tooltipField": "prev_lot_info", "headerTooltip": "Los an der Vorgängerstufe" if is_de else "Lot of the previous processing stage", "filter": "agTextColumnFilter"})
+    fields.append({"field": "availability", "headerName": "Verfügbarkeit" if is_de else "Availability", "headerTooltip": "Auftragsverfügbarkeit" if is_de else "Order availability", "filter": "agDateColumnFilter"})
 
     current_process_index = next((idx for idx, proc in enumerate(site.processes) if proc.name_short == process), None)
 
@@ -1489,8 +1419,9 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     current_process_plants = [p for p in plant_targets.target_weight.keys()] if plant_targets is not None else []
     if len(current_process_plants) == 0:
         return None, None, None, "sizeToFit"
-
-    orders_filtered = [order for order in snapshot_obj.orders if any(plant in current_process_plants for plant in order.allowed_equipment)]
+    temporary_restrictions = state.get_temporary_restrictions()
+    orders = LotsOptimizationAlgo.orders_apply_temporary_constraints(snapshot_obj.orders, temporary_restrictions, equipment=current_process_plants)
+    orders_filtered = [order for order in orders if any(plant in current_process_plants for plant in order.allowed_equipment)]
     orders_sorted = sorted(orders_filtered, key=process_index_for_order)
     order_ids = {o.id: o for o in orders_sorted}
     new_selected_rows = {"ids": []}
@@ -1535,7 +1466,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     elif is_init_command2:
         # adapt planning start time according to frozen lots
         eligible_orders = state.get_snapshot_provider().eligible_orders2(snapshot_obj, process, (actual_start_time, end_time),
-                                            equipment=current_process_plants, transport_times=transport_times)
+                                            equipment=current_process_plants, transport_times=transport_times, temporary_restrictions=temporary_restrictions)
         if not update_selection and selected_rows is not None:
             eligible_orders = eligible_orders + [row for row in (row0["id"] if isinstance(row0, dict) else row0 for row0 in selected_rows) if row not in eligible_orders]
         # filter orders matching for selected process
@@ -1577,8 +1508,8 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
         if prev_lot is None or prev_lot.end_time is None or not prev_lot.active:   # or not snapshot_provider.is_lot_complete(prev_lot):
             _availability_by_order[order] = None
             return None
+        end_time = prev_lot.end_time
         lt_times = snapshot_provider.get_order_lot_times(snapshot_obj.timestamp, o.id)
-        end_time = None
         if lt_times is not None and len(lt_times) > 0 and prev_lot_proc in lt_times[o.id]:
             end_time = lt_times[o.id][prev_lot_proc].end
             if transport_times is not None:
@@ -1650,7 +1581,7 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     try:
         relevant_fields: list[str]|None = state.get_cost_provider().relevant_fields(site.get_equipment(current_process_plants[0]))
         if relevant_fields is not None:
-            def field_sort_id(f: dict[str, any]) -> int:
+            def field_sort_id(f: dict[str, Any]) -> int:
                 _id = f.get("field")
                 if not _id:
                     return 1000
@@ -1821,8 +1752,8 @@ clientside_callback(
     Output("lots2-objectives-history", "data"),
     Output("lots2-lots-data", "data"),
     Output("lots2-lotsview-header", "hidden"),
-    State("selected-snapshot", "data"),
-    State("lots2-process-selector", "value"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
+    State({"role": "process-selector", "page": translations_key}, "value"),
     Input("lots2-interval", "n_intervals"),
     Input("lots2-init-selector", "value"),
     #Input("lots2-existing-sols", "value")
@@ -1865,7 +1796,7 @@ def update_solution_state(snapshot: str|datetime|None, process: str|None, _, sel
 @callback(
     Output("lots2-creation-objectives", "figure"),
     #Output("lots2-creation-graph", "hidden"),
-    Input("lots2-objectives-history", "data")
+    Input("lots2-objectives-history", "data"),
 )
 def update_figure(history: list[float]|None):
     lot_creation_listener = None if history is not None else state.get_lot_creator().listener()
@@ -1898,8 +1829,8 @@ def update_figure(history: list[float]|None):
           Output("lots2-stop", "disabled"),
           Output("lots2-continue", "hidden"),
           #Output("lots2-process-selector", "value"),  # causes a lot of problems
-          Output("lots2-process-selector", "disabled"),
-          #Output("lots2-iterations-value", "children"),
+          Output({"role": "process-selector", "page": translations_key}, "disabled"),  # ok?
+          #Output("lots2-process-selector", "disabled"),  #
           Output("lots2-num-iterations", "value"),
           Output("lots2-iterations", "data"),
           Output("lots2-iterations-value", "children"),
@@ -1918,7 +1849,7 @@ def update_figure(history: list[float]|None):
           Output("lots2-warning-message", "children"),
           Output("lots2-warning-message", "className"),
 
-          State("selected-snapshot", "data"),
+          State({"role": "snapshot-selector", "page": translations_key}, "data"),
           State("lots2-check-use-lot-range", "value"),
           State("lots2-check-append_to_lot", "value"),
           State("lots2-details-plants", "children"),
@@ -1940,14 +1871,14 @@ def update_figure(history: list[float]|None):
           Input("lots2-horizon-hours", "value"),
           Input("lots2-num-iterations", "value"),
           Input("lots2-iterations", "data"),
-          Input("lots2-process-selector", "value"),
+          Input({"role": "process-selector", "page": translations_key}, "value"),
           Input("lots2-init-selector", "value"),
           Input("lots2-existing-sols", "value"),
           Input("lots2-start", "n_clicks"),
           Input("lots2-stop", "n_clicks"),
           Input("lots2-continue", "n_clicks"),
           Input("lots2-interval", "n_intervals"),
-
+          Input("lang", "data")
           )
 def process_changed(snapshot: datetime|None,
                     use_lot_range0: list[Literal[""]],
@@ -1970,7 +1901,7 @@ def process_changed(snapshot: datetime|None,
                     process: str,
                     selected_init_method: Literal["heuristic", "duedate", "snapshot", "result"]|None,
                     existing_solution: str|dash._callback.NoUpdate|None,
-                    _, __, ___, _v,
+                    _, __, ___, _v, lang: str|None
                     ):
     warning_message = ""
     warning_class = "lots2-message-severe"
@@ -2051,17 +1982,21 @@ def process_changed(snapshot: datetime|None,
         results = [{"label": sol, "value": sol, "title": sol} for sol in existing_solutions]
     result_selector_hidden: bool = selected_init_method != "result"
     stop_disabled = check_stop_optimization(changed_ids)
+    is_de: bool = lang and lang.startswith("de")
     if is_running and not stop_disabled:
         interval = 3000
         selection_disabled = True
         #for result in results:  # TODO not working
         #    result["disabled"] = True
         #settings_trigger_hidden = selected_init_method == "result"
+        running_msg = "Optimierung läuft" if is_de else "Optimization running"
         return (True, stop_disabled, True, #process_out,
                 True, iterations, iterations, iterations, result_selector_hidden, selected_init_method, results,
-                existing_solution, selection_disabled, "Optimization running", interval, False, warning_message, warning_class)
+                existing_solution, selection_disabled, running_msg, interval, False, warning_message, warning_class)
     if horizon_hours is None or iterations is None or process is None or snapshot is None:
-        title = "Select a process first" if process is None else "Select a snapshot first" if snapshot is None else "Enter valid planning horizon"
+        title = ("Bitte zunächst eine Anlagenstufe auswählen" if is_de else "Select a process first") if process is None \
+            else ("Bitte zunächst einen Snapshot auswählen" if is_de else "Select a snapshot first") if snapshot is None \
+            else ("Bitte ein gültiges Planungsintervall eingeben" if is_de else "Enter valid planning horizon")
         warning_message = warning_message if warning_message else title
         return (True, stop_disabled, True, #process_out,
                 False, iterations, iterations, iterations, True, selected_init_method, [], None,
@@ -2078,7 +2013,8 @@ def process_changed(snapshot: datetime|None,
                               order_data.get("process") != process or order_data.get("snapshot") != DatetimeUtils.format(snapshot)
     plant_targets_unset: bool = target_elements is None and selected_init_method != "result"
     if orders_unselected or plant_targets_unset:
-        title = "Select orders first" if orders_unselected else "Set plant targets first"
+        title = ("Bitte zunächst den Auftragsvorrat auswählen" if is_de else "Select orders first") if orders_unselected \
+            else ("Bitte zunächst die Anlagenziele auswählen" if is_de else "Set plant targets first")
         warning_message = warning_message if warning_message else title
         return (True, stop_disabled, continue_hidden, #process_out,
                 False, iterations, iterations, iterations, True, selected_init_method, [], None,
@@ -2099,8 +2035,8 @@ def process_changed(snapshot: datetime|None,
             start_disabled = True
     if selected_init_method == "result" and existing_solution is None:
         if start_disabled or len(existing_solutions) == 0 or "create-existing-sols" in changed_ids:  # trying to start the optimization, or explicitly deselected solution id # TODO check
-            title = "Select an existing result" if len(results) > 0 else \
-                        "No previous results avaialable, select a different initialization method."
+            title = ("Bestehende Lösung auswählen" if is_de else "Select an existing result") if len(results) > 0 else \
+                ("Keine Lösungen vorhanden, bitte eine andere Initialisierungsmethode auswählen." if is_de else "No previous results avaialable, select a different initialization method.")
             warning_message = warning_message if warning_message else title
             return (True, stop_disabled, True, #process_out,
                     False, iterations, iterations, iterations, False, selected_init_method, results, existing_solution,
@@ -2125,7 +2061,8 @@ def process_changed(snapshot: datetime|None,
         warning_message = error_msg
     backlog_weight = order_data.get("orders_selected_weight", 0) if order_data is not None else 0
     if (warning_message is None or warning_message == "") and _tab == "settings" and target_weight is not None and target_weight > backlog_weight:
-        warning_message = f"Order backlog of {backlog_weight:.1f}t does not cover the targeted {target_weight:.1f}t."
+        warning_message = f"Auftragsvorrat von {backlog_weight:.1f}t reicht nicht für die geplanten {target_weight:.1f}t." if is_de else \
+                f"Order backlog of {backlog_weight:.1f}t does not cover the targeted {target_weight:.1f}t."
         warning_class = "lots2-message-warn"
     return (start_disabled, stop_disabled, continue_hidden, #process_out,
             process_selection_disabled, iterations, iterations, iterations, result_selector_hidden,
@@ -2306,8 +2243,10 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
          Input({"role": "plant-lot", "id": ALL}, "value"),
          Input({"role": "plant-lotmin", "id": ALL}, "value"),
          Input({"role": "plant-lotmax", "id": ALL}, "value"))
-def test_test(plants, checked: Sequence[Sequence[Literal[""]]], inputs: Sequence[str|float], selected_lots: Sequence[str|None],
+def plant_settings_changed0(plants, checked: Sequence[Sequence[Literal[""]]], inputs: Sequence[str|float], selected_lots: Sequence[str|None],
               lots_min: Sequence[float|None]|None, lots_max: Sequence[float|None]|None):
+    if "lots2-active-tab" in GuiUtils.changed_ids():
+        return dash.no_update, dash.no_update
     plants_checked = [len(c) > 0 for c in checked]
     total_values = [0 if not plants_checked[idx] or not GuiUtils.is_numeric(inp) else float(inp) for idx, inp in enumerate(inputs)]
     lots_range = None
@@ -2327,18 +2266,50 @@ def test_test(plants, checked: Sequence[Sequence[Literal[""]]], inputs: Sequence
 
 @callback(
           Output("lots2-active-plants", "data"),
+          Output("lots2-planning-itv-start2", "data"),
           Input("lots2-plant-settings", "data"),
           State("lots2-active-plants", "data"),
+          State({"role": "snapshot-selector", "page": translations_key}, "data"),
 )
-def plant_settings_changed(settings: dict[int, Any]|None, active_plants: Sequence[str]) -> Sequence[int]:
+def plant_settings_changed(settings: dict[int, Any]|None, active_plants: Sequence[str], snapshot: str|None) -> tuple[Sequence[int], str]:
     if settings is None or len(settings) == 0:
-        return tuple()
+        return tuple(), snapshot
     num_current = len(active_plants)
     num_new = len(settings) if settings is not None else 0
-    if num_current == num_new and all(p in settings for p in active_plants):
-        return dash.no_update
-    return tuple(int(p) for p in settings.keys())
 
+    if num_current == num_new and all(p in settings for p in active_plants):
+        active_plants = dash.no_update
+    else:
+        active_plants = tuple(int(p) for p in settings.keys())
+    snap_obj = state.get_snapshot(time=DatetimeUtils.parse_date(snapshot))
+    _empty = tuple()
+    if snap_obj is not None:
+        start_time = None  # snap_obj.timestamp
+        for plant, p_settings in settings.items():
+            prev_lot = p_settings.get("predecessor_lot")
+            lot = next((lt for lt in snap_obj.lots.get(int(plant), _empty) if lt.id == prev_lot), None) if prev_lot is not None else None
+            lot_end = lot.end_time if lot is not None and lot.end_time is not None else snap_obj.timestamp
+            if start_time is None or lot_end < start_time:
+                start_time = lot_end
+        if start_time is None:
+            start_time = snap_obj.timestamp
+    else:
+        start_time = DatetimeUtils.now()
+    if isinstance(start_time, datetime):
+        start_time = DatetimeUtils.format(state.as_timezone(start_time))
+    return active_plants, start_time
+
+
+@callback(
+    Output("lots2-planning-itv-start-date", "value"),
+          Output("lots2-planning-itv-start-time", "value"),
+          Input("lots2-planning-itv-start2", "data"),
+)
+def planning_start_changed2(start: str|None):
+    start = DatetimeUtils.parse_date(start)
+    if start is None:
+        return dash.no_update,dash.no_update
+    return DatetimeUtils.format(state.as_timezone(start), use_zone=False).split("T")
 
 # Swimlane related callbacks
 
@@ -2351,7 +2322,7 @@ clientside_callback(
     Input("lots2-lots-data", "data"),
     State("lots2-shifts", "data"),
     State("lots2-lots-swimlane", "id"),
-    State("lots2-process-selector", "value"),
+    State({"role": "process-selector", "page": translations_key}, "value"),
     State("lots2-swimlane-mode", "value")
 )
 
@@ -2411,7 +2382,7 @@ clientside_callback(
     ),
     Output("lots2-materials-grid", "title"),
     Input("lots2-structure-btn", "n_clicks"),
-    State("lots2-process-selector", "value"),
+    State({"role": "process-selector", "page": translations_key}, "value"),
     State("lots2-target-weight", "data"),
     State("lots2-material-setpoints-memory", "data"),
     State("lots2-materials-grid", "id"),
@@ -2535,6 +2506,14 @@ def target_value_update_backlog(target_value: float):
     return formatted_sum, formatted_sum
 
 
+@callback(
+    Output("lots2-swimlane-mode", "options"),
+    Input("lang", "data")
+)
+def lang_changed_swimlane(lang: str|None):
+    return lots_view_options(lang)
+
+
 def target_values_from_settings(process: str, period: tuple[datetime, datetime], plants: list[int], use_lot_range: bool, components: list[Component]|None) -> tuple[ProductionTargets|None, bool, dict[int, str], str|None]:
     """
     :return: targets, indicator if default values have been changed, selected predecessor lot by plant , message
@@ -2621,6 +2600,36 @@ def target_values_from_settings(process: str, period: tuple[datetime, datetime],
     except ValueError as e:
         traceback.print_exc()
         return None, False, None, str(e)
+
+
+@callback(
+    Output("lots2-check-hide-released-lots", "options"),
+    Input("lang", "data"),
+)
+def order_backlog_checklist_options(lang: str|None):
+    is_de: bool = lang and lang.startswith("de")
+    return [{"value": "hide_released", "label": "Freigegebene Lose ausblenden" if is_de else "Hide released lots"},
+               {"value": "hide_unavailable", "label": "Nicht verfügbare Aufträge ausblenden" if is_de else "Hide unavailable orders"},
+               {"value": "hide_next_procs", "label": "Aufträge an nachfolgenden Produktionsstufen ausblenden" if is_de else "Hide orders at later process steps"}]
+
+@callback(
+    Output("lots2-init-selector", "options"),
+    Input("lang", "data"),
+)
+def init_method_options(lang: str|None):
+    is_de: bool = lang and lang.startswith("de")
+    return [
+        {"value": "heuristic", "label": "Heuristisch" if is_de else "Heuristic",
+             "title": "Eine heuristische Initialisierung mit einer plausiblen Anordnung von Aufträgen, die jedoch globale Kosten ignoriert." if is_de else
+                    "A heuristic initialization that aims to start with a reasonable assignment of orders already, with low costs, but ignoring global constraints."},
+        {"value": "duedate", "label": "Fälligkeitsdatum" if is_de else "Due date",
+            "title": "Initialisierung basierend auf dem Fälligkeitsdatum der Aufträge" if is_de else
+                    "Initialization based on the due dates of orders."},
+        {"value": "snapshot", "label": "Snapshot", "title":
+            "Initialisierung basierend auf dem aktuellen Snapshot. Nur zum Testen mit Aufträgen aus aktiven Snapshot-Losen." if is_de else
+            "Initialization based on planning in current snapshot. This only makes sense if the order selection contains a significant number of orders in currently active lots"},
+    ]
+
 
 def _selected_dropdown_value(c: dict|None) -> str | None:
     if c is None or "props" not in c:

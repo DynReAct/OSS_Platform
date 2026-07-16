@@ -75,8 +75,11 @@ class DynReActSrvConfig:
     stp_frontend: str = "default"  # default is the frontend provided in this module
     material_order_allocation_frontend: str|None = None
     "Optionally register a frontend for a custom material-order allocation service"
+    temporary_restrictions: str|None = None
+    "Optional url of the equipment restrictions service, for constraints that can be activated and deactivated by the user."
     profile: str|None = None
     "Optional profile name for loading of custom components. If unset, DynReAct uses the base OSS/default loading path. Can be overwritten for individual components."
+
 
     def __init__(self,
                  config_provider: str | None = None,
@@ -117,6 +120,7 @@ class DynReActSrvConfig:
                  energy_cost_service: dict[str, str] | None = None,
                  stp_frontend: str|None = None,
                  material_order_allocation_frontend: str|None = None,
+                 temporary_restrictions: str | None = None,
                  time_zone: str | None = None,
                  profile: str|None = None
                  ):
@@ -277,6 +281,9 @@ class DynReActSrvConfig:
             if material_order_allocation_frontend == "":
                 material_order_allocation_frontend = None
         self.material_order_allocation_frontend = material_order_allocation_frontend
+        if temporary_restrictions is None:
+            temporary_restrictions = os.getenv("TEMPORARY_RESTRICTIONS")
+        self.temporary_restrictions = temporary_restrictions
 
 
 class ConfigProvider:

@@ -1,0 +1,140 @@
+from __future__ import annotations
+
+from typing import Sequence, Any, Mapping, Iterator
+
+from pydantic import BaseModel
+
+from dynreact.base.conditions import Condition, ConditionUtils, ConditionValue
+from dynreact.base.model import Site, Order
+
+
+class EquipmentRestriction(BaseModel, use_attribute_docstrings=True):
+    """
+    A restriction for a subset of orders that excludes certain equipment from processing them.
+    There are essentially two types of restrictions, static ones (fixed values in condition) and parametrizable
+    ones (ParameterValue values in condition).
+    """
+
+    id: str
+    label: str
+    description: str|None = None
+
+    equipment: int|Sequence[int]
+    "A filter for the equipment unit(s) this rule applies to"
+    equipment_selectable: bool = False
+    "If set to true and equipment is a list, then the user may select the applicable equipment"
+    allowed: bool = False
+    """By default, the restriction excludes certain equipment (value = false). 
+        If this is set to true, then only the specified equipment is allowed."""
+    condition: Condition
+
+
+class TemporaryRestrictionsProvider:
+
+    def __init__(self, url: str, site: Site):
+        self._url = url
+        self._site = site
+
+    def equipment_restrictions(self, equipment: int|Sequence[int]|None=None, active_only: bool=False) -> Sequence[tuple[EquipmentRestriction, Sequence[RuleSettings]]]:
+        """
+        Parameters:
+            equipment:
+
+        Returns:
+             sequence of rules together with their active status
+        """
+        raise NotImplementedError
+
+    def get_restriction(self, rule_id: str) -> tuple[EquipmentRestriction|None, Sequence[RuleSettings]]:
+        """
+        Parameters:
+            rule_id:
+
+        Returns:
+             Restriction plus active status
+        """
+        return next(((rule, settings) for rule, settings in self.equipment_restrictions() if rule.id == rule_id), (None, tuple()))
+
+    def activate(self, rule: str, settings: RuleSettings, rule_index: int|None=None) -> bool:
+        """
+        Activate or deactivate a rule, identified by its id
+
+        Parameters:
+            rule:
+            settings:
+            rule_index: if not None, the respective configuration will be updated
+        """
+        raise NotImplementedError
+
+    def deactivate(self, rule: str, rule_index: int = 0) -> bool:
+        raise NotImplementedError
+
+    def is_active(self, rule_id: str) -> bool:
+        raise NotImplementedError
+
+    def equipment_allowed(self, equipment: int, order: Order) -> tuple[bool, EquipmentRestriction|None]:
+        """
+        Parameters:
+            equipment:
+            order:
+
+        Returns:
+              Returns whether or not the equipment is allowed for the order, and if applicable, the rule that forbids it.
+        """
+        rules: Sequence[tuple[EquipmentRestriction, Sequence[RuleSettings]]] = self.equipment_restrictions(equipment=equipment, active_only=True)
+        rules2: Iterator[tuple[EquipmentRestriction, RuleSettings]] = ((rule, setting) for rule, settings in rules for setting in settings)
+        r, s = next(((rule, setting) for rule, setting in rules2 if not RestrictionUtils.equipment_allowed(rule, (setting, ), equipment, order)), (None, None))
+        if r is None:
+            return True, None
+        adapted_condition = ConditionUtils.apply_parameters(r.condition, s.parameters)
+        if adapted_condition != r.condition:
+            r = r.model_copy(update={"condition": adapted_condition})
+        return False, r
+
+class RuleSettings(BaseModel, use_attribute_docstrings=True):
+    active: bool
+    active_equipment: Sequence[int]|None=None
+    "If none, all equipments are considered selected"
+    parameters: Sequence[ConditionValue]|None=None
+    "TODO: nested parameters"
+
+
+class RestrictionUtils:
+
+    @staticmethod
+    def deserialize(content: dict[str, Any]) -> EquipmentRestriction:
+        if not content or "condition" not in content:
+            raise ValueError(f"Not a valid condition: {content}")
+        condition = ConditionUtils.deserialize(content["condition"])
+        content2 = content|{"condition": condition}
+        return EquipmentRestriction.model_validate(content2)
+
+    @staticmethod
+    def apply_settings(rule: EquipmentRestriction, setting: RuleSettings) -> EquipmentRestriction|None:
+        """Returns a non-parametrized restriction"""
+        if not setting.active or (setting.active_equipment is not None and len(setting.active_equipment) == 0):
+            return None
+        rule_equipments = 1 if isinstance(rule.equipment, int) else len(rule.equipment)
+        new_equipment = rule.equipment if setting.active_equipment is None or len(setting.active_equipment) == rule_equipments else tuple(setting.active_equipment)
+        condition = ConditionUtils.apply_parameters(rule.condition, setting.parameters)
+        return rule.model_copy(update={"equipment": new_equipment, "condition": condition})
+
+    @staticmethod
+    def equipment_allowed(rule: EquipmentRestriction, settings: Sequence[RuleSettings]|None, equipment: int, order: Order) -> bool:
+        """
+        Note: if the settings arguments is None, the rule condition must not be parametrized
+        """
+        if not rule.allowed:
+            equipment_match0 = equipment in rule.equipment if isinstance(rule.equipment, Sequence) else equipment == rule.equipment
+            if not equipment_match0:
+                return True
+        rules = [r for r in (RestrictionUtils.apply_settings(rule, setting) for setting in settings) if r is not None] if settings is not None else [rule]
+        for rl in rules:
+            equipment_match = equipment in rl.equipment if isinstance(rl.equipment, Sequence) else equipment == rl.equipment
+            if equipment_match == rl.allowed:
+                continue
+            applies = ConditionUtils.applies(rl.condition, order)
+            allowed = (not rl.allowed and not applies) or (rl.allowed and applies)
+            if not allowed:
+                return allowed
+        return True

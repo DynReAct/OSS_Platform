@@ -21,15 +21,12 @@ if "transport_times" in _st0 and "unit" in _st0["transport_times"] and isinstanc
 site: dcc.Store = dcc.Store(id="site-store", storage_type="memory", data=_st0)
 # Type: datetime (the snapshot id)
 selected_snapshot: dcc.Store = dcc.Store(id="selected-snapshot", storage_type="memory")
+selected_snapshot_next: dcc.Store = dcc.Store(id="selected-snapshot-next", storage_type="memory")
+selected_snapshot_prev: dcc.Store = dcc.Store(id="selected-snapshot-prev", storage_type="memory")
 selected_snapshot_obj: dcc.Store = dcc.Store(id="selected-snapshot-obj", storage_type="memory")
+snapshot_update_active: dcc.Store = dcc.Store(id="snapshot-update-active", storage_type="memory")
 selected_process: dcc.Store = dcc.Store(id="selected-process", storage_type="memory")
 
-# XXX this one is a bit ugly, but to be able to set the value of selected_snapshot from the snapshot page
-# and also from url params we need an intermediate second global store which is only manipulated by the snapshot page
-snapshot_page_selector: dcc.Store = dcc.Store(id="snapshot_selected-snapshot", storage_type="memory")
-# These are updated from the respective pages via the dropdown, and they update the global process selector
-lotcreation_process_selector: dcc.Store = dcc.Store(id="create_process-selector", storage_type="memory")
-lotplanning_process_selector: dcc.Store = dcc.Store(id="lotplanning_process-selector", storage_type="memory")
 
 # Type: str
 #selected_process = dcc.Store(id="selected-process", storage_type="session")
@@ -44,16 +41,18 @@ def get_date_range(current_snapshot: str|datetime|None, zi: ZoneInfo|None = None
     if current is None:
         # 3) use current snapshot
         current = state.get_snapshot_provider().current_snapshot_id()
+    now = state.as_timezone(DatetimeUtils.now())
     if current is None:  # should not really happen
-        now = state.as_timezone(DatetimeUtils.now())
         return (now - timedelta(days=30)).date(), (now + timedelta(days=1)).date(), [], None
     dates: list[datetime] = []
     cnt = 0
-    iterator = state.get_snapshot_provider().snapshots(start_time=current - timedelta(days=90), end_time=current + timedelta(days=3), order="desc") #if current_snapshot is None \
+    # ensure the current snapshot is always shown for selection
+    end_time = now + timedelta(days=1) if timedelta(days=3) < now - current < timedelta(days=10) else current + timedelta(days=3)
+    iterator = state.get_snapshot_provider().snapshots(start_time=current - timedelta(days=90), end_time=end_time, order="desc") #if current_snapshot is None \
         #else state.get_snapshot_provider().snapshots(start_time=current - timedelta(hours=2), end_time=current + timedelta(days=90), order="asc")
     for dt in iterator:
-        dates.append(dt)
-        if cnt > 100:  # ?
+        dates.append(state.as_timezone(dt))
+        if cnt > 100 and dt <= current:  # ?
             break
         cnt += 1
     dates = sorted(dates, reverse=True)

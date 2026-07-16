@@ -180,6 +180,7 @@ def analyze_lots():
         lots = snapshot.lots[plant_id]
         lines = []
         aggregated_tons = 0
+        empty = tuple()
         for lot in lots:
             if lot_filter is not None and lot.id.upper() not in lot_filter:
                 continue
@@ -194,7 +195,7 @@ def analyze_lots():
             if active is not None and str(lot.active).lower() != active:
                 continue
             has_any = True
-            materials = [mat for order in lot_orders for mat in material.get(order.id)]
+            materials = [mat for order in lot_orders for mat in material.get(order.id, empty)]
             lot_line = f"    Lot {lot.id}, active={lot.active}, status={lot.status}, weight={total_weight:7.2f}t, order cnt={len(lot.orders):2}, material cnt={len(materials):2}"
             if hasattr(lot, "priority"):
                 lot_line += f", priority={getattr(lot, 'priority')}"

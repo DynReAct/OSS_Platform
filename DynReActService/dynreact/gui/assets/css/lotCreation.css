@@ -14,10 +14,6 @@
     display: none;
 }
 
-.process-selector {
-    min-width: 6em;
-}
-
 .create-control-row {
     display: flex;
     flex-wrap: wrap;

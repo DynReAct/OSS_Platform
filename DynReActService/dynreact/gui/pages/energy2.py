@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Sequence, Literal, Any
 
 from dynreact.app import state, config
@@ -22,13 +22,15 @@ if len(energy_types) > 0:
 
 _table_cols = [
         {"field": "equipment_name", "pinned": True},
-        {"field": "coil_id", "headerName": "Coil", "pinned": True},
-        {"field": "order_id", "headerName": "Order"},
+        #{"field": "coil_id", "headerName": "Coil", "pinned": True},
+        {"field": "order_id", "headerName": "Order", "pinned": True},
+        {"field": "units", "headerName": "Units", "headerTooltip": "Number of material units belonging to this order"},
         {"field": "lot_id", "headerName": "Lot"},
-        {"field": "start_time", "headerName": "Start", "filter": "agDateColumnFilter"},
-        {"field": "end_time", "headerName": "End", "filter": "agDateColumnFilter"},
+        {"field": "start_time", "headerName": "Start", "filter": "agDateColumnFilter", "width": 250},
+        {"field": "end_time", "headerName": "End", "filter": "agDateColumnFilter", "width": 250},
         {"field": "duration_min", "headerName": "Duration (min)", "filter": "agNumberColumnFilter"},
-        {"field": "energy_kwh", "headerName": "Ensemble energy (kWh)", "filter": "agNumberColumnFilter"},
+        {"field": "power_kw", "headerName": "Power (kW)", "filter": "agNumberColumnFilter", "valueFormatter": {"function": "formatCell(params.value, 4)"}},
+        {"field": "energy_kwh", "headerName": "Ensemble energy (kWh)", "filter": "agNumberColumnFilter", "valueFormatter": {"function": "formatCell(params.value, 4)"}},
         {"field": "uncertainty_min_kwh", "headerName": "Uncertainty min (kWh)", "filter": "agNumberColumnFilter"},
         {"field": "uncertainty_max_kwh", "headerName": "Uncertainty max (kWh)", "filter": "agNumberColumnFilter"},
         {"field": "energy_cost_eur", "headerName": "Cost (EUR)", "filter": "agNumberColumnFilter"},
@@ -185,13 +187,23 @@ def run_energy_analysis(_: int, energy_type: Literal["electric", "heat"]|None, s
     site = state.get_site()
     for equipment, orders in equipment_with_orders.items():
         try:
-            results_eq: Sequence[EnergyPrediction] = energy_service.bulk_energy_consumption(orders, equipment)
-            results[equipment] = results_eq
             order_ids = [o.id for o in orders]
             process = site.get_equipment(equipment, do_raise=True).process
-            ol = ModelUtils.get_order_lot_times_with_fallback(site, sp, snapshot=snap_obj.timestamp, order=order_ids, process=process)
-            order_lot_times: dict[str, LotTimes]|None = {o: dct[process] for o, dct in ol.items() if process in dct} if ol is not None else None
-            order_lot_times_sorted = [order_lot_times.get(o) if order_lot_times is not None else None for o in order_ids]
+            lot_times = ModelUtils.get_order_lot_times_with_fallback(site, sp, snapshot=snap_obj.timestamp, order=order_ids, process=process)
+            order_lot_times: dict[str, LotTimes] = {o: dct[process] for o, dct in lot_times.items() if process in dct}
+            #order_lot_times_sorted = [order_lot_times.get(o) if order_lot_times is not None else None for o in order_ids]
+            start_times: list[datetime] = []
+            end_times: list[datetime] = []
+            latest_end = snap_obj.timestamp
+            for order in orders:
+                start = order_lot_times[order.id].start if order.id in order_lot_times else latest_end
+                start_times.append(start)
+                end = order_lot_times[order.id].end if order.id in order_lot_times else start + timedelta(hours=order.material_count)
+                end_times.append(end)
+                latest_end = end
+            results_eq: Sequence[EnergyPrediction] = energy_service.bulk_energy_consumption(orders, equipment, start_times).results
+            results[equipment] = results_eq
+
             # "ensemble_energy_kwh": round(float(ensemble_energy), 3),
             #             "uncertainty_min_kwh": round(min(numeric_pröedictions), 3) if numeric_predictions else None,
             #             "uncertainty_max_kwh": round(max(numeric_predictions), 3) if numeric_predictions else None,
@@ -199,10 +211,13 @@ def run_energy_analysis(_: int, energy_type: Literal["electric", "heat"]|None, s
             #             "unit_price_eur_mwh"
             eq = site.get_equipment(equipment, do_raise=True)
             equipment_name = eq.name or eq.name_short or str(eq.id)
+            durations = [end_times[idx] - start_times[idx] for idx in range(len(start_times))]
             rows = [{"equipment": equipment, "equipment_name": equipment_name, "order_id": orders[idx].id, "lot_id": orders[idx].lots.get(process) if orders[idx].lots is not None else None,
-                          "start_time": order_lot_times_sorted[idx].start if order_lot_times_sorted[idx] is not None else None,
-                          "end_time":  order_lot_times_sorted[idx].end if order_lot_times_sorted[idx] is not None else None,
-                          "duration_min": round(order_lot_times_sorted[idx].processing_time.total_seconds()/60) if order_lot_times_sorted[idx] is not None else None,
+                          "units": orders[idx].material_count,
+                          "start_time": DatetimeUtils.format(start_times[idx], use_zone=False).replace("T", " "),
+                          "end_time":  DatetimeUtils.format(end_times[idx], use_zone=False).replace("T", " "),
+                          "duration_min": round(durations[idx].total_seconds()/60),
+                          "power_kw": p.predicted_energy/durations[idx].total_seconds()*3_600,
                           "energy_kwh": p.predicted_energy} for idx, p in enumerate(results_eq)]
             rows_by_equipment[equipment] = rows
             #rows, status = _backend.analyse(equipment_ids, start_time, end_time)

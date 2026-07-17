@@ -162,3 +162,26 @@ class DatetimeUtils:
         if isinstance(dt, datetime):
             return dt.strftime(_FORMATS_WITH_ZONE[2] if use_zone else _FORMATS_NO_ZONE[2])
         return dt.strftime(_FORMATS_NO_ZONE[-2])
+
+    @staticmethod
+    def format_duration(delta: timedelta) -> str:
+        result = ""
+        empty = True
+        if delta.days > 0:
+            result += f"{delta.days}d"
+            empty = False
+        seconds = delta.seconds
+        import math
+        hours = math.floor(seconds/3_600)
+        if hours > 0:
+            if not empty:
+                result += " "
+            result += f"{hours}h"
+            empty = False
+        minutes = round(seconds/60 - hours * 60)
+        if minutes > 0 and delta.days <=0 :
+            if not empty:
+                result += " "
+            result += f"{minutes}m"
+            empty = False
+        return result if not empty else f"{delta.seconds}s"

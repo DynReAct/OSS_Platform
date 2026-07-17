@@ -69,7 +69,7 @@ class DynReActSrvConfig:
     energy_provider: str|None = "default+file:./data/energy_context.json"
     "Optional energy analysis provider. Preferred values: `default+file:./data/energy_context.json` or `ras+file:./data/context/energy_context.json`."
     energy_service: dict[str, str]|None = None
-    "Keys: energy types ('electric', 'heat'), values: provider id"
+    "Keys: energy types ('electric', 'heat'), values: provider id, such as energy+http://localhost:8051 or energy+simple:"
     energy_cost_service: dict[str, str] | None = None
     "Keys: energy types ('electric', 'heat'), values: provider id"
     stp_frontend: str = "default"  # default is the frontend provided in this module

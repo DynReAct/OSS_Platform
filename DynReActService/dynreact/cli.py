@@ -5,7 +5,7 @@ import glob
 import json
 import os.path
 import time
-from typing import Sequence, Mapping, Any
+from typing import Sequence, Mapping, Any, Literal
 from datetime import timedelta, datetime, timezone
 from enum import Enum
 
@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.base.AggregationProvider import AggregationLevel
 from dynreact.base.CostProvider import CostProvider
+from dynreact.base.EnergyService import EnergyPredictionResultsFailed, EnergyPrediction
 from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationState, OptimizationListener
@@ -25,6 +26,7 @@ from dynreact.base.impl.AggregationPersistence import AggregationInternal
 from dynreact.base.impl.AggregationProviderImpl import AggregationProviderImpl
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
+from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.impl.Scenarios import MidTermScenario, MidTermBenchmark
 from dynreact.base.model import Snapshot, Material, OrderAssignment, Order, EquipmentProduction, ProductionTargets, \
     ProductionPlanning, ObjectiveFunction, Site, LabeledItem, Lot, Process, Equipment, PlannedWorkingShift, \
@@ -901,11 +903,78 @@ def read_history():
                     line += "              |"
             print(line)
 
+class _EnergyType(str, Enum):  # Literal["electric", "heat"] does not work with argparse
+    electric = "electric"
+    heat = "heat"
+
+def predict_energy():
+    parser = argparse.ArgumentParser(description="Run the energy prediction service")
+    parser.add_argument("equipment", help="Equipment id or name", type=str)
+    parser.add_argument("-s", "--snapshot", help="Snapshot. Uses the latest available one, if not specified", type=str, default=None)
+    #parser.add_argument("-o", "--order", help="Energy type: electric vs heat", type=Literal["electric", "heat"], default="electric")
+    parser.add_argument("-t", "--type", help="Energy type: electric vs heat", type=_EnergyType, default="electric", choices=[tp.value for tp in _EnergyType])
+    parser.add_argument("-st", "--start_time", help="Prediction start time", type=str, default=None)
+    parser.add_argument("-m", "--model", help="Optional prediction model selection", type=str, default=None)
+    args = parser.parse_args()
+    config = DynReActSrvConfig()
+    plugins = Plugins(config)
+    site = plugins.get_config_provider().site_config()
+    equipment: list[Equipment] | None = _plants_for_ids(args.equipment, site)
+    if equipment is None or len(equipment) == 0:
+        raise ValueError(f"No equipment found matching the specified {args.equipment}")
+    energy_type: Literal["electric", "heat"] = args.type.value
+    service = plugins.get_energy_service(energy_type)
+    if service is None:
+        raise Exception(f"Energy service provider not found: {energy_type}")
+    snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
+    snapshot: Snapshot = plugins.get_snapshot_provider().load(time=snap)
+    snap_formatted = DatetimeUtils.format(snapshot.timestamp, use_zone=False).replace("T", " ")
+    sp = plugins.get_snapshot_provider()
+    all_orders = {o.id: o for o in snapshot.orders}
+    print(f"Energy ({energy_type}) predictions for snapshot {snap_formatted}, equipment {[e.name_short or e.id for e in equipment]}")
+    print("=========================")
+    for eq in equipment:
+        process = eq.process
+        lots: list[Lot] = sorted([lot for lot in snapshot.lots.get(eq.id) if lot.active and lot.start_time is not None], key=lambda lot: lot.start_time)
+        if len(lots) == 0:
+            print(f"  No active lots found for equipment {eq.name_short or eq.id}")
+            continue
+        orders = [all_orders[order] for lot in lots for order in lot.orders]
+        order_ids = [o.id for o in orders]
+        lot_times: dict[str, dict[str, LotTimes]] = ModelUtils.get_order_lot_times_with_fallback(site, sp, snapshot.timestamp, order=order_ids, process=process)
+        lot_times_proc: dict[str, LotTimes] = {o: dct[process] for o, dct in lot_times.items() if process in dct}
+        start_times = []
+        latest_end = snapshot.timestamp
+        for order in orders:
+            start = lot_times_proc[order.id].start if order.id in lot_times_proc else latest_end
+            start_times.append(start)
+            latest_end = lot_times_proc[order.id].end if order.id in lot_times_proc else start + timedelta(hours=order.material_count)
+        results = service.bulk_energy_consumption(orders, eq.id, start_times, model=args.model)
+        if isinstance(results, EnergyPredictionResultsFailed):
+            print(f"  Failed to determine energy prediction ({energy_type} for equipment {eq.name_short or eq.id}: {results}")
+            continue
+        predictions: Sequence[EnergyPrediction] = results.results
+        print(f"  Equipment {eq.name_short or eq.id} predictions")
+        # TODO adapt to common order id sizes
+        print("  |   Order   |    Start time    | Power / kW  | Energy / kWh | Units | Duration |    Lot    |")
+        print("  |-----------|------------------|-------------|--------------|-------|----------|-----------|")
+        for idx, order in enumerate(orders):
+            start = start_times[idx]
+            duration = start_times[idx+1] - start_times[idx] if idx < len(start_times) - 1 else latest_end - start_times[idx]
+            start_formatted = DatetimeUtils.format(start, use_zone=False).replace("T", " ")
+            energy = predictions[idx].predicted_energy  # in kWh
+            power = energy / (duration.total_seconds()/3_600)  # in kW
+            lot_id = order.lots[process] if order.lots and process in order.lots else ""
+            dur_formatted = DatetimeUtils.format_duration(duration)
+            print(f"  |  {order.id}  | {start_formatted} |    {power:6.2f}   |    {energy:6.2f}    | {order.material_count:4d}  |  {dur_formatted:7s} |  {lot_id} |")
+
+        print("  |-----------|------------------|------------|---------------|-------|----------|-----------|")
+
 
 def run_ltp():
     parser = argparse.ArgumentParser(description="Run the long term planning")
-    parser.add_argument("-s", "--start", help="Start time", type=str, default=None),
-    parser.add_argument("-sd", "--shift-duration", help="Shift duration in hours", type=int, default=8),
+    parser.add_argument("-s", "--start", help="Start time", type=str, default=None)
+    parser.add_argument("-sd", "--shift-duration", help="Shift duration in hours", type=int, default=8)
     parser.add_argument("-p", "--production", type=float, default=100_000)
     # parser.add_argument("-w", "--wide", help="Show wide cells, do not crop content", action="store_true")
     args = parser.parse_args()

@@ -48,12 +48,15 @@ class SimpleEnergyService(EnergyService):
 
     def __init__(self, url: str, site: Site, config: EnergyConfig|None=None):
         super().__init__(url, site)
-        if not url.startswith("simple:"):
+        if not url.startswith("energy+simple:"):
             raise NotApplicableException(f"URL {url} not applicable to simple energy service")
         self._config = config if config is not None else EnergyConfig()
 
     def service(self) -> EnergyServiceMetadata:
         return EnergyServiceMetadata(id="simple", label="Simple energy service for testing")
+
+    def status(self) -> int:
+        return 0
 
     def energy_type(self) -> Literal["electric", "heat"]:
         return self._config.energy_type
@@ -61,6 +64,7 @@ class SimpleEnergyService(EnergyService):
     def energy_consumption(self,
                            order: Order,
                            equipment: int,
+                           start_time: datetime,
                            *args,
                            process_id: int|None=None,
                            model: str|None=None,

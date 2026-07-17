@@ -1,12 +1,12 @@
 from datetime import datetime
-from typing import Literal, Sequence, Mapping
+from typing import Literal, Sequence, Mapping, TypeAlias
 
 from pydantic import BaseModel
 
 from dynreact.base.model import Order, Site
 
 
-class EnergyServiceMetadata(BaseModel, use_attribute_docstrings=True):
+class EnergyServiceMetadata(BaseModel, use_attribute_docstrings=True, frozen=True):
     """Provides metadata about the energy estimation service.
 
     Attributes:
@@ -25,9 +25,11 @@ class EnergyServiceMetadata(BaseModel, use_attribute_docstrings=True):
     "Equipment ids supported. If None, all equipments can be assumed to be supported"
     available_models: Sequence[str]|Mapping[int, Sequence[str]]|None = None
     "List of all available model keys. Either a flat list, or a mapping from equipment ids to lists of model keys."
+    relevant_fields: Mapping[str, str]|None=None
+    "Important for the HTTP energy service; keys=service attributes, values=DynReAct order attribute names, such as \"material_properties.custom_attribute\"."
 
 
-class EnergyPrediction(BaseModel, use_attribute_docstrings=True):
+class EnergyPrediction(BaseModel, use_attribute_docstrings=True, extra="allow"):
     """Result structure for energy estimation.
 
     Attributes:
@@ -40,6 +42,22 @@ class EnergyPrediction(BaseModel, use_attribute_docstrings=True):
     # TODO uncertainties etc
 
 
+class EnergyPredictionResultsSuccess(BaseModel, use_attribute_docstrings=True):
+    results: Sequence[EnergyPrediction]
+
+
+class EnergyPredictionResultsFailed(BaseModel, use_attribute_docstrings=True):
+
+    reason: int
+    "http status code, or 1 for service not available"
+    message: str|None=None
+    details: dict|None=None
+
+
+# TODO upon dropping Python 3.11 support we can replace ...: TypeAlias = by type ... =
+EnergyPredictionResults: TypeAlias = EnergyPredictionResultsSuccess | EnergyPredictionResultsFailed
+
+
 class EnergyService:
 
     def __init__(self, url: str, site: Site):
@@ -49,22 +67,30 @@ class EnergyService:
     def service(self) -> EnergyServiceMetadata:
         raise NotImplementedError
 
+    def status(self) -> int:
+        """
+        :return: 0: service running, 1: service not available, > 10: custom error codes
+        """
+        raise NotImplementedError
+
     def energy_type(self) -> Literal["electric", "heat"]:
         raise NotImplementedError
 
     def energy_consumption(self,
                            order: Order,
                            equipment: int,
+                           start_time: datetime,
                            *args,
                            process_id: int|None=None,
                            model: str|None=None,
-                           **kwargs) -> EnergyPrediction:
+                           **kwargs) -> EnergyPrediction|EnergyPredictionResultsFailed:
         """
         An estimation of the energy required for processing an order at some equipment.
         TODO more input data needed? Start/end time, predecessor, etc?
         Parameters:
             order:
             equipment:
+            start_time:
             process_id: the energy may vary depending on the process performed
             model: optional identifier of the estimation model to be performed. Service-specific.
 
@@ -76,11 +102,13 @@ class EnergyService:
     def bulk_energy_consumption(self,
                            orders: Sequence[Order],
                            equipment: int,
+                           start_times: Sequence[datetime],
                            *args,
                            process_id: int|None=None,
                            model: str|None=None,
-                           **kwargs) -> Sequence[EnergyPrediction]:
-        return [self.energy_consumption(order, equipment, *args, process_id=process_id, model=model, **kwargs) for order in orders]
+                           **kwargs) -> EnergyPredictionResults:
+        return EnergyPredictionResultsSuccess(results=[self.energy_consumption(order, equipment, start_times[idx], *args,
+                                                        process_id=process_id, model=model, **kwargs) for idx, order in enumerate(orders)])
 
 
 class EnergyCostServiceMetadata(BaseModel, use_attribute_docstrings=True):

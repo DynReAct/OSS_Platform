@@ -11,12 +11,14 @@ import plotly.graph_objects as go
 from dynreact.auth.authentication import dash_authenticated
 from dynreact.base.EnergyService import EnergyPrediction
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
+from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Lot, Order, LotTimes, Site
+from dynreact.gui.gui_utils import GuiUtils
 
 energy_types: Sequence[Literal["electric", "heat"]] = state.energy_prediction_types()
+translations_key = "ngy2"
 if len(energy_types) > 0:
     dash.register_page(__name__, path="/perfmodels/energy2")
-    translations_key = "ngy2"
 
 _table_cols = [
         {"field": "equipment_name", "pinned": True},
@@ -38,14 +40,20 @@ def layout(*args, **kwargs):
     energy_type = kwargs.get("type")
     if energy_type not in energy_types:
         energy_type = energy_types[0]
+    equipment = kwargs.get("equipment")
+    if equipment is not None:
+        equipment = tuple([int(e) for e in equipment] if isinstance(equipment, Sequence) else [int(equipment)])
     return html.Div([
         html.H1("Energy prediction", id="ngy2-title"),
         html.Div([
             html.Span("Energy type"),
             dcc.Dropdown(id="ngy2-type", options=energy_types, value=energy_type, style={"min-width": "8em"}),
             html.Span("Provider: "),
-            html.Span(id="ngy2-model-label")
-        ], className="flex gap-1 gap-below-05"),
+            html.Span(id="ngy2-model-label"),
+            html.Span("Snapshot:"),
+            GuiUtils.create_snapshots_selector_prev_next(translations_key),
+        ], style={"display": "grid", "grid-template-columns": "repeat(4, auto)", "align-items": "center",
+                                        "justify-content": "start", "row-gap": "1em", "column-gap": "1em", "padding-bottom": "1em"}),
         # ======= Models table ==============
         html.Div([html.Div("Supported equipment", style={"fontWeight": "bold", "marginBottom": "0.5rem"}),
                   dcc.Checklist(id="ngy2-equipment-checklist", value=[],
@@ -79,15 +87,19 @@ def layout(*args, **kwargs):
             delay_show=100,
         ),
         dcc.ConfirmDialog(id="ngy2-perf-energy-validation-dialog"),
-        dcc.Store(id="ngy2-lots-included", storage_type="memory")   # lot_ids: list[str]
-    ])
+        dcc.Store(id="ngy2-lots-included", storage_type="memory"),   # lot_ids: list[str]
+        dcc.Store(id="ngy2-initial-equipments", storage_type="memory", data=equipment)
+    ], id=translations_key)
+
+
+GuiUtils.create_snapshot_callbacks(translations_key)
 
 
 @callback(
     Output("ngy2-lots-included", "data"),
     Output("ngy2-perf-energy-from", "value"),
     Output("ngy2-perf-energy-until", "value"),
-    Input("selected-snapshot", "data"),  # selected-snapshot is a page-global store
+    Input({"role": "snapshot-selector", "page": translations_key}, "data"),
     Input("ngy2-equipment-checklist", "value"),
 )
 def snapshot_changed(snapshot: str|None, active_equipment: Sequence[int]):
@@ -109,8 +121,10 @@ def snapshot_changed(snapshot: str|None, active_equipment: Sequence[int]):
     Output("ngy2-equipment-checklist", "options"),
     Output("ngy2-equipment-checklist", "value"),
     Input("ngy2-type", "value"),
+    State("ngy2-equipment-checklist", "value"),
+    State("ngy2-initial-equipments", "data")
 )
-def type_changed(energy_type: Literal["electric", "heat"]|None):
+def type_changed(energy_type: Literal["electric", "heat"]|None, previous_equipments: list[int] | None, initial_equipment: Sequence[int]|None):
     if not energy_type or not dash_authenticated(config):
         return None, None, None, None
     service = state.get_energy_service(energy_type)
@@ -122,7 +136,13 @@ def type_changed(energy_type: Literal["electric", "heat"]|None):
     site = state.get_site()
     equipments = [e for e in site.equipment if meta.equipment is None or e.id in meta.equipment]
     equipment_options = [{"value": e.id, "label": e.name_short or str(e.id), "title": f"Id: {e.id}"} for e in equipments]
-    return label, description, equipment_options, [e.id for e in equipments]
+    if previous_equipments is not None and len(previous_equipments) > 0:
+        value = previous_equipments
+    elif initial_equipment is not None:
+        value = initial_equipment
+    else:
+        value = [e.id for e in equipments]
+    return label, description, equipment_options, value
 
 
 @callback(
@@ -133,7 +153,7 @@ def type_changed(energy_type: Literal["electric", "heat"]|None):
     Output("ngy2-perf-energy-graph", "figure"),
     Input("ngy2-perf-energy-start", "n_clicks"),
     State("ngy2-type", "value"),
-    State("selected-snapshot", "data"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
     State("ngy2-lots-included", "data"),
     State("ngy2-perf-energy-from", "value"),
     State("ngy2-perf-energy-until", "value"),
@@ -169,7 +189,7 @@ def run_energy_analysis(_: int, energy_type: Literal["electric", "heat"]|None, s
             results[equipment] = results_eq
             order_ids = [o.id for o in orders]
             process = site.get_equipment(equipment, do_raise=True).process
-            ol = sp.get_order_lot_times(snapshot=snap_obj.timestamp, order=order_ids)
+            ol = ModelUtils.get_order_lot_times_with_fallback(site, sp, snapshot=snap_obj.timestamp, order=order_ids, process=process)
             order_lot_times: dict[str, LotTimes]|None = {o: dct[process] for o, dct in ol.items() if process in dct} if ol is not None else None
             order_lot_times_sorted = [order_lot_times.get(o) if order_lot_times is not None else None for o in order_ids]
             # "ensemble_energy_kwh": round(float(ensemble_energy), 3),
@@ -206,11 +226,8 @@ def _build_figure(site: Site, rows_by_equipment: dict[int, list[dict[str, Any]]]
         eq = site.get_equipment(equipment, do_raise=True)
         equipment_name = eq.name or eq.name_short or str(eq.id)
         color = color_by_equipment[equipment]
-        x_values = [row["start_time"] for row in equipment_rows] #  TODO
+        x_values = [row["start_time"] for row in equipment_rows]
         y_values = [row["energy_kwh"] for row in equipment_rows]
-        # FIXME
-        print("     Equipment", equipment_name, " x values", x_values)
-        print("     Equipment", equipment_name, " y values", y_values)
         #y_low = [row["uncertainty_min_kwh"] for row in equipment_rows]
         #y_high = [row["uncertainty_max_kwh"] for row in equipment_rows]
         cum_energy = []

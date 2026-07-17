@@ -1,6 +1,6 @@
 import logging
 import os
-import urllib.parse
+from urllib.parse import urlparse
 from datetime import datetime, timedelta
 from typing import Sequence, Mapping, Any
 
@@ -65,7 +65,7 @@ class EnergyServiceClientHttp(EnergyService):
 
     def _get_meta(self) -> EnergyServiceMetadata:
         if self._meta is None:
-            # TODO error handling
+            # TODO error handling etc
             result = requests.get(self._address + "model",
                                   headers=EnergyServiceClientHttp._attach_token({"Accept": "application/json"}, self._token))
             result.raise_for_status()
@@ -75,7 +75,7 @@ class EnergyServiceClientHttp(EnergyService):
 
     def __str__(self):
         try:
-            return f"EnergyServiceClientHttp[id={self.id()}, label={self.label()}, address={self._address}]"
+            return f"EnergyServiceClientHttp[id={self.service().id}, label={self.service().label}, address={self._address}]"
         except:
             return f"EnergyServiceClientHttp[address={self._address}] (disconnected)"
 
@@ -148,7 +148,7 @@ class EnergyServiceClientHttp(EnergyService):
     # https://stackoverflow.com/a/36283503
     @staticmethod
     def _is_valid_url(url: str, qualifying_attributes=("scheme", "netloc")):
-        tokens = urllib.urlparse.urlparse(url)
+        tokens = urlparse(url)
         return all(getattr(tokens, qualifying_attr) for qualifying_attr in qualifying_attributes)
 
     @staticmethod

@@ -25,6 +25,7 @@ from dynreact.base.impl.AggregationPersistence import AggregationInternal
 from dynreact.base.impl.AggregationProviderImpl import AggregationProviderImpl
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.MaterialAggregation import MaterialAggregation
+from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.impl.Scenarios import MidTermScenario, MidTermBenchmark
 from dynreact.base.model import Snapshot, Material, OrderAssignment, Order, EquipmentProduction, ProductionTargets, \
     ProductionPlanning, ObjectiveFunction, Site, LabeledItem, Lot, Process, Equipment, PlannedWorkingShift, \

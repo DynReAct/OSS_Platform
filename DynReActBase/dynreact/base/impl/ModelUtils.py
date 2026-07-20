@@ -524,7 +524,7 @@ class ModelUtils:
     def get_order_lot_times_with_fallback(site: Site, snapshot_provider: SnapshotProvider, snapshot: datetime | None = None,
                                           order: str|Sequence[str]|None=None, process: str|None=None) -> dict[str, dict[str, LotTimes]]|None:
         """
-        Provides the same functionality as SnapshotProvider.get_order_lots(), but with a fallback in case this method is not implemented
+        Provides the same functionality as SnapshotProvider.get_order_lot_times(), but with a fallback in case this method is not implemented
 
         Parameters:
             site:
@@ -574,4 +574,69 @@ class ModelUtils:
                             result[l_order] = {}
                         result[l_order][lot_process] = lot_times
                     start_time = end_time
+        return result
+
+    @staticmethod
+    def get_material_lot_times_with_fallback(site: Site, snapshot_provider: SnapshotProvider, snapshot: datetime | None = None,
+                                          material: str|Sequence[str]|None=None, process: str|None=None) -> dict[str, dict[str, LotTimes]]|None:
+        """
+        Provides the same functionality as SnapshotProvider.get_material_lot_times(), but with a fallback in case this method is not implemented
+
+        Parameters:
+            site:
+            snapshot_provider:
+            snapshot: snapshot timestamp
+            material:    optional material id(s) filter
+            process:  optional process filter
+
+        Returns:
+            A nested dictionary order id -> process -> lot times object
+        """
+        try:
+            return snapshot_provider.get_material_lot_times(snapshot=snapshot, material=material)
+        except NotImplementedError:
+            pass
+        snap_obj = snapshot_provider.load(time=snapshot)
+        if not snap_obj:
+            return None
+        material_objects: dict[str, Material] = {m.id: m for m in snap_obj.material}
+        if material is not None and isinstance(material, str):
+            material = (material, )
+        elif material is None:
+            material = material_objects.keys()
+        order_objects = {o.id: o for o in snap_obj.orders}
+        mat_by_orders: dict[str, list[Material]] = {}  # Note: unsorted
+        for mat_id in material:
+            mat = material_objects[mat_id]
+            if mat.order not in mat_by_orders:
+                mat_by_orders[mat.order] = []
+            mat_by_orders[mat.order].append(mat)
+        result: dict[str, dict[str, LotTimes]] = {}
+        for equipment, lots in snap_obj.lots.items():
+            eq_obj = site.get_equipment(equipment)
+            lot_process = eq_obj.process if eq_obj else None
+            if not lot_process or (process is not None and lot_process != process):
+                continue
+            for lot in lots:
+                if not lot.active or not lot.start_time or not lot.end_time or not any(o in lot.orders for o in mat_by_orders.keys()):
+                    continue
+                lot_duration = lot.end_time - lot.start_time
+                lot_orders = sorted([o for o in mat_by_orders.keys() if o in lot.orders], key=lambda o: lot.orders.index(o))
+                lot_weight = lot.weight or sum(order_objects[o].actual_weight for o in lot.orders)
+                if lot_weight < 1e-2:
+                    continue
+                for order in lot_orders:
+                    order_idx = lot.orders.index(order)
+                    prev_orders = [order_objects[o] for o in lot.orders[:order_idx]]
+                    prev_weight = sum(o.actual_weight for o in prev_orders)
+                    prev_share = prev_weight/lot_weight
+                    start_time = lot.start_time + prev_share * lot_duration
+                    order_materials = sorted(mat_by_orders[order], key=lambda mat: (mat.current_process, mat.order_positions.get(lot_process, mat.order_position) if mat.order_positions is not None else mat.order_position))
+                    for mat in order_materials:
+                        end_time = start_time + (mat.weight / lot_weight * lot_duration)
+                        if mat.id in material:
+                            if mat.id not in result:
+                                result[mat.id] = {}
+                            result[mat.id][lot_process] = LotTimes(id=mat.id, process=lot_process, start=start_time, end=end_time, processing_time=end_time-start_time)
+                        start_time = end_time
         return result

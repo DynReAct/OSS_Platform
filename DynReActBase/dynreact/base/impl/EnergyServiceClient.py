@@ -105,8 +105,10 @@ class EnergyServiceClientHttp(EnergyService):
                            *args,
                            process_id: int|None=None,
                            model: str|None=None,
+                           missing_value_ensemble: Sequence[Order] | None = None,
                            **kwargs) -> EnergyPrediction|EnergyPredictionResultsFailed:
-        results = self.bulk_energy_consumption([order], equipment, [start_time], *args, process_id=process_id, model=model, **kwargs)
+        results = self.bulk_energy_consumption([order], equipment, [start_time], *args, process_id=process_id,
+                                               model=model, missing_value_ensemble=missing_value_ensemble, **kwargs)
         if isinstance(results, EnergyPredictionResultsFailed):
             return results
         return results.results[0]
@@ -118,10 +120,12 @@ class EnergyServiceClientHttp(EnergyService):
                            *args,
                            process_id: int|None=None,
                            model: str|None=None,
+                           missing_value_ensemble: Sequence[Order] | None = None,
                            **kwargs) -> EnergyPredictionResults:
         service_meta = self.service()
-        relevant_fields = service_meta.relevant_fields
-        serialized_orders: Sequence[dict[str, Any]] = [EnergyServiceClientHttp._serialize_order(o, relevant_fields) for o in orders]
+        relevant_fields = service_meta.relevant_fields[equipment] if service_meta.relevant_fields is not None \
+                                    and equipment in service_meta.relevant_fields else service_meta.relevant_fields
+        serialized_orders: Sequence[dict[str, Any]] = [EnergyServiceClientHttp._serialize_order(o, relevant_fields, missing_value_ensemble) for o in orders]
         payload = EnergyPredictionInput(orders=serialized_orders, equipment=equipment, start_times=start_times, model=model)
         try:
             response = requests.post(self._address + "prediction",
@@ -164,16 +168,33 @@ class EnergyServiceClientHttp(EnergyService):
         return headers
 
     @staticmethod
-    def _serialize_order(order: Order, relevant_fields: Mapping[str, str]|None) -> dict[str, Any]:
+    def _serialize_order(order: Order, relevant_fields: Mapping[str, str]|None, missing_value_ensemble: Sequence[Order]|None) -> dict[str, Any]:
         if relevant_fields is None:
             return order.model_dump(exclude_none=True, exclude_unset=True, mode="json")
         result = {}
         for attribute, field in relevant_fields.items():
+            if field == "":
+                result[attribute] = ""
+                continue
+            elif field == "---":  # FIXME
+                result[attribute] = 1
+                continue
             is_mat_prop = field.startswith("material_properties.")
             obj = order if not is_mat_prop else order.material_properties
             if is_mat_prop:
                 field = field[20:]
             value = getattr(obj, field, None)
+            if value is None and missing_value_ensemble is not None:
+                other_values = []
+                for o2 in missing_value_ensemble:
+                    obj2 = o2.material_properties if is_mat_prop else o2
+                    other_value = getattr(obj2, field, None)
+                    if other_value is not None:
+                        if not isinstance(other_value, float):
+                            break
+                        other_values.append(other_value)
+                if len(other_values) > 0:
+                    value = sum(other_values)/len(other_values)
             if value is not None:
                 result[attribute] = value
         return result

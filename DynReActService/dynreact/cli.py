@@ -991,15 +991,33 @@ class _EnergyType(str, Enum):  # Literal["electric", "heat"] does not work with 
     electric = "electric"
     heat = "heat"
 
+
+def energy_services():
+    parser = argparse.ArgumentParser(description="Show available energy service providers")
+    parser.parse_args()
+    config = DynReActSrvConfig()
+    plugins = Plugins(config)
+    energy_types = plugins.energy_prediction_types()
+    for energy_type in energy_types:
+        service = plugins.get_energy_service(energy_type)
+        meta = None
+        try:
+            meta = service.service()
+        except:
+            pass
+        print(f"  Energy service type={energy_type}, status={service.status()}, meta={meta}")
+
+
 def predict_energy():
     parser = argparse.ArgumentParser(description="Run the energy prediction service")
     parser.add_argument("equipment", help="Equipment id or name", type=str)
     parser.add_argument("-s", "--snapshot", help="Snapshot. Uses the latest available one, if not specified", type=str, default=None)
     #parser.add_argument("-o", "--order", help="Energy type: electric vs heat", type=Literal["electric", "heat"], default="electric")
-    parser.add_argument("-t", "--type", help="Energy type: electric vs heat", type=_EnergyType, default="electric", choices=[tp.value for tp in _EnergyType])
+    parser.add_argument("-t", "--type", help="Energy type: electric vs heat. Default: 'electric'", type=_EnergyType, default="electric", choices=[tp.value for tp in _EnergyType])
     parser.add_argument("-st", "--start-time", help="Prediction start time", type=str, default=None)
     parser.add_argument("-et", "--end-time", help="Prediction start time", type=str, default=None)
     parser.add_argument("-lt", "--lots", help="Lots to include. Separate multiple by a comma \",\"", type=str, default=None)
+    parser.add_argument("-o", "--orders", help="Orders. Separate multiple by a comma \",\"", type=str, default=None)
     parser.add_argument("-m", "--model", help="Optional prediction model selection", type=str, default=None)
     args = parser.parse_args()
     config = DynReActSrvConfig()
@@ -1020,6 +1038,7 @@ def predict_energy():
     sp = plugins.get_snapshot_provider()
     all_orders = {o.id: o for o in snapshot.orders}
     lots_included: Sequence[str]|None = [l for l in (l.strip() for l in args.lots.split(",")) if l] if args.lots else None
+    orders_included = [o for o in (o.strip() for o in args.orders.split(",")) if o] if args.orders is not None else None
     print(f"Energy ({energy_type}) predictions for snapshot {snap_formatted}, equipment {[e.name_short or e.id for e in equipment]}")
     print("=========================")
     for eq in equipment:
@@ -1030,7 +1049,7 @@ def predict_energy():
         if len(lots) == 0:
             print(f"  No active lots found for equipment {eq.name_short or eq.id}")
             continue
-        orders = [all_orders[order] for lot in lots for order in lot.orders]
+        orders = [all_orders[order] for lot in lots for order in lot.orders if orders_included is None or order in orders_included]
         order_ids = [o.id for o in orders]
         lot_times: dict[str, dict[str, LotTimes]] = ModelUtils.get_order_lot_times_with_fallback(site, sp, snapshot.timestamp, order=order_ids, process=process)
         lot_times_proc: dict[str, LotTimes] = {o: dct[process] for o, dct in lot_times.items() if process in dct}
@@ -1048,7 +1067,7 @@ def predict_energy():
             if len(orders) == 0:
                 print(f"  No orders found matching the specified time interval {start_time} - {end_time} for equipment {eq.name_short or eq.id}")
                 continue
-        results = service.bulk_energy_consumption(orders, eq.id, start_times, model=args.model)
+        results = service.bulk_energy_consumption(orders, eq.id, start_times, model=args.model, missing_value_ensemble=snapshot.orders)
         if isinstance(results, EnergyPredictionResultsFailed):
             print(f"  Failed to determine energy prediction ({energy_type} for equipment {eq.name_short or eq.id}: {results}")
             continue

@@ -25,7 +25,7 @@ class EnergyServiceMetadata(BaseModel, use_attribute_docstrings=True, frozen=Tru
     "Equipment ids supported. If None, all equipments can be assumed to be supported"
     available_models: Sequence[str]|Mapping[int, Sequence[str]]|None = None
     "List of all available model keys. Either a flat list, or a mapping from equipment ids to lists of model keys."
-    relevant_fields: Mapping[str, str]|None=None
+    relevant_fields: Mapping[str, str]|Mapping[int, Mapping[str, str]]|None=None
     "Important for the HTTP energy service; keys=service attributes, values=DynReAct order attribute names, such as \"material_properties.custom_attribute\"."
 
 
@@ -83,6 +83,7 @@ class EnergyService:
                            *args,
                            process_id: int|None=None,
                            model: str|None=None,
+                           missing_value_ensemble: Sequence[Order]|None=None,
                            **kwargs) -> EnergyPrediction|EnergyPredictionResultsFailed:
         """
         An estimation of the energy required for processing an order at some equipment.
@@ -106,9 +107,10 @@ class EnergyService:
                            *args,
                            process_id: int|None=None,
                            model: str|None=None,
+                            missing_value_ensemble: Sequence[Order] | None = None,
                            **kwargs) -> EnergyPredictionResults:
-        return EnergyPredictionResultsSuccess(results=[self.energy_consumption(order, equipment, start_times[idx], *args,
-                                                        process_id=process_id, model=model, **kwargs) for idx, order in enumerate(orders)])
+        return EnergyPredictionResultsSuccess(results=[self.energy_consumption(order, equipment, start_times[idx], *args, process_id=process_id,
+                                        model=model, missing_value_ensemble=missing_value_ensemble, **kwargs) for idx, order in enumerate(orders)])
 
 
 class EnergyCostServiceMetadata(BaseModel, use_attribute_docstrings=True):

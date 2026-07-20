@@ -543,7 +543,7 @@ class ModelUtils:
         snap_obj = snapshot_provider.load(time=snapshot)
         if not snap_obj:
             return None
-        if order is not None and not isinstance(order, Sequence):
+        if order is not None and isinstance(order, str):
             order = (order, )
         elif order is None:
             order = [o.id for o in snap_obj.orders]

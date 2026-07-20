@@ -594,6 +594,90 @@ def show_orders():
     _print_orders(orders, fields, wide=wide, filter_existent_properties=filter_existing, equipment=equipment)
 
 
+def show_order_history():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("order", help="Select order(s) to be displayed. Separate multiple fields by \",\"", type=str)
+    parser.add_argument("-s", "--start", help="Start time. Default: now - 1 day", type=str)
+    parser.add_argument("-e", "--end", help="End time. Default: now", type=str)
+    parser.add_argument("-st", "--step", help="Timestep between snapshots", type=str, default="PT1H")
+    parser.add_argument("-t", "--times", help="Explicit timesteps, separated by a comma \",\"", type=str, default=None)
+    parser.add_argument("-l", "--limit", help="Max number snapshots to parse", type=int, default=5)
+    args = parser.parse_args()
+    config = DynReActSrvConfig()
+    plugins = Plugins(config)
+    site = plugins.get_config_provider().site_config()
+    start: datetime | None = DatetimeUtils.parse_date(args.start)
+    end: datetime | None = DatetimeUtils.parse_date(args.end)
+    step: timedelta = pd.Timedelta(args.step).to_pytimedelta() if args.step else timedelta(hours=1)
+    sp = plugins.get_snapshot_provider()
+    times = None
+    if args.times:
+        times = [DatetimeUtils.parse_date(t) for t in (t.strip() for t in args.times.split(",")) if t]
+        if len(times) == 0:
+            times = None
+    limit = args.limit if times is None else len(times)
+    if not times and (not start or not end):
+        if not start and not end:
+            end = sp.previous()
+        if end:
+            start = end - ((limit-1) * step)
+        else:
+            end = start + (limit * step)
+    snapshots: dict[datetime, Snapshot] = {}
+    all_lots_by_snapshot: dict[datetime, dict[str, Lot]] = {}
+    for idx in range(0, limit):
+        t = start + idx * step if not times else times[idx]
+        snap_obj = sp.load(time=t)
+        if snap_obj.timestamp in snapshots:
+            continue
+        if times is None and snap_obj.timestamp > end + timedelta(minutes=30):
+            break
+        snapshots[snap_obj.timestamp] = snap_obj
+        all_lots = {lt.id: lt for lots in snap_obj.lots.values() for lt in lots}
+        all_lots_by_snapshot[snap_obj.timestamp] = all_lots
+    orders = [o for o in (o.strip() for o in args.order.split(",")) if o]
+    if len(orders) == 0:
+        print("No order found")
+        return
+    procs = [p.name_short for p in site.processes]
+    for order in orders:
+        print(f"Order {order}")
+        print("==================")
+        print("|      Snapshot       | Units |         Equipment         |   Processes   |             Lots                                    |")
+        print("|---------------------|-------|---------------------------|---------------|-----------------------------------------------------|")
+        for snapshot in snapshots.values():
+            o = snapshot.get_order(order)
+            if o is None:
+                continue
+            t = DatetimeUtils.format(snapshot.timestamp.astimezone(), use_zone=False).replace("T", " ")
+            eq = [e for e in (site.get_equipment(e) for e in o.current_equipment) if e is not None]
+            eq_names = ", ".join([e.name_short or str(e.id) for e in eq])
+            cr_procs = ", ".join([str(p) for p in o.current_processes])
+            lots = [""]
+            if o.lots is not None:
+                lots = all_lots_by_snapshot[snapshot.timestamp]
+                processes = [p for p in procs if p in o.lots]
+                order_lots: dict[str, Lot] = {p: lt for p, lt in {p: lots.get(o.lots[p]) for p in processes}.items() if lt is not None}
+                lt_times: dict[str, dict[str, LotTimes]]|None = ModelUtils.get_order_lot_times_with_fallback(site, sp, snapshot=snapshot.timestamp, order=order)
+                lt_times_order: dict[str, LotTimes]|None = lt_times.get(order) if lt_times is not None else None
+                lt_time_strings = {}
+                if lt_times_order is not None:
+                    lt_time_strings = {p: DatetimeUtils.format(lt.start.astimezone(), use_zone=False).replace("T", " ") + " - " +
+                                          DatetimeUtils.format(lt.end.astimezone(), use_zone=False).replace("T", " ") for p, lt in lt_times_order.items()}
+
+                if len(order_lots) > 0:
+                    lots = [f"{lt.id}: " + ((lt_time_strings.get(p) or "") if lt.active else "inactive") for p, lt in order_lots.items()]
+            for idx, lot in enumerate(lots):
+                if idx == 0:
+                    print(f"|  {t}   | {o.material_count:3d}   | {eq_names:25s} | {cr_procs:13s} |  {lot:50s} |")
+                else:
+                    print(f"|                     |       |                           |               |  {lot:50s} |")
+            if len(lots) > 1:
+                print("|---------------------|-------|---------------------------|---------------|-----------------------------------------------------|")
+        print("|---------------------|-------|---------------------------|---------------|-----------------------------------------------------|")
+        print()
+
+
 def show_material():
     parser = _trafo_args()
     parser.add_argument("-m", "--material", help="Specify material ids to be displayed. Separate multiple entries by \",\"",type=str, default=None)

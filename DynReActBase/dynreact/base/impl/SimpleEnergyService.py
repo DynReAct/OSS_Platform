@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from dynreact.base.EnergyService import EnergyService, EnergyServiceMetadata, EnergyCostService, \
     EnergyCostServiceMetadata, EnergyPriceCurve, EnergyCharacteristics, EnergyPrediction
 from dynreact.base.NotApplicableException import NotApplicableException
-from dynreact.base.model import Site, Order
+from dynreact.base.model import Site, Order, Material
 
 
 class EnergyConfig:
@@ -17,11 +17,13 @@ class EnergyConfig:
     energy_factor_by_equipment: Mapping[int, float] = {}
     "kWh/t material produced."
     default_energy_factor: float = 1.
+    material_based: bool=False
 
     def __init__(self,
                  energy_type: Literal["electric", "heat"]|None=None,
                  energy_factor_by_equipment: Mapping[int, float]|None=None,
-                 default_energy_factor: float|None=None):
+                 default_energy_factor: float|None=None,
+                 material_based: bool|None=None):
         load_dotenv()
         if energy_type is None:
             energy_type = os.getenv("SIMPLE_ENERGY_TYPE", EnergyConfig.energy_type)
@@ -38,6 +40,9 @@ class EnergyConfig:
         if default_energy_factor is None:
             default_energy_factor = float(os.getenv("SIMPLE_ENERGY_DEFAULT_FACTOR", EnergyConfig.default_energy_factor))
         self.default_energy_factor = default_energy_factor
+        if material_based is None:
+            material_based = os.getenv("SIMPLE_ENERGY_MAT_BASED") is not None
+        self.material_based = material_based
 
 
 class SimpleEnergyService(EnergyService):
@@ -51,9 +56,10 @@ class SimpleEnergyService(EnergyService):
         if not url.startswith("energy+simple:"):
             raise NotApplicableException(f"URL {url} not applicable to simple energy service")
         self._config = config if config is not None else EnergyConfig()
+        self._mat_based = self._config.material_based
 
     def service(self) -> EnergyServiceMetadata:
-        return EnergyServiceMetadata(id="simple", label="Simple energy service for testing")
+        return EnergyServiceMetadata(id="simple", label="Simple energy service for testing", material_based=self._mat_based)
 
     def status(self) -> int:
         return 0
@@ -64,13 +70,14 @@ class SimpleEnergyService(EnergyService):
     def energy_consumption(self,
                            order: Order,
                            equipment: int,
-                           start_time: datetime,
                            *args,
+                           material: Material| None = None,
                            process_id: int|None=None,
                            model: str|None=None,
                            **kwargs) -> EnergyPrediction:
         energy_factor = self._config.energy_factor_by_equipment.get(equipment, self._config.default_energy_factor)
-        kwh = order.actual_weight * energy_factor
+        weight = order.actual_weight if material is None else material.weight
+        kwh = weight * energy_factor
         return EnergyPrediction(model="simple", predicted_energy=kwh)
 
 

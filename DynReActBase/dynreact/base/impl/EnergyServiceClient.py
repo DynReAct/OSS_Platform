@@ -29,11 +29,11 @@ class EnergyServiceClientConfig(BaseModel, use_attribute_docstrings=True):
 
 
 class EnergyPredictionInput(BaseModel, use_attribute_docstrings=True, frozen=True):
-    orders: Sequence[Mapping[str, Any]]
-    "List of serialized order attributes"
+    features: Sequence[Mapping[str, Any]]
+    "List of serialized order (or material) attributes"
     equipment: int
     "Equipment id"
-    start_times: Sequence[datetime]
+    #start_times: Sequence[datetime]
     "Order processing start times"
     model: str | None = None
     "Optional model specifier"
@@ -101,13 +101,13 @@ class EnergyServiceClientHttp(EnergyService):
     def energy_consumption(self,
                            order: Order,
                            equipment: int,
-                           start_time: datetime,
                            *args,
+                           material: Material | None = None,
                            process_id: int|None=None,
                            model: str|None=None,
                            missing_value_ensemble: Sequence[Order] | None = None,
                            **kwargs) -> EnergyPrediction|EnergyPredictionResultsFailed:
-        results = self.bulk_energy_consumption([order], equipment, [start_time], *args, process_id=process_id,
+        results = self.bulk_energy_consumption([order], equipment, *args, material={order.id: [material]} if material else None, process_id=process_id,
                                                model=model, missing_value_ensemble=missing_value_ensemble, **kwargs)
         if isinstance(results, EnergyPredictionResultsFailed):
             return results
@@ -116,17 +116,23 @@ class EnergyServiceClientHttp(EnergyService):
     def bulk_energy_consumption(self,
                            orders: Sequence[Order],
                            equipment: int,
-                           start_times: Sequence[datetime],
                            *args,
+                           material: Mapping[str, Sequence[Material]] | None = None,
                            process_id: int|None=None,
                            model: str|None=None,
                            missing_value_ensemble: Sequence[Order] | None = None,
                            **kwargs) -> EnergyPredictionResults:
         service_meta = self.service()
+        is_mat_based = service_meta.material_based
         relevant_fields = service_meta.relevant_fields[equipment] if service_meta.relevant_fields is not None \
                                     and equipment in service_meta.relevant_fields else service_meta.relevant_fields
-        serialized_orders: Sequence[dict[str, Any]] = [EnergyServiceClientHttp._serialize_order(o, relevant_fields, missing_value_ensemble) for o in orders]
-        payload = EnergyPredictionInput(orders=serialized_orders, equipment=equipment, start_times=start_times, model=model)
+        if material is not None and is_mat_based:
+            empty = (None,)
+            entries = [(o, mat) for o in orders for mat in material.get(o.id, empty)]
+        else:
+            entries = [(o, None) for o in orders]
+        serialized_orders: Sequence[dict[str, Any]] = [EnergyServiceClientHttp._serialize_order(o, mat, relevant_fields, missing_value_ensemble, is_mat_based) for o, mat in entries]
+        payload = EnergyPredictionInput(orders=serialized_orders, equipment=equipment, model=model)  # , start_times=start_times
         try:
             response = requests.post(self._address + "prediction",
                                    data=payload.model_dump_json(exclude_none=True, exclude_unset=True),
@@ -168,9 +174,9 @@ class EnergyServiceClientHttp(EnergyService):
         return headers
 
     @staticmethod
-    def _serialize_order(order: Order, relevant_fields: Mapping[str, str]|None, missing_value_ensemble: Sequence[Order]|None) -> dict[str, Any]:
+    def _serialize_order(order: Order, mat: Material|None, relevant_fields: Mapping[str, str]|None, missing_value_ensemble: Sequence[Order]|None, material_based: bool) -> dict[str, Any]:
         if relevant_fields is None:
-            return order.model_dump(exclude_none=True, exclude_unset=True, mode="json")
+            return order.model_dump(exclude_none=True, exclude_unset=True, mode="json") if not material_based else mat.model_dump(exclude_none=True, exclude_unset=True, mode="json")
         result = {}
         for attribute, field in relevant_fields.items():
             if field == "":
@@ -179,8 +185,15 @@ class EnergyServiceClientHttp(EnergyService):
             elif field == "---":  # FIXME
                 result[attribute] = 1
                 continue
+            base_item = order
+            if material_based:
+                order_based = field.startswith("order.")
+                if order_based:
+                    field = field[6:]
+                else:
+                    base_item = mat
             is_mat_prop = field.startswith("material_properties.")
-            obj = order if not is_mat_prop else order.material_properties
+            obj = base_item if not is_mat_prop else base_item.material_properties
             if is_mat_prop:
                 field = field[20:]
             value = getattr(obj, field, None)

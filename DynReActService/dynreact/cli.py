@@ -1067,7 +1067,7 @@ def predict_energy():
             if len(orders) == 0:
                 print(f"  No orders found matching the specified time interval {start_time} - {end_time} for equipment {eq.name_short or eq.id}")
                 continue
-        results = service.bulk_energy_consumption(orders, eq.id, start_times, model=args.model, missing_value_ensemble=snapshot.orders)
+        results = service.bulk_energy_consumption(orders, eq.id, model=args.model, missing_value_ensemble=snapshot.orders)  # , start_times
         if isinstance(results, EnergyPredictionResultsFailed):
             print(f"  Failed to determine energy prediction ({energy_type} for equipment {eq.name_short or eq.id}: {results}")
             continue

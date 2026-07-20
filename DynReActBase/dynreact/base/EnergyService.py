@@ -3,7 +3,7 @@ from typing import Literal, Sequence, Mapping, TypeAlias
 
 from pydantic import BaseModel
 
-from dynreact.base.model import Order, Site
+from dynreact.base.model import Order, Site, Material
 
 
 class EnergyServiceMetadata(BaseModel, use_attribute_docstrings=True, frozen=True):
@@ -19,6 +19,7 @@ class EnergyServiceMetadata(BaseModel, use_attribute_docstrings=True, frozen=Tru
     """
     id: str
     label: str
+    material_based: bool = False
     description: str|None=None
     processes: Sequence[str]|None=None
     equipment: Sequence[int]|None=None
@@ -79,8 +80,9 @@ class EnergyService:
     def energy_consumption(self,
                            order: Order,
                            equipment: int,
-                           start_time: datetime,
+                           #start_time: datetime,
                            *args,
+                           material: Material | None = None,
                            process_id: int|None=None,
                            model: str|None=None,
                            missing_value_ensemble: Sequence[Order]|None=None,
@@ -91,6 +93,7 @@ class EnergyService:
         Parameters:
             order:
             equipment:
+            material: optional material unit
             start_time:
             process_id: the energy may vary depending on the process performed
             model: optional identifier of the estimation model to be performed. Service-specific.
@@ -103,14 +106,21 @@ class EnergyService:
     def bulk_energy_consumption(self,
                            orders: Sequence[Order],
                            equipment: int,
-                           start_times: Sequence[datetime],
+                           #start_times: Sequence[datetime],
                            *args,
+                           material: Mapping[str, Sequence[Material]]|None = None,
                            process_id: int|None=None,
                            model: str|None=None,
-                            missing_value_ensemble: Sequence[Order] | None = None,
+                           missing_value_ensemble: Sequence[Order] | None = None,
                            **kwargs) -> EnergyPredictionResults:
-        return EnergyPredictionResultsSuccess(results=[self.energy_consumption(order, equipment, start_times[idx], *args, process_id=process_id,
-                                        model=model, missing_value_ensemble=missing_value_ensemble, **kwargs) for idx, order in enumerate(orders)])
+
+        if material is not None:
+            empty = tuple()
+            entries = [(o, mat) for o in orders for mat in material.get(o.id, empty)]
+        else:
+            entries = [(o, None) for o in orders]
+        return EnergyPredictionResultsSuccess(results=[self.energy_consumption(order, equipment, *args, material=mat, process_id=process_id,
+                                        model=model, missing_value_ensemble=missing_value_ensemble, **kwargs) for order, mat in entries])
 
 
 class EnergyCostServiceMetadata(BaseModel, use_attribute_docstrings=True):

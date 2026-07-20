@@ -12,7 +12,7 @@ from dynreact.auth.authentication import dash_authenticated
 from dynreact.base.EnergyService import EnergyPrediction
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
-from dynreact.base.model import Lot, Order, LotTimes, Site
+from dynreact.base.model import Lot, Order, LotTimes, Site, Material
 from dynreact.gui.gui_utils import GuiUtils
 
 energy_types: Sequence[Literal["electric", "heat"]] = state.energy_prediction_types()
@@ -179,6 +179,7 @@ def run_energy_analysis(_: int, energy_type: Literal["electric", "heat"]|None, s
     equipment_with_lots = dict(sorted(equipment_with_lots.items()))  # sort by equipments
     equipment_with_orders: dict[int, list[Order]] = {eq: [snap_obj.get_order(order, do_raise=True) for lot in lots for order in lot.orders] for eq, lots in equipment_with_lots.items()}
     energy_service = state.get_energy_service(energy_type)
+    mat_based: bool = energy_service.service().material_based
     success = 0
     last_error = None
     results: dict[int, Sequence[EnergyPrediction]] = {}
@@ -188,32 +189,54 @@ def run_energy_analysis(_: int, energy_type: Literal["electric", "heat"]|None, s
     for equipment, orders in equipment_with_orders.items():
         try:
             order_ids = [o.id for o in orders]
+            materials: dict[str, list[Material]]|None = None
+            if mat_based:
+                processes = state.get_site().processes
+                materials = {}
+                for mat in snap_obj.material:
+                    if mat.order in order_ids:
+                        if mat.order not in materials:
+                            materials[mat.order] = []
+                        materials[mat.order].append(mat)
+                for mats in materials.values():
+                    mat_processes = {mat.id: next((p for p in processes if mat.current_process in p.process_ids), None) for mat in mats}
+                    process_indices = {mat_id: processes.index(p) if p is not None else 1_000_000 for mat_id, p in mat_processes.items()}
+                    order_indices = {mat.id: mat.order_positions.get(p.name_short, 1_000) if p is not None and mat.order_positions is not None else 0 for mat, p in zip(mats, mat_processes)}
+                    mats.sort(key=lambda mat: (process_indices[mat.id], order_indices[mat.id]))  # sort by process ids and order indices
             process = site.get_equipment(equipment, do_raise=True).process
+            # TODO handle material based case!
             lot_times = ModelUtils.get_order_lot_times_with_fallback(site, sp, snapshot=snap_obj.timestamp, order=order_ids, process=process)
             order_lot_times: dict[str, LotTimes] = {o: dct[process] for o, dct in lot_times.items() if process in dct}
             #order_lot_times_sorted = [order_lot_times.get(o) if order_lot_times is not None else None for o in order_ids]
             start_times: list[datetime] = []
             end_times: list[datetime] = []
             latest_end = snap_obj.timestamp
-            for order in orders:
+            if mat_based:
+                empty = tuple()
+                entries = [(o, mat) for o in orders for mat in materials.get(o.id, empty)]
+            else:
+                entries = [(o, None) for o in orders]
+            for order in orders:  # TODO for order, mat in entries
                 start = order_lot_times[order.id].start if order.id in order_lot_times else latest_end
                 start_times.append(start)
                 end = order_lot_times[order.id].end if order.id in order_lot_times else start + timedelta(hours=order.material_count)
                 end_times.append(end)
                 latest_end = end
-            results_eq: Sequence[EnergyPrediction] = energy_service.bulk_energy_consumption(orders, equipment, start_times).results
+            results_eq: Sequence[EnergyPrediction] = energy_service.bulk_energy_consumption(orders, equipment, material=materials).results
             results[equipment] = results_eq
 
             # "ensemble_energy_kwh": round(float(ensemble_energy), 3),
-            #             "uncertainty_min_kwh": round(min(numeric_pröedictions), 3) if numeric_predictions else None,
+            #             "uncertainty_min_kwh": round(min(numeric_predictions), 3) if numeric_predictions else None,
             #             "uncertainty_max_kwh": round(max(numeric_predictions), 3) if numeric_predictions else None,
             #             "energy_cost_eur": round(float(cost_result.get("total_cost_eur", 0.0)), 4),
             #             "unit_price_eur_mwh"
             eq = site.get_equipment(equipment, do_raise=True)
             equipment_name = eq.name or eq.name_short or str(eq.id)
+            # TODO adapt start times to material-based case
             durations = [end_times[idx] - start_times[idx] for idx in range(len(start_times))]
+            # TODO handle material vs order base
             rows = [{"equipment": equipment, "equipment_name": equipment_name, "order_id": orders[idx].id, "lot_id": orders[idx].lots.get(process) if orders[idx].lots is not None else None,
-                          "units": orders[idx].material_count,
+                          "units": orders[idx].material_count if not mat_based else 1,
                           "start_time": DatetimeUtils.format(start_times[idx], use_zone=False).replace("T", " "),
                           "end_time":  DatetimeUtils.format(end_times[idx], use_zone=False).replace("T", " "),
                           "duration_min": round(durations[idx].total_seconds()/60),

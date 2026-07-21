@@ -1509,7 +1509,10 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
             _availability_by_order[order] = None
             return None
         end_time = prev_lot.end_time
-        lt_times = snapshot_provider.get_order_lot_times(snapshot_obj.timestamp, o.id)
+        try:
+            lt_times = snapshot_provider.get_order_lot_times(snapshot_obj.timestamp, o.id)
+        except NotImplementedError:
+            lt_times = None
         if lt_times is not None and len(lt_times) > 0 and prev_lot_proc in lt_times[o.id]:
             end_time = lt_times[o.id][prev_lot_proc].end
             if transport_times is not None:

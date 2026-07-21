@@ -530,7 +530,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         nonlocal plant_obj
         nonlocal last_lot_obj
         as_dict = o.material_properties.model_dump(exclude_none=True, exclude_unset=True) if isinstance(o.material_properties, BaseModel) \
-            else dict(o.material_properties)
+            else dict(o.material_properties) if o.material_properties is not None else None
         as_dict["order"] = o.id
         as_dict["lot"] = lot or ""
         as_dict["weight"] = o.actual_weight
@@ -606,7 +606,10 @@ def _append_lot_info_for_order(row: dict[str, Any], o: Order, process: str, snap
     if last_lot is not None:
         prev_proc = site.get_equipment(last_lot.equipment, do_raise=True).process
         row["previous_lot"] = _lot_info(last_lot)
-        timings = sp.get_order_lot_times(snap_obj.timestamp, o.id)
+        try:
+            timings = sp.get_order_lot_times(snap_obj.timestamp, o.id)
+        except NotImplementedError:
+            timings = None
         if timings is not None and len(timings) > 0 and prev_proc in timings.get(o.id, {}):
             end_prev_lot = state.as_timezone(timings.get(o.id).get(prev_proc).end)
             if site.transport_times is not None and target_plant is not None:

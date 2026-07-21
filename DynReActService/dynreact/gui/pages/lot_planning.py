@@ -530,7 +530,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
         nonlocal plant_obj
         nonlocal last_lot_obj
         as_dict = o.material_properties.model_dump(exclude_none=True, exclude_unset=True) if isinstance(o.material_properties, BaseModel) \
-            else o.material_properties
+            else dict(o.material_properties)
         as_dict["order"] = o.id
         as_dict["lot"] = lot or ""
         as_dict["weight"] = o.actual_weight

@@ -350,6 +350,8 @@ class SnapshotProvider:
         next_process_ids = [pid for p in next_processes for pid in p.process_ids]
         applicable_orders: list[str] = []
         for order in snapshot.orders:
+            if order.is_setup_order:
+                continue
             # step 0: any equipment allowed at all?
             order_equipment = [e for e in equipment if e in order.allowed_equipment]
             if restrictions:

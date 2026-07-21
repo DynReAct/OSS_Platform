@@ -164,7 +164,7 @@ def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["order
         return col_def
     if order_coil == "material":
         fields = [column_def_for_field(key, info) for key, info in snapshot.material[0].model_fields.items()]  # TODO how to sort?
-        return fields, [coil.model_dump(exclude_none=True, exclude_unset=True) for coil in snapshot.material]
+        return fields, [coil.model_dump(exclude_none=True, exclude_unset=True) for coil in snapshot.material if not coil.is_setup_material]
     # TODO how to sort?
     fields = [column_def_for_field(key, info) for key, info in snapshot.orders[0].model_fields.items() if (key not in ["material_properties", "material_status", "lot", "lot_position" ])] + \
              ([column_def_for_field(key, info) for key, info in snapshot.orders[0].material_properties.model_fields.items()] if \
@@ -175,7 +175,7 @@ def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["order
     for field in fields:
         if field["field"] == "id":
             field["pinned"] = True
-        if field["field"] in ["lots", "lot_positions", "active_processes", "coil_status", "follow_up_processes", "target_weight", "actual_weight", "material_classes"]:
+        if field["field"] in ["lots", "lot_positions", "active_processes", "coil_status", "follow_up_processes", "target_weight", "actual_weight", "material_classes", "equipment_performance"]:
             field["valueFormatter"] = value_formatter_object
 
     def order_to_json(o: Order):
@@ -190,7 +190,7 @@ def snapshot_selected(snapshot_id: datetime|str|None, order_coil: Literal["order
         if isinstance(o.material_properties, BaseModel):
             as_dict.update(o.material_properties.model_dump(mode="json", exclude_none=True, exclude_unset=True))
         return as_dict
-    return fields, [order_to_json(order) for order in snapshot.orders]
+    return fields, [order_to_json(order) for order in snapshot.orders if not order.is_setup_order]
 
 
 @callback(

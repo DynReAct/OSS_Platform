@@ -132,7 +132,7 @@ class EnergyServiceClientHttp(EnergyService):
         else:
             entries = [(o, None) for o in orders]
         serialized_orders: Sequence[dict[str, Any]] = [EnergyServiceClientHttp._serialize_order(o, mat, relevant_fields, missing_value_ensemble, is_mat_based) for o, mat in entries]
-        payload = EnergyPredictionInput(orders=serialized_orders, equipment=equipment, model=model)  # , start_times=start_times
+        payload = EnergyPredictionInput(features=serialized_orders, equipment=equipment, model=model)  # , start_times=start_times
         try:
             response = requests.post(self._address + "prediction",
                                    data=payload.model_dump_json(exclude_none=True, exclude_unset=True),

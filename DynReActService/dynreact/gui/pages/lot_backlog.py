@@ -281,7 +281,10 @@ def update_table(equipment: int|None, start_date0: str|None,
                         hours = round(hours*10) / 10
                     tt = delta
                     od["transport_time"] = hours
-            times = snap_provider.get_order_lot_times(snap_obj.timestamp, order.id)
+            try:
+                times = snap_provider.get_order_lot_times(snap_obj.timestamp, order.id)
+            except NotImplementedError:
+                times = None
             if times and order.id in times:
                 o_times: LotTimes|None = times[order.id].get(prev_proc)
                 if o_times is not None:

@@ -1530,8 +1530,6 @@ def update_orders(snapshot: str, process: str, tab: str|None, check_hide_list: l
     if hide_next_procs or hide_released_lots or hide_unavailable:
 
         def _filter_order(o: Order) -> bool:
-            if o.is_setup_order:
-                return False
             if hide_next_procs:
                 #process_ids = o.current_processes
                 #order_processes = [procs_by_id.get(p_id) for p_id in process_ids if p_id in procs_by_id]

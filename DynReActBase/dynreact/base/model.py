@@ -188,7 +188,6 @@ class Material(Model, Generic[PROPERTIES]):
     "Indicates that the material cannot be further processed for the time being."
     properties: PROPERTIES|None = None
     "Material-specific properties."
-    is_setup_material: bool = False
 
     def get_current_equipment_name(self) -> str|None:
         return self.current_equipment_name
@@ -241,8 +240,6 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
     "Use-case specific material characteristics."
     priority: int = 0
     "Order priority"
-    is_setup_order: bool = False
-    "A production order that does not correspond to a customer order, but solely represents some setup activity"
 
 
 class Lot(Model):

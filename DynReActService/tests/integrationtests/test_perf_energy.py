@@ -15,21 +15,33 @@ from dynreact.gui.perf_energy import _build_http_backend
 
 class PerfEnergyHttpConfigTest(unittest.TestCase):
 
-    def test_http_backend_requires_feature_table_per_equipment(self):
+    def test_http_backend_requires_service_equipment_per_equipment(self):
         with self.assertRaisesRegex(
             ValueError,
-            r"Energy HTTP configuration for `PKL01` is missing `feature_table`\."
+            r"Energy HTTP configuration for `PKL01` is missing `service_equipment`\."
         ):
             _build_http_backend(
                 {
                     "DYNREACT_ENERGY_PERF": "http://energy-service",
                     "equipment": {
-                        "PKL01": {
-                            "service_equipment": "PKL01",
-                        }
+                        "PKL01": {}
                     },
                 }
             )
+
+    def test_http_backend_accepts_model_driven_equipment_mapping(self):
+        backend = _build_http_backend(
+            {
+                "DYNREACT_ENERGY_PERF": "http://energy-service",
+                "equipment": {
+                    "PKL01": {
+                        "service_equipment": "TD1",
+                    }
+                },
+            }
+        )
+
+        self.assertEqual(backend._supported["PKL01"]["service_equipment"], "TD1")
 
 
 if __name__ == "__main__":

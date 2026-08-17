@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import csv
 import json
 import math
 import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Protocol, cast
+from typing import Any, Callable
 
 import requests
 
@@ -36,79 +35,6 @@ class ScheduledCoil:
     order: Any
     coil: Any | None
     lot_id: str | None
-    row: dict[str, str] | None = None
-
-
-class SnapshotRowsProvider(Protocol):
-    """Snapshot provider protocol for raw RAS row access."""
-
-    def get_snapshot_rows(self, snapshot: datetime | None = None) -> list[dict[str, str]]:
-        """Return raw snapshot rows for an optional snapshot timestamp."""
-        ...
-
-
-class _LegacySnapshotRowsProvider:
-    """Compatibility adapter for snapshot providers exposing raw CSV files only."""
-
-    def __init__(self, provider: Any):
-        self._provider = provider
-
-    def get_snapshot_rows(self, snapshot: datetime | None = None) -> list[dict[str, str]]:
-        snapshot_id = self._resolve_snapshot_id(snapshot)
-        if snapshot_id is None:
-            return []
-        file_name = self._resolve_snapshot_file(snapshot_id)
-        if file_name is None:
-            return []
-        with Path(file_name).open("r", encoding="utf-8-sig", newline="") as handle:
-            reader = csv.DictReader(handle, delimiter=";")
-            return [
-                {str(key): "" if value is None else str(value) for key, value in row.items()}
-                for row in reader
-            ]
-
-    def _resolve_snapshot_id(self, snapshot: datetime | None) -> datetime | None:
-        find_time = getattr(self._provider, "_find_time", None)
-        if callable(find_time):
-            resolved = find_time(snapshot)
-            return resolved if isinstance(resolved, datetime) else None
-        current_snapshot_id = getattr(self._provider, "current_snapshot_id", None)
-        if callable(current_snapshot_id):
-            resolved = current_snapshot_id() if snapshot is None else snapshot
-            return resolved if isinstance(resolved, datetime) else None
-        return snapshot
-
-    def _resolve_snapshot_file(self, snapshot_id: datetime) -> str | None:
-        snapshot_files = getattr(self._provider, "_snapshot_files", None)
-        if not isinstance(snapshot_files, dict) or snapshot_id not in snapshot_files:
-            snapshots = getattr(self._provider, "snapshots", None)
-            if callable(snapshots):
-                resolved = snapshots(
-                    datetime.fromtimestamp(0, tz=snapshot_id.tzinfo),
-                    datetime.fromtimestamp(9_999_999_999, tz=snapshot_id.tzinfo),
-                )
-                if resolved is not None:
-                    list(resolved)
-                snapshot_files = getattr(self._provider, "_snapshot_files", None)
-        if isinstance(snapshot_files, dict):
-            file_name = snapshot_files.get(snapshot_id)
-            if file_name:
-                return str(file_name)
-        file_name = getattr(self._provider, "_file", None)
-        return str(file_name) if file_name else None
-
-
-def require_snapshot_rows_provider(provider: Any) -> SnapshotRowsProvider:
-    """Accept snapshot providers by capability instead of profile-specific type."""
-    if callable(getattr(provider, "get_snapshot_rows", None)):
-        return cast(SnapshotRowsProvider, provider)
-    if callable(getattr(provider, "_find_time", None)) and (
-        isinstance(getattr(provider, "_snapshot_files", None), dict) or getattr(provider, "_file", None) is not None
-    ):
-        return cast(SnapshotRowsProvider, _LegacySnapshotRowsProvider(provider))
-    raise ValueError(
-        "The HTTP energy backend requires a snapshot provider exposing get_snapshot_rows()."
-    )
 
 
 def _ensure_local_datetime(value: datetime) -> datetime:
@@ -247,10 +173,11 @@ class HttpEnergyBackend(EnergyBackend):
         return [{"label": eq, "value": eq} for eq in self._supported if eq in site_names]
 
     def analyse(self, equipment_names: list[str], start_time: datetime, end_time: datetime) -> tuple[list[dict[str, Any]], str]:
-        provider = require_snapshot_rows_provider(self._context.get_snapshot_provider())
-        rows = provider.get_snapshot_rows()
-        selected = {eq: self._supported[eq] for eq in equipment_names if eq in self._supported}
-        scheduled = self._scheduled_from_rows(rows, selected, start_time, end_time)
+        snapshot_id = self._context.get_snapshot_provider().current_snapshot_id()
+        snapshot = self._context.get_snapshot(snapshot_id)
+        if snapshot is None:
+            return [], "Snapshot not available."
+        scheduled = _scheduled_from_snapshot(self._context, snapshot, equipment_names, start_time, end_time)
         if len(scheduled) == 0:
             return [], "No scheduled coils were found for the selected equipment and time window."
 
@@ -261,9 +188,11 @@ class HttpEnergyBackend(EnergyBackend):
         price_rate_limited = 0
         price_unavailable = 0
         for item in scheduled:
-            spec = selected[item.equipment_name]
-            features = self._features_from_row(item.row or {}, spec, item)
-            service_equipment = spec["service_equipment"]
+            spec = self._supported.get(item.equipment_name)
+            if spec is None:
+                continue
+            service_equipment = str(spec.get("service_equipment") or item.equipment_name).strip() or item.equipment_name
+            features = self._features_from_snapshot(spec, item)
             predictions = self._post_json("/energy_estimation_all", params={"equipment_id": service_equipment}, payload={"features": features})
             prediction_summary = _prediction_summary(predictions, service_equipment)
             selected_model_key, selected_energy = _pick_preferred_prediction(predictions, service_equipment)
@@ -334,189 +263,101 @@ class HttpEnergyBackend(EnergyBackend):
             status += f" Live pricing was unavailable for {price_unavailable} coils, so their energy is shown without cost."
         return result_rows, status
 
-    def _scheduled_from_rows(
-        self,
-        rows: list[dict[str, str]],
-        selected: dict[str, dict[str, str]],
-        start_time: datetime,
-        end_time: datetime,
-    ) -> list[ScheduledCoil]:
-        grouped: dict[str, list[ScheduledCoil]] = {eq: [] for eq in selected}
-        for row in rows:
-            coil_id = (row.get("MatID") or row.get("Me-ID-Primary") or "").strip()
-            order_id = (row.get("Production Order NR") or "").strip()
-            if coil_id == "" or order_id == "":
-                continue
-            for equipment_name, spec in selected.items():
-                lot_id = (row.get(f"{spec['lot_prefix']}LotID") or "").strip()
-                if not lot_id.startswith(equipment_name):
-                    continue
-                start_val = _parse_ras_datetime(row.get(f"{spec['lot_prefix']}_Coil_Start"))
-                end_val = _parse_ras_datetime(row.get(f"{spec['lot_prefix']}_Coil_End"))
-                if start_val is None or end_val is None:
-                    continue
-                if end_val < start_time or start_val > end_time:
-                    continue
-                grouped[equipment_name].append(
-                    ScheduledCoil(
-                        equipment_name=equipment_name,
-                        coil_id=coil_id,
-                        order_id=order_id,
-                        start_time=start_val,
-                        end_time=end_val,
-                        duration_min=(end_val - start_val).total_seconds() / 60.0,
-                        time_gap_min=0.0,
-                        order=None,
-                        coil=None,
-                        lot_id=lot_id,
-                        row=row,
-                    )
-                )
-        result: list[ScheduledCoil] = []
-        for equipment_name, items in grouped.items():
-            previous_end: datetime | None = None
-            for item in sorted(items, key=lambda current: (current.start_time, current.coil_id)):
-                time_gap = 0.0 if previous_end is None else max(0.0, (item.start_time - previous_end).total_seconds() / 60.0)
-                result.append(
-                    ScheduledCoil(
-                        equipment_name=item.equipment_name,
-                        coil_id=item.coil_id,
-                        order_id=item.order_id,
-                        start_time=item.start_time,
-                        end_time=item.end_time,
-                        duration_min=item.duration_min,
-                        time_gap_min=time_gap,
-                        order=item.order,
-                        coil=item.coil,
-                        lot_id=item.lot_id,
-                        row=item.row,
-                    )
-                )
-                previous_end = item.end_time
-        return result
+    def _service_metadata(self) -> dict[str, Any]:
+        cached = getattr(self, "_metadata_cache", None)
+        if isinstance(cached, dict):
+            return cached
+        response = self._session.get(f"{self._base_url}/model", timeout=self._timeout)
+        response.raise_for_status()
+        data = response.json()
+        self._metadata_cache = data if isinstance(data, dict) else {}
+        return self._metadata_cache
 
-    def _features_from_row(self, row: dict[str, str], spec: dict[str, Any], item: ScheduledCoil) -> dict[str, Any]:
-        feature_table = spec.get("feature_table")
-        if isinstance(feature_table, dict) and len(feature_table) > 0:
-            resolved = self._resolve_feature_table(row, spec, item, feature_table)
-            required = self._required_feature_names(spec, resolved)
-            return {name: resolved[name] for name in required}
+    def _features_from_snapshot(self, spec: dict[str, Any], item: ScheduledCoil) -> dict[str, Any]:
         service_equipment = str(spec.get("service_equipment") or item.equipment_name).strip() or item.equipment_name
-        raise ValueError(
-            "Energy HTTP configuration for equipment "
-            f"`{item.equipment_name}` (service `{service_equipment}`) is missing `feature_table`."
-        )
+        metadata = self._service_metadata()
+        relevant_fields = metadata.get("relevant_fields") or {}
+        model_features = metadata.get("model_features") or {}
+        equipment_fields = relevant_fields.get(service_equipment)
+        if not isinstance(equipment_fields, dict) or len(equipment_fields) == 0:
+            raise ValueError(f"Energy service metadata does not define `relevant_fields` for `{service_equipment}`.")
+        equipment_models = model_features.get(service_equipment)
+        required_names = self._required_feature_names(equipment_models, equipment_fields)
+        resolved = {
+            feature_name: self._resolve_metadata_mapping(feature_name, descriptor, item)
+            for feature_name, descriptor in equipment_fields.items()
+            if feature_name in required_names
+        }
+        return {name: resolved[name] for name in required_names}
 
-    def _required_feature_names(self, spec: dict[str, Any], resolved: dict[str, Any]) -> list[str]:
-        models = spec.get("model_features")
-        if not isinstance(models, dict) or len(models) == 0:
-            return list(resolved.keys())
+    def _required_feature_names(self, equipment_models: Any, equipment_fields: dict[str, Any]) -> list[str]:
+        if not isinstance(equipment_models, dict) or len(equipment_models) == 0:
+            return list(equipment_fields.keys())
         required: list[str] = []
         seen: set[str] = set()
-        for feature_names in models.values():
+        for feature_names in equipment_models.values():
             if not isinstance(feature_names, list):
                 continue
             for name in feature_names:
-                if not isinstance(name, str) or name in seen or name not in resolved:
+                if not isinstance(name, str) or name in seen or name not in equipment_fields:
                     continue
                 seen.add(name)
                 required.append(name)
-        return required or list(resolved.keys())
+        return required or list(equipment_fields.keys())
 
-    def _resolve_feature_table(
-        self,
-        row: dict[str, str],
-        spec: dict[str, Any],
-        item: ScheduledCoil,
-        feature_table: dict[str, Any],
-    ) -> dict[str, Any]:
-        resolved: dict[str, Any] = {}
-        for feature_name, descriptor in feature_table.items():
-            if not isinstance(feature_name, str):
-                continue
-            resolved[feature_name] = self._resolve_feature_value(feature_name, descriptor, row, spec, item)
-        return resolved
-
-    def _resolve_feature_value(
-        self,
-        feature_name: str,
-        descriptor: Any,
-        row: dict[str, str],
-        spec: dict[str, Any],
-        item: ScheduledCoil,
-    ) -> Any:
+    def _resolve_metadata_mapping(self, feature_name: str, descriptor: Any, item: ScheduledCoil) -> Any:
+        if isinstance(descriptor, str):
+            descriptor = {"source": descriptor}
         if not isinstance(descriptor, dict):
             return descriptor
-
-        source = str(descriptor.get("source") or "row").strip().lower()
-        required = bool(descriptor.get("required", False))
-        default = descriptor.get("default", 0.0 if str(descriptor.get("type") or "").strip().lower() == "number" else "")
-        if source == "row":
-            raw_value = self._row_value(row, descriptor)
-        elif source == "computed":
-            raw_value = self._computed_value(descriptor, spec, item)
-        elif source == "literal":
-            raw_value = descriptor.get("value")
-        else:
-            raise ValueError(f"Unsupported energy feature source `{source}` for `{feature_name}`.")
-
-        if _is_missing_value(raw_value):
-            fallback_field = descriptor.get("fallback_computed")
-            if isinstance(fallback_field, str) and fallback_field.strip() != "":
-                raw_value = self._computed_value({"field": fallback_field}, spec, item)
-
+        source = str(descriptor.get("source") or "").strip()
+        if source == "":
+            raise ValueError(f"Energy service metadata for `{feature_name}` is missing a source expression.")
+        required = bool(descriptor.get("required", True))
+        raw_value = self._resolve_source_path(source, item)
         if _is_missing_value(raw_value):
             if required:
-                columns = descriptor.get("columns") or descriptor.get("column") or descriptor.get("field") or source
-                raise ValueError(f"Missing required energy feature `{feature_name}` from `{columns}`.")
-            raw_value = default
-
-        value_type = str(descriptor.get("type") or "").strip().lower()
-        if value_type == "number":
-            parser = _number_from_mixed if bool(descriptor.get("extract_digits", False)) else _number
-            value = parser(raw_value, _number(default))
-        else:
-            value = raw_value
+                raise ValueError(f"Missing required energy feature `{feature_name}` from `{source}`.")
+            raw_value = descriptor.get("default")
         scale = descriptor.get("scale")
-        if isinstance(scale, (int, float)):
-            value = float(value) * float(scale)
-        return value
+        if isinstance(scale, (int, float)) and raw_value is not None:
+            raw_value = float(_number_from_mixed(raw_value)) * float(scale)
+        return raw_value
 
-    def _row_value(self, row: dict[str, str], descriptor: dict[str, Any]) -> Any:
-        columns = descriptor.get("columns")
-        if isinstance(columns, list):
-            for column in columns:
-                if not isinstance(column, str):
-                    continue
-                value = row.get(column)
-                if not _is_missing_value(value):
-                    return value
-            return None
-        column = descriptor.get("column")
-        if isinstance(column, str):
-            return row.get(column)
-        return None
-
-    def _computed_value(self, descriptor: dict[str, Any], spec: dict[str, Any], item: ScheduledCoil) -> Any:
-        field = str(descriptor.get("field") or "").strip()
-        if field == "duration_min":
+    def _resolve_source_path(self, source: str, item: ScheduledCoil) -> Any:
+        if source == "duration_min":
             return item.duration_min
-        if field == "time_gap_min":
+        if source == "time_gap_min":
             return item.time_gap_min
-        if field == "coil_id":
-            return item.coil_id
-        if field == "order_id":
-            return item.order_id
-        if field == "lot_id":
-            return item.lot_id
-        if field == "start_time_iso":
-            return item.start_time.isoformat()
-        if field == "end_time_iso":
-            return item.end_time.isoformat()
-        if field == "performance_column":
-            column_name = spec.get("performance_column")
-            return item.row.get(column_name) if isinstance(column_name, str) and item.row is not None else None
-        raise ValueError(f"Unsupported computed energy field `{field}`.")
+        if source == "weight":
+            return getattr(item.coil, "weight", None) if item.coil is not None else getattr(item.order, "actual_weight", None)
+        if source == "equipment_performance[$EQUIPMENT]":
+            equipment = self._context.get_site().get_equipment_by_name(item.equipment_name)
+            if equipment is None:
+                return None
+            performance = getattr(item.order, "equipment_performance", None)
+            if isinstance(performance, dict):
+                return performance.get(equipment.id)
+            return None
+        root_name, _, remainder = source.partition(".")
+        root: Any
+        if root_name == "order":
+            root = item.order
+        elif root_name == "coil":
+            root = item.coil
+        elif root_name == "equipment":
+            root = self._context.get_site().get_equipment_by_name(item.equipment_name)
+        else:
+            raise ValueError(f"Unsupported energy metadata source `{source}`.")
+        value = root
+        for part in remainder.split(".") if remainder else []:
+            if value is None:
+                return None
+            if isinstance(value, dict):
+                value = value.get(part)
+            else:
+                value = getattr(value, part, None)
+        return value
 
     def _post_json(self, path: str, params: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         response = self._session.post(f"{self._base_url}{path}", params=params, json=payload, timeout=self._timeout)
@@ -739,10 +580,10 @@ def build_http_backend(http_cfg: dict[str, Any], *, context: EnergyBackendContex
     for equipment_name, spec in equipment.items():
         if not isinstance(spec, dict):
             raise ValueError(f"Energy HTTP configuration for `{equipment_name}` must be a mapping.")
-        feature_table = spec.get("feature_table")
-        if not isinstance(feature_table, dict) or len(feature_table) == 0:
+        service_equipment = str(spec.get("service_equipment") or "").strip()
+        if service_equipment == "":
             raise ValueError(
-                f"Energy HTTP configuration for `{equipment_name}` is missing `feature_table`."
+                f"Energy HTTP configuration for `{equipment_name}` is missing `service_equipment`."
             )
     return HttpEnergyBackend(
         base_url,
@@ -761,17 +602,6 @@ def normalize_energy_context(context: dict[str, Any]) -> dict[str, Any]:
     if isinstance(functions_cfg, dict):
         normalized["defaults"] = functions_cfg.get("defaults", normalized.get("defaults") or {})
         normalized["equipment"] = functions_cfg.get("equipment", normalized.get("equipment") or {})
-    http_cfg = normalized.get("http")
-    if isinstance(http_cfg, dict):
-        equipment_cfg = http_cfg.get("equipment")
-        if isinstance(equipment_cfg, dict):
-            for spec in equipment_cfg.values():
-                if not isinstance(spec, dict):
-                    continue
-                feature_table = spec.get("feature_table")
-                legacy_features = spec.get("features")
-                if not isinstance(feature_table, dict) and isinstance(legacy_features, dict):
-                    spec["feature_table"] = legacy_features
     return normalized
 
 

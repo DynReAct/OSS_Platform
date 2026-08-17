@@ -3,6 +3,7 @@ from typing import Literal, Sequence, Mapping, TypeAlias
 
 from pydantic import BaseModel
 
+from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.model import Order, Site, Material
 
 
@@ -61,9 +62,10 @@ EnergyPredictionResults: TypeAlias = EnergyPredictionResultsSuccess | EnergyPred
 
 class EnergyService:
 
-    def __init__(self, url: str, site: Site):
+    def __init__(self, url: str, site: Site, snapshot_provider: SnapshotProvider):
         self._url = url
         self._site = site
+        self._snapshot_provider = snapshot_provider
 
     def service(self) -> EnergyServiceMetadata:
         raise NotImplementedError
@@ -80,6 +82,7 @@ class EnergyService:
     def energy_consumption(self,
                            order: Order,
                            equipment: int,
+                           snapshot: datetime,
                            #start_time: datetime,
                            *args,
                            material: Material | None = None,
@@ -106,6 +109,7 @@ class EnergyService:
     def bulk_energy_consumption(self,
                            orders: Sequence[Order],
                            equipment: int,
+                           snapshot: datetime,
                            #start_times: Sequence[datetime],
                            *args,
                            material: Mapping[str, Sequence[Material]]|None = None,
@@ -119,7 +123,7 @@ class EnergyService:
             entries = [(o, mat) for o in orders for mat in material.get(o.id, empty)]
         else:
             entries = [(o, None) for o in orders]
-        return EnergyPredictionResultsSuccess(results=[self.energy_consumption(order, equipment, *args, material=mat, process_id=process_id,
+        return EnergyPredictionResultsSuccess(results=[self.energy_consumption(order, equipment, snapshot, *args, material=mat, process_id=process_id,
                                         model=model, missing_value_ensemble=missing_value_ensemble, **kwargs) for order, mat in entries])
 
 

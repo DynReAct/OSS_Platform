@@ -11,8 +11,10 @@ from pydantic import TypeAdapter, BaseModel
 from dynreact.base.EnergyService import EnergyServiceMetadata, EnergyService, EnergyPrediction, EnergyPredictionResults, \
     EnergyPredictionResultsFailed, EnergyPredictionResultsSuccess
 from dynreact.base.NotApplicableException import NotApplicableException
+from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.base.model import Site, Order, Material
+from dynreact.base.impl.ModelUtils import ModelUtils
+from dynreact.base.model import Site, Order, Material, LotTimes
 from dynreact.base.monitoring import ServiceHealth
 
 
@@ -45,8 +47,8 @@ class EnergyServiceClientHttp(EnergyService):
     Defines a client for an HTTP-based energy service.
     """
 
-    def __init__(self, url: str, site: Site, config: EnergyServiceClientConfig|None = None):
-        super().__init__(url, site)
+    def __init__(self, url: str, site: Site, snapshot_provider: SnapshotProvider, config: EnergyServiceClientConfig|None = None):
+        super().__init__(url, site, snapshot_provider)
         if not url or not url.lower().startswith("energy+http") or "://" not in url:
             raise NotApplicableException
         address = url[7:]
@@ -101,13 +103,14 @@ class EnergyServiceClientHttp(EnergyService):
     def energy_consumption(self,
                            order: Order,
                            equipment: int,
+                           snapshot: datetime,
                            *args,
                            material: Material | None = None,
                            process_id: int|None=None,
                            model: str|None=None,
                            missing_value_ensemble: Sequence[Order] | None = None,
                            **kwargs) -> EnergyPrediction|EnergyPredictionResultsFailed:
-        results = self.bulk_energy_consumption([order], equipment, *args, material={order.id: [material]} if material else None, process_id=process_id,
+        results = self.bulk_energy_consumption([order], equipment, snapshot, *args, material={order.id: [material]} if material else None, process_id=process_id,
                                                model=model, missing_value_ensemble=missing_value_ensemble, **kwargs)
         if isinstance(results, EnergyPredictionResultsFailed):
             return results
@@ -116,6 +119,7 @@ class EnergyServiceClientHttp(EnergyService):
     def bulk_energy_consumption(self,
                            orders: Sequence[Order],
                            equipment: int,
+                           snapshot: datetime,
                            *args,
                            material: Mapping[str, Sequence[Material]] | None = None,
                            process_id: int|None=None,
@@ -131,7 +135,15 @@ class EnergyServiceClientHttp(EnergyService):
             entries = [(o, mat) for o in orders for mat in material.get(o.id, empty)]
         else:
             entries = [(o, None) for o in orders]
-        serialized_orders: Sequence[dict[str, Any]] = [EnergyServiceClientHttp._serialize_order(o, mat, relevant_fields, missing_value_ensemble, is_mat_based) for o, mat in entries]
+        proc = self._site.get_equipment(equipment, do_raise=True).process
+        needs_lot_times = relevant_fields is not None and any("lot_times[$PROCESS]" in f for f in relevant_fields.values())
+        lot_times: dict[str, LotTimes]|None = None
+        if needs_lot_times:
+            lot_times0 = ModelUtils.get_order_lot_times_with_fallback(self._site, self._snapshot_provider, snapshot=snapshot, order=[o.id for o in orders], process=proc) if not is_mat_based else \
+                    ModelUtils.get_material_lot_times_with_fallback(self._site, self._snapshot_provider, snapshot=snapshot, material=[mat.id for o, mat in entries], process=proc)
+            lot_times = {key: dct[proc] for key, dct in lot_times0.items() if proc in dct}
+        serialized_orders: Sequence[dict[str, Any]] = [EnergyServiceClientHttp._serialize_order(o, mat, equipment, proc, lot_times,
+                                                                relevant_fields, missing_value_ensemble, is_mat_based) for o, mat in entries]
         payload = EnergyPredictionInput(features=serialized_orders, equipment=equipment, model=model)  # , start_times=start_times
         try:
             response = requests.post(self._address + "prediction",
@@ -174,17 +186,12 @@ class EnergyServiceClientHttp(EnergyService):
         return headers
 
     @staticmethod
-    def _serialize_order(order: Order, mat: Material|None, relevant_fields: Mapping[str, str]|None, missing_value_ensemble: Sequence[Order]|None, material_based: bool) -> dict[str, Any]:
+    def _serialize_order(order: Order, mat: Material|None, equipment: int, process: str, lot_times: dict[str, LotTimes]|None,
+                         relevant_fields: Mapping[str, str]|None, missing_value_ensemble: Sequence[Order]|None, material_based: bool) -> dict[str, Any]:
         if relevant_fields is None:
             return order.model_dump(exclude_none=True, exclude_unset=True, mode="json") if not material_based else mat.model_dump(exclude_none=True, exclude_unset=True, mode="json")
         result = {}
         for attribute, field in relevant_fields.items():
-            if field == "":
-                result[attribute] = ""
-                continue
-            elif field == "---":  # FIXME
-                result[attribute] = 1
-                continue
             base_item = order
             if material_based:
                 order_based = field.startswith("order.")
@@ -192,6 +199,30 @@ class EnergyServiceClientHttp(EnergyService):
                     field = field[6:]
                 else:
                     base_item = mat
+            if field == "":
+                result[attribute] = ""
+                continue
+            elif field == "equipment_performance[$EQUIPMENT]":
+                result[attribute] = order.equipment_performance.get(equipment, 0.) if order.equipment_performance is not None else 0.
+                continue
+            elif field.startswith("lot_times[$PROCESS]"):
+                lt = lot_times.get(base_item.id) if lot_times is not None else None
+                if lt is not None:
+                    avg_duration_seconds = (lt.processing_time or (lt.end - lt.start)).total_seconds()
+                elif lt is None and lot_times is not None and len(lot_times) > 0:
+                    avg_duration_seconds = sum((times.processing_time or (times.end - times.start)).total_seconds() for times in lot_times.values()) / len(lot_times)
+                elif order.equipment_performance and equipment in order.equipment_performance:  # ?
+                    avg_duration_seconds = (mat.weight if material_based else order.actual_weight) / order.equipment_performance[equipment] * 3_600
+                else:
+                    avg_duration_seconds = 0.  # ?
+                unit_hours = field.endswith("[h]")
+                unit_minutes = field.endswith("[min]")
+                avg_duration = avg_duration_seconds/3_600 if unit_hours else avg_duration_seconds/60 if unit_minutes else avg_duration_seconds
+                result[attribute] = avg_duration
+                continue
+            elif field == "0":
+                result[attribute] = 0  # TODO
+                continue
             is_mat_prop = field.startswith("material_properties.")
             obj = base_item if not is_mat_prop else base_item.material_properties
             if is_mat_prop:

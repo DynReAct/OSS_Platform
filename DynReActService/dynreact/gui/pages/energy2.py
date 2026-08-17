@@ -20,23 +20,6 @@ translations_key = "ngy2"
 if len(energy_types) > 0:
     dash.register_page(__name__, path="/perfmodels/energy2")
 
-_table_cols = [
-        {"field": "equipment_name", "pinned": True},
-        #{"field": "coil_id", "headerName": "Coil", "pinned": True},
-        {"field": "order_id", "headerName": "Order", "pinned": True},
-        {"field": "units", "headerName": "Units", "headerTooltip": "Number of material units belonging to this order"},
-        {"field": "lot_id", "headerName": "Lot"},
-        {"field": "start_time", "headerName": "Start", "filter": "agDateColumnFilter", "width": 250},
-        {"field": "end_time", "headerName": "End", "filter": "agDateColumnFilter", "width": 250},
-        {"field": "duration_min", "headerName": "Duration (min)", "filter": "agNumberColumnFilter"},
-        {"field": "power_kw", "headerName": "Power (kW)", "filter": "agNumberColumnFilter", "valueFormatter": {"function": "formatCell(params.value, 4)"}},
-        {"field": "energy_kwh", "headerName": "Ensemble energy (kWh)", "filter": "agNumberColumnFilter", "valueFormatter": {"function": "formatCell(params.value, 4)"}},
-        {"field": "uncertainty_min_kwh", "headerName": "Uncertainty min (kWh)", "filter": "agNumberColumnFilter"},
-        {"field": "uncertainty_max_kwh", "headerName": "Uncertainty max (kWh)", "filter": "agNumberColumnFilter"},
-        {"field": "energy_cost_eur", "headerName": "Cost (EUR)", "filter": "agNumberColumnFilter"},
-        {"field": "unit_price_eur_mwh", "headerName": "Unit price (EUR/MWh)", "filter": "agNumberColumnFilter"},
-        {"field": "source", "headerName": "Source"},
-    ]
 
 def layout(*args, **kwargs):
     energy_type = kwargs.get("type")
@@ -79,7 +62,7 @@ def layout(*args, **kwargs):
                  style={"fontWeight": "bold", "marginBottom": "1rem"}),
         dcc.Loading(
             [
-                dash_ag.AgGrid(id="ngy2-perf-energy-table", columnDefs=_table_cols, rowData=[],
+                dash_ag.AgGrid(id="ngy2-perf-energy-table", columnDefs=get_table_columns(None), rowData=[],
                                className="ag-theme-alpine",
                                defaultColDef={"sortable": True, "filter": True, "resizable": True},
                                style={"height": "340px", "width": "100%", "marginBottom": "1rem"},
@@ -143,8 +126,45 @@ def type_changed(energy_type: Literal["electric", "heat"]|None, previous_equipme
     elif initial_equipment is not None:
         value = initial_equipment
     else:
-        value = [e.id for e in equipments]
+        value = [equipments[0].id]
     return label, description, equipment_options, value
+
+
+@callback(
+    Output("ngy2-perf-energy-table", "columnDefs"),
+    Input("ngy2-type", "value")
+)
+def get_table_columns(energy_type: Literal["electric", "heat"]|None):
+    cols = [
+        {"field": "equipment_name", "pinned": True},
+        # {"field": "coil_id", "headerName": "Coil", "pinned": True},
+        {"field": "order_id", "headerName": "Order", "pinned": True},
+        {"field": "units", "headerName": "Units", "headerTooltip": "Number of material units belonging to this order"},
+        {"field": "lot_id", "headerName": "Lot"},
+        {"field": "start_time", "headerName": "Start", "filter": "agDateColumnFilter", "width": 250},
+        {"field": "end_time", "headerName": "End", "filter": "agDateColumnFilter", "width": 250},
+        {"field": "duration_min", "headerName": "Duration (min)", "filter": "agNumberColumnFilter"},
+        {"field": "power_kw", "headerName": "Power (kW)", "filter": "agNumberColumnFilter",
+         "valueFormatter": {"function": "formatCell(params.value, 4)"}},
+        {"field": "energy_kwh", "headerName": "Ensemble energy (kWh)", "filter": "agNumberColumnFilter",
+         "valueFormatter": {"function": "formatCell(params.value, 4)"}},
+        {"field": "uncertainty_min_kwh", "headerName": "Uncertainty min (kWh)", "filter": "agNumberColumnFilter"},
+        {"field": "uncertainty_max_kwh", "headerName": "Uncertainty max (kWh)", "filter": "agNumberColumnFilter"},
+        {"field": "energy_cost_eur", "headerName": "Cost (EUR)", "filter": "agNumberColumnFilter"},
+        {"field": "unit_price_eur_mwh", "headerName": "Unit price (EUR/MWh)", "filter": "agNumberColumnFilter"},
+        {"field": "source", "headerName": "Source"},
+    ]
+    energy_service = state.get_energy_service(energy_type) if energy_type else None
+    mat_based = False
+    try:
+        mat_based = energy_service.service().material_based
+    except:
+        pass
+    if mat_based:
+        cols[1]["pinned"] = False
+        cols.pop(2)  # no need for units
+        cols.insert(1, {"field": "material_id", "headerName": "Material", "pinned": True})
+    return cols
 
 
 @callback(
@@ -179,7 +199,11 @@ def run_energy_analysis(_: int, energy_type: Literal["electric", "heat"]|None, s
     equipment_with_lots = dict(sorted(equipment_with_lots.items()))  # sort by equipments
     equipment_with_orders: dict[int, list[Order]] = {eq: [snap_obj.get_order(order, do_raise=True) for lot in lots for order in lot.orders] for eq, lots in equipment_with_lots.items()}
     energy_service = state.get_energy_service(energy_type)
-    mat_based: bool = energy_service.service().material_based
+    mat_based: bool = False
+    try:
+        mat_based = energy_service.service().material_based
+    except:
+        pass
     success = 0
     last_error = None
     results: dict[int, Sequence[EnergyPrediction]] = {}
@@ -226,7 +250,7 @@ def run_energy_analysis(_: int, energy_type: Literal["electric", "heat"]|None, s
                 end = order_lot_times[key].end if key in order_lot_times else start + timedelta(hours=order.material_count if not mat_based else 1)
                 end_times.append(end)
                 latest_end = end
-            res = energy_service.bulk_energy_consumption(orders, equipment, material=materials, missing_value_ensemble=snap_obj.orders)
+            res = energy_service.bulk_energy_consumption(orders, equipment, snap_obj.timestamp, material=materials, missing_value_ensemble=snap_obj.orders)
             if isinstance(res, EnergyPredictionResultsFailed):
                 msg = f"Model application failed: {res.reason}: {res.message}"
                 if res.details:
@@ -245,6 +269,7 @@ def run_energy_analysis(_: int, energy_type: Literal["electric", "heat"]|None, s
             equipment_name = eq.name or eq.name_short or str(eq.id)
             durations = [end_times[idx] - start_times[idx] for idx in range(len(start_times))]
             rows = [{"equipment": equipment, "equipment_name": equipment_name, "order_id": entries[idx][0].id,
+                          "material_id": entries[idx][1].id if entries[idx][1] is not None else None,
                           "lot_id": entries[idx][0].lots.get(process) if entries[idx][0].lots is not None else None,
                           "units": entries[idx][0].material_count if not mat_based else 1,
                           "start_time": DatetimeUtils.format(start_times[idx], use_zone=False).replace("T", " "),

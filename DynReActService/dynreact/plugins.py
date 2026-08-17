@@ -249,18 +249,19 @@ class Plugins:
         if energy_type not in self._energy_services and self._config.energy_service is not None:
             provider_url = self._config.energy_service.get(energy_type)
             site = self.get_config_provider().site_config()
+            sp = self.get_snapshot_provider()
             if isinstance(provider_url, EnergyService):
                 provider = provider_url
             elif provider_url is None:
                 provider = None
             elif provider_url.startswith("energy+simple:"):
                 from dynreact.base.impl.SimpleEnergyService import SimpleEnergyService
-                provider = SimpleEnergyService(provider_url, site)
+                provider = SimpleEnergyService(provider_url, site, sp)
             elif provider_url.startswith("energy+http"):
                 from dynreact.base.impl.EnergyServiceClient import EnergyServiceClientHttp
-                provider = EnergyServiceClientHttp(provider_url, site)
+                provider = EnergyServiceClientHttp(provider_url, site, sp)
             else:
-                provider = Plugins._load_energy_service(provider_url, site)
+                provider = Plugins._load_energy_service(provider_url, site, sp)
             self._energy_services[energy_type] = provider
         return self._energy_services.get(energy_type)
 
@@ -373,7 +374,7 @@ class Plugins:
         return instantiate_first_matching(class_name, PlantPerformanceModel, config, do_raise=True)
 
     @staticmethod
-    def _load_energy_service(config: str,  site: Site) -> EnergyService | None:
+    def _load_energy_service(config: str,  site: Site, sp: SnapshotProvider) -> EnergyService | None:
         if "::" not in config:
             return None
         idx = config.index("::")
@@ -384,7 +385,7 @@ class Plugins:
         token = config[last_idx + 2:] if has_token else None
         # actually a generic client config
         config = PerformanceModelClientConfig(address=uri, token=token)
-        return instantiate_first_matching(class_name, EnergyService, site, config, do_raise=True)
+        return instantiate_first_matching(class_name, EnergyService, site, sp, config, do_raise=True)
 
     @staticmethod
     def _load_energy_cost_service(config: str) -> EnergyCostService | None:

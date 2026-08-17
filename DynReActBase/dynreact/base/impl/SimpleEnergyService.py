@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from dynreact.base.EnergyService import EnergyService, EnergyServiceMetadata, EnergyCostService, \
     EnergyCostServiceMetadata, EnergyPriceCurve, EnergyCharacteristics, EnergyPrediction
 from dynreact.base.NotApplicableException import NotApplicableException
+from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.model import Site, Order, Material
 
 
@@ -51,8 +52,8 @@ class SimpleEnergyService(EnergyService):
     equipment times the weight of the order in tons.
     """
 
-    def __init__(self, url: str, site: Site, config: EnergyConfig|None=None):
-        super().__init__(url, site)
+    def __init__(self, url: str, site: Site, snapshot_provider: SnapshotProvider, config: EnergyConfig|None=None):
+        super().__init__(url, site, snapshot_provider)
         if not url.startswith("energy+simple:"):
             raise NotApplicableException(f"URL {url} not applicable to simple energy service")
         self._config = config if config is not None else EnergyConfig()
@@ -70,6 +71,7 @@ class SimpleEnergyService(EnergyService):
     def energy_consumption(self,
                            order: Order,
                            equipment: int,
+                           snapshot: datetime,
                            *args,
                            material: Material| None = None,
                            process_id: int|None=None,

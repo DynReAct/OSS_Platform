@@ -1030,6 +1030,12 @@ def predict_energy():
     service = plugins.get_energy_service(energy_type)
     if service is None:
         raise Exception(f"Energy service provider not found: {energy_type}")
+    mat_based = False
+    try:
+        mat_based = service.service().material_based
+    except Exception as e:
+        print(f"Failed to determine service metadata: {e}")
+        return
     start_time = DatetimeUtils.parse_date(args.start_time)
     end_time = DatetimeUtils.parse_date(args.end_time)
     snap: datetime | None = DatetimeUtils.parse_date(args.snapshot)
@@ -1037,6 +1043,12 @@ def predict_energy():
     snap_formatted = DatetimeUtils.format(snapshot.timestamp, use_zone=False).replace("T", " ")
     sp = plugins.get_snapshot_provider()
     all_orders = {o.id: o for o in snapshot.orders}
+    materials_by_order: dict[str, list[Material]]|None = {} if mat_based else None
+    if mat_based:
+        for mat in snapshot.material:
+            if mat.order not in materials_by_order:
+                materials_by_order[mat.order] = []
+            materials_by_order[mat.order].append(mat)
     lots_included: Sequence[str]|None = [l for l in (l.strip() for l in args.lots.split(",")) if l] if args.lots else None
     orders_included = [o for o in (o.strip() for o in args.orders.split(",")) if o] if args.orders is not None else None
     print(f"Energy ({energy_type}) predictions for snapshot {snap_formatted}, equipment {[e.name_short or e.id for e in equipment]}")
@@ -1063,11 +1075,16 @@ def predict_energy():
             first_index = next((idx for idx, t in enumerate(start_times) if (start_time is None or t >= start_time)), len(start_times))
             end_index = next((idx for idx, t in enumerate(start_times) if (end_time is not None and t >= end_time)), len(start_times))
             orders = orders[first_index:end_index]
+            order_ids = [o.id for o in orders]
             start_times = start_times[first_index:end_index]
             if len(orders) == 0:
                 print(f"  No orders found matching the specified time interval {start_time} - {end_time} for equipment {eq.name_short or eq.id}")
                 continue
-        results = service.bulk_energy_consumption(orders, eq.id, model=args.model, missing_value_ensemble=snapshot.orders)  # , start_times
+        materials: dict[str, list[Material]] = {o: mats for o, mats in materials_by_order.items() if o in order_ids} if mat_based else None  # unsorted
+        if mat_based: # sort
+            for mats in materials.values():
+                mats.sort(key=lambda mat: (mat.current_process, mat.order_positions.get(process, mat.order_position or 1_000) if mat.order_positions is not None else (mat.order_position or 1000)))
+        results = service.bulk_energy_consumption(orders, eq.id, snapshot.timestamp, model=args.model, material=materials, missing_value_ensemble=snapshot.orders)
         if isinstance(results, EnergyPredictionResultsFailed):
             print(f"  Failed to determine energy prediction ({energy_type} for equipment {eq.name_short or eq.id}: {results}")
             continue

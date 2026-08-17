@@ -275,7 +275,7 @@ def snapshot_changed(snapshot: str|None, rule_id: str|None, lang: str|None):
     snap = DatetimeUtils.parse_date(snapshot)
     snap_obj = state.get_snapshot(time=snap)
     if not snap_obj or not dash_authenticated(config):
-        return None
+        return None, None
     orders = snap_obj.orders
     temporary_restrictions = state.get_temporary_restrictions()
     rule, settings = temporary_restrictions.get_restriction(rule_id)

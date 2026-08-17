@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from datetime import timedelta
+from datetime import timedelta, datetime
 from typing import Sequence
 
 import dash
@@ -213,6 +213,7 @@ def snapshot_params_changed(params: str|None, user_set_snapshots: Sequence[str|N
     changed = GuiUtils.changed_ids()
     user_snapshot_selection = next((_id for _id in changed if "\"snapshot-selector\"" in _id), None)
     user_selected_snapshot = user_snapshot_selection is not None
+    snapshot = None
     if user_selected_snapshot:
         changed_id = json.loads(user_snapshot_selection)
         changed_page = changed_id.get("page")
@@ -226,7 +227,7 @@ def snapshot_params_changed(params: str|None, user_set_snapshots: Sequence[str|N
             return dash.no_update, dash.no_update
     elif params is None or len(params) == 0:
         snapshot = dash.no_update
-    else:
+    if snapshot is None and params is not None and len(params) > 0:
         params = params[1:]
         params_dict: dict[str, str] = {arr[0].lower(): arr[1] for arr in (val.split("=") for val in params.split("&")) if len(arr) == 2 and len(arr[0]) > 0}
         snapshot = params_dict.get("snapshot") or dash.no_update
@@ -238,7 +239,10 @@ def snapshot_params_changed(params: str|None, user_set_snapshots: Sequence[str|N
         snap = state.get_snapshot()
         snapshot = GuiUtils.format_snapshot(snap.timestamp, None, state=state) if snap is not None else None
     elif snapshot != dash.no_update:
-        snap = state.get_snapshot(DatetimeUtils.parse_date(snapshot))
+        dt = DatetimeUtils.parse_date(snapshot)
+        if isinstance(dt, datetime) and "+" not in snapshot:  # XXX
+            dt = dt.replace(tzinfo=state.as_timezone(dt).tzinfo)
+        snap = state.get_snapshot(dt)
         snapshot = GuiUtils.format_snapshot(snap.timestamp, None, state=state) if snap is not None else None
     if snap != dash.no_update and snap is not None:
         lots: dict[int, Sequence[Lot]] = snap.lots

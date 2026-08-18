@@ -88,6 +88,42 @@ def _number_from_mixed(value: Any, default: float = 0.0) -> float:
         return default
 
 
+_STEEL_DENSITY_KG_M3 = 7856.0
+
+
+def _va_speed_from_performance_tph(
+    performance_tph: Any,
+    width_mm: Any,
+    thickness_mm: Any,
+    *,
+    density_kg_m3: float = _STEEL_DENSITY_KG_M3,
+) -> float | None:
+    """Convert throughput in t/h plus strip geometry into line speed in m/min."""
+    throughput_tph = _number_from_mixed(performance_tph, default=0.0)
+    width_m = _number_from_mixed(width_mm, default=0.0) / 1000.0
+    thickness_m = _number_from_mixed(thickness_mm, default=0.0) / 1000.0
+    if throughput_tph <= 0.0 or width_m <= 0.0 or thickness_m <= 0.0 or density_kg_m3 <= 0.0:
+        return None
+    area_m2 = width_m * thickness_m
+    kg_per_hour = throughput_tph * 1000.0
+    meters_per_hour = kg_per_hour / (density_kg_m3 * area_m2)
+    return meters_per_hour / 60.0
+
+
+def _derived_planned_speed_va(order: Any, performance_tph: Any) -> float | None:
+    """Derive the VA planned speed from throughput and planned geometry."""
+    mat_props = getattr(order, "material_properties", None)
+    if mat_props is None:
+        return None
+    width_mm = getattr(mat_props, "width_va_in_planned", None)
+    thickness_mm = getattr(mat_props, "thickness_nww_out_planned", None)
+    if _is_missing_value(width_mm):
+        width_mm = getattr(mat_props, "va_width", None)
+    if _is_missing_value(thickness_mm):
+        thickness_mm = getattr(mat_props, "va_thickness", None)
+    return _va_speed_from_performance_tph(performance_tph, width_mm, thickness_mm)
+
+
 def _trim_prediction_outliers(values: list[float], sigma_factor: float = 3.0) -> list[float]:
     if len(values) < 3:
         return values
@@ -331,6 +367,13 @@ class HttpEnergyBackend(EnergyBackend):
             return item.time_gap_min
         if source == "weight":
             return getattr(item.coil, "weight", None) if item.coil is not None else getattr(item.order, "actual_weight", None)
+        if source == "derived_planned_speed_va[$EQUIPMENT]":
+            equipment = self._context.get_site().get_equipment_by_name(item.equipment_name)
+            if equipment is None:
+                return None
+            performance = getattr(item.order, "equipment_performance", None)
+            throughput_tph = performance.get(equipment.id) if isinstance(performance, dict) else None
+            return _derived_planned_speed_va(item.order, throughput_tph)
         if source == "equipment_performance[$EQUIPMENT]":
             equipment = self._context.get_site().get_equipment_by_name(item.equipment_name)
             if equipment is None:
@@ -622,4 +665,3 @@ def build_backend_from_context(path: Path, context: dict[str, Any], *, runtime_c
         http_cfg = normalized["http"] if isinstance(normalized.get("http"), dict) else normalized
         return build_http_backend(http_cfg, context=runtime_context)
     raise ValueError(f"Unsupported energy context provider `{provider_type}` in {path}.")
-

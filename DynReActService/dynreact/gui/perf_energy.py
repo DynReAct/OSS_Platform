@@ -4,7 +4,7 @@ The energy page is selected through the `DYNREACT_ENERGY` configuration.
 Recommended values follow the standard DynReAct file-provider style:
 
 - `default+file:./data/energy_context.json` for the local OSS evaluator.
-- `ras+file:./data/context/energy_context.json` for the RAS HTTP-backed evaluator.
+- `ras+file:./data/config/energy_context.json` for the RAS HTTP-backed evaluator.
 
 Legacy values such as `http:http://host:port` or `file:./data/energy_context.json`
 are still accepted for backwards compatibility.

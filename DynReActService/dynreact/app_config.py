@@ -67,7 +67,7 @@ class DynReActSrvConfig:
     # model-specific initialization data
     plant_performance_models: list[str]|None = None
     energy_provider: str|None = "default+file:./data/energy_context.json"
-    "Optional energy analysis provider. Preferred values: `default+file:./data/energy_context.json` or `ras+file:./data/context/energy_context.json`."
+    "Optional energy analysis provider. Preferred values: `default+file:./data/energy_context.json` or `ras+file:./data/config/energy_context.json`."
     stp_frontend: str = "default"  # default is the frontend provided in this module
     material_order_allocation_frontend: str|None = None
     "Optionally register a frontend for a custom material-order allocation service"

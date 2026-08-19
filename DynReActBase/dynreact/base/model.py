@@ -221,6 +221,8 @@ class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):
     # @deprecated
     current_processes: Sequence[int]
     active_processes: Mapping[int, Literal["PENDING", "STARTED", "FINISHED"]]
+    equipment_performance: Mapping[int, float]|None = None
+    "in t/h"
     # FIXME a single order can be assigned to multiple orders at different process steps!
     # @deprecated
     lot: str|None = Field(None, deprecated=True)

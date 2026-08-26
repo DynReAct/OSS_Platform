@@ -150,9 +150,10 @@ def layout(*args, **kwargs):
          Output({"role": "temprest-active", "id": MATCH}, "title"),
          Output({"role": "temprest-error-msg", "id": MATCH}, "data"),   # could be a problem with MATCH? Need one per entry?
          Input({"role": "temprest-toggle", "id": MATCH}, "n_clicks"),
-         running=[  # TODO here we could enable ALL by using an intermediate store maybe
-              (Output({"role": "temprest-toggle", "id": MATCH}, "disabled"), True, False),
-         ],
+         # TODO enable once we can drop support for dash<=2.17.1: https://github.com/plotly/dash/issues/2863
+         #running=[  # TODO here we could enable ALL by using an intermediate store maybe
+         #     (Output({"role": "temprest-toggle", "id": MATCH}, "disabled"), True, False),
+         #],
          config_prevent_initial_callbacks=True)
 def toggle_rule_nonconfigurable(clicks):
     changed = GuiUtils.changed_ids(excluded_ids=("",))
@@ -205,9 +206,10 @@ def error_msg_changed(messages0, messages1):
          State({"role": "temprest-equipment-selector", "id": MATCH}, "value"),
          State({"role": "temprest-parameter-control", "id": MATCH, "count": ALL}, "value"),
          #State({"role": "parameter-control", "rule": MATCH}, "value"),
-         running=[
-              (Output({"role": "temprest-save", "id": MATCH}, "disabled"), True, False),
-         ],
+         # TODO enable once we can drop support for dash<=2.17.1: https://github.com/plotly/dash/issues/2863
+         #running=[
+         #     (Output({"role": "temprest-save", "id": MATCH}, "disabled"), True, False),
+         #],
          config_prevent_initial_callbacks=True)
 def save_rule_configurable(clicks, selected_equipment: list[int], parameters):
     changed = GuiUtils.changed_ids(excluded_ids=("",))

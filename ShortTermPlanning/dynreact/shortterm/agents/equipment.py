@@ -62,10 +62,12 @@ def material_weight_tons(material_params: dict) -> float:
     """
     Extract the tonnage represented by an assigned material/order.
 
-    RAS auctions send orders as material parameters and expose their weight as
-    ``target_weight`` or ``actual_weight``. OSS material payloads may not carry a
-    weight, in which case the function returns ``0.0`` and preserves existing
-    behavior.
+    The short-term auction confirms one representative material per order, so
+    target tonnage must be accumulated with order-level weights whenever they
+    are present. Some payloads still expose coil-level weights at the top level;
+    those are only used as a fallback when the embedded order does not provide
+    an aggregate value. OSS material payloads may not carry any weight, in which
+    case the function returns ``0.0`` and preserves existing behavior.
 
     :param dict material_params: Material parameters received in a confirmation.
     :return: Material/order weight in tons.
@@ -74,17 +76,17 @@ def material_weight_tons(material_params: dict) -> float:
     if not isinstance(material_params, dict):
         return 0.0
 
-    for key in ("target_weight", "actual_weight", "weight"):
-        weight = _coerce_optional_float(material_params.get(key))
-        if weight is not None:
-            return weight
-
     order = material_params.get("order")
     if isinstance(order, dict):
         for key in ("target_weight", "actual_weight", "weight"):
             weight = _coerce_optional_float(order.get(key))
             if weight is not None:
                 return weight
+
+    for key in ("target_weight", "actual_weight", "weight"):
+        weight = _coerce_optional_float(material_params.get(key))
+        if weight is not None:
+            return weight
 
     return 0.0
 
@@ -242,8 +244,8 @@ class Equipment(Agent):
         self.last_bid_time = None
         self.bid_to_confirm = dict()
 
-        #if self.start_time is not None and self.current_order_length is not None and self.operation_speed > 0:
-        #    self.start_time += timedelta(seconds=self.current_order_length / self.operation_speed)
+        if self.start_time is not None and self.current_order_length is not None and self.operation_speed and self.operation_speed > 0:
+            self.start_time += timedelta(seconds=self.current_order_length / self.operation_speed)
 
         self.current_order_length = None
         full_msg = dict(

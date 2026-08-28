@@ -4,6 +4,11 @@ This program runs the scripts required to start the general agents,
 clones them for an auction with the resources indicated by the user,
 and starts the auction, waiting for its completion.
 
+The auction stop condition is order-based: when one material is confirmed, the
+associated order tonnage is accumulated from the embedded `order` payload, and
+its processing duration advances with the total order length rather than an
+individual coil length.
+
 ---
 
 ## delete_all_topics function

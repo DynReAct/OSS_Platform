@@ -1,5 +1,6 @@
 import types
 import typing
+from datetime import datetime
 from typing import Sequence, Any
 
 
@@ -236,10 +237,13 @@ def equipment_changed(equipment: Sequence[int]|None, snapshot: str|None, previou
           Input("ts-plots-eq-select", "value"),
           Input("ts-plots-data-select", "value"),
           Input({"role": "lot-select", "equipment": ALL}, "value"),
+          Input({"role": "dynlot-select", "equipment": ALL}, "value"),
+          Input("ts-plots-dynlot-select", "value"),
           Input({"role": "snapshot-selector", "page": translations_key}, "data"),
           State({"role": "process-selector", "page": translations_key}, "value"),
           State("lang", "data"),)
-def data_changed(equipments: Sequence[int]|None, data: Sequence[str]|None, end_lots: Sequence[str|None]|None, snapshot: str|None, process: str|None, lang: str|None):
+def data_changed(equipments: Sequence[int]|None, data: Sequence[str]|None, end_lots: Sequence[str|None]|None,
+                 dynreact_lots: Sequence[str] | None, dynreact_solution: str | None, snapshot: str|None, process: str|None, lang: str|None):
     snapshot = DatetimeUtils.parse_date(snapshot)
     fig = go.Figure()
     if not dash_authenticated(config) or not snapshot or not process or not equipments or not data:
@@ -257,11 +261,17 @@ def data_changed(equipments: Sequence[int]|None, data: Sequence[str]|None, end_l
     num_colors = len(colors)
     trace_cnt = 0
     equipment_objects = {e: site.get_equipment(e, do_raise=True) for e in equipments}
+    process = next(iter(equipment_objects.values())).process if len(equipment_objects) > 0 else ""
+    _empty = tuple()
+    dyn_lots: dict[int, list[Lot]] = {}
+    if dynreact_solution and dynreact_lots and len(dynreact_lots) > 0 and len(equipments) == len(dynreact_lots):
+        sol = state.get_results_persistence_aggregate().load(snap_obj.timestamp, process, dynreact_solution)
+        dyn_lots = sol.best_solution.get_lots()
     for data_point in data:
         for eq_idx, equipment in enumerate(equipments):
             eq_obj = equipment_objects[equipment]
-            lots = snap_obj.lots.get(equipment)
-            lots = [lot for lot in lots if lot.active and lot.end_time is not None] if lots else []
+            lots = snap_obj.lots.get(equipment, _empty)
+            lots = [lot for lot in lots if lot.active and lot.end_time is not None]
             if len(lots) == 0:
                 continue
             lots.sort(key=lambda lot: lot.end_time)
@@ -269,34 +279,57 @@ def data_changed(equipments: Sequence[int]|None, data: Sequence[str]|None, end_l
                 end_lot = end_lots[eq_idx] if eq_idx < len(end_lots) else None
                 end_lot_idx = next((idx for idx, lot in enumerate(lots) if lot.id == end_lot), None)
                 if end_lot_idx is None:
-                    continue
-                lots = lots[:end_lot_idx+1]
-            orders = [order for lot in lots for order in lot.orders]
+                    lots = []
+                else:
+                    lots = lots[:end_lot_idx+1]
+            dyn_lot_start: datetime|None = None
+            if equipment in dyn_lots:
+                eq_dyn_lots = dyn_lots[equipment]
+                eq_dyn_lots.sort(key=lambda lot: lot.end_time)
+                end_lot = dynreact_lots[eq_idx]
+                end_lot_idx = next((idx for idx, lot in enumerate(eq_dyn_lots) if lot.id == end_lot), None)
+                if end_lot_idx is not None:
+                    eq_dyn_lots = eq_dyn_lots[:end_lot_idx+1]
+                    dyn_lot_start = eq_dyn_lots[0].start_time if len(eq_dyn_lots) > 0 else None
+                    if dyn_lot_start:
+                        dyn_lot_start = state.as_timezone(dyn_lot_start)
+                    lots = lots + eq_dyn_lots
+            if len(lots) == 0:
+                continue
+            order_lots = [(order, lot) for lot in lots for order in lot.orders]
+            orders = [order for order, _ in order_lots]
             order_lot_times: dict[str, dict[str, LotTimes]]|None = ModelUtils.get_order_lot_times_with_fallback(site, snap_provider, snapshot=snap_obj.timestamp, order=orders, process=process)
             xs = []
             ys = []
             custom_orders = []
-            if order_lot_times is not None:
-                for order in orders:
-                    if order not in order_lot_times or process not in order_lot_times[order]:
+            start_times_by_lot = {lot.id: lot.start_time for lot in lots if lot.start_time is not None}
+            for order, lot in order_lots:
+                order_obj = snap_obj.get_order(order)
+                if not order_obj:
+                    continue
+                props = order_obj.material_properties
+                value = getattr(props, data_point) if hasattr(props, data_point) else None
+                if value is None or (isinstance(value, float) and np.isnan(value)):
+                    continue
+                if not order_lot_times or order not in order_lot_times or process not in order_lot_times[order]:
+                    if not lot.start_time or not lot.end_time:
                         continue
-                    order_obj = snap_obj.get_order(order)
-                    if not order_obj:
-                        continue
-                    props = order_obj.material_properties
-                    value = getattr(props, data_point) if hasattr(props, data_point) else None
-                    if value is None or (isinstance(value, float) and np.isnan(value)):
-                        continue
+                    fraction = order_obj.actual_weight / lot.weight if lot.weight else 1/len(lot.orders)
+                    start = state.as_timezone(start_times_by_lot[lot.id])
+                    end = start + fraction * (lot.end_time - lot.start_time)
+                    start_times_by_lot[lot.id] = end
+                else:
                     times = order_lot_times[order][process]
-                    xs.append(times.start)
-                    xs.append(times.end)
-                    ys.append(value)
-                    ys.append(value)
-                    lt = order_obj.lots.get(process) if order_obj.lots is not None else None
-                    custom_orders.append((order, lt))
-                    custom_orders.append((order, lt))
-            else:
-                raise NotImplementedError("If order lot times are missing, we cannot yet draw the line...")
+                    start = state.as_timezone(times.start)
+                    end = state.as_timezone(times.end)
+                xs.append(start)
+                xs.append(end)
+                ys.append(value)
+                ys.append(value)
+                #lt = order_obj.lots.get(process) if order_obj.lots is not None else None
+                lt = lot.id
+                custom_orders.append((order, lt))
+                custom_orders.append((order, lt))
             if len(xs) == 0:
                 continue
             if is_single_equipment or is_single_datapoint:
@@ -308,6 +341,8 @@ def data_changed(equipments: Sequence[int]|None, data: Sequence[str]|None, end_l
             new_line = go.Scatter(x=xs, y=ys, customdata=custom_orders, mode="lines+markers", line={"color": color, "width": 2}, marker={"size": 7}, name=f"{equipment_name}: {data_point}", legendgroup=equipment_name,
                                   hovertemplate=f"{lt_label}: %{{customdata[1]}}, {order_label}: %{{customdata[0]}}, {data_point}: %{{y:,.2f}}, {time_label}: %{{x}}<extra></extra>")
             fig.add_trace(new_line)
+            if dyn_lot_start:
+                fig.add_vline(x=dyn_lot_start, line={"color": color, "width": 3}, line_dash="dash")
     data_label = ", ".join(data)
     if is_single_equipment:
         e = equipment_objects[equipments[0]]

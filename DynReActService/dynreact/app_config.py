@@ -73,6 +73,10 @@ class DynReActSrvConfig:
     "Optionally register a frontend for a custom material-order allocation service"
     temporary_restrictions: str|None = None
     "Optional url of the equipment restrictions service, for constraints that can be activated and deactivated by the user."
+    metrics_persistence: str|None = None
+    "Store metrics in a folder; example: file+json:./metrics"
+    metrics_persistence_interval: str|None=None
+    "Store metrics periodically in a predefined time interval"
     profile: str|None = None
     "Optional profile name for loading of custom components. If unset, DynReAct uses the base OSS/default loading path. Can be overwritten for individual components."
 
@@ -116,6 +120,8 @@ class DynReActSrvConfig:
                  material_order_allocation_frontend: str|None = None,
                  temporary_restrictions: str | None = None,
                  time_zone: str | None = None,
+                 metrics_persistence: str|None = None,
+                 metrics_persistence_interval: str|None=None,
                  profile: str|None = None
                  ):
         # Resolve .env from the current working directory / standard dotenv search
@@ -266,6 +272,12 @@ class DynReActSrvConfig:
         if temporary_restrictions is None:
             temporary_restrictions = os.getenv("TEMPORARY_RESTRICTIONS")
         self.temporary_restrictions = temporary_restrictions
+        if metrics_persistence is None:
+            metrics_persistence = os.getenv("METRICS_PERSISTENCE")
+        self.metrics_persistence = metrics_persistence
+        if metrics_persistence_interval is None:
+            metrics_persistence_interval = os.getenv("METRICS_PERSISTENCE_INTERVAL")
+        self.metrics_persistence_interval = metrics_persistence_interval
 
 
 class ConfigProvider:

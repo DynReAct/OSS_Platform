@@ -16,6 +16,7 @@ from dynreact.base.LotsOptimizer import LotsOptimizationAlgo, LotsOptimizer, Lot
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation
 from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider
+from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Snapshot, ProductionPlanning, ProductionTargets, Site, OrderAssignment, Order, \
     EquipmentStatus, Lot, Equipment, EquipmentProduction, ObjectiveFunction
 from dynreact.lotcreation.TabuParams import TabuParams
@@ -216,11 +217,13 @@ class TabuSearch(LotsOptimizer):
                 # optimal solution found
                 break
             next_step: tuple[TabuSwap, ProductionPlanning, ObjectiveFunction] = self.FindNextStep(self._state.current_solution, TabuList, pool, worker_cnt)
+
             worker_cnt += self._params.NParallel
             if next_step is None or next_step[0] is None:
                 break
             swp: TabuSwap = next_step[0]
             next_solution: ProductionPlanning = next_step[1]
+
             #swp: TabuSwap = next_step[0]
             #ssol: ProductionPlanning = next_step[1]
             #sval: float = next_step[1]
@@ -662,6 +665,7 @@ class LotsAllocator:
         lots: list[Lot] = []
         last_idx: int|None = None
         last_order: Order | None = None
+        capa: float|None = plant.throughput_capacity
         for idx in route:
             costs = 0 if last_order is None else transition_costs[last_idx, idx]
 
@@ -861,11 +865,16 @@ class LotsAllocator:
                 sub_lot_weight = 0
                 current_lot = []
                 sub_lot_idx = 0
+                duration = lot.end_time - lot.start_time if lot.end_time and lot.start_time else None
+                start_time = lot.start_time
                 for order_idx, order in enumerate(lot_orders):
                     current_weight = order.actual_weight
                     if sub_lot_weight + current_weight > max_lot and sub_lot_weight >= min_lot and sub_lot_weight > 0:
+                        fraction = sub_lot_weight/total_weight
+                        end_time = start_time + fraction * duration if duration is not None else None
                         new_sub_lots.append(Lot(id=lot_prefix + "." + f"{idx + total_added_lots + sub_lot_idx:02d}", orders=[o.id for o in current_lot],
-                                equipment=plant_id, active=False, status=1, weight=sub_lot_weight))
+                                equipment=plant_id, active=False, status=1, weight=sub_lot_weight, start_time=start_time, end_time=end_time))
+                        start_time = end_time
                         sub_lot_idx += 1
                         current_lot = [order]
                         sub_lot_weight = current_weight
@@ -873,8 +882,10 @@ class LotsAllocator:
                         sub_lot_weight += current_weight
                         current_lot.append(order)
                 if len(current_lot) > 0:
+                    fraction = sub_lot_weight / total_weight
+                    end_time = start_time + fraction * duration if duration is not None else None
                     new_sub_lots.append(Lot(id=lot_prefix + "." + f"{idx + total_added_lots + sub_lot_idx:02d}", orders=[o.id for o in current_lot],
-                            equipment=plant_id, active=False, status=1, weight=sub_lot_weight))
+                            equipment=plant_id, active=False, status=1, weight=sub_lot_weight, start_time=start_time, end_time=end_time))
                 if len(new_sub_lots) > 1:
                     for l_idx in range(idx + 1, len(lots)):  # rename remaining lots
                         other_lot = lots[l_idx]
@@ -934,6 +945,7 @@ class CTabuWorker:
         costs: CostProvider = self.tabu_search._costs
         snapshot = self.tabu_search._snapshot
         is_lot_append: bool = self.tabu_search._base_lots is not None
+        plants = self.tabu_search._plants
         previous_orders: dict[int, str] | None = self.tabu_search._previous_orders
         planning = self.planning
         main_category: str|None = self.tabu_search._main_category
@@ -1040,6 +1052,7 @@ class CTabuWorker:
                 best_swap = swap
                 best_solution = swap_planning
                 best_timed_out = True
+        best_solution.lots = None  # XXX ensure lot times and weights will be set later
         if best_objective is None:
             best_objective = ObjectiveFunction(total_value=objective_value)
         elif best_timed_out and self.tabu_search._params.tsp_solver_final_tsp:
@@ -1054,23 +1067,30 @@ class CTabuWorker:
             if lots_differ:  # we know that order assignments can only differ in the ordering, not in the equipment assignments
                 # adapt existing assignments, not needed any more
                 assignments: dict[str, OrderAssignment] = {}
-                plant_status = {}
-                for p, equipment_targets in targets.target_weight.items():
-                    if p in final_lots:
-                        for lot in final_lots.get(p):
-                            for idx, ord in enumerate(lot.orders):
-                                assignments[ord] = OrderAssignment(order=ord, equipment=p, lot=lot.id, lot_idx=idx + 1)
-                    start_order = previous_orders.get(p) if previous_orders is not None else None
-                    new_status: EquipmentStatus = costs.evaluate_equipment_assignments(equipment_targets, planning.process, assignments, snapshot, targets.period,
-                                        track_structure=track_structure, main_category=main_category, orders_custom_priority=orders_custom_priority, previous_order=start_order)
-                    plant_status[p] = new_status
+                #plant_status = {}
+                #for p, equipment_targets in targets.target_weight.items():
+                #    if p in final_lots:
+                #        for lot in final_lots.get(p):
+                #            for idx, ord in enumerate(lot.orders):
+                #                assignments[ord] = OrderAssignment(order=ord, equipment=p, lot=lot.id, lot_idx=idx + 1)
+                #    start_order = previous_orders.get(p) if previous_orders is not None else None
+                #    new_status: EquipmentStatus = costs.evaluate_equipment_assignments(equipment_targets, planning.process, assignments, snapshot, targets.period,
+                #                        track_structure=track_structure, main_category=main_category, orders_custom_priority=orders_custom_priority, previous_order=start_order)
+                #    plant_status[p] = new_status
                 assignments.update({o: OrderAssignment(order=o, equipment=-1, lot="", lot_idx=-1) for o in planning.order_assignments.keys() if o not in assignments})
-                new_sol = ProductionPlanning(process=planning.process, order_assignments=assignments, equipment_status=plant_status, target_structure=targets.material_weights,
-                                                        total_priority=planning.total_priority, previous_orders=previous_orders)
+                new_sol = costs.evaluate_order_assignments(planning.process, assignments, targets, snapshot, total_priority=planning.total_priority,
+                                                 orders_custom_priority=orders_custom_priority, previous_orders=previous_orders)
+                #new_sol = ProductionPlanning(process=planning.process, order_assignments=assignments, equipment_status=plant_status, target_structure=targets.material_weights,
+                #                                        total_priority=planning.total_priority, previous_orders=previous_orders)
                 total_objectives = costs.process_objective_function(new_sol)
                 if total_objectives.total_value < best_objective.total_value:
                     best_solution = new_sol
                     best_objective = total_objectives
+        set_later = False
+        if best_solution.lots is None:
+            set_later = True
+            best_solution.lots = ModelUtils.lots_for_assignments(plants, snapshot, best_solution.order_assignments,
+                                                                 targets.period[0], previous_orders=previous_orders)
         return best_swap, best_solution, best_objective
 
     def _eval_dummy_swap(self, swap: TabuSwap) -> tuple[ProductionPlanning, ObjectiveFunction]:

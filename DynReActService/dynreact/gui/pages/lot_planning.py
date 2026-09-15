@@ -444,7 +444,7 @@ def solution_changed(snapshot: str|datetime|None, process: str|None, solution: s
     process_plants: list[int] = [p.id for p in site.get_process_equipment(process) if p.id in best_result.equipment_status]
     previous_processes: list[str] = [proc.name_short for proc in site.processes if proc.next_steps is not None and process in proc.next_steps]
     prev_proc_plants: list[int] = [p.id for p in site.equipment if p.process in previous_processes]
-    # these lots lost time information
+    # these lots lost time information # XXX
     lots: list[Lot] = sorted([lot for eq, plant_lots in best_result.get_lots().items() if eq in process_plants for lot in plant_lots],
                              key=lambda lot: (plants.get(lot.equipment).name_short if lot.equipment in plants else "ZZ", lot.id))
     lots_dict = prepare_lots_for_lot_view(snapshot, process, best_result, is_snap_solution or solution == "_DUE_DATE_", is_optimized_solution)
@@ -947,6 +947,7 @@ def start_transfer0(lot_id: str, new_lotname: str, orders: list[str], snapshot: 
     if len(orders) != len(lot_obj.orders):
         lot_update["orders"] = orders
     lot_obj = lot_obj.copy(update=lot_update)
+    # if lot_obj.end_time is None and lot_obj.start_time is None: # TODO
     return transfer_internal(lot_obj, snapshot_obj, new_lotname, sink, update_snap, user)
 
 

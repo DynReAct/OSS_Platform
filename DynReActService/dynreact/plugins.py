@@ -1,3 +1,4 @@
+from __future__ import annotations
 import importlib
 import importlib.util
 import logging
@@ -36,6 +37,7 @@ from dynreact.base.impl.SimpleLongTermPlanning import SimpleLongTermPlanning
 from dynreact.base.model import Site
 
 from dynreact.app_config import DynReActSrvConfig
+from dynreact.base.monitoring import MetricsPersistence
 from dynreact.module_loader import instantiate_first_matching, resolve_explicit_reference
 
 
@@ -61,6 +63,7 @@ class Plugins:
         self._aggregation_persistence: AggregationPersistence|None = None
         self._temporary_restrictions: TemporaryRestrictionsProvider|None = None
         self._temporary_restrictions_loaded: bool = False
+        self._metrics_persistence: MetricsPersistence|None = None
         self._permissions: PermissionManager|None = None
 
     @staticmethod
@@ -222,6 +225,17 @@ class Plugins:
                 self._temporary_restrictions = Plugins._load_module("dynreact.restrictions", self._config.temporary_restrictions,
                                                                     self._profile, TemporaryRestrictionsProvider, site, do_raise=False)
         return self._temporary_restrictions
+
+    def get_metrics_persistence(self) -> MetricsPersistence|None:
+        if self._metrics_persistence is None and self._config.metrics_persistence is not None:
+            if isinstance(self._metrics_persistence, MetricsPersistence):
+                self._metrics_persistence = self._config.metrics_persistence
+            elif self._config.metrics_persistence.startswith("file+json:"):
+                from dynreact.base.impl.FileMetricsPersistence import FileMetricsPersistence
+                self._metrics_persistence = FileMetricsPersistence(self._config.metrics_persistence)
+            else:
+                self._metrics_persistence = Plugins._load_module("dynreact.metrics_persistence", self._config.metrics_persistence, self._profile, MetricsPersistence)
+        return self._metrics_persistence
 
     def get_permission_manager(self) -> PermissionManager:
         if self._permissions is None:

@@ -12,6 +12,7 @@ class ServiceHealth(Model):
 
     status: int
     "0: ok"
+    reason: str|None=None
     running_since: datetime|None=None
 
 
@@ -33,6 +34,18 @@ class Histogram(Metric):
 class ServiceMetrics(Model):
     service_id: str
     metrics: Sequence[Metric]
+
+
+class MetricsPersistence:
+
+    def __init__(self, url: str):
+        self._url = url
+
+    def store(self, metrics: dict[str, ServiceMetrics], health: dict[str, ServiceHealth], timestamp: datetime|None=None):
+        raise NotImplementedError
+
+    def load(self, timestamp: datetime|None=None) -> tuple[dict[str, ServiceMetrics], dict[str, ServiceHealth]]:
+        raise NotImplementedError
 
 
 # Below: batch lot creation monitoring

@@ -4,7 +4,7 @@ from typing import Mapping, Sequence
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.model import MidTermTargets, ProductionTargets, EquipmentProduction, ProductionPlanning, Site, \
     EquipmentAvailability, MaterialCategory, SUM_MATERIAL, Lot, PlannedWorkingShift, Snapshot, StorageLevel, Storage, \
-    Material, LotTimes, Order
+    Material, LotTimes, Order, OrderAssignment, Equipment
 
 
 class ModelUtils:
@@ -575,3 +575,64 @@ class ModelUtils:
                         result[l_order][lot_process] = lot_times
                     start_time = end_time
         return result
+
+    @staticmethod
+    def lots_for_assignments(equipment: dict[int, Equipment], snapshot: Snapshot, assignments: dict[str, OrderAssignment], start_time: datetime,
+                              previous_orders: dict[int, str] | None = None) -> dict[int, list[Lot]]:
+        """
+        :return: dictionary with keys = equipment ids, values = lots
+        """
+        result: dict[int, dict[str, dict[int, str]]] = {}  # keys: equipment, lot_id, lot_idx, order
+        for order, assignment in assignments.items():
+            plant = assignment.equipment
+            if plant < 0:
+                continue
+            if plant not in result:
+                result[plant] = {}
+            lot_id: str = assignment.lot
+            lot_idx: int = assignment.lot_idx
+            if lot_id not in result[plant]:
+                result[plant][lot_id] = {}
+            lot_orders: dict[int, str] = result[plant][lot_id]
+            lot_orders[lot_idx] = order
+        result_sorted: dict[int, list[Lot]] = {}
+        _empty = tuple()
+        for plant_id, lots in result.items():
+            lots_sorted: list[str] = sorted(lots)
+            plant_lots: list[Lot] = []
+            existing_lots = {lot.id: lot for lot in snapshot.lots.get(plant_id, _empty) if
+                             lot.end_time is not None and lot.active}
+            has_existing = len(existing_lots) > 0
+            lot_start = max(lot.end_time for lot in existing_lots.values()) if len(existing_lots) > 0 else start_time
+            if previous_orders is not None and plant_id in previous_orders:
+                prev_order = snapshot.get_order(previous_orders[plant_id])
+                if prev_order is not None and prev_order.lots is not None:
+                    match = next((lot_id for lot_id in prev_order.lots.values() if lot_id in existing_lots), None)
+                    if match is not None:
+                        lot_start = existing_lots[match].end_time
+            # assuming full capacity operation => probably ok at this point
+            capa: float | None = equipment[plant_id].throughput_capacity
+            for lot_id in lots_sorted:
+                order_data: dict[int, str] = lots[lot_id]
+                all_orders = [order for order in (snapshot.get_order(order) for order in order_data.values()) if
+                              order is not None]
+                mat_weights = {}
+                lot_weight = 0.
+                for order in all_orders:
+                    for cl in order.material_classes.values():
+                        mat_weights[cl] = mat_weights.get(cl, 0.) + order.actual_weight
+                    lot_weight += order.actual_weight
+                lot_indices: list[int] = sorted(order_data)
+                start_time = None
+                end_time = None
+                if capa is not None and capa > 0:
+                    duration = timedelta(hours=lot_weight / capa)
+                    start_time = lot_start
+                    end_time = lot_start + duration
+                    lot_start = end_time
+                lot = Lot(id=lot_id, equipment=plant_id, active=True, status=0,
+                          orders=[order_data[idx] for idx in lot_indices], weight=lot_weight,
+                          material_weights=mat_weights, start_time=start_time, end_time=end_time)
+                plant_lots.append(lot)
+            result_sorted[plant_id] = plant_lots
+        return result_sorted

@@ -451,13 +451,17 @@ class ProductionPlanning(Model, Generic[P]):
     "Sum priority orders"
     previous_orders: dict[int, str] | None = None
     "Initial conditions for the optimization"
+    lots: Mapping[int, Sequence[Lot]]|None = None
+    "Lots cache (keys: lot id); if not set, the get_lots() method reconstructs the lots"
 
-    # TODO cache results?
-    def get_lots(self, orders: dict[str, Order]|None=None) -> dict[int, list[Lot]]:
+    def get_lots(self, orders: dict[str, Order]|None=None, cache: bool=False) -> dict[int, list[Lot]]:
         """
-        :return: dictionary with keys = equipment ids, values = lots
+        :return: dictionary with keys = equipment ids, values = lots; by default, the lots field is evaluated,
+                a fallback is applied if it is missing
         If the orders field is provided, then the lot weights will be filled, as well (missing orders are ignored, however)
         """
+        if self.lots:
+            return {eq: list(lots) for eq, lots in self.lots.items()}
         result: dict[int, dict[str, dict[int, str]]] = {}  # keys: equipment, lot_id, lot_idx, order
         for order, assignment in self.order_assignments.items():
             plant = assignment.equipment
@@ -484,6 +488,8 @@ class ProductionPlanning(Model, Generic[P]):
                 lot = Lot(id=lot_id, equipment=plant_id, active=True, status=0, orders=[order_data[idx] for idx in lot_indices], weight=lot_weight)
                 plant_lots.append(lot)
             result_sorted[plant_id] = plant_lots
+        if cache:
+            self.lots = result_sorted
         return result_sorted
 
     def get_num_lots(self) -> int:

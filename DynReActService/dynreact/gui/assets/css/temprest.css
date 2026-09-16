@@ -29,6 +29,10 @@
     padding: 0.5em 1em;
 }
 
+.temprest-cell-sub-header {
+    padding-left: 2em;
+}
+
 .temprest-active {
     color: green;
 }

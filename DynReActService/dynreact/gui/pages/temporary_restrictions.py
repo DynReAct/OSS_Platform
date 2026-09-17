@@ -39,7 +39,7 @@ def layout(*args, **kwargs):
                 html.Th("Material filter", scope="col", title="Does the rule apply to a specific material class?", id="temprest-grid-mat"),
                 html.Th("Property filter", scope="col", title="Does the rule apply to specific order properties?", id="temprest-grid-prop"),
                 html.Th("Active", scope="col", title="Is the rule currently active?", id="temprest-grid-active"),
-                html.Th("Changes", scope="col", title="Save or clear parameter changes", id="temprest-grid-changes")
+                html.Th("Changes", scope="col", title="Save or reset parameter changes", id="temprest-grid-changes")
             ])),
             html.Tbody(id="temprest-grid-body")  #grid_body, id="temprest-grid-body")
     ]
@@ -91,7 +91,6 @@ def layout(*args, **kwargs):
     ], id="temprest")
 
 
-# TODO Save button etc need setting_idx parameter
 @callback(Output("temprest-grid-body", "children"),
           Input({"role": "temprest-add-row", "id": ALL}, "n_clicks"),
           Input({"role": "temprest-delete-row", "id": ALL, "setting": ALL}, "n_clicks"),
@@ -192,7 +191,7 @@ def set_table_content(_, __):
                 check_id["setting"] = setting.setting_id
                 msg_id["setting"] = setting.setting_id
                 save_col.append(html.Button("Save", className="dynreact-button", id={"role": "temprest-save", "id": rst.id, "setting": setting.setting_id}, title="Save changes", hidden=True))
-                save_col.append(html.Button("Clear", className="dynreact-button", id={"role": "temprest-clear", "id": rst.id, "setting": setting.setting_id}, title="Clear changes", hidden=True))
+                save_col.append(html.Button("Reset", className="dynreact-button", id={"role": "temprest-clear", "id": rst.id, "setting": setting.setting_id}, title="Reset changes", hidden=True))
             save_col.extend([dcc.Store(id=msg_id, ), dummy_parameters])
             grid_body.append(html.Tr([
                 header,
@@ -202,7 +201,7 @@ def set_table_content(_, __):
                 html.Td(order_attribute, className="temprest-cell"),
                 html.Td(html.Div(dcc.Checklist(options=("", ), value=("", ) if active else (), id=check_id),
                         className="temprest-cell temprest-" + active_status, title=f"Rule is {active_status}")),
-                html.Td(save_col, className="temprest-cell")
+                html.Td(save_col, className="temprest-cell flex gap-05")
             ]))
         rule_options.append({"value": rst.id, "label": rst.label or rst.id})
     return grid_body
@@ -265,6 +264,7 @@ def error_msg_changed(messages0, messages1):
          Output({"role": "temprest-cfg-active", "id": MATCH, "setting": MATCH}, "title"),
          Output({"role": "temprest-cfg-error-msg", "id": MATCH, "setting": MATCH}, "data"),
          Input({"role": "temprest-cfg-active", "id": MATCH, "setting": MATCH}, "value"),
+         Input({"role": "temprest-save", "id": MATCH, "setting": MATCH}, "n_clicks"),
          State({"role": "temprest-equipment-selector", "id": MATCH, "setting": MATCH}, "value"),
          State({"role": "temprest-parameter-control", "id": MATCH, "setting": MATCH, "count": ALL}, "value"),
          #State({"role": "parameter-control", "rule": MATCH}, "value"),
@@ -273,7 +273,7 @@ def error_msg_changed(messages0, messages1):
          #     (Output({"role": "temprest-save", "id": MATCH}, "disabled"), True, False),
          #],
          config_prevent_initial_callbacks=True)
-def save_rule_configurable(value: Sequence[Literal[""]]|None, selected_equipment: list[int], parameters):
+def save_rule_configurable(value: Sequence[Literal[""]]|None, _, selected_equipment: list[int], parameters):
     trigger_id = callback_context.triggered_id
     if value is None or not isinstance(trigger_id, Mapping) or not dash_authenticated(config):
         return None, None, None
@@ -324,14 +324,16 @@ def save_rule_configurable(value: Sequence[Literal[""]]|None, selected_equipment
          Input({"role": "temprest-save", "id": MATCH, "setting": MATCH}, "n_clicks"),
          Input({"role": "temprest-clear", "id": MATCH, "setting": MATCH}, "n_clicks"),
          config_prevent_initial_callbacks=True)
-def set_save_clear_btn_status(value: Sequence[Literal[""]]|None, selected_equipment: list[int], parameters, _, __):
+def set_save_clear_btn_status(value: Sequence[Literal[""]]|None, selected_equipment: int|list[int], parameters, _, __):
     triggered = callback_context.triggered_id
     # rule not active
     if not value or len(value) == 0 or not dash_authenticated(config) or \
                 not isinstance(triggered, Mapping) or triggered.get("role") in ("temprest-save", "temprest-clear"):
         return True, True
-    if not selected_equipment or len(selected_equipment) == 0:
+    if not selected_equipment or (isinstance(selected_equipment, Sequence) and len(selected_equipment) == 0):
         return True, True
+    if not isinstance(selected_equipment, Sequence):
+        selected_equipment = [selected_equipment]
     rule_id = triggered.get("id")
     setting_id = triggered.get("setting")
     rule, settings = state.get_temporary_restrictions().get_restriction(rule_id)
@@ -351,6 +353,34 @@ def set_save_clear_btn_status(value: Sequence[Literal[""]]|None, selected_equipm
         if setting.parameters is None or len(setting.parameters) != len(parameters) or any(p != setting.parameters[idx] for idx, p in enumerate(parameters)):
             return False, False
     return True, True
+
+
+@callback(Output({"role": "temprest-equipment-selector", "id": MATCH, "setting": MATCH}, "value"),
+         Output({"role": "temprest-parameter-control", "id": MATCH, "setting": MATCH, "count": ALL}, "value"),
+         Input({"role": "temprest-clear", "id": MATCH, "setting": MATCH}, "n_clicks"),
+         config_prevent_initial_callbacks=True)
+def clear_btn_pressed(_):
+    groupings = callback_context.outputs_grouping
+    outputs = groupings[1]
+    params_out = [dash.no_update for o in outputs]
+    if not dash_authenticated(config):
+        return dash.no_update, params_out
+    triggered = callback_context.triggered_id
+    rule_id = triggered.get("id")
+    setting_id = triggered.get("setting")
+    rule, settings = state.get_temporary_restrictions().get_restriction(rule_id)
+    setting = next((s for s in settings if s.setting_id == setting_id), None)
+    if rule is None or setting is None:
+        return dash.no_update, dash.no_update
+    equipment = rule.equipment if not rule.equipment_selectable else (setting.active_equipment or rule.equipment)
+    if not isinstance(equipment, Sequence):
+        equipment = (equipment, )
+    if ConditionUtils.condition_has_parameters(rule.condition) and setting.parameters is not None:
+        if isinstance(rule.condition, ListCondition):
+            params_out = ["; ".join([str(p) for p in setting.parameters])]
+        else:  # Note: this is tricky if parameters contains a nested list
+            params_out = setting.parameters
+    return equipment, params_out
 
 
 # clientside arguments: msg, type, siblingId, dummyReturnValue

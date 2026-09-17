@@ -22,6 +22,9 @@ class ActiveSettings(BaseModel, use_attribute_docstrings=True):
     "Note: only a single instance of a rule may be instantiated for non-configurable rules, i.e., those without ParameterValues."
 
 
+_INACTIVE = RuleSettings(active=False)
+
+
 class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
     """
     Expects rules to be stored in json files in a single folder, and likewise stores the active status in a
@@ -129,9 +132,13 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
             rules = [r for r in rules if r.equipment in equipment or (isinstance(r.equipment, Sequence) and any(e in equipment for e in r.equipment))]
         return self._active_status_for_rules(rules, active_only)
 
-    def is_active(self, rule_id: str) -> bool:
+    def is_active(self, rule_id: str, setting_id: int = 0) -> bool:
         self._check_parse()
-        return rule_id in self._active_rules and any(s.active for s in self._active_rules.get(rule_id, tuple()))
+        rules = self._active_rules.get(rule_id, (_INACTIVE, ))
+        if rules is None:  # non-configurable rules have a None value stored
+            return True
+        rule = next((r for r in rules if r.setting_id == setting_id), _INACTIVE)
+        return rule.active
 
     def add(self, rule: str) -> RuleSettings:
         self._check_parse()
@@ -147,11 +154,11 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
             if rule not in new_rules:
                 new_rules[rule] = []
             current_rules = self._active_rules[rule]
-            rule_id = 0
-            while any(r.setting_id == rule_id for r in current_rules):
+            setting_id = round(datetime.now().timestamp()*1000)
+            while any(r.setting_id == setting_id for r in current_rules):
                 time.sleep(0.01)
-                rule_id = round(datetime.now().timestamp()*1000)
-            new_rule = RuleSettings(rule_id=rule_id, active=False)
+                setting_id = round(datetime.now().timestamp()*1000)
+            new_rule = RuleSettings(setting_id=setting_id, active=False)
             current_rules.append(new_rule)
             logging.getLogger(__name__).info(f"Adding temporary equipment restriction(s) {rule}")
             self._active_rules = new_rules
@@ -162,16 +169,14 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
                 raise
             return new_rule
 
-    def activate(self, rule: str, settings: RuleSettings):
+    def store(self, rule: str, settings: RuleSettings):
         """
-        Activate a rule, identified by its id
+        Activate or deactivate a rule, identified by its id
 
         Parameters:
             rule:
-            active:
+            settings:
         """
-        if not settings.active:  # TODO store even disabled rules
-            return self.deactivate(rule, setting_id=settings.setting_id)
         self._check_parse()
         if rule not in self._rules:
             raise ValueError(f"Rule {rule} unknown")
@@ -182,22 +187,43 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
         #    raise ValueError(f"Must not specifiy equipment when it is not applicable. Rule: {rule_obj}")
         if has_equipment_selection:
             if settings.active_equipment is None:
-                raise ValueError(f"Must specify equipment for rule {rule_obj}")
-            if len(settings.active_equipment) == 0:
-                return self.deactivate(rule, setting_id=settings.setting_id)
+                if settings.active:
+                    raise ValueError(f"Must specify equipment for rule {rule_obj}")
+                else:
+                    existing = next((r for r in self._active_rules.get(rule, tuple()) if r.setting_id == settings.setting_id), None)
+                    if existing is None or not existing.active:  # inactive anyway
+                        return
+                    settings = settings.model_copy(update={"active_equipment": existing.active_equipment})
             not_applicable = [e for e in settings.active_equipment if e not in rule_obj.equipment]
-            if len(not_applicable):
+            if len(not_applicable) > 0:
                 raise ValueError(f"Selected equipment {not_applicable} not applicable to rule {rule_obj}")
+        elif not has_equipment_selection and settings.active_equipment is not None:
+            applicable_equipment = rule_obj.equipment if isinstance(rule_obj.equipment, Sequence) else (rule_obj.equipment, )
+            if len(applicable_equipment) != len(settings.active_equipment) or any(e not in applicable_equipment for e in settings.active_equipment):
+                raise ValueError(f"Cannot specify equipment for rule {rule}")
+            settings = settings.model_copy(update={"active_equipment": None})
         if not has_parameters and settings.parameters is not None:
-            raise ValueError(f"Must not specifiy parameters when they are not applicable. Rule: {rule_obj}")
+            if len(settings.parameters) != 0:
+                raise ValueError(f"Must not specifiy parameters when they are not applicable. Rule: {rule_obj}")
+            settings = settings.model_copy(update={"parameters": None})
         if has_parameters and (settings.parameters is None or len(settings.parameters) == 0):
-            raise ValueError(f"Parameters not specified for rule {rule_obj}")
+            if settings.active:
+                raise ValueError(f"Parameters not specified for rule {rule_obj}")
+            else:
+                existing = next((r for r in self._active_rules.get(rule, tuple()) if r.setting_id == settings.setting_id), None)
+                if existing is None or not existing.active:  # inactive anyway
+                    return
+                settings = settings.model_copy(update={"parameters": existing.parameters})
         with self._active_rules_lock:
             current_rules = self._active_rules
             new_rules = dict(current_rules)
             if not has_parameters and not has_equipment_selection:
-                new_rules[rule] = None
+                if settings.active:
+                    new_rules[rule] = None
+                else:
+                    new_rules.pop(rule, None)
             else:
+                settings = settings.model_copy()
                 if rule not in new_rules:
                     new_rules[rule] = []
                 existing_rules = new_rules[rule]
@@ -206,7 +232,8 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
                     existing_rules.append(settings)
                 else:
                     existing_rules[existing] = settings
-            logging.getLogger(__name__).info(f"Activating temporary equipment restriction(s) {rule}")
+            prefix = "Dea" if not settings.active else "A"
+            logging.getLogger(__name__).info(f"{prefix}ctivating temporary equipment restriction(s) {rule}")
             self._active_rules = new_rules
             try:
                 self._store_rules()
@@ -214,9 +241,6 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
                 self._active_rules = current_rules  # rollback
                 raise
             return True
-
-    def deactivate(self, rule: str, setting_id: int = 0) -> bool:
-        return self._delete_or_deactivate(rule, rule_id=setting_id)
 
     def delete(self, rule: str, setting_id: int) -> bool:
         return self._delete_or_deactivate(rule, rule_id=setting_id, delete=True)

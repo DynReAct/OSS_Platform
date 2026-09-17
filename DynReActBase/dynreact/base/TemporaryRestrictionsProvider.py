@@ -56,12 +56,13 @@ class TemporaryRestrictionsProvider:
         return next(((rule, settings) for rule, settings in self.equipment_restrictions() if rule.id == rule), (None, tuple()))
 
     def add(self, rule: str) -> RuleSettings:
+        """Create a new rule instance (setting)."""
         raise NotImplementedError
 
     def delete(self, rule: str, setting_id: int) -> bool:
         raise NotImplementedError
 
-    def activate(self, rule: str, settings: RuleSettings) -> bool:
+    def store(self, rule: str, settings: RuleSettings) -> bool:
         """
         Activate or deactivate a rule, identified by its id
 
@@ -72,10 +73,7 @@ class TemporaryRestrictionsProvider:
         """
         raise NotImplementedError
 
-    def deactivate(self, rule: str, setting_id: int = 0) -> bool:
-        raise NotImplementedError
-
-    def is_active(self, rule_id: str) -> bool:
+    def is_active(self, rule_id: str, setting_id: int=0) -> bool:
         raise NotImplementedError
 
     def equipment_allowed(self, equipment: int, order: Order) -> tuple[bool, EquipmentRestriction|None]:

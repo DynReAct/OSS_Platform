@@ -117,7 +117,7 @@ def set_table_content(_, __):
     for rst, settings in restrictions:
         material_filter = "" if not isinstance(rst.condition, MaterialCondition) else rst.condition.material_class
         equipment = rst.equipment
-        equipment_selectable = rst.equipment_selectable and isinstance(rst.equipment, Sequence)
+        equipment_selectable = rst.equipment_selectable and isinstance(rst.equipment, Sequence) and len(rst.equipment) > 1
         has_params = ConditionUtils.condition_has_parameters(rst.condition)
         is_rule_configurable: bool = equipment_selectable or has_params
         equipment_as_list = [rst.equipment] if not isinstance(rst.equipment, Sequence) else list(rst.equipment)
@@ -140,6 +140,7 @@ def set_table_content(_, __):
                                         hidden=True) if num_params == 0 and is_rule_configurable else None
             # if dummy_selector:
             #    dummy_selector.children.value = equipment_as_list
+            equipment_selector = None
             if is_rule_configurable:
                 equipment_selector = html.Div(dcc.Dropdown(
                     options=[{"value": e, "label": _equipment_text(e, site)[0]} for e in equipment_as_list], value=[],
@@ -151,12 +152,15 @@ def set_table_content(_, __):
                     equipment_selector.children.value = setting.active_equipment
                 else:
                     equipment_selector.children.value = rst.equipment
-            elif isinstance(equipment, Sequence):
-                equipment_texts = [_equipment_text(e, site) for e in equipment]
-                equipment_text = ", ".join([label for label, title in equipment_texts])
-                equipment_title = ", ".join([title for label, title in equipment_texts if title is not None])
-            else:
-                equipment_text, equipment_title = _equipment_text(equipment, site)
+            if not equipment_selectable:
+                if isinstance(equipment, Sequence):
+                    equipment_texts = [_equipment_text(e, site) for e in equipment]
+                    equipment_text = ", ".join([label for label, title in equipment_texts])
+                    equipment_title = ", ".join([title for label, title in equipment_texts if title is not None])
+                else:
+                    equipment_text, equipment_title = _equipment_text(equipment, site)
+                if equipment_selector is not None:  # in this case we still need the equipment selector for the callback logic, but do not want to show it
+                    equipment_text = html.Div([equipment_text, html.Div(equipment_selector, hidden=True)])
             active_text = "✔" if active else "✖"
 
             active_status = "active" if active else "inactive"
@@ -228,10 +232,7 @@ def toggle_rule(value: Sequence[Literal[""]]|None):
         active = settings and len(settings) > 0 and settings[0].active
         if active != activating:
             try:
-                if not active:
-                    restrictions.activate(triggered, RuleSettings(active=True))
-                else:
-                    restrictions.deactivate(triggered)
+                restrictions.store(triggered, RuleSettings(active=activating))
             except Exception as e:
                 msg = {"type": "error", "msg": f"Failed to toggle status: {e}"}
     rule_active = restrictions.is_active(triggered)
@@ -244,7 +245,7 @@ def toggle_rule(value: Sequence[Literal[""]]|None):
 @callback(
          Output("temprest-error-msg", "data"),
          Input({"role": "temprest-error-msg", "id": ALL}, "data"),
-         Input({"role": "temprest-error-msg", "id": ALL, "setting": ALL}, "data"))
+         Input({"role": "temprest-cfg-error-msg", "id": ALL, "setting": ALL}, "data"))
 def error_msg_changed(messages0, messages1):
     changed = GuiUtils.changed_ids(excluded_ids=("",))
     if len(changed) == 0:
@@ -302,15 +303,12 @@ def save_rule_configurable(value: Sequence[Literal[""]]|None, selected_equipment
             if has_parameters:  # validate appropriate number of parameters
                 pass
             new_settings = RuleSettings(active=activating, active_equipment=selected_equipment, parameters=params, setting_id=setting)
-            if activating:
-                restrictions.activate(triggered, new_settings)
-            else:
-                restrictions.deactivate(triggered, setting)
+            restrictions.store(triggered, new_settings)
             # msg = {"type": "success", "msg": f"Status toggled: {triggered} = {not active}"}  # the alert is too ugly here
         except Exception as e:
             traceback.print_exc()
             msg = {"type": "error", "msg": f"Failed to toggle status: {e}"}
-    rule_active = restrictions.is_active(triggered)
+    rule_active = restrictions.is_active(triggered, setting_id=setting)
     status = "✔" if rule_active else "✖"
     value = [""] if rule_active else []
     clazz = "temprest-cell " + ("temprest-active" if rule_active else "temprest-inactive")

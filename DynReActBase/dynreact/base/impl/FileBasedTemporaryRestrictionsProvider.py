@@ -153,7 +153,7 @@ class FileBasedTemporaryRestrictionsProvider(TemporaryRestrictionsProvider):
             new_rules = dict(self._active_rules)
             if rule not in new_rules:
                 new_rules[rule] = []
-            current_rules = self._active_rules[rule]
+            current_rules = new_rules[rule]
             setting_id = round(datetime.now().timestamp()*1000)
             while any(r.setting_id == setting_id for r in current_rules):
                 time.sleep(0.01)

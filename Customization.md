@@ -28,7 +28,15 @@ SWhich data sources are required exactly depends on the selection of DynReAct co
 Whereas the long-term planning models the flow of material through the whole site, keeping buffer levels within the defined boundaries
 and ensuring sufficient supply for each equipment unit, the mid-term and short-term planning modules generate sequences of
 production orders and therefore have similar data requirements. The three modules can be used in conjunction, but all of them
-can be adopted as standalone solutions, allowing for a phased introduction.   
+can be adopted as standalone solutions, allowing for a phased introduction.
+
+Documentation of DynReAct Python interfaces can be found under the following link: [https://dynreact.github.io/OSS_Platform/docs/](https://dynreact.github.io/OSS_Platform/docs/), and
+the DynReAct REST interface is documented at [https://dynreact.github.io/OSS_Platform/docs/service/index.html](https://dynreact.github.io/OSS_Platform/docs/service/index.html).
+Source code for the basic models, such as `Order`, `Snapshot` and `Lot` can be found in [model.py](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActBase/dynreact/base/model.py),
+and all interfaces are defined in the [`dynreact.base`](https://github.com/DynReAct/OSS_Platform/tree/main/DynReActBase/dynreact/base) module. 
+
+The REST service is based on the *FastAPI* framework, it can be found in [service.py](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/dynreact/service/service.py), 
+and the web frontend is based on Plotly's *Dash*.     
 
 ## Site configuration
 
@@ -236,9 +244,39 @@ subproject, with the interface implementation residing in the file [LongTermPlan
 
 ### Mid-term planning
 
+The mid-term planning or lot creation algorithm is based on a TabuSearch approach for the allocation of orders to equipments, with a traveling salesman
+solver determining the optimal order of orders. It can be found in the
+[MidTermPlanning](https://github.com/DynReAct/OSS_Platform/tree/main/MidTermPlanning) subproject,
+with the interface implementation residing in the file [LotsOptimizerImpl.py](https://github.com/DynReAct/OSS_Platform/blob/main/MidTermPlanning/dynreact/lotcreation/LotsOptimizerImpl.py).
+
 #### Lot creation configuration
 
+The lot creation algorithm has several configuration parameters, all of which can be set via environment variables.
+
+```
+# Setting TABU_NUM_CORES to 1 disables parallelism for the tabu search algorithm. By default, the value is set to min(8, cpu_count)-
+TABU_NUM_CORES=1
+# Define the virtual cost threshold for the creation of a new lot. Default value is 4.
+TABU_MAX_TRANSITION_COST=10
+# Set the timeout for the traveling salesman solver, determining the optimal order of orders in each iteration. Default value is 1.
+TABU_ORTOOLS_TIMEOUT=2
+# Configure a fixed random seed for the lot creation, leading to reproducible lot creation results, as long as no timeouts are hit. Recommended setting for tests. 
+TABU_RAND_SEED=42
+```
+
+A comprehensive list of parameters can be found in the file 
+[TabuParams.py](https://github.com/DynReAct/OSS_Platform/blob/main/MidTermPlanning/dynreact/lotcreation/TabuParams.py).
+
 #### Batch lot creation
+
+It is possible to run the lot creation periodically in the background, setting the env var `LOTS_BATCH_CONFIG`. Example:  
+
+```
+LOTS_BATCH_CONFIG=19:00;P1D;PKL:1000:PT15M,CRL:500:PT30M 
+```
+
+to run daily at 19:00 (local server time), for the two process stages with ids *PKL* and *CRL*, allowing for 1000 iterations and 15 minutes execution time, 
+respectively 750 iterations and 30 minutes duration.
 
 #### Lot creation algorithm
 
@@ -251,10 +289,6 @@ LOT_CREATION=class:path.to.custom.lotcreation.LotCreation:mycompany:./algoSettin
 The configured class must implement the [LotsOptimizationAlgo](https://dynreact.github.io/OSS_Platform/docs/DynReActBase/lots_optimizer.html#lotsoptimizationalgo-class)
 interface.
 
-The existing implementation is based on a TabuSearch approach for the allocation of orders to equipments, with a traveling salesman
-solver determining the optimal order of orders. It can be found in the
-[MidTermPlanning](https://github.com/DynReAct/OSS_Platform/tree/main/MidTermPlanning) subproject,
-with the interface implementation residing in the file [LotsOptimizerImpl.py](https://github.com/DynReAct/OSS_Platform/blob/main/MidTermPlanning/dynreact/lotcreation/LotsOptimizerImpl.py).
 
 ### Short-term planning
 

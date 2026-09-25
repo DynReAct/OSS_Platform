@@ -101,7 +101,7 @@ in this scenario can be found [here](./SampleUseCase/dynreact/cost/CostCalculato
 
 ### Prerequisites
 
-Python versions >= 3.10 and <= 3.12 should be supported. 
+Python versions >= 3.11 and <= 3.14 should be supported. 
 
 * The *short term planning* functionality requires a Kafka broker ready to support the communication between modules. (see the [Short Term Planning](./ShortTerm) module).
 
@@ -200,4 +200,5 @@ See [ShortTermPlanning/README.md](./ShortTermPlanning/README.md)
 
 ## Customize
 
-In order to adapt DynReAct to your own planning and/or scheduling problem, follow the instructions at [Customization.md](./Customization.md)
+In order to adapt DynReAct to your own planning and/or scheduling problem, follow the instructions at [Customization.md](./Customization.md).
+

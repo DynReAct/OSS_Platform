@@ -164,7 +164,7 @@ class DynReActSrvConfig:
             aggregation_exec_offset_minutes = int(os.getenv("AGGREGATION_OFFSET_MINUTES", DynReActSrvConfig.aggregation_exec_offset_minutes))
         self.aggregation_exec_offset_minutes = aggregation_exec_offset_minutes
         if lot_sinks is None:
-            lot_sinks = [sink.strip() for sink in os.getenv("LOT_SINKS", DynReActSrvConfig.lot_sinks[0]).split(",")]
+            lot_sinks = [sink.strip() for sink in os.getenv("LOT_SINKS", DynReActSrvConfig.lot_sinks[0]).split(";")]
         elif isinstance(lot_sinks, str):
             lot_sinks = [lot_sinks]
         if lots_batch_config is None:

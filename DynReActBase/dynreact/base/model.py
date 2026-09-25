@@ -199,7 +199,7 @@ class Material(Model, Generic[PROPERTIES]):
         return self.order
 
 
-MATERIAL_PROPERTIES = TypeVar("MATERIAL_PROPERTIES", bound=Model)  # Material properties, such as dimensions at specific production facilities
+MATERIAL_PROPERTIES = TypeVar("MATERIAL_PROPERTIES", bound=BaseModel)  # Material properties, such as dimensions at specific production facilities
 
 
 class Order(Model, Generic[MATERIAL_PROPERTIES], arbitrary_types_allowed=True):

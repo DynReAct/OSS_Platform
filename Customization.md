@@ -2,6 +2,7 @@
 
 ## Content
 
+* [Overview](#overview)
 * [Site configuration](#site-configuration)
 * [Data sources and sinks](#data-sources-and-sinks)
   * [Custom profiles](#custom-profiles) 
@@ -67,7 +68,29 @@ production orders currently being processed or waiting to be processed in the si
 along with planned order sequences ([*Lots*](https://dynreact.github.io/OSS_Platform/docs/DynReActBase/model.html#lot-class)) for each equipment unit. This is the minimum required data source for the mid-term
 and short-term planning modules. For this purpose, a [SnapshotProvider](https://dynreact.github.io/OSS_Platform/docs/DynReActBase/snapshot_provider.html) 
 class must be defined in the custom Python project. Its `__init__` method takes two arguments, a URL identifying the
-snapshot provider, such as `mycompany+mes:db-address:1027`, and the basic [`Site`](#site-configuration) object.
+snapshot provider, such as `mycompany+mes:db-address:1027`, and the basic [`Site`](#site-configuration) object. There is a 
+set of predefined properties every [Order](https://dynreact.github.io/OSS_Platform/docs/DynReActBase/model.html#order-class) should possess.
+Additionally, custom properties can be added in the [`material_properties`](https://dynreact.github.io/OSS_Platform/docs/DynReActBase/model.html#dynreact.base.model.Order.material_properties) 
+field, which holds an object of a generic subtype of the Pydantic [`BaseModel`](https://pydantic.dev/docs/validation/dev/api/pydantic/base_model/) class. 
+Define your custom subtype as in the following example:
+
+```python
+from pydantic import BaseModel
+
+class MyOrderProperties(BaseModel, use_attribute_docstrings=True):
+    """
+    This class contains custom order properties
+    """
+    
+    target_width: float
+    "Width in mm"
+    target_height: float
+    "Height in mm"
+    ...
+```
+
+Then ensure that the SnapshotProvider generates orders of generic type `Order[MyOrderProperties]`, i.e., whose `material_properties`
+field is an instance of the class `MyOrderProperties`.
 
 In order to activate the custom snapshot provider, the environment parameter `SNAPSHOT_PROVIDER` must be set:
 
@@ -82,12 +105,17 @@ Otherwise, the module can be prepended as follows:
 SNAPSHOT_PROVIDER=class:custom.module.path.MySnapshotProvider,mycompany+mes:db-address:1027
 ```
 
+An example of a SnapshotProvider is included in DynReAct core: 
+[FileSnapshotProvider](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActBase/dynreact/base/impl/FileSnapshotProvider.py).
+It reads snapshots from .csv files, where every row corresponds to a material unit, and one or multiple units make up an
+order. It supports custom order properties in columns whose name begins with `material_`.  
+
 ### Further sources
 
 Besides the snapshot provider, some other data sources can be provided:
 
 * [ShiftsProvider](https://dynreact.github.io/OSS_Platform/docs/DynReActBase/shifts_provider.html): mainly used by 
-   the long-term planning but also the mid-term planning (TODO explain)  
+   the long-term planning but also the mid-term planning (TODO to be extended).  
 * [ProductionHistoryReader](https://dynreact.github.io/OSS_Platform/docs/DynReActBase/prod_history_reader.html): only relevant
    for the long-term planning. Is used for comparing the actual production with the long-term targets, and thus creating updates of the latter.  
 
@@ -107,7 +135,7 @@ In order to activate the configured LotSink, the environment parameter `LOT_SINK
 LOT_SINK=mycompany+mes:db-address:1027
 ```
 
-in our example. It is assumed here that the custom `LotSink` subclass resides in the module `dynreact.lotsink.<PROFILE_ID>`.
+in our example. Multiple sinks can be separated by a semi-colon ";". It is assumed here that the custom `LotSink` subclass resides in the module `dynreact.lotsink.<PROFILE_ID>`.
 Otherwise, the class module can be prepended, as follows:
 
 ```
@@ -123,6 +151,64 @@ LOT_SINKS=default+file:./testlots
 Where *./testlots* is the folder to store lots in.
 
 ## Cost functions
+
+Another core component of DynReAct is the virtual costs function, or objective function. It defines primarily the transition costs between orders
+at a given equipment unit. The interface is called [CostProvider](https://dynreact.github.io/OSS_Platform/docs/DynReActBase/cost_provider.html), 
+and the central method that needs to be implemented is 
+[`transition_costs`](https://github.com/DynReAct/OSS_Platform/blob/4d5297bb500f9c3b68e4cb1b0f7a7745b70a790f/DynReActBase/dynreact/base/CostProvider.py#L26-L42):  
+
+```python
+from dynreact.base.model import Equipment, Order, Material
+
+def transition_costs(self, plant: Equipment, current: Order, next: Order, current_material: Material | None = None, next_material: Material | None = None) -> float:
+        """
+        Calculates the transition costs for two orders at a given plant. If materials are specified,
+        then the transition costs between individual materials are evaluated instead.
+        This function does not take into account global constraints and objectives.
+
+        Parameters:
+            plant: equipment
+            current: order 1
+            next: order 2
+            current_material: optional material unit belonging to order 1
+            next_material: optional material unit belonging to order 2
+
+        Returns:
+            the virtual transition costs associated to the order-to-order transition
+        """
+        pass
+```
+
+It assigns virtual costs to the transition from the order named `current` to the order `next`. Optionally, it is possible 
+to consider also the material units (an order may consist of one or more material units to be processed). However, support
+for material-level transitions is currently limited, therefore the cost provider should be able to deal with `None` values
+for those materials.
+
+Returned cost values should never be negative, but they may be zero if the transition does not involve any setup activities
+and is not constrained in any other way at the equipment. The more setup activities or waiting times are required between orders,
+the higher the costs should be. In the default setup, a cost value 4 defines the threshold for the creation of a new lot. 
+I.e., orders with transition costs <= 4 may succeed one another in a single lot, whereas the DynReAct lot creation algorithm
+will create a new lot whenever it determines that the optimal order sequence has two subsequent orders with transition costs > 4.
+This threshold can be configured, however, see section [Lot creation configuration](#lot-creation-configuration) below.
+
+Besides `transition_costs()`, the method `update_transition_costs()` must be implemented, as well as `objective_function()`.
+TODO explain...
+
+An example of a CostProvider can be found in the DynReAct SampleUseCase module: 
+[CostCalculatorImpl](https://github.com/DynReAct/OSS_Platform/blob/main/SampleUseCase/dynreact/cost/CostCalculatorImpl.py).
+It is based on a custom order properties class [`SampleMaterial`](https://github.com/DynReAct/OSS_Platform/blob/main/SampleUseCase/dynreact/sample/model.py#L6),
+as explained in the section on the [snapshot provider](#snapshot-generation). The entries of the `SampleMaterial` instances
+are filled from the snapshot columns whose names start with `material_`, cf. the [sample snapshot](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/data/snapshots/snapshot_2024-12-31T00_00.csv).
+
+The custom `CostProvider` should reside in the module `dynreact.cost.<PROFILE_ID>`, in which case it will be activated automatically. 
+Alternatively, it is possible to specify the cost provider using an environment variable:
+
+```
+COST_PROVIDER=class:dynreact.custom.path.CostProvider,mycompany+mes:db-address:1027
+```
+
+Its `__init__` method should accept two arguments, a URL (which may be `None`, unless specified via an env var as in the example above),
+and the `Site` object. 
 
 ## Optimizations
 

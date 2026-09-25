@@ -20,6 +20,7 @@
   * [Dependencies](#dependencies)
   * [IDE settings](#ide-settings)
   * [Run](#run)
+* [Customize](#customize)
 
 ## Introduction
 
@@ -181,7 +182,8 @@ Standard options:
 
 tbc...
 
-See [app_config.py](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/dynreact/app_config.py) for complete configuration options.
+See [app_config.py](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActService/dynreact/app_config.py) for complete configuration options. 
+How to customize DynReAct for a new use case is explained in the document [Customization.md](./Customization.md).
 
 #### Long-term planning
 
@@ -195,3 +197,7 @@ folder.
 #### Short-term planning
 
 See [ShortTermPlanning/README.md](./ShortTermPlanning/README.md)
+
+## Customize
+
+In order to adapt DynReAct to your own planning and/or scheduling problem, follow the instructions at [Customization.md](./Customization.md)

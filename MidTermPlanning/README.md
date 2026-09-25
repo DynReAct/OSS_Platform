@@ -21,6 +21,31 @@ TABU_RAND_SEED=42
 A comprehensive list of parameters can be found in the file 
 [TabuParams.py](https://github.com/DynReAct/OSS_Platform/blob/main/MidTermPlanning/dynreact/lotcreation/TabuParams.py).
 
+## Results
+
+By default, results of the mid-term planning optimization are stored in the folder *DynReActService/results/lotcreation*, and are organized in subfolders by 
+snapshot date. Below the snapshots there are additional subfolders per process stage. For instance, the resulting folder structure may look as follows:
+
+```
+| results
+|  - lotcreation
+|     - 1738364400000
+|        - PKL
+|        - CRL
+|     - 1738368000000
+|        - PKL
+```
+
+By deleting the *lotcreation* folder all existing MTP results can be removed. The base folder can be configured by means of the `RESULTS_PERSISTENCE`
+environment variable. To change to a different directory, set
+
+```
+RESULTS_PERSISTENCE=default+file:./path/to/folder
+```
+
+It is also possible to implement a custom [ResultsPersistence](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActBase/dynreact/base/ResultsPersistence.py) provider, 
+to store results in a database, for instance. 
+
 ## Run tests
 
 In the present folder run

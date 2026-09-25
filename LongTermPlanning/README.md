@@ -25,6 +25,28 @@ LTP_DEBUG=true
 
 These parameters are defined in the source file [LtpParams.py](https://github.com/DynReAct/OSS_Platform/blob/main/LongTermPlanning/dynreact/ltp/LtpParams.py)
 
+## Results
+
+By default, results of the long-term planning optimization are stored in the folder *DynReActService/results/longterm*, and are organized in subfolders by month.
+For instance, the resulting folder structure may look as follows:
+
+```
+| results
+|  - longterm
+|     - 2026-12
+|     - 2027-01
+```
+
+By deleting the *longterm* folder all existing LTP results can be removed. The base folder can be configured by means of the `RESULTS_PERSISTENCE`
+environment variable. To change to a different directory, set
+
+```
+RESULTS_PERSISTENCE=default+file:./path/to/folder
+```
+
+It is also possible to implement a custom [ResultsPersistence](https://github.com/DynReAct/OSS_Platform/blob/main/DynReActBase/dynreact/base/ResultsPersistence.py) provider, 
+to store results in a database, for instance. 
+
 ## Run tests
 
 In the present folder run

@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="img/favicon.ico" />
+    <title>LTP utils - Dynreact Long Term Planning (LTP)</title>
+    <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="assets/_mkdocstrings.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "LTP utils";
+        var mkdocs_page_input_path = "ltpUtils.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="index.html" class="icon icon-home"> Dynreact Long Term Planning (LTP)
+        </a>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="" href="../index.html">Back</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="index.html">General</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="ltpImp.html">Long term planning implementation</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">LTP utils</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#ltputils-class">LtpUtils class</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.ltp.LtpUtils.LtpUtils">LtpUtils</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.ltp.LtpUtils.LtpUtils.store_results">store_results</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.ltp.LtpUtils.LtpUtils.load_results">load_results</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.ltp.LtpUtils.LtpUtils.analyze_flows">analyze_flows</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#dynreact.ltp.LtpUtils.LtpUtils.analyze_storages">analyze_storages</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Dynreact Long Term Planning (LTP)</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="index.html" class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">LTP utils</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="long-term-planning-utilities">Long term planning utilities</h1>
+<hr />
+<h2 id="ltputils-class"><strong>LtpUtils</strong> class</h2>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<a id="dynreact.ltp.LtpUtils.LtpUtils"></a>
+    <div class="doc doc-contents first">
+
+
+
+
+
+
+
+
+
+              <details class="quote">
+                <summary>Source code in <code>LongTermPlanning/dynreact/ltp/LtpUtils.py</code></summary>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 11</span>
+<span class="normal"> 12</span>
+<span class="normal"> 13</span>
+<span class="normal"> 14</span>
+<span class="normal"> 15</span>
+<span class="normal"> 16</span>
+<span class="normal"> 17</span>
+<span class="normal"> 18</span>
+<span class="normal"> 19</span>
+<span class="normal"> 20</span>
+<span class="normal"> 21</span>
+<span class="normal"> 22</span>
+<span class="normal"> 23</span>
+<span class="normal"> 24</span>
+<span class="normal"> 25</span>
+<span class="normal"> 26</span>
+<span class="normal"> 27</span>
+<span class="normal"> 28</span>
+<span class="normal"> 29</span>
+<span class="normal"> 30</span>
+<span class="normal"> 31</span>
+<span class="normal"> 32</span>
+<span class="normal"> 33</span>
+<span class="normal"> 34</span>
+<span class="normal"> 35</span>
+<span class="normal"> 36</span>
+<span class="normal"> 37</span>
+<span class="normal"> 38</span>
+<span class="normal"> 39</span>
+<span class="normal"> 40</span>
+<span class="normal"> 41</span>
+<span class="normal"> 42</span>
+<span class="normal"> 43</span>
+<span class="normal"> 44</span>
+<span class="normal"> 45</span>
+<span class="normal"> 46</span>
+<span class="normal"> 47</span>
+<span class="normal"> 48</span>
+<span class="normal"> 49</span>
+<span class="normal"> 50</span>
+<span class="normal"> 51</span>
+<span class="normal"> 52</span>
+<span class="normal"> 53</span>
+<span class="normal"> 54</span>
+<span class="normal"> 55</span>
+<span class="normal"> 56</span>
+<span class="normal"> 57</span>
+<span class="normal"> 58</span>
+<span class="normal"> 59</span>
+<span class="normal"> 60</span>
+<span class="normal"> 61</span>
+<span class="normal"> 62</span>
+<span class="normal"> 63</span>
+<span class="normal"> 64</span>
+<span class="normal"> 65</span>
+<span class="normal"> 66</span>
+<span class="normal"> 67</span>
+<span class="normal"> 68</span>
+<span class="normal"> 69</span>
+<span class="normal"> 70</span>
+<span class="normal"> 71</span>
+<span class="normal"> 72</span>
+<span class="normal"> 73</span>
+<span class="normal"> 74</span>
+<span class="normal"> 75</span>
+<span class="normal"> 76</span>
+<span class="normal"> 77</span>
+<span class="normal"> 78</span>
+<span class="normal"> 79</span>
+<span class="normal"> 80</span>
+<span class="normal"> 81</span>
+<span class="normal"> 82</span>
+<span class="normal"> 83</span>
+<span class="normal"> 84</span>
+<span class="normal"> 85</span>
+<span class="normal"> 86</span>
+<span class="normal"> 87</span>
+<span class="normal"> 88</span>
+<span class="normal"> 89</span>
+<span class="normal"> 90</span>
+<span class="normal"> 91</span>
+<span class="normal"> 92</span>
+<span class="normal"> 93</span>
+<span class="normal"> 94</span>
+<span class="normal"> 95</span>
+<span class="normal"> 96</span>
+<span class="normal"> 97</span>
+<span class="normal"> 98</span>
+<span class="normal"> 99</span>
+<span class="normal">100</span>
+<span class="normal">101</span>
+<span class="normal">102</span>
+<span class="normal">103</span>
+<span class="normal">104</span>
+<span class="normal">105</span>
+<span class="normal">106</span>
+<span class="normal">107</span>
+<span class="normal">108</span>
+<span class="normal">109</span>
+<span class="normal">110</span>
+<span class="normal">111</span>
+<span class="normal">112</span>
+<span class="normal">113</span>
+<span class="normal">114</span>
+<span class="normal">115</span>
+<span class="normal">116</span>
+<span class="normal">117</span>
+<span class="normal">118</span>
+<span class="normal">119</span>
+<span class="normal">120</span>
+<span class="normal">121</span>
+<span class="normal">122</span>
+<span class="normal">123</span>
+<span class="normal">124</span>
+<span class="normal">125</span>
+<span class="normal">126</span>
+<span class="normal">127</span>
+<span class="normal">128</span>
+<span class="normal">129</span>
+<span class="normal">130</span>
+<span class="normal">131</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span>
+<span class="normal">135</span>
+<span class="normal">136</span>
+<span class="normal">137</span>
+<span class="normal">138</span>
+<span class="normal">139</span>
+<span class="normal">140</span>
+<span class="normal">141</span>
+<span class="normal">142</span>
+<span class="normal">143</span>
+<span class="normal">144</span>
+<span class="normal">145</span>
+<span class="normal">146</span>
+<span class="normal">147</span>
+<span class="normal">148</span>
+<span class="normal">149</span>
+<span class="normal">150</span>
+<span class="normal">151</span>
+<span class="normal">152</span>
+<span class="normal">153</span>
+<span class="normal">154</span>
+<span class="normal">155</span>
+<span class="normal">156</span>
+<span class="normal">157</span>
+<span class="normal">158</span>
+<span class="normal">159</span>
+<span class="normal">160</span>
+<span class="normal">161</span>
+<span class="normal">162</span>
+<span class="normal">163</span>
+<span class="normal">164</span>
+<span class="normal">165</span>
+<span class="normal">166</span>
+<span class="normal">167</span>
+<span class="normal">168</span>
+<span class="normal">169</span>
+<span class="normal">170</span>
+<span class="normal">171</span>
+<span class="normal">172</span>
+<span class="normal">173</span>
+<span class="normal">174</span>
+<span class="normal">175</span>
+<span class="normal">176</span>
+<span class="normal">177</span>
+<span class="normal">178</span>
+<span class="normal">179</span>
+<span class="normal">180</span>
+<span class="normal">181</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span>
+<span class="normal">211</span>
+<span class="normal">212</span>
+<span class="normal">213</span>
+<span class="normal">214</span>
+<span class="normal">215</span>
+<span class="normal">216</span>
+<span class="normal">217</span>
+<span class="normal">218</span>
+<span class="normal">219</span>
+<span class="normal">220</span>
+<span class="normal">221</span>
+<span class="normal">222</span>
+<span class="normal">223</span>
+<span class="normal">224</span>
+<span class="normal">225</span>
+<span class="normal">226</span>
+<span class="normal">227</span>
+<span class="normal">228</span>
+<span class="normal">229</span>
+<span class="normal">230</span>
+<span class="normal">231</span>
+<span class="normal">232</span>
+<span class="normal">233</span>
+<span class="normal">234</span>
+<span class="normal">235</span>
+<span class="normal">236</span>
+<span class="normal">237</span>
+<span class="normal">238</span>
+<span class="normal">239</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">LtpUtils</span><span class="p">:</span>
+
+    <span class="n">_zero_delta</span><span class="p">:</span> <span class="n">timedelta</span> <span class="o">=</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_material_constraints</span><span class="p">(</span><span class="n">flow_problem</span><span class="p">:</span> <span class="n">pc</span><span class="o">.</span><span class="n">Problem</span><span class="p">,</span> <span class="n">var</span><span class="p">:</span> <span class="n">pc</span><span class="o">.</span><span class="n">RealVariable</span><span class="p">,</span> <span class="n">material_categories</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]):</span>
+        <span class="n">num_shifts</span> <span class="o">=</span> <span class="n">var</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">mat_start_idx</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="c1"># material constraints  # Note: here we assume the capacity to be the same for all material classes; this is an oversimplification</span>
+        <span class="k">for</span> <span class="n">cat</span><span class="p">,</span> <span class="n">classes</span> <span class="ow">in</span> <span class="n">material_categories</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">cat_classes</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">classes</span><span class="p">)</span>
+            <span class="c1"># for each material category, the sum of material in the corresponding classes must add up to the overall material weight</span>
+            <span class="n">flow_problem</span><span class="o">.</span><span class="n">require</span><span class="p">([</span><span class="n">pc</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">var</span><span class="p">[</span><span class="n">mat_start_idx</span><span class="p">:</span><span class="n">mat_start_idx</span> <span class="o">+</span> <span class="n">cat_classes</span><span class="p">,</span> <span class="n">k</span><span class="p">])</span> <span class="o">==</span> <span class="n">var</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_shifts</span><span class="p">)])</span>
+            <span class="n">mat_start_idx</span> <span class="o">+=</span> <span class="n">cat_classes</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_availability_to_hours</span><span class="p">(</span><span class="n">periods</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">datetime</span><span class="p">,</span> <span class="n">datetime</span><span class="p">]],</span> <span class="n">avail</span><span class="p">:</span> <span class="n">EquipmentAvailability</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+        <span class="n">hours</span> <span class="o">=</span> <span class="p">[</span><span class="n">LtpUtils</span><span class="o">.</span><span class="n">_availability_for_period</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">avail</span><span class="o">.</span><span class="n">daily_baseline</span><span class="p">,</span> <span class="n">avail</span><span class="o">.</span><span class="n">deltas</span><span class="p">)</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span><span class="o">/</span><span class="mi">3600</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">periods</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">hours</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_availability_for_period</span><span class="p">(</span><span class="n">period</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">datetime</span><span class="p">,</span> <span class="n">datetime</span><span class="p">],</span> <span class="n">base</span><span class="p">:</span> <span class="n">timedelta</span><span class="p">,</span> <span class="n">deltas</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">date</span><span class="p">,</span> <span class="n">timedelta</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">timedelta</span><span class="p">:</span>
+        <span class="n">timedeltas</span> <span class="o">=</span> <span class="n">LtpUtils</span><span class="o">.</span><span class="n">_zero_delta</span>
+        <span class="n">start_time</span> <span class="o">=</span> <span class="n">period</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">while</span> <span class="n">start_time</span> <span class="o">&lt;</span> <span class="n">period</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="c1"># end of day or end of period</span>
+            <span class="n">end_time</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">period</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">start_time</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">hour</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">minute</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">second</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">microsecond</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+            <span class="n">fraction_of_day</span> <span class="o">=</span> <span class="p">(</span><span class="n">end_time</span> <span class="o">-</span> <span class="n">start_time</span><span class="p">)</span> <span class="o">/</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">timedeltas</span> <span class="o">+=</span> <span class="n">fraction_of_day</span> <span class="o">*</span> <span class="n">base</span>
+            <span class="n">current_date</span> <span class="o">=</span> <span class="n">start_time</span><span class="o">.</span><span class="n">date</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">deltas</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">current_date</span> <span class="ow">in</span> <span class="n">deltas</span><span class="p">:</span>
+                <span class="n">delta</span><span class="p">:</span> <span class="n">timedelta</span> <span class="o">=</span> <span class="n">deltas</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">current_date</span><span class="p">)</span>
+                <span class="n">timedeltas</span> <span class="o">+=</span> <span class="n">fraction_of_day</span> <span class="o">*</span> <span class="n">delta</span>
+            <span class="n">start_time</span> <span class="o">=</span> <span class="n">end_time</span>
+        <span class="k">return</span> <span class="n">timedeltas</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_results</span><span class="p">(</span>
+            <span class="n">site</span><span class="p">:</span> <span class="n">Site</span><span class="p">,</span>
+            <span class="n">shifts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">datetime</span><span class="p">,</span> <span class="n">datetime</span><span class="p">]],</span>
+            <span class="n">targets</span><span class="p">:</span> <span class="n">LongTermTargets</span><span class="p">,</span>
+            <span class="n">storages</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">pc</span><span class="o">.</span><span class="n">RealVariable</span><span class="o">|</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+            <span class="n">storages_to_equipment</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">pc</span><span class="o">.</span><span class="n">RealVariable</span><span class="o">|</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span>
+            <span class="n">equipment_to_storages</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">pc</span><span class="o">.</span><span class="n">RealVariable</span><span class="o">|</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span>
+            <span class="n">shift_results</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">pc</span><span class="o">.</span><span class="n">BinaryVariable</span><span class="o">|</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span><span class="o">|</span><span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">MidTermTargets</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">StorageLevel</span><span class="p">]]]:</span>
+        <span class="n">done_stg</span> <span class="o">=</span> <span class="n">storages</span><span class="p">[</span><span class="s2">"DONE"</span><span class="p">]</span>
+        <span class="n">num_shifts</span> <span class="o">=</span> <span class="n">done_stg</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="n">num_materials</span> <span class="o">=</span> <span class="n">done_stg</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="mi">1</span>
+        <span class="c1"># every array has shape [num_material_classes+1, num_shifts+1]</span>
+        <span class="n">storage_values</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">stg</span><span class="p">:</span> <span class="n">stg_var</span><span class="o">.</span><span class="n">np2d</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stg_var</span><span class="p">,</span> <span class="n">pc</span><span class="o">.</span><span class="n">RealVariable</span><span class="p">)</span> <span class="k">else</span> <span class="n">stg_var</span> <span class="k">for</span> <span class="n">stg</span><span class="p">,</span> <span class="n">stg_var</span> <span class="ow">in</span> <span class="n">storages</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        <span class="n">materials</span> <span class="o">=</span> <span class="p">[</span><span class="n">clzz</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">site</span><span class="o">.</span><span class="n">material_categories</span> <span class="k">for</span> <span class="n">clzz</span> <span class="ow">in</span> <span class="n">cat</span><span class="o">.</span><span class="n">classes</span><span class="p">]</span>
+        <span class="n">storage_levels</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">StorageLevel</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">shift_idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_shifts</span><span class="o">+</span><span class="mi">1</span><span class="p">):</span>
+            <span class="n">timestamp</span> <span class="o">=</span> <span class="n">shifts</span><span class="p">[</span><span class="n">shift_idx</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">shift_idx</span> <span class="o">&lt;</span> <span class="n">num_shifts</span> <span class="k">else</span> <span class="n">shifts</span><span class="p">[</span><span class="n">shift_idx</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">levels</span> <span class="o">=</span> <span class="p">{</span><span class="n">stg</span><span class="p">:</span> <span class="n">LtpUtils</span><span class="o">.</span><span class="n">_storage_result</span><span class="p">(</span><span class="n">stg</span><span class="p">,</span> <span class="n">stg_var</span><span class="p">,</span> <span class="n">shift_idx</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="n">materials</span><span class="p">)</span> <span class="k">for</span> <span class="n">stg</span><span class="p">,</span> <span class="n">stg_var</span> <span class="ow">in</span> <span class="n">storage_values</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+            <span class="n">storage_levels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">levels</span><span class="p">)</span>
+        <span class="n">equipment_by_proc</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span><span class="n">proc</span><span class="o">.</span><span class="n">name_short</span><span class="p">:</span> <span class="p">[</span><span class="n">eq</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">eq</span> <span class="ow">in</span> <span class="n">site</span><span class="o">.</span><span class="n">get_process_equipment</span><span class="p">(</span><span class="n">proc</span><span class="o">.</span><span class="n">name_short</span><span class="p">,</span> <span class="n">do_raise</span><span class="o">=</span><span class="kc">True</span><span class="p">)]</span> <span class="k">for</span> <span class="n">proc</span> <span class="ow">in</span> <span class="n">site</span><span class="o">.</span><span class="n">processes</span><span class="p">}</span>
+        <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">ProductionTargets</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">proc</span><span class="p">,</span> <span class="n">equipments</span> <span class="ow">in</span> <span class="n">equipment_by_proc</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">equipment_targets</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">EquipmentProduction</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[{}</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_shifts</span><span class="p">)]</span>
+            <span class="n">material_weights</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[{</span><span class="n">mat</span><span class="p">:</span> <span class="mf">0.</span> <span class="k">for</span> <span class="n">mat</span> <span class="ow">in</span> <span class="n">materials</span><span class="p">}</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_shifts</span><span class="p">)]</span>
+            <span class="k">for</span> <span class="n">eq</span> <span class="ow">in</span> <span class="n">equipments</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">eq</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">equipment_to_storages</span><span class="p">:</span>  <span class="c1"># ?</span>
+                    <span class="k">continue</span>
+                <span class="c1">#outgoing_flows = list(equipment_to_storages[eq].values())  # TODO check</span>
+                <span class="n">outgoing_flows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">flow</span><span class="o">.</span><span class="n">np2d</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">flow</span><span class="p">,</span> <span class="n">pc</span><span class="o">.</span><span class="n">RealVariable</span><span class="p">)</span> <span class="k">else</span> <span class="n">flow</span> <span class="k">for</span> <span class="n">flow</span> <span class="ow">in</span> <span class="n">equipment_to_storages</span><span class="p">[</span><span class="n">eq</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
+                <span class="k">for</span> <span class="n">shift_idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_shifts</span><span class="p">):</span>
+                    <span class="n">total_weight</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">fl</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">shift_idx</span><span class="p">]</span> <span class="k">for</span> <span class="n">fl</span> <span class="ow">in</span> <span class="n">outgoing_flows</span><span class="p">)</span>
+                    <span class="n">eq_material</span> <span class="o">=</span> <span class="p">{}</span>
+                    <span class="k">for</span> <span class="n">mat_idx</span><span class="p">,</span> <span class="n">material</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">materials</span><span class="p">):</span>
+                        <span class="n">mat_weight</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">fl</span><span class="p">[</span><span class="n">mat_idx</span><span class="p">,</span> <span class="n">shift_idx</span><span class="p">]</span> <span class="k">for</span> <span class="n">fl</span> <span class="ow">in</span> <span class="n">outgoing_flows</span><span class="p">)</span>
+                        <span class="n">material_weights</span><span class="p">[</span><span class="n">shift_idx</span><span class="p">][</span><span class="n">material</span><span class="p">]</span> <span class="o">+=</span> <span class="n">mat_weight</span>
+                        <span class="n">eq_material</span><span class="p">[</span><span class="n">material</span><span class="p">]</span> <span class="o">=</span> <span class="n">mat_weight</span>
+                    <span class="n">eq_prod</span> <span class="o">=</span> <span class="n">EquipmentProduction</span><span class="p">(</span><span class="n">equipment</span><span class="o">=</span><span class="n">eq</span><span class="p">,</span> <span class="n">total_weight</span><span class="o">=</span><span class="n">total_weight</span><span class="p">,</span> <span class="n">material_weights</span><span class="o">=</span><span class="n">eq_material</span><span class="p">)</span>
+                    <span class="n">equipment_targets</span><span class="p">[</span><span class="n">shift_idx</span><span class="p">][</span><span class="n">eq</span><span class="p">]</span> <span class="o">=</span> <span class="n">eq_prod</span>
+            <span class="n">proc_result</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ProductionTargets</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">ProductionTargets</span><span class="p">(</span><span class="n">process</span><span class="o">=</span><span class="n">proc</span><span class="p">,</span> <span class="n">target_weight</span><span class="o">=</span><span class="n">eq_target_dct</span><span class="p">,</span> <span class="n">material_weights</span><span class="o">=</span><span class="n">mat_target_dct</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="n">shifts</span><span class="p">[</span><span class="n">shift_idx</span><span class="p">])</span>
+                                                    <span class="k">for</span> <span class="n">shift_idx</span><span class="p">,</span> <span class="p">(</span><span class="n">eq_target_dct</span><span class="p">,</span> <span class="n">mat_target_dct</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">equipment_targets</span><span class="p">,</span> <span class="n">material_weights</span><span class="p">))]</span>
+            <span class="n">result</span><span class="p">[</span><span class="n">proc</span><span class="p">]</span> <span class="o">=</span> <span class="n">proc_result</span>
+        <span class="n">mtp_result</span> <span class="o">=</span> <span class="n">MidTermTargets</span><span class="p">(</span><span class="n">period</span><span class="o">=</span><span class="n">targets</span><span class="o">.</span><span class="n">period</span><span class="p">,</span> <span class="n">production_targets</span><span class="o">=</span><span class="n">targets</span><span class="o">.</span><span class="n">production_targets</span><span class="p">,</span> <span class="n">total_production</span><span class="o">=</span><span class="n">targets</span><span class="o">.</span><span class="n">total_production</span><span class="p">,</span>
+                       <span class="n">sub_periods</span><span class="o">=</span><span class="n">shifts</span><span class="p">,</span> <span class="n">production_sub_targets</span><span class="o">=</span><span class="n">result</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">mtp_result</span><span class="p">,</span> <span class="n">storage_levels</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_storage_result</span><span class="p">(</span><span class="n">stg</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">stg_var</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">shift_idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">:</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">materials</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">StorageLevel</span><span class="p">:</span>
+        <span class="n">material_levels</span> <span class="o">=</span> <span class="p">{</span><span class="n">mat</span><span class="p">:</span> <span class="n">stg_var</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="n">shift_idx</span><span class="p">]</span> <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">mat</span>  <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">materials</span><span class="p">)}</span>
+        <span class="k">return</span> <span class="n">StorageLevel</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="n">stg</span><span class="p">,</span> <span class="n">filling_level</span><span class="o">=</span><span class="n">stg_var</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">shift_idx</span><span class="p">],</span> <span class="n">timestamp</span><span class="o">=</span><span class="n">timestamp</span><span class="p">,</span> <span class="n">material_levels</span><span class="o">=</span><span class="n">material_levels</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">store_results</span><span class="p">(</span>
+            <span class="n">site</span><span class="p">:</span> <span class="n">Site</span><span class="p">,</span>
+            <span class="n">structure</span><span class="p">:</span> <span class="n">LongTermTargets</span><span class="p">,</span>
+            <span class="n">shifts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">datetime</span><span class="p">,</span> <span class="n">datetime</span><span class="p">]],</span>
+            <span class="n">availabilities</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">EquipmentAvailability</span><span class="p">],</span>
+            <span class="n">storage_levels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+            <span class="n">storages_to_equipment</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span>
+            <span class="n">equipment_to_storages</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span>
+            <span class="n">file</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">frozen_horizons</span><span class="p">:</span>  <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">datetime</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">dynreact.ltp.ResultSerialization</span><span class="w"> </span><span class="kn">import</span> <span class="n">SerializableResult</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">SerializableResult</span><span class="p">(</span><span class="n">site</span><span class="o">=</span><span class="n">site</span><span class="p">,</span> <span class="n">structure</span><span class="o">=</span><span class="n">structure</span><span class="p">,</span> <span class="n">shifts</span><span class="o">=</span><span class="n">shifts</span><span class="p">,</span> <span class="n">storage_levels</span><span class="o">=</span><span class="n">storage_levels</span><span class="p">,</span>
+                   <span class="n">availabilities</span><span class="o">=</span><span class="n">availabilities</span><span class="p">,</span> <span class="n">storages_to_equipment</span><span class="o">=</span><span class="n">storages_to_equipment</span><span class="p">,</span> <span class="n">equipment_to_storages</span><span class="o">=</span><span class="n">equipment_to_storages</span><span class="p">,</span> <span class="n">frozen_horizons</span><span class="o">=</span><span class="n">frozen_horizons</span><span class="p">)</span>
+        <span class="n">json</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">model_dump_json</span><span class="p">(</span><span class="n">exclude_unset</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exclude_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"w"</span><span class="p">)</span> <span class="k">as</span> <span class="n">fl</span><span class="p">:</span>
+            <span class="n">fl</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">json</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">"Written results to"</span><span class="p">,</span> <span class="n">file</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_results</span><span class="p">(</span><span class="n">file</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"r"</span><span class="p">)</span> <span class="k">as</span> <span class="n">fl</span><span class="p">:</span>
+            <span class="n">json</span> <span class="o">=</span> <span class="n">fl</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">dynreact.ltp.ResultSerialization</span><span class="w"> </span><span class="kn">import</span> <span class="n">SerializableResult</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">SerializableResult</span><span class="o">.</span><span class="n">model_validate_json</span><span class="p">(</span><span class="n">json</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">analyze_flows</span><span class="p">(</span><span class="n">equipment_to_storages</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span> <span class="n">storages_to_equipment</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span> <span class="n">site</span><span class="p">:</span> <span class="n">Site</span><span class="p">,</span> <span class="n">num_shifts</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">process</span><span class="p">:</span> <span class="nb">str</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                      <span class="n">fail_on_error</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">error_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.</span><span class="p">,</span> <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span><span class="o">=</span><span class="s2">""</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        Validates that for every shift the following constraint is satisfied:</span>
+<span class="sd">            material flow into equipment = material flow out of equipment,</span>
+<span class="sd">        both globally and per material category.</span>
+<span class="sd">        """</span>
+        <span class="n">all_mats</span> <span class="o">=</span> <span class="p">[</span><span class="n">clzz</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">site</span><span class="o">.</span><span class="n">material_categories</span> <span class="k">for</span> <span class="n">clzz</span> <span class="ow">in</span> <span class="n">cat</span><span class="o">.</span><span class="n">classes</span><span class="p">]</span>
+        <span class="n">cat_indices</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="p">[</span><span class="n">all_mats</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">cl</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="k">for</span> <span class="n">cl</span> <span class="ow">in</span> <span class="n">cat</span><span class="o">.</span><span class="n">classes</span><span class="p">]</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">site</span><span class="o">.</span><span class="n">material_categories</span><span class="p">}</span>
+        <span class="n">cats</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="n">cat</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">site</span><span class="o">.</span><span class="n">material_categories</span><span class="p">}</span>
+        <span class="n">classes_cnt</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_mats</span><span class="p">)</span>
+        <span class="n">equipments</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">equipment_to_storages</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="n">zero_start</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">classes_cnt</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">num_shifts</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">fail_on_error</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2"> Equipments to be analyzed"</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"for process </span><span class="si">{</span><span class="n">process</span><span class="si">}</span><span class="s2">"</span> <span class="k">if</span> <span class="n">process</span> <span class="k">else</span> <span class="s2">""</span><span class="p">,</span> <span class="sa">f</span><span class="s2">": </span><span class="si">{</span><span class="n">equipments</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">equipment</span> <span class="ow">in</span> <span class="n">equipments</span><span class="p">:</span>
+            <span class="n">outgoing_flows</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">equipment_to_storages</span><span class="p">[</span><span class="n">equipment</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">start</span><span class="o">=</span><span class="n">zero_start</span><span class="p">)</span>
+            <span class="n">incoming_flows</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">((</span><span class="n">dct</span><span class="p">[</span><span class="n">equipment</span><span class="p">]</span> <span class="k">for</span> <span class="n">stg</span><span class="p">,</span> <span class="n">dct</span> <span class="ow">in</span> <span class="n">storages_to_equipment</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">equipment</span> <span class="ow">in</span> <span class="n">dct</span><span class="p">),</span> <span class="n">start</span><span class="o">=</span><span class="n">zero_start</span><span class="p">)</span>
+            <span class="n">total_flow_dev</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">cat_in_dev</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="p">:</span> <span class="kc">False</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">cats</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
+            <span class="n">cat_out_dev</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="p">:</span> <span class="kc">False</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">cats</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
+            <span class="k">for</span> <span class="n">shift</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_shifts</span><span class="p">):</span>
+                <span class="n">total_flow_in</span> <span class="o">=</span> <span class="n">incoming_flows</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">shift</span><span class="p">]</span>
+                <span class="n">total_flow_out</span> <span class="o">=</span> <span class="n">outgoing_flows</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">shift</span><span class="p">]</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">total_flow_dev</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="n">total_flow_in</span> <span class="o">-</span> <span class="n">total_flow_out</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">error_threshold</span><span class="p">:</span>
+                    <span class="n">total_flow_dev</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">  Total flow in != total flow out for equipment </span><span class="si">{</span><span class="n">equipment</span><span class="si">}</span><span class="s2"> in shift </span><span class="si">{</span><span class="n">shift</span><span class="si">}</span><span class="s2">. In: </span><span class="si">{</span><span class="n">total_flow_in</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, out: </span><span class="si">{</span><span class="n">total_flow_out</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">"</span>
+                    <span class="k">if</span> <span class="n">fail_on_error</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">cat</span><span class="p">,</span> <span class="n">indices</span> <span class="ow">in</span> <span class="n">cat_indices</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="n">cat_sum_in</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">incoming_flows</span><span class="p">[</span><span class="n">indices</span><span class="p">,</span> <span class="n">shift</span><span class="p">])</span>
+                    <span class="n">cat_sum_out</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">outgoing_flows</span><span class="p">[</span><span class="n">indices</span><span class="p">,</span> <span class="n">shift</span><span class="p">])</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">cat_in_dev</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="n">cat_sum_in</span> <span class="o">-</span> <span class="n">total_flow_in</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">error_threshold</span><span class="p">:</span>
+                        <span class="n">cat_in_dev</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">   Category in flow != total in flow for equipment </span><span class="si">{</span><span class="n">equipment</span><span class="si">}</span><span class="s2">, category </span><span class="si">{</span><span class="n">cat</span><span class="si">}</span><span class="s2">, in shift </span><span class="si">{</span><span class="n">shift</span><span class="si">}</span><span class="s2">: Total: </span><span class="si">{</span><span class="n">total_flow_in</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, catgory flow: </span><span class="si">{</span><span class="n">cat_sum_in</span><span class="si">}</span><span class="s2">"</span>
+                        <span class="k">if</span> <span class="n">fail_on_error</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">cat_out_dev</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="n">cat_sum_out</span> <span class="o">-</span> <span class="n">total_flow_out</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">error_threshold</span><span class="p">:</span>
+                        <span class="n">cat_out_dev</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">   Category out flow != total out flow for equipment </span><span class="si">{</span><span class="n">equipment</span><span class="si">}</span><span class="s2">, category </span><span class="si">{</span><span class="n">cat</span><span class="si">}</span><span class="s2">, in shift </span><span class="si">{</span><span class="n">shift</span><span class="si">}</span><span class="s2">: Total: </span><span class="si">{</span><span class="n">total_flow_out</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, catgory flow: </span><span class="si">{</span><span class="n">cat_sum_out</span><span class="si">}</span><span class="s2">"</span>
+                        <span class="k">if</span> <span class="n">fail_on_error</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">analyze_storages</span><span class="p">(</span><span class="n">equipment_to_storages</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span> <span class="n">storages_to_equipment</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span>
+                      <span class="n">storage_levels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+                      <span class="n">site</span><span class="p">:</span> <span class="n">Site</span><span class="p">,</span> <span class="n">num_shifts</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">process</span><span class="p">:</span> <span class="nb">str</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                      <span class="n">fail_on_error</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">error_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.025</span><span class="p">,</span> <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span><span class="o">=</span><span class="s2">""</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        Validates that for every shift the following constraint is satisfied:</span>
+<span class="sd">            new storage level = old storage level + material flow into storage - material flow out of storage</span>
+<span class="sd">        both globally and per material category. Furthermore, it validates that forbidden material does not enter a storage.</span>
+<span class="sd">        """</span>
+        <span class="n">all_mats</span> <span class="o">=</span> <span class="p">[</span><span class="n">clzz</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">site</span><span class="o">.</span><span class="n">material_categories</span> <span class="k">for</span> <span class="n">clzz</span> <span class="ow">in</span> <span class="n">cat</span><span class="o">.</span><span class="n">classes</span><span class="p">]</span>
+        <span class="n">cat_indices</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="p">[</span><span class="n">all_mats</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">cl</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="k">for</span> <span class="n">cl</span> <span class="ow">in</span> <span class="n">cat</span><span class="o">.</span><span class="n">classes</span><span class="p">]</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">site</span><span class="o">.</span><span class="n">material_categories</span><span class="p">}</span>
+        <span class="n">cats</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="n">cat</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">site</span><span class="o">.</span><span class="n">material_categories</span><span class="p">}</span>
+        <span class="n">classes_cnt</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_mats</span><span class="p">)</span>
+        <span class="n">storages</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">storage_levels</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="c1"># equipments = list(equipment_to_storages.keys())</span>
+        <span class="n">zero_flow</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">classes_cnt</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">num_shifts</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">fail_on_error</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2"> Storages to be analyzed"</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"for process </span><span class="si">{</span><span class="n">process</span><span class="si">}</span><span class="s2">"</span> <span class="k">if</span> <span class="n">process</span> <span class="k">else</span> <span class="s2">""</span><span class="p">,</span> <span class="sa">f</span><span class="s2">": </span><span class="si">{</span><span class="n">storages</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">storage</span> <span class="ow">in</span> <span class="n">storages</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">storage</span> <span class="ow">in</span> <span class="n">dct</span> <span class="k">for</span> <span class="n">dct</span> <span class="ow">in</span> <span class="n">equipment_to_storages</span><span class="o">.</span><span class="n">values</span><span class="p">())</span> <span class="ow">or</span> <span class="n">storage</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">storages_to_equipment</span><span class="p">:</span>  <span class="c1"># Input or output storage</span>
+                <span class="k">continue</span>
+            <span class="n">stg</span> <span class="o">=</span> <span class="n">site</span><span class="o">.</span><span class="n">get_storage</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">do_raise</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">level</span> <span class="o">=</span> <span class="n">storage_levels</span><span class="p">[</span><span class="n">storage</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">stg</span><span class="o">.</span><span class="n">material_constraints</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">stg</span><span class="o">.</span><span class="n">material_constraints</span><span class="o">.</span><span class="n">excluded</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">forbidden_indices</span> <span class="o">=</span> <span class="p">[</span><span class="n">all_mats</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">mat</span><span class="p">)</span> <span class="k">for</span> <span class="n">mat</span> <span class="ow">in</span> <span class="n">stg</span><span class="o">.</span><span class="n">material_constraints</span><span class="o">.</span><span class="n">excluded</span><span class="p">]</span>
+                <span class="c1"># mat -&gt; shift index</span>
+                <span class="n">violated_indices</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">idx</span><span class="p">:</span> <span class="nb">next</span><span class="p">((</span><span class="n">shift</span> <span class="k">for</span> <span class="n">shift</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_shifts</span><span class="p">)</span> <span class="k">if</span> <span class="n">level</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="n">shift</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.01</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">forbidden_indices</span><span class="p">}</span>
+                <span class="n">violated_indices</span> <span class="o">=</span> <span class="p">{</span><span class="n">mat_idx</span><span class="p">:</span> <span class="n">shift_idx</span> <span class="k">for</span> <span class="n">mat_idx</span><span class="p">,</span> <span class="n">shift_idx</span> <span class="ow">in</span> <span class="n">violated_indices</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">shift_idx</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">}</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">violated_indices</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"Forbidden material in storage </span><span class="si">{</span><span class="n">storage</span><span class="si">}</span><span class="s2">: "</span>
+                    <span class="n">msg</span> <span class="o">+=</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="sa">f</span><span class="s2">"material </span><span class="si">{</span><span class="n">all_mats</span><span class="p">[</span><span class="n">mat_idx</span><span class="p">]</span><span class="si">}</span><span class="s2">: shift </span><span class="si">{</span><span class="n">shift_idx</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">mat_idx</span><span class="p">,</span> <span class="n">shift_idx</span> <span class="ow">in</span> <span class="n">violated_indices</span><span class="o">.</span><span class="n">items</span><span class="p">()])</span>
+                    <span class="k">if</span> <span class="n">fail_on_error</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="n">capacity</span> <span class="o">=</span> <span class="n">stg</span><span class="o">.</span><span class="n">capacity_weight</span>
+            <span class="n">flow_in</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">((</span><span class="n">dct</span><span class="p">[</span><span class="n">storage</span><span class="p">]</span> <span class="k">for</span> <span class="n">dct</span> <span class="ow">in</span> <span class="n">equipment_to_storages</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="n">storage</span> <span class="ow">in</span> <span class="n">dct</span><span class="p">),</span> <span class="n">start</span><span class="o">=</span><span class="n">zero_flow</span><span class="p">)</span> <span class="o">/</span> <span class="n">capacity</span>
+            <span class="n">flow_out</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">storages_to_equipment</span><span class="p">[</span><span class="n">storage</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">start</span><span class="o">=</span><span class="n">zero_flow</span><span class="p">)</span> <span class="o">/</span> <span class="n">capacity</span> <span class="k">if</span> <span class="n">storage</span> <span class="ow">in</span> <span class="n">storages_to_equipment</span> <span class="k">else</span> <span class="n">zero_flow</span>
+            <span class="n">previous_level</span> <span class="o">=</span> <span class="n">level</span><span class="p">[:,</span> <span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">new_level</span> <span class="o">=</span> <span class="n">level</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span>
+            <span class="n">new_level_calc</span> <span class="o">=</span> <span class="n">previous_level</span> <span class="o">+</span> <span class="n">flow_in</span> <span class="o">-</span> <span class="n">flow_out</span>
+            <span class="n">total_level_dev</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">cat_is_dev</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="p">:</span> <span class="kc">False</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">cats</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
+            <span class="n">cat_calc_dev</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="p">:</span> <span class="kc">False</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">cats</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
+            <span class="k">for</span> <span class="n">shift</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_shifts</span><span class="p">):</span>
+                <span class="n">total_new_level_is</span> <span class="o">=</span> <span class="n">new_level</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">shift</span><span class="p">]</span>
+                <span class="n">total_new_level_calc</span> <span class="o">=</span> <span class="n">new_level_calc</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">shift</span><span class="p">]</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">total_level_dev</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="n">total_new_level_calc</span> <span class="o">-</span> <span class="n">total_new_level_is</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">error_threshold</span><span class="p">:</span>
+                    <span class="n">total_level_dev</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">  Total storage level != previous level + flow diff for storage </span><span class="si">{</span><span class="n">storage</span><span class="si">}</span><span class="s2"> in shift </span><span class="si">{</span><span class="n">shift</span><span class="si">}</span><span class="s2">. New level is: </span><span class="si">{</span><span class="n">total_new_level_is</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, expected: </span><span class="si">{</span><span class="n">total_new_level_calc</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">"</span>
+                    <span class="k">if</span> <span class="n">fail_on_error</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">cat</span><span class="p">,</span> <span class="n">indices</span> <span class="ow">in</span> <span class="n">cat_indices</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="n">cat_level_is</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">new_level</span><span class="p">[</span><span class="n">indices</span><span class="p">,</span> <span class="n">shift</span><span class="p">])</span>
+                    <span class="n">cat_level_calc</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">new_level_calc</span><span class="p">[</span><span class="n">indices</span><span class="p">,</span> <span class="n">shift</span><span class="p">])</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">cat_is_dev</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="n">cat_level_is</span> <span class="o">-</span> <span class="n">total_new_level_is</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">error_threshold</span><span class="p">:</span>
+                        <span class="n">cat_is_dev</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">   Category storage level != total level for storage </span><span class="si">{</span><span class="n">storage</span><span class="si">}</span><span class="s2">, category </span><span class="si">{</span><span class="n">cat</span><span class="si">}</span><span class="s2">, in shift </span><span class="si">{</span><span class="n">shift</span><span class="si">}</span><span class="s2">: Total: </span><span class="si">{</span><span class="n">total_new_level_is</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, catgory level: </span><span class="si">{</span><span class="n">cat_level_is</span><span class="si">}</span><span class="s2">"</span>
+                        <span class="k">if</span> <span class="n">fail_on_error</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">cat_calc_dev</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="n">cat_level_calc</span> <span class="o">-</span> <span class="n">total_new_level_calc</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">error_threshold</span><span class="p">:</span>
+                        <span class="n">cat_calc_dev</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">   Calculated category storage level != calculated total level for storage </span><span class="si">{</span><span class="n">storage</span><span class="si">}</span><span class="s2">, category </span><span class="si">{</span><span class="n">cat</span><span class="si">}</span><span class="s2">, in shift </span><span class="si">{</span><span class="n">shift</span><span class="si">}</span><span class="s2">: Total: </span><span class="si">{</span><span class="n">total_new_level_calc</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, catgory level: </span><span class="si">{</span><span class="n">cat_level_calc</span><span class="si">}</span><span class="s2">"</span>
+                        <span class="k">if</span> <span class="n">fail_on_error</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+              </details>
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.ltp.LtpUtils.LtpUtils.store_results" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">store_results</span><span class="p">(</span><span class="n">site</span><span class="p">,</span> <span class="n">structure</span><span class="p">,</span> <span class="n">shifts</span><span class="p">,</span> <span class="n">availabilities</span><span class="p">,</span> <span class="n">storage_levels</span><span class="p">,</span> <span class="n">storages_to_equipment</span><span class="p">,</span> <span class="n">equipment_to_storages</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="n">frozen_horizons</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-staticmethod"><code>staticmethod</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>LongTermPlanning/dynreact/ltp/LtpUtils.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 98</span>
+<span class="normal"> 99</span>
+<span class="normal">100</span>
+<span class="normal">101</span>
+<span class="normal">102</span>
+<span class="normal">103</span>
+<span class="normal">104</span>
+<span class="normal">105</span>
+<span class="normal">106</span>
+<span class="normal">107</span>
+<span class="normal">108</span>
+<span class="normal">109</span>
+<span class="normal">110</span>
+<span class="normal">111</span>
+<span class="normal">112</span>
+<span class="normal">113</span>
+<span class="normal">114</span>
+<span class="normal">115</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@staticmethod</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">store_results</span><span class="p">(</span>
+        <span class="n">site</span><span class="p">:</span> <span class="n">Site</span><span class="p">,</span>
+        <span class="n">structure</span><span class="p">:</span> <span class="n">LongTermTargets</span><span class="p">,</span>
+        <span class="n">shifts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">datetime</span><span class="p">,</span> <span class="n">datetime</span><span class="p">]],</span>
+        <span class="n">availabilities</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">EquipmentAvailability</span><span class="p">],</span>
+        <span class="n">storage_levels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+        <span class="n">storages_to_equipment</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span>
+        <span class="n">equipment_to_storages</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span>
+        <span class="n">file</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">frozen_horizons</span><span class="p">:</span>  <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">datetime</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">dynreact.ltp.ResultSerialization</span><span class="w"> </span><span class="kn">import</span> <span class="n">SerializableResult</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">SerializableResult</span><span class="p">(</span><span class="n">site</span><span class="o">=</span><span class="n">site</span><span class="p">,</span> <span class="n">structure</span><span class="o">=</span><span class="n">structure</span><span class="p">,</span> <span class="n">shifts</span><span class="o">=</span><span class="n">shifts</span><span class="p">,</span> <span class="n">storage_levels</span><span class="o">=</span><span class="n">storage_levels</span><span class="p">,</span>
+               <span class="n">availabilities</span><span class="o">=</span><span class="n">availabilities</span><span class="p">,</span> <span class="n">storages_to_equipment</span><span class="o">=</span><span class="n">storages_to_equipment</span><span class="p">,</span> <span class="n">equipment_to_storages</span><span class="o">=</span><span class="n">equipment_to_storages</span><span class="p">,</span> <span class="n">frozen_horizons</span><span class="o">=</span><span class="n">frozen_horizons</span><span class="p">)</span>
+    <span class="n">json</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">model_dump_json</span><span class="p">(</span><span class="n">exclude_unset</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exclude_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"w"</span><span class="p">)</span> <span class="k">as</span> <span class="n">fl</span><span class="p">:</span>
+        <span class="n">fl</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">json</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"Written results to"</span><span class="p">,</span> <span class="n">file</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.ltp.LtpUtils.LtpUtils.load_results" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">load_results</span><span class="p">(</span><span class="n">file</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-staticmethod"><code>staticmethod</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>LongTermPlanning/dynreact/ltp/LtpUtils.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">117</span>
+<span class="normal">118</span>
+<span class="normal">119</span>
+<span class="normal">120</span>
+<span class="normal">121</span>
+<span class="normal">122</span>
+<span class="normal">123</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@staticmethod</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_results</span><span class="p">(</span><span class="n">file</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"r"</span><span class="p">)</span> <span class="k">as</span> <span class="n">fl</span><span class="p">:</span>
+        <span class="n">json</span> <span class="o">=</span> <span class="n">fl</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">dynreact.ltp.ResultSerialization</span><span class="w"> </span><span class="kn">import</span> <span class="n">SerializableResult</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">SerializableResult</span><span class="o">.</span><span class="n">model_validate_json</span><span class="p">(</span><span class="n">json</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.ltp.LtpUtils.LtpUtils.analyze_flows" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">analyze_flows</span><span class="p">(</span><span class="n">equipment_to_storages</span><span class="p">,</span> <span class="n">storages_to_equipment</span><span class="p">,</span> <span class="n">site</span><span class="p">,</span> <span class="n">num_shifts</span><span class="p">,</span> <span class="n">process</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fail_on_error</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">error_threshold</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s1">''</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-staticmethod"><code>staticmethod</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Validates that for every shift the following constraint is satisfied:
+    material flow into equipment = material flow out of equipment,
+both globally and per material category.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>LongTermPlanning/dynreact/ltp/LtpUtils.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">125</span>
+<span class="normal">126</span>
+<span class="normal">127</span>
+<span class="normal">128</span>
+<span class="normal">129</span>
+<span class="normal">130</span>
+<span class="normal">131</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span>
+<span class="normal">135</span>
+<span class="normal">136</span>
+<span class="normal">137</span>
+<span class="normal">138</span>
+<span class="normal">139</span>
+<span class="normal">140</span>
+<span class="normal">141</span>
+<span class="normal">142</span>
+<span class="normal">143</span>
+<span class="normal">144</span>
+<span class="normal">145</span>
+<span class="normal">146</span>
+<span class="normal">147</span>
+<span class="normal">148</span>
+<span class="normal">149</span>
+<span class="normal">150</span>
+<span class="normal">151</span>
+<span class="normal">152</span>
+<span class="normal">153</span>
+<span class="normal">154</span>
+<span class="normal">155</span>
+<span class="normal">156</span>
+<span class="normal">157</span>
+<span class="normal">158</span>
+<span class="normal">159</span>
+<span class="normal">160</span>
+<span class="normal">161</span>
+<span class="normal">162</span>
+<span class="normal">163</span>
+<span class="normal">164</span>
+<span class="normal">165</span>
+<span class="normal">166</span>
+<span class="normal">167</span>
+<span class="normal">168</span>
+<span class="normal">169</span>
+<span class="normal">170</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@staticmethod</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">analyze_flows</span><span class="p">(</span><span class="n">equipment_to_storages</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span> <span class="n">storages_to_equipment</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span> <span class="n">site</span><span class="p">:</span> <span class="n">Site</span><span class="p">,</span> <span class="n">num_shifts</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">process</span><span class="p">:</span> <span class="nb">str</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                  <span class="n">fail_on_error</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">error_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.</span><span class="p">,</span> <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span><span class="o">=</span><span class="s2">""</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Validates that for every shift the following constraint is satisfied:</span>
+<span class="sd">        material flow into equipment = material flow out of equipment,</span>
+<span class="sd">    both globally and per material category.</span>
+<span class="sd">    """</span>
+    <span class="n">all_mats</span> <span class="o">=</span> <span class="p">[</span><span class="n">clzz</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">site</span><span class="o">.</span><span class="n">material_categories</span> <span class="k">for</span> <span class="n">clzz</span> <span class="ow">in</span> <span class="n">cat</span><span class="o">.</span><span class="n">classes</span><span class="p">]</span>
+    <span class="n">cat_indices</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="p">[</span><span class="n">all_mats</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">cl</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="k">for</span> <span class="n">cl</span> <span class="ow">in</span> <span class="n">cat</span><span class="o">.</span><span class="n">classes</span><span class="p">]</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">site</span><span class="o">.</span><span class="n">material_categories</span><span class="p">}</span>
+    <span class="n">cats</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="n">cat</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">site</span><span class="o">.</span><span class="n">material_categories</span><span class="p">}</span>
+    <span class="n">classes_cnt</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_mats</span><span class="p">)</span>
+    <span class="n">equipments</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">equipment_to_storages</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+    <span class="n">zero_start</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">classes_cnt</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">num_shifts</span><span class="p">))</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">fail_on_error</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2"> Equipments to be analyzed"</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"for process </span><span class="si">{</span><span class="n">process</span><span class="si">}</span><span class="s2">"</span> <span class="k">if</span> <span class="n">process</span> <span class="k">else</span> <span class="s2">""</span><span class="p">,</span> <span class="sa">f</span><span class="s2">": </span><span class="si">{</span><span class="n">equipments</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">equipment</span> <span class="ow">in</span> <span class="n">equipments</span><span class="p">:</span>
+        <span class="n">outgoing_flows</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">equipment_to_storages</span><span class="p">[</span><span class="n">equipment</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">start</span><span class="o">=</span><span class="n">zero_start</span><span class="p">)</span>
+        <span class="n">incoming_flows</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">((</span><span class="n">dct</span><span class="p">[</span><span class="n">equipment</span><span class="p">]</span> <span class="k">for</span> <span class="n">stg</span><span class="p">,</span> <span class="n">dct</span> <span class="ow">in</span> <span class="n">storages_to_equipment</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">equipment</span> <span class="ow">in</span> <span class="n">dct</span><span class="p">),</span> <span class="n">start</span><span class="o">=</span><span class="n">zero_start</span><span class="p">)</span>
+        <span class="n">total_flow_dev</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">cat_in_dev</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="p">:</span> <span class="kc">False</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">cats</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
+        <span class="n">cat_out_dev</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="p">:</span> <span class="kc">False</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">cats</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
+        <span class="k">for</span> <span class="n">shift</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_shifts</span><span class="p">):</span>
+            <span class="n">total_flow_in</span> <span class="o">=</span> <span class="n">incoming_flows</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">shift</span><span class="p">]</span>
+            <span class="n">total_flow_out</span> <span class="o">=</span> <span class="n">outgoing_flows</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">shift</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">total_flow_dev</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="n">total_flow_in</span> <span class="o">-</span> <span class="n">total_flow_out</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">error_threshold</span><span class="p">:</span>
+                <span class="n">total_flow_dev</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">  Total flow in != total flow out for equipment </span><span class="si">{</span><span class="n">equipment</span><span class="si">}</span><span class="s2"> in shift </span><span class="si">{</span><span class="n">shift</span><span class="si">}</span><span class="s2">. In: </span><span class="si">{</span><span class="n">total_flow_in</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, out: </span><span class="si">{</span><span class="n">total_flow_out</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">"</span>
+                <span class="k">if</span> <span class="n">fail_on_error</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">cat</span><span class="p">,</span> <span class="n">indices</span> <span class="ow">in</span> <span class="n">cat_indices</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">cat_sum_in</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">incoming_flows</span><span class="p">[</span><span class="n">indices</span><span class="p">,</span> <span class="n">shift</span><span class="p">])</span>
+                <span class="n">cat_sum_out</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">outgoing_flows</span><span class="p">[</span><span class="n">indices</span><span class="p">,</span> <span class="n">shift</span><span class="p">])</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">cat_in_dev</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="n">cat_sum_in</span> <span class="o">-</span> <span class="n">total_flow_in</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">error_threshold</span><span class="p">:</span>
+                    <span class="n">cat_in_dev</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">   Category in flow != total in flow for equipment </span><span class="si">{</span><span class="n">equipment</span><span class="si">}</span><span class="s2">, category </span><span class="si">{</span><span class="n">cat</span><span class="si">}</span><span class="s2">, in shift </span><span class="si">{</span><span class="n">shift</span><span class="si">}</span><span class="s2">: Total: </span><span class="si">{</span><span class="n">total_flow_in</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, catgory flow: </span><span class="si">{</span><span class="n">cat_sum_in</span><span class="si">}</span><span class="s2">"</span>
+                    <span class="k">if</span> <span class="n">fail_on_error</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">cat_out_dev</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="n">cat_sum_out</span> <span class="o">-</span> <span class="n">total_flow_out</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">error_threshold</span><span class="p">:</span>
+                    <span class="n">cat_out_dev</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">   Category out flow != total out flow for equipment </span><span class="si">{</span><span class="n">equipment</span><span class="si">}</span><span class="s2">, category </span><span class="si">{</span><span class="n">cat</span><span class="si">}</span><span class="s2">, in shift </span><span class="si">{</span><span class="n">shift</span><span class="si">}</span><span class="s2">: Total: </span><span class="si">{</span><span class="n">total_flow_out</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, catgory flow: </span><span class="si">{</span><span class="n">cat_sum_out</span><span class="si">}</span><span class="s2">"</span>
+                    <span class="k">if</span> <span class="n">fail_on_error</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="dynreact.ltp.LtpUtils.LtpUtils.analyze_storages" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">analyze_storages</span><span class="p">(</span><span class="n">equipment_to_storages</span><span class="p">,</span> <span class="n">storages_to_equipment</span><span class="p">,</span> <span class="n">storage_levels</span><span class="p">,</span> <span class="n">site</span><span class="p">,</span> <span class="n">num_shifts</span><span class="p">,</span> <span class="n">process</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fail_on_error</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">error_threshold</span><span class="o">=</span><span class="mf">0.025</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s1">''</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-staticmethod"><code>staticmethod</code></small>
+  </span>
+
+</h2>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Validates that for every shift the following constraint is satisfied:
+    new storage level = old storage level + material flow into storage - material flow out of storage
+both globally and per material category. Furthermore, it validates that forbidden material does not enter a storage.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>LongTermPlanning/dynreact/ltp/LtpUtils.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">172</span>
+<span class="normal">173</span>
+<span class="normal">174</span>
+<span class="normal">175</span>
+<span class="normal">176</span>
+<span class="normal">177</span>
+<span class="normal">178</span>
+<span class="normal">179</span>
+<span class="normal">180</span>
+<span class="normal">181</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span>
+<span class="normal">194</span>
+<span class="normal">195</span>
+<span class="normal">196</span>
+<span class="normal">197</span>
+<span class="normal">198</span>
+<span class="normal">199</span>
+<span class="normal">200</span>
+<span class="normal">201</span>
+<span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span>
+<span class="normal">211</span>
+<span class="normal">212</span>
+<span class="normal">213</span>
+<span class="normal">214</span>
+<span class="normal">215</span>
+<span class="normal">216</span>
+<span class="normal">217</span>
+<span class="normal">218</span>
+<span class="normal">219</span>
+<span class="normal">220</span>
+<span class="normal">221</span>
+<span class="normal">222</span>
+<span class="normal">223</span>
+<span class="normal">224</span>
+<span class="normal">225</span>
+<span class="normal">226</span>
+<span class="normal">227</span>
+<span class="normal">228</span>
+<span class="normal">229</span>
+<span class="normal">230</span>
+<span class="normal">231</span>
+<span class="normal">232</span>
+<span class="normal">233</span>
+<span class="normal">234</span>
+<span class="normal">235</span>
+<span class="normal">236</span>
+<span class="normal">237</span>
+<span class="normal">238</span>
+<span class="normal">239</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@staticmethod</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">analyze_storages</span><span class="p">(</span><span class="n">equipment_to_storages</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span> <span class="n">storages_to_equipment</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span>
+                  <span class="n">storage_levels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+                  <span class="n">site</span><span class="p">:</span> <span class="n">Site</span><span class="p">,</span> <span class="n">num_shifts</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">process</span><span class="p">:</span> <span class="nb">str</span><span class="o">|</span><span class="kc">None</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                  <span class="n">fail_on_error</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">error_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.025</span><span class="p">,</span> <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span><span class="o">=</span><span class="s2">""</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Validates that for every shift the following constraint is satisfied:</span>
+<span class="sd">        new storage level = old storage level + material flow into storage - material flow out of storage</span>
+<span class="sd">    both globally and per material category. Furthermore, it validates that forbidden material does not enter a storage.</span>
+<span class="sd">    """</span>
+    <span class="n">all_mats</span> <span class="o">=</span> <span class="p">[</span><span class="n">clzz</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">site</span><span class="o">.</span><span class="n">material_categories</span> <span class="k">for</span> <span class="n">clzz</span> <span class="ow">in</span> <span class="n">cat</span><span class="o">.</span><span class="n">classes</span><span class="p">]</span>
+    <span class="n">cat_indices</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="p">[</span><span class="n">all_mats</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">cl</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="k">for</span> <span class="n">cl</span> <span class="ow">in</span> <span class="n">cat</span><span class="o">.</span><span class="n">classes</span><span class="p">]</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">site</span><span class="o">.</span><span class="n">material_categories</span><span class="p">}</span>
+    <span class="n">cats</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="n">cat</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">site</span><span class="o">.</span><span class="n">material_categories</span><span class="p">}</span>
+    <span class="n">classes_cnt</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_mats</span><span class="p">)</span>
+    <span class="n">storages</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">storage_levels</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+    <span class="c1"># equipments = list(equipment_to_storages.keys())</span>
+    <span class="n">zero_flow</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">classes_cnt</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">num_shifts</span><span class="p">))</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">fail_on_error</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2"> Storages to be analyzed"</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"for process </span><span class="si">{</span><span class="n">process</span><span class="si">}</span><span class="s2">"</span> <span class="k">if</span> <span class="n">process</span> <span class="k">else</span> <span class="s2">""</span><span class="p">,</span> <span class="sa">f</span><span class="s2">": </span><span class="si">{</span><span class="n">storages</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">storage</span> <span class="ow">in</span> <span class="n">storages</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">storage</span> <span class="ow">in</span> <span class="n">dct</span> <span class="k">for</span> <span class="n">dct</span> <span class="ow">in</span> <span class="n">equipment_to_storages</span><span class="o">.</span><span class="n">values</span><span class="p">())</span> <span class="ow">or</span> <span class="n">storage</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">storages_to_equipment</span><span class="p">:</span>  <span class="c1"># Input or output storage</span>
+            <span class="k">continue</span>
+        <span class="n">stg</span> <span class="o">=</span> <span class="n">site</span><span class="o">.</span><span class="n">get_storage</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">do_raise</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">level</span> <span class="o">=</span> <span class="n">storage_levels</span><span class="p">[</span><span class="n">storage</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">stg</span><span class="o">.</span><span class="n">material_constraints</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">stg</span><span class="o">.</span><span class="n">material_constraints</span><span class="o">.</span><span class="n">excluded</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">forbidden_indices</span> <span class="o">=</span> <span class="p">[</span><span class="n">all_mats</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">mat</span><span class="p">)</span> <span class="k">for</span> <span class="n">mat</span> <span class="ow">in</span> <span class="n">stg</span><span class="o">.</span><span class="n">material_constraints</span><span class="o">.</span><span class="n">excluded</span><span class="p">]</span>
+            <span class="c1"># mat -&gt; shift index</span>
+            <span class="n">violated_indices</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">idx</span><span class="p">:</span> <span class="nb">next</span><span class="p">((</span><span class="n">shift</span> <span class="k">for</span> <span class="n">shift</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_shifts</span><span class="p">)</span> <span class="k">if</span> <span class="n">level</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="n">shift</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.01</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">forbidden_indices</span><span class="p">}</span>
+            <span class="n">violated_indices</span> <span class="o">=</span> <span class="p">{</span><span class="n">mat_idx</span><span class="p">:</span> <span class="n">shift_idx</span> <span class="k">for</span> <span class="n">mat_idx</span><span class="p">,</span> <span class="n">shift_idx</span> <span class="ow">in</span> <span class="n">violated_indices</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">shift_idx</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">}</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">violated_indices</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"Forbidden material in storage </span><span class="si">{</span><span class="n">storage</span><span class="si">}</span><span class="s2">: "</span>
+                <span class="n">msg</span> <span class="o">+=</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="sa">f</span><span class="s2">"material </span><span class="si">{</span><span class="n">all_mats</span><span class="p">[</span><span class="n">mat_idx</span><span class="p">]</span><span class="si">}</span><span class="s2">: shift </span><span class="si">{</span><span class="n">shift_idx</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">mat_idx</span><span class="p">,</span> <span class="n">shift_idx</span> <span class="ow">in</span> <span class="n">violated_indices</span><span class="o">.</span><span class="n">items</span><span class="p">()])</span>
+                <span class="k">if</span> <span class="n">fail_on_error</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="n">capacity</span> <span class="o">=</span> <span class="n">stg</span><span class="o">.</span><span class="n">capacity_weight</span>
+        <span class="n">flow_in</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">((</span><span class="n">dct</span><span class="p">[</span><span class="n">storage</span><span class="p">]</span> <span class="k">for</span> <span class="n">dct</span> <span class="ow">in</span> <span class="n">equipment_to_storages</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="n">storage</span> <span class="ow">in</span> <span class="n">dct</span><span class="p">),</span> <span class="n">start</span><span class="o">=</span><span class="n">zero_flow</span><span class="p">)</span> <span class="o">/</span> <span class="n">capacity</span>
+        <span class="n">flow_out</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">storages_to_equipment</span><span class="p">[</span><span class="n">storage</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">start</span><span class="o">=</span><span class="n">zero_flow</span><span class="p">)</span> <span class="o">/</span> <span class="n">capacity</span> <span class="k">if</span> <span class="n">storage</span> <span class="ow">in</span> <span class="n">storages_to_equipment</span> <span class="k">else</span> <span class="n">zero_flow</span>
+        <span class="n">previous_level</span> <span class="o">=</span> <span class="n">level</span><span class="p">[:,</span> <span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">new_level</span> <span class="o">=</span> <span class="n">level</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span>
+        <span class="n">new_level_calc</span> <span class="o">=</span> <span class="n">previous_level</span> <span class="o">+</span> <span class="n">flow_in</span> <span class="o">-</span> <span class="n">flow_out</span>
+        <span class="n">total_level_dev</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">cat_is_dev</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="p">:</span> <span class="kc">False</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">cats</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
+        <span class="n">cat_calc_dev</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="p">:</span> <span class="kc">False</span> <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">cats</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
+        <span class="k">for</span> <span class="n">shift</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_shifts</span><span class="p">):</span>
+            <span class="n">total_new_level_is</span> <span class="o">=</span> <span class="n">new_level</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">shift</span><span class="p">]</span>
+            <span class="n">total_new_level_calc</span> <span class="o">=</span> <span class="n">new_level_calc</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">shift</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">total_level_dev</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="n">total_new_level_calc</span> <span class="o">-</span> <span class="n">total_new_level_is</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">error_threshold</span><span class="p">:</span>
+                <span class="n">total_level_dev</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">  Total storage level != previous level + flow diff for storage </span><span class="si">{</span><span class="n">storage</span><span class="si">}</span><span class="s2"> in shift </span><span class="si">{</span><span class="n">shift</span><span class="si">}</span><span class="s2">. New level is: </span><span class="si">{</span><span class="n">total_new_level_is</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, expected: </span><span class="si">{</span><span class="n">total_new_level_calc</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">"</span>
+                <span class="k">if</span> <span class="n">fail_on_error</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">cat</span><span class="p">,</span> <span class="n">indices</span> <span class="ow">in</span> <span class="n">cat_indices</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">cat_level_is</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">new_level</span><span class="p">[</span><span class="n">indices</span><span class="p">,</span> <span class="n">shift</span><span class="p">])</span>
+                <span class="n">cat_level_calc</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">new_level_calc</span><span class="p">[</span><span class="n">indices</span><span class="p">,</span> <span class="n">shift</span><span class="p">])</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">cat_is_dev</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="n">cat_level_is</span> <span class="o">-</span> <span class="n">total_new_level_is</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">error_threshold</span><span class="p">:</span>
+                    <span class="n">cat_is_dev</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">   Category storage level != total level for storage </span><span class="si">{</span><span class="n">storage</span><span class="si">}</span><span class="s2">, category </span><span class="si">{</span><span class="n">cat</span><span class="si">}</span><span class="s2">, in shift </span><span class="si">{</span><span class="n">shift</span><span class="si">}</span><span class="s2">: Total: </span><span class="si">{</span><span class="n">total_new_level_is</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, catgory level: </span><span class="si">{</span><span class="n">cat_level_is</span><span class="si">}</span><span class="s2">"</span>
+                    <span class="k">if</span> <span class="n">fail_on_error</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">cat_calc_dev</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="n">cat_level_calc</span> <span class="o">-</span> <span class="n">total_new_level_calc</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">error_threshold</span><span class="p">:</span>
+                    <span class="n">cat_calc_dev</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">prefix</span><span class="si">}</span><span class="s2">   Calculated category storage level != calculated total level for storage </span><span class="si">{</span><span class="n">storage</span><span class="si">}</span><span class="s2">, category </span><span class="si">{</span><span class="n">cat</span><span class="si">}</span><span class="s2">, in shift </span><span class="si">{</span><span class="n">shift</span><span class="si">}</span><span class="s2">: Total: </span><span class="si">{</span><span class="n">total_new_level_calc</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, catgory level: </span><span class="si">{</span><span class="n">cat_level_calc</span><span class="si">}</span><span class="s2">"</span>
+                    <span class="k">if</span> <span class="n">fail_on_error</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+
+</div>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="ltpImp.html" class="btn btn-neutral float-left" title="Long term planning implementation"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="ltpImp.html" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+  </span>
+</div>
+    <script src="js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = ".";</script>
+    <script src="js/theme_extra.js"></script>
+    <script src="js/theme.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

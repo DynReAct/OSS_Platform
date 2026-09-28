@@ -1,12 +1,7 @@
-site_name: Dynreact ShortTermPlanning
+site_name: Dynreact Long Term Planning (LTP)
 
 site_url: ""
 use_directory_urls: false
-
-
-docs_dir: docs
-extra:
-  source_dir: dynreact
 
 theme:
   name: "readthedocs"
@@ -20,6 +15,7 @@ plugins:
       python:
         options:
           members_order: source
+          show_source: true
           docstring_section_style: table
           docstring_style: google
           
@@ -27,11 +23,5 @@ plugins:
 nav:
   - Back: ../index.html
   - General: index.md
-  - Agent: agent.md
-  - Material: material.md
-  - Equipment: equipment.md
-  - Common: common.md
-  - Log: log.md
-  - Functions: functions.md
-  - Clean_kafka: cleankafka.md
-  - ShortTermPlanning: shorttermplanning.md
+  - Long term planning implementation: ltpImp.md
+  - LTP utils: ltpUtils.md

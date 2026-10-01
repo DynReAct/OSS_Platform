@@ -39,3 +39,10 @@
     color: darkgreen;
 }
 
+.lotplanning-procopt-sol {
+   color: darkgreen;
+}
+
+.lotplanning-procopt-nosol {
+    color: gray;
+}

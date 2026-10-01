@@ -12,30 +12,38 @@ from dynreact.app import state
 def lots_view(id_prefix: str, initial_hidden: bool=True, ids_toggle: bool=False, *args, **kwargs):
     lot_size: str | None = kwargs.get("lotsize", "time")
     controls = [
-        html.Span("Display mode: "),
-        dcc.Dropdown(id=id_prefix + "-swimlane-mode", options=[
-            {"value": "time", "label": "Time",
-             "title": "Show a gantt chart of lots."},
-            {"value": "constant", "label": "Lots",
-             "title": "All lots are shown with the same width, depending on the available screen space."},
-            {"value": "weight", "label": "Weight",
-             "title": "The width of a lot is proportional to the total weight of its coils."},
-            {"value": "orders", "label": "Orders",
-             "title": "The width of a lot is proportional to the number of orders it contains."},
-            {"value": "coils", "label": "Coils",
-             "title": "The width of a lot is proportional to the number of coils it contains."},
-        ], value=lot_size)
+        html.Span("Display mode: ", id=f"{id_prefix}-mode-label"),
+        dcc.Dropdown(id=id_prefix + "-swimlane-mode", options=lots_view_options(None), value=lot_size)
     ]
     if ids_toggle:
-        controls.append(html.Span("Show lot ids: "))
+        controls.append(html.Span("Show lot ids: ", id=f"{id_prefix}-show-lotids"))
         controls.append(dcc.Checklist(id=id_prefix + "-lotid-toggle", options= [{"value": ""}] , value=[""]))
     return html.Div([
         html.Div([
-            html.H2("Lots view"),
+            html.H2("Lots view", id=f"{id_prefix}-lotsview-head"),
             html.Div(controls, className="planning-swimlane-mode")
         ], id=id_prefix + "-lotsview-header", hidden=initial_hidden),
         html.Div(id=id_prefix + "-lots-swimlane")
     ])
+
+def lots_view_options(lang: str|None):
+    is_de: bool = lang and lang.startswith("de")
+    return [
+        {"value": "time", "label": "Zeit" if is_de else "Time",
+         "title": "Balkendiagramm der Lose anzeigen" if is_de else "Show a gantt chart of lots."},
+        {"value": "constant", "label": "Lose" if is_de else  "Lots",
+         "title": "Alle Lose mit gleicher Breite anzeigen" if is_de else
+                "All lots are shown with the same width, depending on the available screen space."},
+        {"value": "weight", "label": "Gewicht" if is_de else "Weight",
+         "title": "Die Breite des Loses ist proportional zum Gesamtgewicht der enthaltenen Ringe" if is_de else
+                "The width of a lot is proportional to the total weight of its coils."},
+        {"value": "orders", "label": "Aufträge" if is_de else "Orders",
+         "title": "Die Breite des Loses ist proportional zur Anzahl der enthaltenen Aufträge" if is_de else
+                "The width of a lot is proportional to the number of orders it contains."},
+        {"value": "coils", "label": "Ringe" if is_de else "Coils",
+         "title": "Die Breite des Loses ist proportional zur Anzahl der enthaltenen Ringe" if is_de else
+                "The width of a lot is proportional to the number of coils it contains."},
+    ]
 
 
 def prepare_lots_for_lot_view(snapshot: str|datetime|None, process: str|None, result: ProductionPlanning | None,
@@ -158,4 +166,51 @@ def prepare_lots_for_lot_view(snapshot: str|datetime|None, process: str|None, re
     else:
         data = sorted(data, key=lambda lot: lot["id"])
     return data
+
+
+def ltp_init_dialog(prefix: str, frozen_lots_checkbox: bool=False):
+    import dash_ag_grid as dash_ag
+    check = None if not frozen_lots_checkbox else dcc.Checklist(id=f"{prefix}-ltp-frozen-check", options=[{"value": "", "label": "Respect frozen lots"}], value=[""])
+    return html.Dialog(
+        html.Div([
+            html.H3("Long term planning results"),
+            html.Div([
+                dash_ag.AgGrid(
+                    id=f"{prefix}-ltp-table",
+                    columnDefs=[{"field": "id", "pinned": True},
+                                {"field": "start_time", "filter": "agDateColumnFilter",
+                                 "headerName": "Start time"},
+                                {"field": "end_time", "filter": "agDateColumnFilter",
+                                 "headerName": "End time"},
+                                {"field": "shift_duration", "filter": "agNumberColumnFilter",
+                                 "headerName": "Shift duration / h"},
+                                {"field": "total_production", "filter": "agNumberColumnFilter",
+                                 "headerName": "Total production / t"},
+                                {"field": "production_per_shift", "filter": "agNumberColumnFilter",
+                                 "headerName": "Avg. production per shift / t"},
+                                # {"field": "delete"} # not possible
+                                ],
+                    defaultColDef={"filter": "agTextColumnFilter", "filterParams": {"buttons": ["reset"]}},
+                    rowData=[],
+                    getRowId="params.data.id",
+                    className="ag-theme-alpine",  # ag-theme-alpine-dark
+                    columnSizeOptions={"defaultMinWidth": 125},
+                    columnSize="responsiveSizeToFit",
+                    dashGridOptions={"rowSelection": "single", "domLayout": "autoHeight"}
+                ),
+                html.Br(),
+                check,
+                html.Div([
+                    html.H3("Selected long-term planning"),
+                    html.Div([html.Span("Total production: "), html.Span(id=f"{prefix}-ltp-popup-total"), html.Span("t")], className="lots2-ltp-summary-item"),
+                    html.Div("Material structure for selected planning interval:", className="lots2-ltp-summary-item"),
+                    html.Div(id=f"{prefix}-ltp-popup-structure")
+                ], id=f"{prefix}-ltp-popup-summary", hidden=True)
+            ]),
+            html.Div([
+                html.Button("Cancel", id=f"{prefix}-ltp-cancel", className="dynreact-button"),
+                html.Button("Apply", id=f"{prefix}-ltp-submit", className="dynreact-button")
+            ], className="lots2-materials-buttons")
+        ]),
+        id=f"{prefix}-ltp-dialog", className="dialog-filled lots2-ltp-dialog", open=False)
 

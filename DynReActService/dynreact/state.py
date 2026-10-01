@@ -17,11 +17,12 @@ from dynreact.base.ProductionHistoryReader import ProductionHistoryReader
 from dynreact.base.ResultsPersistence import ResultsPersistence
 from dynreact.base.ShiftsProvider import ShiftsProvider
 from dynreact.base.SnapshotProvider import SnapshotProvider
+from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider
 from dynreact.base.impl.AggregationPersistence import AggregationPersistence
 from dynreact.base.impl.AggregationProviderImpl import AggregationProviderImpl
 from dynreact.base.impl.MemoryResultsPersistence import MemoryResultsPersistence
 from dynreact.base.model import Snapshot, Site, ProductionPlanning, ProductionTargets, Material, Lot
-from dynreact.base.monitoring import LotsBatchJobStatistics
+from dynreact.base.monitoring import LotsBatchJobStatistics, ServiceMetrics, ServiceHealth
 from dynreact.lots_optimization import LotCreator
 from dynreact.AggregateResultsPersistence import AggregateResultsPersistence
 
@@ -65,17 +66,29 @@ class DynReActSrvState:
         self._moa_loaded = False
         self._aggregation: AggregationProvider|None = None
         self._aggregation_persistence: AggregationPersistence|None = None
+        self._temporary_restrictions: TemporaryRestrictionsProvider|None = None
         self._optimization_state = LotCreator()
         self._lots_batch_job = None
+        self._metrics_persistence = None
         self._snapshot_locks: dict[datetime, Lock] = {}
 
     def start(self):
         if self._config.lots_batch_config:
             from dynreact.batch import LotsBatchOptimizationJob
             self._lots_batch_job = LotsBatchOptimizationJob(self._config, self)
+        if self._config.metrics_persistence_interval:
+            persistence = self._plugins.get_metrics_persistence()
+            if persistence is not None:
+                from dynreact.stats import MetricsPersistenceJob
+                self._metrics_persistence = MetricsPersistenceJob(self._config.metrics_persistence_interval, persistence, self)
 
     def has_batch_mtp(self) -> bool:
         return self._lots_batch_job is not None
+
+    def run_batch_mtp(self) -> bool:
+        if not self._lots_batch_job:
+            return False
+        return self._lots_batch_job.trigger()
 
     def get_batch_mtp_data(self) -> LotsBatchJobStatistics|None:
         if self._lots_batch_job is None:
@@ -151,6 +164,11 @@ class DynReActSrvState:
         if self._shifts_provider is None:
             self._shifts_provider = self._plugins.get_shifts_provider()
         return self._shifts_provider
+
+    def get_temporary_restrictions(self) -> TemporaryRestrictionsProvider|None:
+        if self._temporary_restrictions is None:
+            self._temporary_restrictions = self._plugins.get_temporary_restrictions()
+        return self._temporary_restrictions
 
     def get_history_reader(self) -> ProductionHistoryReader:
         if self._history_reader is None:
@@ -309,6 +327,30 @@ class DynReActSrvState:
 
     def get_lot_sinks(self, if_exists: bool=False) -> dict[str, LotSink]:
         return self._plugins.get_lot_sinks()
+
+    def metrics(self) -> dict[str, ServiceMetrics]:
+        services = []
+        if self._snapshot_provider is not None:
+            services.append(self._snapshot_provider.metrics())
+        if self._lots_optimizer is not None:
+            services.append(self._lots_optimizer.metrics())
+        lot_sinks = self.get_lot_sinks(if_exists=True)
+        if lot_sinks is not None:
+            for sink in lot_sinks.values():
+                services.append(sink.metrics())
+        metrics = {service.service_id: service for service in services}
+        return metrics
+
+    def services_health(self) -> dict[str, ServiceHealth]:
+        healths: dict[str, ServiceHealth] = {}
+        ppms = self.get_plant_performance_models()
+        if len(ppms) == 0:
+            return {}
+        from dynreact.base.impl.PerformanceModelClient import PerformanceModelClient
+        for pm in ppms:
+            stat = pm.health() if isinstance(pm, PerformanceModelClient) else ServiceHealth(status=pm.status())
+            healths[pm.id()] = stat
+        return healths
 
     def has_material_order_allocation_page(self):
         return self._config.material_order_allocation_frontend is not None

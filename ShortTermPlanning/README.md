@@ -12,7 +12,8 @@ It does include several agent prototypes, such as
 
 * **material.py**: Material Agent (coils), in charge of representing the status
                    of the material and its willingness to offer for a slot in the
-                   next auction.
+                   next auction. Confirmed assignments are interpreted at order
+                   level for accumulated tonnage and processing duration.
 
 * **ShortTermPlanning.py**: Main script in charge of simulating several contexts for
                    the auction. 

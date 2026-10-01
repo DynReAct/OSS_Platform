@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Sequence
 
 from dynreact.base.model import Model
@@ -12,6 +12,7 @@ class ServiceHealth(Model):
 
     status: int
     "0: ok"
+    reason: str|None=None
     running_since: datetime|None=None
 
 
@@ -35,11 +36,24 @@ class ServiceMetrics(Model):
     metrics: Sequence[Metric]
 
 
+class MetricsPersistence:
+
+    def __init__(self, url: str):
+        self._url = url
+
+    def store(self, metrics: dict[str, ServiceMetrics], health: dict[str, ServiceHealth], timestamp: datetime|None=None):
+        raise NotImplementedError
+
+    def load(self, timestamp: datetime|None=None) -> tuple[dict[str, ServiceMetrics], dict[str, ServiceHealth]]:
+        raise NotImplementedError
+
+
 # Below: batch lot creation monitoring
 # =============================================== #
 
 class LotCreationProcessStatistics(Model):
     solution_id: str
+    duration: timedelta
     order_backlog_count: int
     order_backlog_tons: float
     lots_created: int
@@ -68,8 +82,7 @@ class LotsBatchJobStatistics(Model):
     previous_invocation: datetime | None = None
     previous_snapshot: datetime|None = None
     next_invocation: datetime | None = None
-    # TODO option to keep more than one result set
-    previous_process_results: dict[str, LotCreationProcessStatistics] | None = None
+    previous_process_results: dict[datetime, dict[str, LotCreationProcessStatistics]] = {}
     overall_process_results: dict[str, LotCreationProcessStatistics]
 
 

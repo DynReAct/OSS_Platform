@@ -7,8 +7,8 @@ from dash import html, clientside_callback, ClientsideFunction, Output, Input, S
 from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
-from dynreact.gui.pages.components import lots_view
-
+from dynreact.gui.gui_utils import GuiUtils
+from dynreact.gui.pages.components import lots_view, lots_view_options
 
 dash.register_page(__name__, path="/lots-gantt")
 translations_key = "lots-gantt"
@@ -19,19 +19,22 @@ def layout(*args, **kwargs):
     value_formatter_object = {"function": "formatCell(params.value, 4, 4)"}
     return html.Div([
         html.H1("Lots", id="lots-gantt-title"),
+        html.Div([
+            html.Span("Snapshot:"), GuiUtils.create_snapshots_selector_prev_next(translations_key)
+        ], className="flex gap-1"),
         lots_view("lots-gantt", initial_hidden=False, ids_toggle=True),
         dcc.Store(id="lots-gantt-undefined", storage_type="memory"),
         dcc.Store(id="lots-gantt-undefined2", storage_type="memory"),
         dcc.Store(id="lots-gantt-shifts", storage_type="memory"),
         html.Br(),html.Br(),html.Br(),
-        html.H2("Table view"),
+        html.H2("Table view", id="lots-gantt-table-header"),
         html.Div([
-            html.Span("Select equipment: "),
+            html.Span("Select equipment: ", id="lots-gantt-equipment-label"),
             dcc.Dropdown(id="lots-gantt-equipment-select",
                          options=[{"value": e.id, "label": e.name_short or str(e.id), "title": e.name or e.name_short or str(e.id)} for e in state.get_site().equipment],
                          multi=True),
             html.Span(),
-            html.Span("Select material type: "),
+            html.Span("Select material type: ", id="lots-gantt-mat-label"),
             dcc.Dropdown(id="lots-gantt-material-select",
                          options=[{"value": cat.id, "label": cat.name or str(cat.id),
                                    "title": cat.description or cat.name or str(cat.id)} for cat in state.get_site().material_categories],
@@ -65,13 +68,23 @@ def layout(*args, **kwargs):
                 style={"height": None},
         )], className="lots-gantt-table-parent"),  # relative positioning
         html.Br(),html.Br(),
-    ])
+    ], id="lots-gantt")
+
+GuiUtils.create_snapshot_callbacks(translations_key)
+
+@callback(
+    Output("lots-gantt-swimlane-mode", "options"),
+    Input("lang", "data"),
+)
+def lang_changed(lang: str|None):
+    return lots_view_options(lang)
+
 
 @callback(
     Output("lots-gantt-undefined", "data"),
     Output("lots-gantt-undefined2", "data"),
     Output("lots-gantt-shifts", "data"),
-    Input("selected-snapshot", "data"),
+    Input({"role": "snapshot-selector", "page": translations_key}, "data"),
 )
 def _snapshot_updated(snap: str|None):
     global cnt
@@ -126,7 +139,7 @@ clientside_callback(
     Output("lots-gantt-lots-table", "rowData"),
     Input("lots-gantt-equipment-select", "value"),
     Input("lots-gantt-material-select", "value"),
-    State("selected-snapshot", "data"),
+    State({"role": "snapshot-selector", "page": translations_key}, "data"),
 )
 def show_lots(equipments, material_cat: str|None, snapshot: str|datetime|None):
     snapshot = DatetimeUtils.parse_date(snapshot)

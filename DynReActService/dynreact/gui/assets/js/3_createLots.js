@@ -135,6 +135,7 @@
     *=================================
     */
     globalThis.dash_clientside.createlots.showLotsSwimlane = async function(data, shifts, elementId, process, mode, showIds) {
+
         const site = globalThis.dynreact?.getSite();
         let snap = globalThis.dynreact?.getSnapshot();
         if (!site || !snap || !elementId)

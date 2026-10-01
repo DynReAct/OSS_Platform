@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from typing import Sequence
 
 from dynreact.base.LotSink import LotSink
@@ -23,6 +24,7 @@ class FileLotSink(LotSink):
         self._transfers: dict[str, int] = {}
         self._error_count: dict[str, int] = {}
         self._lots_count: dict[str, int] = {}
+        self._transferred_duration: dict[str, timedelta] = {}
 
     def id(self) -> str:
         return self._url
@@ -58,6 +60,11 @@ class FileLotSink(LotSink):
             with open(filepath, mode="w") as file:
                 file.write(json_str)
             FileLotSink._increase_stat(process, self._lots_count)
+            if lot.end_time is not None and lot.start_time is not None:
+                duration = lot.end_time - lot.start_time
+                if process not in self._transferred_duration:
+                    self._transferred_duration[process] = timedelta(0)
+                self._transferred_duration[process] += duration
             return id
         except:
             FileLotSink._increase_stat(process, self._error_count)
@@ -83,6 +90,12 @@ class FileLotSink(LotSink):
             with open(filepath, mode="w") as file:
                 file.write(json_str)
             FileLotSink._increase_stat(process, self._lots_count)
+            if lot.end_time is not None and lot.start_time is not None:
+                duration = lot.end_time - lot.start_time
+                share = 1 - start_idx/len(lot.orders)
+                if process not in self._transferred_duration:
+                    self._transferred_duration[process] = timedelta(0)
+                self._transferred_duration[process] += share * duration
             return existing_lot.id or lot.id
         except:
             FileLotSink._increase_stat(process, self._error_count)
@@ -102,4 +115,7 @@ class FileLotSink(LotSink):
         for proc, cnt in self._error_count.items():
             labs = {**labels, "process": proc}
             metrics.append(PrimitiveMetric(id="transfer_errors_total", value=cnt, labels=labs))
+        for proc, dur in self._transferred_duration.items():
+            labs = {**labels, "process": proc}
+            metrics.append(PrimitiveMetric(id="lots_transferred_hours", value=dur.total_seconds()/3600, labels=labs))
         return ServiceMetrics(service_id="midtermplanning_lotsink", metrics=metrics)

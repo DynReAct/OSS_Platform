@@ -1,11 +1,16 @@
 node {
+    properties([disableConcurrentBuilds()])
     def IMAGE_NAME = "dynreact-oss-shortterm"
     def IMAGE_TAG = "latest"
+    def BUILD_IMAGE_TAG = "build-${env.BUILD_ID}"
     def LOCAL_REGISTRY = "192.168.110.176:5000/"
 
     env.IMAGE_NAME = IMAGE_NAME
     env.LOCAL_REGISTRY = LOCAL_REGISTRY
-    env.IMAGE_TAG = IMAGE_TAG
+    env.BUILD_IMAGE_TAG = BUILD_IMAGE_TAG
+    env.LATEST_IMAGE_TAG = IMAGE_TAG
+    // Use an immutable tag throughout this run; latest remains a convenience alias.
+    env.IMAGE_TAG = BUILD_IMAGE_TAG
     env.SHORT_TERM_PLANNING_PARAMS = "default+file:/repo/ShortTermPlanning/tests/stp_context_oss_test.json"
     env.EXPECTED_STP_PROFILE = "oss"
     env.CONTAINER_NAME_PREFIX = "JENKINS_OSS_TEST_${env.BUILD_ID}"
@@ -40,8 +45,12 @@ node {
     def runStageWithCleanup = { stageName, body ->
         stage(stageName) {
             sh '''
-                echo "[PRE] Cleaning up containers with prefix $CONTAINER_NAME_PREFIX..."
-                docker ps -a --filter "name=$CONTAINER_NAME_PREFIX_" -q | xargs -r docker rm -f
+                test -n "${CONTAINER_NAME_PREFIX:-}" || {
+                    echo "[ERROR] CONTAINER_NAME_PREFIX is empty; refusing cleanup."
+                    exit 1
+                }
+                echo "[PRE] Cleaning up containers with prefix ${CONTAINER_NAME_PREFIX}..."
+                docker ps -a --filter "name=^${CONTAINER_NAME_PREFIX}_" -q | xargs -r docker rm -f
                 docker system prune -f || echo "[WARN] docker system prune failed; continuing because cleanup is non-blocking."
             '''
             body()
@@ -55,18 +64,30 @@ node {
     stage('Build Docker Image') {
     sh '''
         cd ShortTermPlanning
+        docker image rm -f "$IMAGE_NAME:$BUILD_IMAGE_TAG" "$IMAGE_NAME:$LATEST_IMAGE_TAG" >/dev/null 2>&1 || true
         docker build \\
             --build-arg DOCKER_REGISTRY="$LOCAL_REGISTRY" \\
             --build-arg BUILD_DATE="\$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \\
             --build-arg JENKINS_BUILD_ID="$BUILD_ID" \\
-            -t "$IMAGE_NAME:$IMAGE_TAG" .
+            -t "$IMAGE_NAME:$BUILD_IMAGE_TAG" .
+        docker tag "$IMAGE_NAME:$BUILD_IMAGE_TAG" "$IMAGE_NAME:$LATEST_IMAGE_TAG"
     '''
     }
 
     stage('Tag & Push Image') {
         sh '''
-        docker tag "$IMAGE_NAME:$IMAGE_TAG" "$LOCAL_REGISTRY$IMAGE_NAME:$IMAGE_TAG"
-        docker push "$LOCAL_REGISTRY$IMAGE_NAME:$IMAGE_TAG"
+        docker tag "$IMAGE_NAME:$BUILD_IMAGE_TAG" "$LOCAL_REGISTRY$IMAGE_NAME:$BUILD_IMAGE_TAG"
+        docker tag "$IMAGE_NAME:$BUILD_IMAGE_TAG" "$LOCAL_REGISTRY$IMAGE_NAME:$LATEST_IMAGE_TAG"
+        docker push "$LOCAL_REGISTRY$IMAGE_NAME:$BUILD_IMAGE_TAG"
+        docker push "$LOCAL_REGISTRY$IMAGE_NAME:$LATEST_IMAGE_TAG"
+        '''
+    }
+
+    stage('Verify Runtime Image') {
+        sh '''
+        echo "Runtime image: $LOCAL_REGISTRY$IMAGE_NAME:$BUILD_IMAGE_TAG"
+        docker image inspect "$LOCAL_REGISTRY$IMAGE_NAME:$BUILD_IMAGE_TAG" --format 'RepoTags={{.RepoTags}}'
+        docker image inspect "$LOCAL_REGISTRY$IMAGE_NAME:$BUILD_IMAGE_TAG" --format 'BuildId={{index .Config.Labels "es.upm.etsii.jenkins-pi.dynreact.build_id"}}'
         '''
     }
 
@@ -124,23 +145,10 @@ runStageWithCleanup('Run Scenario 0') {
           -e PIP_CACHE_DIR=/tmp/pip-cache \\
           --user "0:0" \\
           ${envArgs} \\
-          ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG} \\
+          ${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG} \\
           bash -lc 'set -euo pipefail
                 source .venv/bin/activate
-                COMP=DynReActService
-
-                python -m venv /tmp/venv
-                . /tmp/venv/bin/activate
-
-                python -m pip install -U pip setuptools wheel
-                python -m pip install -r "/repo/DynReActBase/requirements.txt"
-                python -m pip install -r "/repo/\$COMP/requirements.txt"
-                [ -f "/repo/\$COMP/requirements_local.txt" ] && python -m pip install -r "/repo/\$COMP/requirements_local.txt" || true
-                [ -f "/repo/\$COMP/requirements-dev.txt" ] && python -m pip install -r "/repo/\$COMP/requirements-dev.txt" || true
-                python -m pip install -r "/repo/ShortTermPlanning/requirements.txt"
-
-                command -v pytest >/dev/null 2>&1 || python -m pip install pytest
-                cd /app/shortterm/dynreact/tests/integration_test
+                   cd /app/shortterm/dynreact/tests/integration_test
                 pytest -s -p no:cacheprovider test_auction.py::test_scenario_00
       '
     """
@@ -166,16 +174,10 @@ runStageWithCleanup('Run Scenario 0') {
           -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           --user "0:0" \\
           ${envArgs} \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
                    python -m venv /tmp/venv
-                   source .venv/bin/activate 
-                   COMP='ShortTermPlanning' 
-                   pip install -r /repo/\$COMP/requirements.txt
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
-
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   source .venv/bin/activate
                    cd /app/shortterm/dynreact/tests/integration_test 
                    pytest -s  -p no:cacheprovider test_auction.py::test_scenario_01
          '
@@ -200,16 +202,10 @@ runStageWithCleanup('Run Scenario 0') {
           -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           --user "0:0" \\
           ${envArgs} \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
                    python -m venv /tmp/venv
-                   source .venv/bin/activate 
-                   COMP='ShortTermPlanning' 
-                   pip install -r /repo/\$COMP/requirements.txt 
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
-
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   source .venv/bin/activate
                    cd /app/shortterm/dynreact/tests/integration_test 
                    pytest -s -p no:cacheprovider test_auction.py::test_scenario_02
          '
@@ -235,16 +231,10 @@ runStageWithCleanup('Run Scenario 0') {
           -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           ${envArgs} \\
           --user "0:0" \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
                    python -m venv /tmp/venv
-                   source .venv/bin/activate 
-                   COMP='ShortTermPlanning' 
-                   pip install -r /repo/\$COMP/requirements.txt 
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
-
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   source .venv/bin/activate
                    cd /app/shortterm/dynreact/tests/integration_test 
                    pytest -s -p no:cacheprovider test_auction.py::test_scenario_03
          '
@@ -271,16 +261,10 @@ runStageWithCleanup('Run Scenario 0') {
           -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           ${envArgs} \\
           --user "0:0" \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
                    python -m venv /tmp/venv
-                   source .venv/bin/activate 
-                   COMP='ShortTermPlanning' 
-                   pip install -r /repo/\$COMP/requirements.txt 
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
-
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   source .venv/bin/activate
                    cd /app/shortterm
                    pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_04
          '
@@ -308,15 +292,9 @@ runStageWithCleanup('Run Scenario 0') {
           -e REMOTE_BASE_AGENTS="1" \\
           ${envArgs} \\
           --user "0:0" \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
-                   source .venv/bin/activate 
-                   COMP='ShortTermPlanning' 
-                   pip install -r /repo/\$COMP/requirements.txt 
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true
-
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   source .venv/bin/activate
                    cd /app/shortterm
                    pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_05
          '
@@ -344,15 +322,9 @@ runStageWithCleanup('Run Scenario 0') {
           -e REMOTE_BASE_AGENTS="1" \\
           ${envArgs} \\
           --user "0:0" \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
-                   source .venv/bin/activate 
-                   COMP='ShortTermPlanning' 
-                   pip install -r /repo/\$COMP/requirements.txt 
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
-
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   source .venv/bin/activate
                    cd /app/shortterm
                    pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_06
          '
@@ -380,15 +352,9 @@ runStageWithCleanup('Run Scenario 0') {
           -e REMOTE_BASE_AGENTS="1" \\
           ${envArgs} \\
           --user "0:0" \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
-                   source .venv/bin/activate 
-                   COMP='ShortTermPlanning' 
-                   pip install -r /repo/\$COMP/requirements.txt 
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
-
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   source .venv/bin/activate
                    cd /app/shortterm
                    pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_07
          '
@@ -416,15 +382,9 @@ runStageWithCleanup('Run Scenario 0') {
           -e REMOTE_BASE_AGENTS="1" \\
           ${envArgs} \\
           --user "0:0" \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
-                   source .venv/bin/activate 
-                   COMP='ShortTermPlanning' 
-                   pip install -r /repo/\$COMP/requirements.txt 
-                   [ -f /repo/\$COMP/requirements_local.txt ] && pip install -r /repo/\$COMP/requirements_local.txt || true 
-                   [ -f /repo/\$COMP/requirements-dev.txt ] && pip install -r /repo/\$COMP/requirements-dev.txt || true 
-
-                   command -v pytest >/dev/null 2>&1 || python -m pip install pytest
+                   source .venv/bin/activate
                    cd /app/shortterm
                    pytest -s -p no:cacheprovider dynreact/tests/integration_test/test_auction.py::test_scenario_08
          '

@@ -8,6 +8,7 @@ import picos as pc
 from dynreact.base.InterruptedException import InterruptedException
 from dynreact.base.model import LongTermTargets, StorageLevel, EquipmentAvailability, MidTermTargets, Site, Lot
 from dynreact.ltp.LtpException import LtpException
+from dynreact.ltp.LtpParams import LtpParams
 from dynreact.ltp.LtpUtils import LtpUtils
 from dynreact.ltp.ShiftAllocator import ShiftAllocator
 
@@ -18,11 +19,12 @@ class LtpInstance:
 
     _zero_delta: timedelta = timedelta(days=0)
 
-    def __init__(self, id0: str, site: Site, structure: LongTermTargets, initial_storage_levels: dict[str, StorageLevel]|None=None,
+    def __init__(self, id0: str, site: Site, params: LtpParams, structure: LongTermTargets, initial_storage_levels: dict[str, StorageLevel]|None=None,
                  shifts: list[tuple[datetime, datetime]]|None=None, plant_availabilities: dict[int, EquipmentAvailability] | None=None,
                  frozen_lots: dict[int, Sequence[Lot]] | None = None):
         self._id = id0
         self._site = site
+        self._params = params
         self._structure = structure
         self._initial_storage_levels = initial_storage_levels
         self._shifts = shifts
@@ -38,7 +40,7 @@ class LtpInstance:
         self._check_interrupted()
         # FIXME
         print("  MODEL built successfully, now starting the optimization")
-        solution: pc.Solution = model.solve(solver="ecos", primals=None, max_iterations=250)  # default maxit: 100
+        solution: pc.Solution = model.solve(solver="ecos", primals=None, max_iterations=self._params.max_iterations)
         # FIXME
         print("   OPTIMIZATION DONE, status ", solution.claimedStatus, "time", solution.searchTime, solution.lastStatus)
         print("    Objective components", {key: exp.value for key, exp in objective_components.items()} )
@@ -99,12 +101,11 @@ class LtpInstance:
                 the model, dict of storage variables, dict of [storage->equipment] flow variables, dict of [equipment->storage] flow variables, objective components, frozen horizons per equipment (if applicable)
         """
         frozen_horizons: dict[int, datetime]|None = self._determine_frozen_ranges()
-        # TODO config
-        alpha_storage_level_input = 0.01
-        alpha_storage_level = 1
-        alpha_class_target = 10
+        alpha_storage_level_input = 0.01 * self._params.weight_storage_level_input
+        alpha_storage_level = 1 * self._params.weight_storage_level
+        alpha_class_target = 10 * self._params.weight_class_targets
         # 0.1 too low, 1 better but still too low, 10 ok, though still not perfect [negative values occur]
-        alpha_storage_level_material_final = 10
+        alpha_storage_level_material_final = 10 * self._params.weight_storage_level_material_final
         alpha_storage_level_material = 0.1
 
         material_categories: dict[str, list[str]] = {cat.id: [clz.id for clz in cat.classes] for cat in self._site.material_categories}

@@ -5,14 +5,16 @@ from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.model import Site, LongTermTargets, StorageLevel, EquipmentAvailability, MidTermTargets, Lot
 from dynreact.ltp.LtpInstance import LtpInstance
+from dynreact.ltp.LtpParams import LtpParams
 
 
 class LongTermPlanningImpl(LongTermPlanning):
 
-    def __init__(self, uri: str, site: Site):
+    def __init__(self, uri: str, site: Site, params: LtpParams|None = None):
         super().__init__(uri, site)
         if not uri.startswith("default:"):
             raise NotApplicableException()
+        self._params = params or LtpParams()
         self._runs: dict[str, LtpInstance] = {}
 
     def run(self, id0: str,
@@ -23,9 +25,9 @@ class LongTermPlanningImpl(LongTermPlanning):
             frozen_lots: dict[int, Sequence[Lot]]|None=None) -> tuple[MidTermTargets, list[dict[str, StorageLevel]]]:
         if id0 in self._runs:
             raise Exception(f"An optimization with the same id {id0} is already running")
-        instance = LtpInstance(id0, self._site, structure, initial_storage_levels, shifts, plant_availabilities, frozen_lots=frozen_lots)
+        instance = LtpInstance(id0, self._site, self._params, structure, initial_storage_levels, shifts, plant_availabilities, frozen_lots=frozen_lots)
         self._runs[id0] = instance
-        result = instance.start()
+        result = instance.start(debug=self._params.debug)
         self._runs.pop(id0, None)
         return result
 

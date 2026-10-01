@@ -67,12 +67,19 @@ class DynReActSrvConfig:
     # model-specific initialization data
     plant_performance_models: list[str]|None = None
     energy_provider: str|None = "default+file:./data/energy_context.json"
-    "Optional energy analysis provider. Preferred values: `default+file:./data/energy_context.json` or `ras+file:./data/context/energy_context.json`."
+    "Optional energy analysis provider. Preferred values: `default+file:./data/energy_context.json` or `ras+file:./data/config/energy_context.json`."
     stp_frontend: str = "default"  # default is the frontend provided in this module
     material_order_allocation_frontend: str|None = None
     "Optionally register a frontend for a custom material-order allocation service"
+    temporary_restrictions: str|None = None
+    "Optional url of the equipment restrictions service, for constraints that can be activated and deactivated by the user."
+    metrics_persistence: str|None = None
+    "Store metrics in a folder; example: file+json:./metrics"
+    metrics_persistence_interval: str|None=None
+    "Store metrics periodically in a predefined time interval"
     profile: str|None = None
     "Optional profile name for loading of custom components. If unset, DynReAct uses the base OSS/default loading path. Can be overwritten for individual components."
+
 
     def __init__(self,
                  config_provider: str | None = None,
@@ -111,7 +118,10 @@ class DynReActSrvConfig:
                  energy_provider: str|None = None,
                  stp_frontend: str|None = None,
                  material_order_allocation_frontend: str|None = None,
+                 temporary_restrictions: str | None = None,
                  time_zone: str | None = None,
+                 metrics_persistence: str|None = None,
+                 metrics_persistence_interval: str|None=None,
                  profile: str|None = None
                  ):
         # Resolve .env from the current working directory / standard dotenv search
@@ -154,7 +164,7 @@ class DynReActSrvConfig:
             aggregation_exec_offset_minutes = int(os.getenv("AGGREGATION_OFFSET_MINUTES", DynReActSrvConfig.aggregation_exec_offset_minutes))
         self.aggregation_exec_offset_minutes = aggregation_exec_offset_minutes
         if lot_sinks is None:
-            lot_sinks = [sink.strip() for sink in os.getenv("LOT_SINKS", DynReActSrvConfig.lot_sinks[0]).split(",")]
+            lot_sinks = [sink.strip() for sink in os.getenv("LOT_SINKS", DynReActSrvConfig.lot_sinks[0]).split(";")]
         elif isinstance(lot_sinks, str):
             lot_sinks = [lot_sinks]
         if lots_batch_config is None:
@@ -259,6 +269,15 @@ class DynReActSrvConfig:
             if material_order_allocation_frontend == "":
                 material_order_allocation_frontend = None
         self.material_order_allocation_frontend = material_order_allocation_frontend
+        if temporary_restrictions is None:
+            temporary_restrictions = os.getenv("TEMPORARY_RESTRICTIONS")
+        self.temporary_restrictions = temporary_restrictions
+        if metrics_persistence is None:
+            metrics_persistence = os.getenv("METRICS_PERSISTENCE")
+        self.metrics_persistence = metrics_persistence
+        if metrics_persistence_interval is None:
+            metrics_persistence_interval = os.getenv("METRICS_PERSISTENCE_INTERVAL")
+        self.metrics_persistence_interval = metrics_persistence_interval
 
 
 class ConfigProvider:

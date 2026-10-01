@@ -1,0 +1,62 @@
+{
+  "provider": "file",
+  "energy_functions": {
+    "defaults": {
+      "price_eur_mwh": "62.0 + 11.0 * (start_time.weekday() < 5) + 14.0 * (7 <= start_time.hour < 20) + 4.0 * (18 <= start_time.hour < 22)",
+      "cost_eur": "ensemble_energy_kwh * unit_price_eur_mwh / 1000.0",
+      "uncertainty_min_factor": 0.9,
+      "uncertainty_max_factor": 1.1,
+      "uncertainty_min_kwh": "ensemble_energy_kwh * uncertainty_min_factor",
+      "uncertainty_max_kwh": "ensemble_energy_kwh * uncertainty_max_factor"
+    },
+    "equipment": {
+      "PKL01": {
+        "energy_kwh": "coil_weight_t * (16.0 + 0.010 * width_mm + 0.45 * thickness_initial_mm) + duration_min * 1.8 + 4.0 * time_gap_min / 60.0",
+        "uncertainty_min_factor": 0.92,
+        "uncertainty_max_factor": 1.08
+      },
+      "PKL02": {
+        "energy_kwh": "coil_weight_t * (15.4 + 0.009 * width_mm + 0.40 * thickness_initial_mm) + duration_min * 1.7 + 3.5 * time_gap_min / 60.0",
+        "uncertainty_min_factor": 0.92,
+        "uncertainty_max_factor": 1.08
+      },
+      "CRL01": {
+        "energy_kwh": "coil_weight_t * (31.0 + 12.0 * reduction_ratio + 0.006 * width_mm + 1.5 * is_ftype2) + duration_min * 2.4 + 6.0 * time_gap_min / 60.0",
+        "uncertainty_min_factor": 0.88,
+        "uncertainty_max_factor": 1.14
+      },
+      "CRL02": {
+        "energy_kwh": "coil_weight_t * (34.0 + 13.0 * reduction_ratio + 0.0065 * width_mm + 1.2 * is_ftype2) + duration_min * 2.8 + 7.5 * time_gap_min / 60.0",
+        "uncertainty_min_factor": 0.87,
+        "uncertainty_max_factor": 1.15
+      },
+      "CRL03": {
+        "energy_kwh": "coil_weight_t * (30.0 + 11.5 * reduction_ratio + 0.0055 * width_mm + 1.8 * is_ftype1) + duration_min * 2.2 + 5.5 * time_gap_min / 60.0",
+        "uncertainty_min_factor": 0.89,
+        "uncertainty_max_factor": 1.13
+      },
+      "FIN01": {
+        "energy_kwh": "coil_weight_t * (9.5 + 0.004 * width_mm + 4.0 * thickness_final_mm + 2.4 * is_ftype1 + 3.2 * is_ftype2) + duration_min * 1.6 + 2.0 * time_gap_min / 60.0",
+        "uncertainty_min_factor": 0.91,
+        "uncertainty_max_factor": 1.12
+      },
+      "FIN02": {
+        "energy_kwh": "coil_weight_t * (9.0 + 0.0035 * width_mm + 3.6 * thickness_final_mm + 2.0 * is_ftype1 + 3.5 * is_ftype2) + duration_min * 1.5 + 2.2 * time_gap_min / 60.0",
+        "uncertainty_min_factor": 0.91,
+        "uncertainty_max_factor": 1.12
+      }
+    }
+  },
+  "mail": {
+    "enabled": false,
+    "smtp_host": "smtp.your-relay.example",
+    "smtp_port": 25,
+    "use_tls": false,
+    "username": null,
+    "password": null,
+    "from_address": "dynreact-recommender@your-domain.example",
+    "recipients": ["production.manager@your-domain.example"],
+    "subject_prefix": "[DynReAct Recommender]",
+    "timeout": 20.0
+  }
+} 

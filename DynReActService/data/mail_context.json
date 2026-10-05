@@ -1,0 +1,14 @@
+{
+  "enabled": false,
+  "smtp_host": "smtp.your-relay.example",
+  "smtp_port": 25,
+  "use_tls": false,
+  "username": null,
+  "password": null,
+  "from_address": "dynreact-recommender@your-domain.example",
+  "recipients": [
+    "production.manager@your-domain.example"
+  ],
+  "subject_prefix": "[DynReAct Recommender]",
+  "timeout": 20.0
+}

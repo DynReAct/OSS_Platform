@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone, tzinfo
 from threading import Lock
-from typing import Any, Sequence
+from typing import Any, Sequence, Mapping
 
 from dynreact.SnapshotUpdate import SnapshotUpdate
 from dynreact.base.AggregationProvider import AggregationProvider
@@ -328,7 +328,7 @@ class DynReActSrvState:
     def get_lot_sinks(self, if_exists: bool=False) -> dict[str, LotSink]:
         return self._plugins.get_lot_sinks()
 
-    def metrics(self) -> dict[str, ServiceMetrics]:
+    def metrics(self) -> Mapping[str, ServiceMetrics]:
         services = []
         if self._snapshot_provider is not None:
             services.append(self._snapshot_provider.metrics())
@@ -341,7 +341,7 @@ class DynReActSrvState:
         metrics = {service.service_id: service for service in services}
         return metrics
 
-    def services_health(self) -> dict[str, ServiceHealth]:
+    def services_health(self) -> Mapping[str, ServiceHealth]:
         healths: dict[str, ServiceHealth] = {}
         ppms = self.get_plant_performance_models()
         if len(ppms) == 0:

@@ -1,5 +1,6 @@
 import types
 import typing
+from datetime import datetime
 from typing import Sequence, Any
 
 
@@ -13,7 +14,7 @@ from dynreact.app import state, config
 from dynreact.auth.authentication import dash_authenticated
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
-from dynreact.base.model import Equipment, Site, LotTimes
+from dynreact.base.model import Equipment, Site, LotTimes, Lot
 from dynreact.gui.gui_utils import GuiUtils
 
 dash.register_page(__name__, path="/lots/ts-plots")
@@ -50,6 +51,15 @@ def layout(*args, **kwargs):
                 ], className="grid-2 gap-1"),
             ], className="settings-panel"),
             html.Div([
+                html.H2("DynReAct lots", id=f"{translations_key}-dynlot-header"),
+                html.Div([
+                    html.Span("DynReAct lots:", id=f"{translations_key}-dynlot-select-label"),
+                    dcc.Dropdown(options=[], value=None, id=f"{translations_key}-dynlot-select", style={"min-width": "12em"}),
+                    html.Span("Select end lots:", id=f"{translations_key}-dyn_endlot-select-label"),
+                    html.Div(id=f"{translations_key}-dyn_endlots-section", className="grid-2 gap-1"),
+                ], className="grid-2 gap-1"),
+            ], className="settings-panel"),
+            html.Div([
                 html.H2("Data points", id=f"{translations_key}-data-header"),
                 html.Div([
                     html.Span("Data points:", id=f"{translations_key}-data-select-label"),
@@ -82,19 +92,22 @@ def process_changed(proc: str|None, selected_plants: Sequence[int]|None):
 
 
 @callback(Output("ts-plots-endlots-section", "children"),
+          Output("ts-plots-dynlot-select", "options"),
           Input("ts-plots-eq-select", "value"),
           Input({"role": "snapshot-selector", "page": translations_key}, "data"),
           State({"role": "lot-select", "equipment": ALL}, "value"),)
 def set_lot_selection(equipment: Sequence[int]|None, snapshot: str|None, previous_end_lots: Sequence[str|None]|None):
     snapshot = DatetimeUtils.parse_date(snapshot)
     if not dash_authenticated(config) or not snapshot or not equipment or len(equipment) == 0:
-        return [], None
+        return [], []
     snap_obj = state.get_snapshot(time=snapshot)
     children = []
     site = state.get_site()
+    process: str|None = None
     previous_end_lots = previous_end_lots or []
     for eq in equipment:
         eq_obj = site.get_equipment(eq, do_raise=True)
+        process = process or eq_obj.process
         children.append(html.Span(f"{eq_obj.name_short or eq_obj.id}"))
         lots = snap_obj.lots.get(eq)
         lots = [lot for lot in lots if lot.active and lot.end_time is not None] if lots else []
@@ -104,13 +117,51 @@ def set_lot_selection(equipment: Sequence[int]|None, snapshot: str|None, previou
         value = next((lot for lot in previous_end_lots if lot in lot_ids), None) or (lot_ids[-1] if len(lot_ids) > 0 else None)
         drop = dcc.Dropdown(options=options, value=value, id={"role": "lot-select", "equipment": eq}, style={"min-width": "10em"})
         children.append(drop)
-    return children
+    solutions: list[str] = ([""] + state.get_results_persistence_aggregate().solutions(snap_obj.timestamp, process)) if process else [""]
+    return children, solutions
 
+@callback(Output("ts-plots-dyn_endlots-section", "children"),
+          Input("ts-plots-dynlot-select", "value"),
+          Input("ts-plots-eq-select", "value"),
+          Input({"role": "snapshot-selector", "page": translations_key}, "data"))
+          #State({"role": "dynlot-select", "equipment": ALL}, "value"),)
+def set_dynreact_endlots_selection(dyn_lot: str, equipment: Sequence[int]|None, snapshot: str|None):  #, previous_end_lots: Sequence[str|None]|None):
+    snapshot = DatetimeUtils.parse_date(snapshot)
+    if not dash_authenticated(config) or not dyn_lot or not snapshot or not equipment or len(equipment) == 0:
+        return []
+    snap_obj = state.get_snapshot(time=snapshot)
+    site = state.get_site()
+    process = site.get_equipment(equipment[0], do_raise=True).process
+    sol = state.get_results_persistence_aggregate().load(snap_obj.timestamp, process, dyn_lot)
+    sol_obj = sol.best_solution
+    equipment_planned = [e for e in equipment if e in sol_obj.equipment_status.keys()]
+    if len(equipment_planned) == 0:
+        return []
+    lots: dict[int, list[Lot]] = sol_obj.get_lots()   # FIXME timestamps missing
+    children = []
+    previous_end_lots = [] #previous_end_lots or []
+    for eq in equipment_planned:
+        eq_obj = site.get_equipment(eq, do_raise=True)
+        children.append(html.Span(f"{eq_obj.name_short or eq_obj.id}"))
+        eq_lots = lots.get(eq, tuple())
+        #eq_lots = [lot for lot in eq_lots if lot.active and lot.end_time is not None]  # FIXME!
+        #eq_lots.sort(key=lambda lot: lot.end_time)
+        eq_lots.sort(key=lambda lot: lot.id)
+        lot_ids = [lot.id for lot in eq_lots]
+        options = [{"value": lot.id, "label": lot.id} for lot in eq_lots]
+        value = next((lot for lot in previous_end_lots if lot in lot_ids), None) or (lot_ids[-1] if len(lot_ids) > 0 else None)
+        drop = dcc.Dropdown(options=options, value=value, id={"role": "dynlot-select", "equipment": eq}, style={"min-width": "10em"})
+        children.append(drop)
+    return children
 
 @callback(Output("ts-plots-endtime", "children"),
           Input({"role": "lot-select", "equipment": ALL}, "value"),
-          Input({"role": "snapshot-selector", "page": translations_key}, "data"))
-def lot_changed(selected_lots: Sequence[str|None]|None, snapshot: str|None):
+          Input({"role": "dynlot-select", "equipment": ALL}, "value"),
+          Input("ts-plots-dynlot-select", "value"),
+          State("ts-plots-eq-select", "value"),
+          State({"role": "snapshot-selector", "page": translations_key}, "data"))
+def lot_changed(selected_lots: Sequence[str|None]|None, dynreact_lots: Sequence[str]|None, dynreact_solution: str|None,
+                equipment: Sequence[int]|None, snapshot: str|None):
     snapshot = DatetimeUtils.parse_date(snapshot)
     if not dash_authenticated(config) or not snapshot or not selected_lots:
         return None
@@ -118,6 +169,16 @@ def lot_changed(selected_lots: Sequence[str|None]|None, snapshot: str|None):
     selected_lots = [lt for lt in selected_lots if lt]
     all_lots = [lot for lots in snap_obj.lots.values() for lot in lots if lot.id in selected_lots and lot.end_time is not None]
     max_time = state.as_timezone(max(lot.end_time for lot in all_lots) if len(all_lots) > 0 else snap_obj.timestamp)
+    if dynreact_solution and dynreact_lots and len(dynreact_lots) > 0 and equipment is not None and len(equipment) == len(dynreact_lots):
+        process = state.get_site().get_equipment(equipment[0], do_raise=True).process
+        sol = state.get_results_persistence_aggregate().load(snap_obj.timestamp, process, dynreact_solution)
+        lots = sol.best_solution.get_lots()
+        _empty = tuple()
+        for idx, eq in enumerate(equipment):
+            lot_id = dynreact_lots[idx]
+            lt = next((lot for lot in lots.get(eq, _empty) if lot.id == lot_id), None)
+            if lt is not None and lt.end_time is not None and lt.end_time > max_time:
+                max_time = lt.end_time
     return DatetimeUtils.format(max_time, use_zone=False).replace("T", " ")
 
 @callback(Output("ts-plots-data-select", "options"),
@@ -176,13 +237,16 @@ def equipment_changed(equipment: Sequence[int]|None, snapshot: str|None, previou
           Input("ts-plots-eq-select", "value"),
           Input("ts-plots-data-select", "value"),
           Input({"role": "lot-select", "equipment": ALL}, "value"),
+          Input({"role": "dynlot-select", "equipment": ALL}, "value"),
+          Input("ts-plots-dynlot-select", "value"),
           Input({"role": "snapshot-selector", "page": translations_key}, "data"),
           State({"role": "process-selector", "page": translations_key}, "value"),
           State("lang", "data"),)
-def data_changed(equipments: Sequence[int]|None, data: Sequence[str]|None, end_lots: Sequence[str|None]|None, snapshot: str|None, process: str|None, lang: str|None):
+def data_changed(equipments: Sequence[int]|None, data: Sequence[str]|None, end_lots: Sequence[str|None]|None,
+                 dynreact_lots: Sequence[str] | None, dynreact_solution: str | None, snapshot: str|None, process: str|None, lang: str|None):
     snapshot = DatetimeUtils.parse_date(snapshot)
     fig = go.Figure()
-    if not dash_authenticated(config) or not snapshot or not process or not equipments:
+    if not dash_authenticated(config) or not snapshot or not process or not equipments or not data:
         return fig
     snap_obj = state.get_snapshot(time=snapshot)
     snap_provider = state.get_snapshot_provider()
@@ -197,11 +261,17 @@ def data_changed(equipments: Sequence[int]|None, data: Sequence[str]|None, end_l
     num_colors = len(colors)
     trace_cnt = 0
     equipment_objects = {e: site.get_equipment(e, do_raise=True) for e in equipments}
+    process = next(iter(equipment_objects.values())).process if len(equipment_objects) > 0 else ""
+    _empty = tuple()
+    dyn_lots: dict[int, list[Lot]] = {}
+    if dynreact_solution and dynreact_lots and len(dynreact_lots) > 0 and len(equipments) == len(dynreact_lots):
+        sol = state.get_results_persistence_aggregate().load(snap_obj.timestamp, process, dynreact_solution)
+        dyn_lots = sol.best_solution.get_lots()
     for data_point in data:
         for eq_idx, equipment in enumerate(equipments):
             eq_obj = equipment_objects[equipment]
-            lots = snap_obj.lots.get(equipment)
-            lots = [lot for lot in lots if lot.active and lot.end_time is not None] if lots else []
+            lots = snap_obj.lots.get(equipment, _empty)
+            lots = [lot for lot in lots if lot.active and lot.end_time is not None]
             if len(lots) == 0:
                 continue
             lots.sort(key=lambda lot: lot.end_time)
@@ -209,34 +279,57 @@ def data_changed(equipments: Sequence[int]|None, data: Sequence[str]|None, end_l
                 end_lot = end_lots[eq_idx] if eq_idx < len(end_lots) else None
                 end_lot_idx = next((idx for idx, lot in enumerate(lots) if lot.id == end_lot), None)
                 if end_lot_idx is None:
-                    continue
-                lots = lots[:end_lot_idx+1]
-            orders = [order for lot in lots for order in lot.orders]
+                    lots = []
+                else:
+                    lots = lots[:end_lot_idx+1]
+            dyn_lot_start: datetime|None = None
+            if equipment in dyn_lots:
+                eq_dyn_lots = dyn_lots[equipment]
+                eq_dyn_lots.sort(key=lambda lot: lot.end_time)
+                end_lot = dynreact_lots[eq_idx]
+                end_lot_idx = next((idx for idx, lot in enumerate(eq_dyn_lots) if lot.id == end_lot), None)
+                if end_lot_idx is not None:
+                    eq_dyn_lots = eq_dyn_lots[:end_lot_idx+1]
+                    dyn_lot_start = eq_dyn_lots[0].start_time if len(eq_dyn_lots) > 0 else None
+                    if dyn_lot_start:
+                        dyn_lot_start = state.as_timezone(dyn_lot_start)
+                    lots = lots + eq_dyn_lots
+            if len(lots) == 0:
+                continue
+            order_lots = [(order, lot) for lot in lots for order in lot.orders]
+            orders = [order for order, _ in order_lots]
             order_lot_times: dict[str, dict[str, LotTimes]]|None = ModelUtils.get_order_lot_times_with_fallback(site, snap_provider, snapshot=snap_obj.timestamp, order=orders, process=process)
             xs = []
             ys = []
             custom_orders = []
-            if order_lot_times is not None:
-                for order in orders:
-                    if order not in order_lot_times or process not in order_lot_times[order]:
+            start_times_by_lot = {lot.id: lot.start_time for lot in lots if lot.start_time is not None}
+            for order, lot in order_lots:
+                order_obj = snap_obj.get_order(order)
+                if not order_obj:
+                    continue
+                props = order_obj.material_properties
+                value = getattr(props, data_point) if hasattr(props, data_point) else None
+                if value is None or (isinstance(value, float) and np.isnan(value)):
+                    continue
+                if not order_lot_times or order not in order_lot_times or process not in order_lot_times[order]:
+                    if not lot.start_time or not lot.end_time:
                         continue
-                    order_obj = snap_obj.get_order(order)
-                    if not order_obj:
-                        continue
-                    props = order_obj.material_properties
-                    value = getattr(props, data_point) if hasattr(props, data_point) else None
-                    if value is None or (isinstance(value, float) and np.isnan(value)):
-                        continue
+                    fraction = order_obj.actual_weight / lot.weight if lot.weight else 1/len(lot.orders)
+                    start = state.as_timezone(start_times_by_lot[lot.id])
+                    end = start + fraction * (lot.end_time - lot.start_time)
+                    start_times_by_lot[lot.id] = end
+                else:
                     times = order_lot_times[order][process]
-                    xs.append(times.start)
-                    xs.append(times.end)
-                    ys.append(value)
-                    ys.append(value)
-                    lt = order_obj.lots.get(process) if order_obj.lots is not None else None
-                    custom_orders.append((order, lt))
-                    custom_orders.append((order, lt))
-            else:
-                raise NotImplementedError("If order lot times are missing, we cannot yet draw the line...")
+                    start = state.as_timezone(times.start)
+                    end = state.as_timezone(times.end)
+                xs.append(start)
+                xs.append(end)
+                ys.append(value)
+                ys.append(value)
+                #lt = order_obj.lots.get(process) if order_obj.lots is not None else None
+                lt = lot.id
+                custom_orders.append((order, lt))
+                custom_orders.append((order, lt))
             if len(xs) == 0:
                 continue
             if is_single_equipment or is_single_datapoint:
@@ -248,6 +341,8 @@ def data_changed(equipments: Sequence[int]|None, data: Sequence[str]|None, end_l
             new_line = go.Scatter(x=xs, y=ys, customdata=custom_orders, mode="lines+markers", line={"color": color, "width": 2}, marker={"size": 7}, name=f"{equipment_name}: {data_point}", legendgroup=equipment_name,
                                   hovertemplate=f"{lt_label}: %{{customdata[1]}}, {order_label}: %{{customdata[0]}}, {data_point}: %{{y:,.2f}}, {time_label}: %{{x}}<extra></extra>")
             fig.add_trace(new_line)
+            if dyn_lot_start:
+                fig.add_vline(x=dyn_lot_start, line={"color": color, "width": 3}, line_dash="dash")
     data_label = ", ".join(data)
     if is_single_equipment:
         e = equipment_objects[equipments[0]]
@@ -261,13 +356,13 @@ def data_changed(equipments: Sequence[int]|None, data: Sequence[str]|None, end_l
     return fig
 
 
-def _plants_for_ids(equipment: str|None, site: Site) -> list[Equipment]|None:
+def _plants_for_ids(equipment: str|None, equipments: Sequence[Equipment]) -> list[Equipment]|None:
     if not equipment:
         return None
     plant_ids = [p for p in (p.strip() for p in equipment.split(",")) if p != ""]
-    return [_plant_for_id(site.equipment, p) for p in plant_ids]
+    return [_plant_for_id(equipments, p) for p in plant_ids]
 
-def _plant_for_id(plants: list[Equipment], plant_id0: str) -> Equipment:
+def _plant_for_id(plants: Sequence[Equipment], plant_id0: str) -> Equipment:
     plant = next((p for p in plants if str(p.id) == plant_id0), None)
     if plant is not None:
         return plant

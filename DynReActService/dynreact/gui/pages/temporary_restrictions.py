@@ -2,7 +2,7 @@ import itertools
 import json
 import logging
 import traceback
-from typing import Sequence, Any, Iterator
+from typing import Sequence, Any, Iterator, Mapping, Literal
 
 from dash import html, callback, Output, ALL, Input, dcc, State, clientside_callback, ClientsideFunction, MATCH, \
     callback_context
@@ -23,13 +23,14 @@ if config.temporary_restrictions:
 translations_key = "temprest"
 
 
+# TODO option to store a short comment with each rule?
 def layout(*args, **kwargs):
     temp_rest = state.get_temporary_restrictions()
     if not temp_rest:
         return html.Div(html.H1("404 - Temporary restrictions not found"))
-    site = state.get_site()
+    #site = state.get_site()
     restrictions: Sequence[tuple[EquipmentRestriction, Sequence[RuleSettings]]] = temp_rest.equipment_restrictions()
-    grid_body = []
+    #grid_body = []
     grid = [ # html.Caption("Temporary equipment restrictions"),
             html.Thead(html.Tr([
                 html.Th("Rule", scope="col", title="Name of the rule", id="temprest-grid-rule"),
@@ -38,65 +39,11 @@ def layout(*args, **kwargs):
                 html.Th("Material filter", scope="col", title="Does the rule apply to a specific material class?", id="temprest-grid-mat"),
                 html.Th("Property filter", scope="col", title="Does the rule apply to specific order properties?", id="temprest-grid-prop"),
                 html.Th("Active", scope="col", title="Is the rule currently active?", id="temprest-grid-active"),
-                html.Th("Toggle", scope="col", title="Toggle the active status of the rule", id="temprest-grid-toggle")
+                html.Th("Changes", scope="col", title="Save or reset parameter changes", id="temprest-grid-changes")
             ])),
-            html.Tbody(grid_body)
+            html.Tbody(id="temprest-grid-body")  #grid_body, id="temprest-grid-body")
     ]
-    rule_options = []
-    for rst, settings in restrictions:
-        active = settings and len(settings) > 0
-        material_filter = "" if not isinstance(rst.condition, MaterialCondition) else rst.condition.material_class
-        parameter_values = list(settings[0].parameters) if active and settings[0].parameters else None
-        try:
-            order_attribute, counter = _print_rule_condition(rst.condition, parameter_values, rst.id)
-        except:
-            logging.getLogger(__name__).exception(f"Failed to display rule settings for rule {rst} with settings {settings}")
-            continue
-        num_params = next(counter)   #  starts at 0
-        equipment = rst.equipment
-        is_rule_configurable: bool = (rst.equipment_selectable and isinstance(rst.equipment, Sequence)) or ConditionUtils.condition_has_parameters(rst.condition)
-        equipment_as_list = [rst.equipment] if not isinstance(rst.equipment, Sequence) else list(rst.equipment)
-        #dummy_selector = equipment_selector if equipment_selector is not None and not rst.equipment_selectable else None
-        # TODO check: is this really required for receiving the callbacks?
-        dummy_parameters = html.Div(dcc.Input(id={"role": "temprest-parameter-control", "id": rst.id, "count": 0}), hidden=True) if num_params == 0 and is_rule_configurable else None
-        #if dummy_selector:
-        #    dummy_selector.children.value = equipment_as_list
-        if is_rule_configurable:
-            equipment_selector = html.Div(dcc.Dropdown(options=[{"value": e, "label": _equipment_text(e, site)[0]} for e in equipment_as_list], value=[], multi=True, style={"min-width": "12em", "max-width": "20em"},
-                                              id={"role": "temprest-equipment-selector", "id": rst.id}))
-            equipment_text = equipment_selector
-            equipment_title = "Select equipment"
-            if len(settings) > 0:
-                equipment_selector.children.value = settings[0].active_equipment
-            elif not active:
-                equipment_selector.children.value = rst.equipment
-        elif isinstance(equipment, Sequence):
-            equipment_texts = [_equipment_text(e, site) for e in equipment]
-            equipment_text = ", ".join([label for label, title in equipment_texts])
-            equipment_title = ", ".join([title for label, title in equipment_texts if title is not None])
-        else:
-            equipment_text, equipment_title = _equipment_text(equipment, site)
-        active_text = "✔" if active else "✖"
-        active_status = "active" if active else "inactive"
-        active_role = "temprest-active" if not is_rule_configurable else "temprest-cfg-active"
-        msg_role = "temprest-error-msg" if not is_rule_configurable else "temprest-cfg-error-msg"
-
-        grid_body.append(html.Tr([
-                    html.Th(rst.label or rst.id, title=f"Id: {rst.id}", scope="row", className="temprest-cell"),
-                    html.Td(rst.description, className="temprest-cell"),
-                    html.Td(equipment_text, title="Id: " + equipment_title, className="temprest-cell"),
-                    html.Td(material_filter, className="temprest-cell"),
-                    html.Td(order_attribute, className="temprest-cell"),
-                    html.Td(active_text, id={"role": active_role, "id": rst.id}, className="temprest-cell temprest-" + active_status, title=f"Rule is {active_status}"),
-                    html.Td([
-                        html.Button("Toggle" if not is_rule_configurable else "Save", className="dynreact-button",
-                                    id={"role": "temprest-toggle" if not is_rule_configurable else "temprest-save", "id": rst.id},
-                                    title=f"Toggle active status of rule: {rst.label or rst.id}" if not is_rule_configurable else "Save changes"),
-                        dcc.Store(id={"role": msg_role, "id": rst.id},),
-                        dummy_parameters
-                    ], className="temprest-cell")
-        ]))
-        rule_options.append({"value": rst.id, "label": rst.label or rst.id})
+    rule_options = [{"value": rst.id, "label": rst.label or rst.id} for rst, _ in restrictions]
     orders_table = dash_ag.AgGrid(
             id="temprest-orders-table",
             columnDefs=[{"field": "id", "pinned": True}],
@@ -144,45 +91,160 @@ def layout(*args, **kwargs):
     ], id="temprest")
 
 
+@callback(Output("temprest-grid-body", "children"),
+          Input({"role": "temprest-add-row", "id": ALL}, "n_clicks"),
+          Input({"role": "temprest-delete-row", "id": ALL, "setting": ALL}, "n_clicks"),
+          )
+def set_table_content(_, __):
+    temp_rest = state.get_temporary_restrictions()
+    if not temp_rest or not dash_authenticated(config):
+        return []
+    site = state.get_site()
+    trigger_id = callback_context.triggered_id
+    add_btn_triggered = trigger_id is not None and isinstance(trigger_id, Mapping) and trigger_id.get("role") == "temprest-add-row"
+    delete_btn_triggered = trigger_id is not None and isinstance(trigger_id, Mapping) and trigger_id.get("role") == "temprest-delete-row"
+    triggered_id: str|None = trigger_id.get("id") if add_btn_triggered or delete_btn_triggered else None
+    triggered_setting: int|None = trigger_id.get("setting") if delete_btn_triggered else None
+    if add_btn_triggered:   # TODO catch errors, show alert; or show success msg
+        temp_rest.add(triggered_id)
+    elif delete_btn_triggered and triggered_setting is not None:
+        temp_rest.delete(triggered_id, triggered_setting)
+    restrictions: Sequence[tuple[EquipmentRestriction, Sequence[RuleSettings]]] = temp_rest.equipment_restrictions()
+    grid_body = []
+    rule_options = []
+    inactive_setting = (RuleSettings(active=False),)
+    for rst, settings in restrictions:
+        material_filter = "" if not isinstance(rst.condition, MaterialCondition) else rst.condition.material_class
+        equipment = rst.equipment
+        equipment_selectable = rst.equipment_selectable and isinstance(rst.equipment, Sequence) and len(rst.equipment) > 1
+        has_params = ConditionUtils.condition_has_parameters(rst.condition)
+        is_rule_configurable: bool = equipment_selectable or has_params
+        equipment_as_list = [rst.equipment] if not isinstance(rst.equipment, Sequence) else list(rst.equipment)
+        if not settings:
+            settings = inactive_setting
+        num_settings = len(settings)
+        for setting_idx, setting in enumerate(settings):
+            active = setting.active
+            parameter_values = list(setting.parameters) if setting.parameters else None
+            try:
+                order_attribute, counter = _print_rule_condition(rst.condition, parameter_values, rst.id, setting.setting_id)
+            except:
+                logging.getLogger(__name__).exception(
+                    f"Failed to display rule settings for rule {rst} with settings {setting}")
+                continue
+            num_params = next(counter)  # starts at 0
+            # dummy_selector = equipment_selector if equipment_selector is not None and not rst.equipment_selectable else None
+            # TODO check: is this really required for receiving the callbacks?
+            dummy_parameters = html.Div(dcc.Input(id={"role": "temprest-parameter-control", "id": rst.id, "setting": setting.setting_id}),
+                                        hidden=True) if num_params == 0 and is_rule_configurable else None
+            # if dummy_selector:
+            #    dummy_selector.children.value = equipment_as_list
+            equipment_selector = None
+            if is_rule_configurable:
+                equipment_selector = html.Div(dcc.Dropdown(
+                    options=[{"value": e, "label": _equipment_text(e, site)[0]} for e in equipment_as_list], value=[],
+                    multi=True, style={"min-width": "12em", "max-width": "20em"},
+                    id={"role": "temprest-equipment-selector", "id": rst.id, "setting": setting.setting_id}))
+                equipment_text = equipment_selector
+                equipment_title = "Select equipment"
+                if setting.active_equipment:
+                    equipment_selector.children.value = setting.active_equipment
+                else:
+                    equipment_selector.children.value = rst.equipment
+            if not equipment_selectable:
+                if isinstance(equipment, Sequence):
+                    equipment_texts = [_equipment_text(e, site) for e in equipment]
+                    equipment_text = ", ".join([label for label, title in equipment_texts])
+                    equipment_title = ", ".join([title for label, title in equipment_texts if title is not None])
+                else:
+                    equipment_text, equipment_title = _equipment_text(equipment, site)
+                if equipment_selector is not None:  # in this case we still need the equipment selector for the callback logic, but do not want to show it
+                    equipment_text = html.Div([equipment_text, html.Div(equipment_selector, hidden=True)])
+            active_text = "✔" if active else "✖"
 
-@callback(Output({"role": "temprest-active", "id": MATCH}, "children"),
-         Output({"role": "temprest-active", "id": MATCH}, "className"),
+            active_status = "active" if active else "inactive"
+            # we use different roles depending on whether the rule is configurable or not
+            active_role = "temprest-active" if not is_rule_configurable else "temprest-cfg-active"
+            msg_role = "temprest-error-msg" if not is_rule_configurable else "temprest-cfg-error-msg"
+            btn_new_instance = None
+            btn_delete = None
+            if setting_idx == 0 and equipment_selectable and has_params:
+                btn_new_instance = html.Button("+", className="button-round",
+                                               id={"role": "temprest-add-row", "id": rst.id},  title=f"Add a new instance of rule: {rst.label or rst.id}")
+            if not active and setting_idx > 0:
+                #btn_delete = html.Button("Delete", className="dynreact-button", id={"role": "temprest-delete-row", "id": rst.id, "setting": setting.setting_id},
+                #                               title=f"Delete inactive rule instance: {rst.label or rst.id}")
+                btn_delete = html.Button("−", className="button-round", id={"role": "temprest-delete-row", "id": rst.id, "setting": setting.setting_id},
+                                         title=f"Delete inactive rule instance: {rst.label or rst.id}")
+
+            label = rst.label or rst.id
+            if setting_idx > 0:
+                label += f" ({setting_idx+1})"
+            rule_label = html.Span(label)
+            label_cell = html.Div([rule_label, btn_new_instance]) if btn_new_instance is not None else html.Div([rule_label, btn_delete]) if btn_delete else rule_label
+            header = html.Th(label_cell, title=f"Id: {rst.id}", scope="row", className="temprest-cell") if setting_idx == 0 else \
+                        html.Td(label_cell, title=f"Id: {rst.id}", className="temprest-cell temprest-cell-sub-header")
+            check_id = {"role": active_role, "id": rst.id}
+            msg_id = {"role": msg_role, "id": rst.id}
+            save_col = []
+            if is_rule_configurable:
+                check_id["setting"] = setting.setting_id
+                msg_id["setting"] = setting.setting_id
+                save_col.append(html.Button("Save", className="dynreact-button", id={"role": "temprest-save", "id": rst.id, "setting": setting.setting_id}, title="Save changes", hidden=True))
+                save_col.append(html.Button("Reset", className="dynreact-button", id={"role": "temprest-clear", "id": rst.id, "setting": setting.setting_id}, title="Reset changes", hidden=True))
+            save_col.extend([dcc.Store(id=msg_id, ), dummy_parameters])
+            grid_body.append(html.Tr([
+                header,
+                html.Td(rst.description, className="temprest-cell"),
+                html.Td(equipment_text, title="Id: " + equipment_title, className="temprest-cell"),
+                html.Td(material_filter, className="temprest-cell"),
+                html.Td(order_attribute, className="temprest-cell"),
+                html.Td(html.Div(dcc.Checklist(options=("", ), value=("", ) if active else (), id=check_id),
+                        className="temprest-cell temprest-" + active_status, title=f"Rule is {active_status}")),
+                html.Td(save_col, className="temprest-cell flex gap-05")
+            ]))
+        rule_options.append({"value": rst.id, "label": rst.label or rst.id})
+    return grid_body
+
+@callback(Output({"role": "temprest-active", "id": MATCH}, "value"),
+         #Output({"role": "temprest-active", "id": MATCH}, "className"),
          Output({"role": "temprest-active", "id": MATCH}, "title"),
-         Output({"role": "temprest-error-msg", "id": MATCH}, "data"),   # could be a problem with MATCH? Need one per entry?
-         Input({"role": "temprest-toggle", "id": MATCH}, "n_clicks"),
-         running=[  # TODO here we could enable ALL by using an intermediate store maybe
-              (Output({"role": "temprest-toggle", "id": MATCH}, "disabled"), True, False),
-         ],
+         Output({"role": "temprest-error-msg", "id": MATCH}, "data"),
+         Input({"role": "temprest-active", "id": MATCH}, "value"),      #
+         # TODO enable once we can drop support for dash<=2.17.1: https://github.com/plotly/dash/issues/2863
+         #running=[  # TODO here we could enable ALL by using an intermediate store maybe
+         #     (Output({"role": "temprest-toggle", "id": MATCH}, "disabled"), True, False),
+         #],
          config_prevent_initial_callbacks=True)
-def toggle_rule_nonconfigurable(clicks):
-    changed = GuiUtils.changed_ids(excluded_ids=("",))
-    if len(changed) == 0 or not dash_authenticated(config):
-        return None, None, None, None
-    triggered = json.loads(changed[0])["id"]
+def toggle_rule(value: Sequence[Literal[""]]|None):
+    trigger_id = callback_context.triggered_id
+    if value is None or not isinstance(trigger_id, Mapping) or not dash_authenticated(config):
+        return None, None, None
+    triggered = trigger_id.get("id")
+    activating = len(value) > 0
     restrictions = state.get_temporary_restrictions()
     rule, settings = restrictions.get_restriction(triggered)
+    msg = None
     if not rule:
         msg = {"type": "error", "msg": f"Rule {triggered} unknown"}
     else:
-        active = settings and len(settings) > 0
-        msg = None
-        try:
-            if not active:
-                restrictions.activate(triggered, RuleSettings(active=True))
-            else:
-                restrictions.deactivate(triggered)
-        except Exception as e:
-            msg = {"type": "error", "msg": f"Failed to toggle status: {e}"}
+        active = settings and len(settings) > 0 and settings[0].active
+        if active != activating:
+            try:
+                restrictions.store(triggered, RuleSettings(active=activating))
+            except Exception as e:
+                msg = {"type": "error", "msg": f"Failed to toggle status: {e}"}
     rule_active = restrictions.is_active(triggered)
     status = "✔" if rule_active else "✖"
+    value = [""] if rule_active else []
     clazz = "temprest-cell " + ("temprest-active" if rule_active else "temprest-inactive")
     title = "Rule is " + ("active" if rule_active else "inactive")
-    return status, clazz, title, msg
+    return value, title, msg
 
 @callback(
          Output("temprest-error-msg", "data"),
          Input({"role": "temprest-error-msg", "id": ALL}, "data"),
-         Input({"role": "temprest-cfg-error-msg", "id": ALL}, "data"))
+         Input({"role": "temprest-cfg-error-msg", "id": ALL, "setting": ALL}, "data"))
 def error_msg_changed(messages0, messages1):
     changed = GuiUtils.changed_ids(excluded_ids=("",))
     if len(changed) == 0:
@@ -197,25 +259,30 @@ def error_msg_changed(messages0, messages1):
     return messages0[changed_idx0] if changed_idx0 is not None else messages1[changed_idx1] if changed_idx1 is not None else None
 
 
-@callback(Output({"role": "temprest-cfg-active", "id": MATCH}, "children"),
-         Output({"role": "temprest-cfg-active", "id": MATCH}, "className"),
-         Output({"role": "temprest-cfg-active", "id": MATCH}, "title"),
-         Output({"role": "temprest-cfg-error-msg", "id": MATCH}, "data"),
-         Input({"role": "temprest-save", "id": MATCH}, "n_clicks"),
-         State({"role": "temprest-equipment-selector", "id": MATCH}, "value"),
-         State({"role": "temprest-parameter-control", "id": MATCH, "count": ALL}, "value"),
+@callback(Output({"role": "temprest-cfg-active", "id": MATCH, "setting": MATCH}, "value"),
+         #Output({"role": "temprest-cfg-active", "id": MATCH, "setting": MATCH}, "className"),
+         Output({"role": "temprest-cfg-active", "id": MATCH, "setting": MATCH}, "title"),
+         Output({"role": "temprest-cfg-error-msg", "id": MATCH, "setting": MATCH}, "data"),
+         Input({"role": "temprest-cfg-active", "id": MATCH, "setting": MATCH}, "value"),
+         Input({"role": "temprest-save", "id": MATCH, "setting": MATCH}, "n_clicks"),
+         State({"role": "temprest-equipment-selector", "id": MATCH, "setting": MATCH}, "value"),
+         State({"role": "temprest-parameter-control", "id": MATCH, "setting": MATCH, "count": ALL}, "value"),
          #State({"role": "parameter-control", "rule": MATCH}, "value"),
-         running=[
-              (Output({"role": "temprest-save", "id": MATCH}, "disabled"), True, False),
-         ],
+         # TODO enable once we can drop support for dash<=2.17.1: https://github.com/plotly/dash/issues/2863
+         #running=[
+         #     (Output({"role": "temprest-save", "id": MATCH}, "disabled"), True, False),
+         #],
          config_prevent_initial_callbacks=True)
-def save_rule_configurable(clicks, selected_equipment: list[int], parameters):
-    changed = GuiUtils.changed_ids(excluded_ids=("",))
-    if len(changed) == 0 or not dash_authenticated(config):
-        return None, None, None, None
-    triggered = json.loads(changed[0])["id"]
+def save_rule_configurable(value: Sequence[Literal[""]]|None, _, selected_equipment: list[int], parameters):
+    trigger_id = callback_context.triggered_id
+    if value is None or not isinstance(trigger_id, Mapping) or not dash_authenticated(config):
+        return None, None, None
+    triggered = trigger_id.get("id")
+    setting = trigger_id.get("setting")
+    activating = len(value) > 0
     restrictions = state.get_temporary_restrictions()
     rule, settings = restrictions.get_restriction(triggered)
+    msg = None
     if not rule:
         msg = {"type": "error", "msg": f"Rule {triggered} unknown"}
     elif parameters is not None and any(p is None for p in parameters):
@@ -226,25 +293,95 @@ def save_rule_configurable(clicks, selected_equipment: list[int], parameters):
         try:
             has_parameters: bool = ConditionUtils.condition_has_parameters(rule.condition)
             msg = None
-            if has_parameters and isinstance(rule.condition, ListCondition) and parameters is not None and len(parameters) > 0:  # TODO recursive...
+            if has_parameters and isinstance(rule.condition, ListCondition) and parameters is not None and len(parameters) > 0:
                 param_value = next(v for v in rule.condition.values if isinstance(v, ParameterValue))
                 params0: str = parameters[0]
                 parameters = [ConditionUtils.convert_to_parameter_type(param_value.parameter_type, p) for p in (p.strip() for p in params0.split(";")) if p]
-            active = len(selected_equipment) > 0 and (not has_parameters or (parameters is not None and len(parameters) > 0))
+            # TODO validate parameters and equipment, raise an error if they do not match the rule conditions
+            #active = len(selected_equipment) > 0 and (not has_parameters or (parameters is not None and len(parameters) > 0))
             params = None if not has_parameters else parameters
-            if has_parameters:  # TODO validate appropriate number of parameters
+            if has_parameters:  # validate appropriate number of parameters
                 pass
-            new_settings = RuleSettings(active=active, active_equipment=selected_equipment, parameters=params)
-            restrictions.activate(triggered, new_settings, rule_index=0)
+            new_settings = RuleSettings(active=activating, active_equipment=selected_equipment, parameters=params, setting_id=setting)
+            restrictions.store(triggered, new_settings)
             # msg = {"type": "success", "msg": f"Status toggled: {triggered} = {not active}"}  # the alert is too ugly here
         except Exception as e:
             traceback.print_exc()
             msg = {"type": "error", "msg": f"Failed to toggle status: {e}"}
-    rule_active = restrictions.is_active(triggered)
+    rule_active = restrictions.is_active(triggered, setting_id=setting)
     status = "✔" if rule_active else "✖"
+    value = [""] if rule_active else []
     clazz = "temprest-cell " + ("temprest-active" if rule_active else "temprest-inactive")
     title = "Rule is " + ("active" if rule_active else "inactive")
-    return status, clazz, title, msg
+    return value, title, msg
+
+
+@callback(Output({"role": "temprest-save", "id": MATCH, "setting": MATCH}, "hidden"),
+         Output({"role": "temprest-clear", "id": MATCH, "setting": MATCH}, "hidden"),
+         Input({"role": "temprest-cfg-active", "id": MATCH, "setting": MATCH}, "value"),
+         Input({"role": "temprest-equipment-selector", "id": MATCH, "setting": MATCH}, "value"),
+         Input({"role": "temprest-parameter-control", "id": MATCH, "setting": MATCH, "count": ALL}, "value"),
+         Input({"role": "temprest-save", "id": MATCH, "setting": MATCH}, "n_clicks"),
+         Input({"role": "temprest-clear", "id": MATCH, "setting": MATCH}, "n_clicks"),
+         config_prevent_initial_callbacks=True)
+def set_save_clear_btn_status(value: Sequence[Literal[""]]|None, selected_equipment: int|list[int], parameters, _, __):
+    triggered = callback_context.triggered_id
+    # rule not active
+    if not value or len(value) == 0 or not dash_authenticated(config) or \
+                not isinstance(triggered, Mapping) or triggered.get("role") in ("temprest-save", "temprest-clear"):
+        return True, True
+    if not selected_equipment or (isinstance(selected_equipment, Sequence) and len(selected_equipment) == 0):
+        return True, True
+    if not isinstance(selected_equipment, Sequence):
+        selected_equipment = [selected_equipment]
+    rule_id = triggered.get("id")
+    setting_id = triggered.get("setting")
+    rule, settings = state.get_temporary_restrictions().get_restriction(rule_id)
+    setting = next((s for s in settings if s.setting_id == setting_id), None)
+    if rule is None or setting is None:
+        return True, True
+    if rule.equipment_selectable and (not setting.active_equipment or len(selected_equipment) != len(setting.active_equipment) or any(e not in setting.active_equipment for e in selected_equipment)):
+        return False, False
+    has_parameters: bool = ConditionUtils.condition_has_parameters(rule.condition)
+    if has_parameters:  # check if parameters have changed
+        if isinstance(rule.condition, ListCondition) and parameters is not None and len(parameters) > 0:
+            param_value = next(v for v in rule.condition.values if isinstance(v, ParameterValue))
+            params0: str = parameters[0]
+            parameters = [ConditionUtils.convert_to_parameter_type(param_value.parameter_type, p) for p in (p.strip() for p in params0.split(";")) if p]
+        if parameters is None or len(parameters) == 0 or any(p is None for p in parameters):
+            return True, True
+        if setting.parameters is None or len(setting.parameters) != len(parameters) or any(p != setting.parameters[idx] for idx, p in enumerate(parameters)):
+            return False, False
+    return True, True
+
+
+@callback(Output({"role": "temprest-equipment-selector", "id": MATCH, "setting": MATCH}, "value"),
+         Output({"role": "temprest-parameter-control", "id": MATCH, "setting": MATCH, "count": ALL}, "value"),
+         Input({"role": "temprest-clear", "id": MATCH, "setting": MATCH}, "n_clicks"),
+         config_prevent_initial_callbacks=True)
+def clear_btn_pressed(_):
+    groupings = callback_context.outputs_grouping
+    outputs = groupings[1]
+    params_out = [dash.no_update for o in outputs]
+    if not dash_authenticated(config):
+        return dash.no_update, params_out
+    triggered = callback_context.triggered_id
+    rule_id = triggered.get("id")
+    setting_id = triggered.get("setting")
+    rule, settings = state.get_temporary_restrictions().get_restriction(rule_id)
+    setting = next((s for s in settings if s.setting_id == setting_id), None)
+    if rule is None or setting is None:
+        return dash.no_update, dash.no_update
+    equipment = rule.equipment if not rule.equipment_selectable else (setting.active_equipment or rule.equipment)
+    if not isinstance(equipment, Sequence):
+        equipment = (equipment, )
+    if ConditionUtils.condition_has_parameters(rule.condition) and setting.parameters is not None:
+        if isinstance(rule.condition, ListCondition):
+            params_out = ["; ".join([str(p) for p in setting.parameters])]
+        else:  # Note: this is tricky if parameters contains a nested list
+            params_out = setting.parameters
+    return equipment, params_out
+
 
 # clientside arguments: msg, type, siblingId, dummyReturnValue
 clientside_callback(
@@ -275,7 +412,7 @@ def snapshot_changed(snapshot: str|None, rule_id: str|None, lang: str|None):
     snap = DatetimeUtils.parse_date(snapshot)
     snap_obj = state.get_snapshot(time=snap)
     if not snap_obj or not dash_authenticated(config):
-        return None
+        return None, None
     orders = snap_obj.orders
     temporary_restrictions = state.get_temporary_restrictions()
     rule, settings = temporary_restrictions.get_restriction(rule_id)
@@ -305,9 +442,9 @@ def snapshot_changed(snapshot: str|None, rule_id: str|None, lang: str|None):
     return cols, rows
 
 
-def _parameter_control(param: ParameterValue[Any], parameter: Any|None, rule_id: str, counter: Iterator[int]):
+def _parameter_control(param: ParameterValue[Any], parameter: Any|None, rule_id: str, setting_id: int, counter: Iterator[int]):
     cnt = next(counter)
-    el_id = {"role": "temprest-parameter-control", "id": rule_id, "count": cnt}
+    el_id = {"role": "temprest-parameter-control", "id": rule_id, "setting": setting_id, "count": cnt}
     value = parameter if parameter is not None else param.default_value
     if param.parameter_type == "bool":
         return dcc.Checklist(options=[""], value=[""] if value else [], id=el_id)
@@ -326,15 +463,15 @@ def _parameter_control(param: ParameterValue[Any], parameter: Any|None, rule_id:
     return None
 
 
-def _print_rule_leaf_condition_with_parameters(condition: Condition, parameter_values: list[Any]|None, rule_id: str, counter: Iterator[int]):
+def _print_rule_leaf_condition_with_parameters(condition: Condition, parameter_values: list[Any]|None, rule_id: str, setting_id: int, counter: Iterator[int]):
     children = []
     if isinstance(condition, RangeCondition):
         val0 = condition.value_range[0]
         val1 = condition.value_range[1]
         param_value0 = parameter_values.pop(0) if isinstance(val0, ParameterValue) and parameter_values is not None else None
         param_value1 = parameter_values.pop(0) if isinstance(val1, ParameterValue) and parameter_values is not None else None
-        val0_el = _parameter_control(val0, param_value0, rule_id, counter) if isinstance(val0, ParameterValue) else html.Span(str(val0))
-        val1_el = _parameter_control(val1, param_value1, rule_id, counter) if isinstance(val1, ParameterValue) else html.Span(str(val1))
+        val0_el = _parameter_control(val0, param_value0, rule_id, setting_id, counter) if isinstance(val0, ParameterValue) else html.Span(str(val0))
+        val1_el = _parameter_control(val1, param_value1, rule_id, setting_id, counter) if isinstance(val1, ParameterValue) else html.Span(str(val1))
         children.extend([val0_el, html.Span(condition.operators[0]), html.Span(condition.attribute), html.Span(condition.operators[1]), val1_el])
     elif isinstance(condition, PropertyCondition):
         children.append(html.Span(condition.attribute))
@@ -343,7 +480,7 @@ def _print_rule_leaf_condition_with_parameters(condition: Condition, parameter_v
             value = condition.value
             if isinstance(value, ParameterValue):
                 param_value = parameter_values.pop(0) if parameter_values is not None else None
-                children.append(_parameter_control(value, param_value, rule_id, counter))
+                children.append(_parameter_control(value, param_value, rule_id, setting_id, counter))
             else:
                 children.append(html.Span(str(value)))
         elif isinstance(condition, ListCondition):
@@ -353,7 +490,7 @@ def _print_rule_leaf_condition_with_parameters(condition: Condition, parameter_v
                 values = [str(v) for v in parameter_values] if parameter_values is not None else None
                 values = "; ".join(values)
                 parameter_values.clear()
-            ctrl = _parameter_control(param_value, values, rule_id, counter)
+            ctrl = _parameter_control(param_value, values, rule_id, setting_id, counter)
             ctrl.type = "string"
             ctrl.style = {"min-width": "12em"}
             ctrl.placeholder = "3; 1; 5; 17; ..." if param_value.parameter_type == "int" else "2.12; 34.6; ..." if param_value.parameter_type == "float" else \
@@ -364,21 +501,21 @@ def _print_rule_leaf_condition_with_parameters(condition: Condition, parameter_v
     return html.Div(children, style={"display": "flex", "column-gap": "0.3em", "row-gap": "0.5em", "flex-wrap": "wrap"})
 
 
-def _print_rule_condition(condition: Condition, parameter_values: list[Any]|None, rule_id: str, counter: Iterator[int]|None=None) -> tuple[Any, Iterator[int]]:
+def _print_rule_condition(condition: Condition, parameter_values: list[Any]|None, rule_id: str, setting_id: int, counter: Iterator[int]|None=None) -> tuple[Any, Iterator[int]]:
     if counter is None:
         counter = itertools.count()
     if isinstance(condition, CompositeCondition):
         return html.Div([html.Span(condition.type.upper() + ":")] +
-                        [html.Div(_print_rule_condition(c, parameter_values, rule_id, counter=counter)[0], style={"padding-left": "1em"}) for c in condition.conditions],
+                        [html.Div(_print_rule_condition(c, parameter_values, rule_id, setting_id, counter=counter)[0], style={"padding-left": "1em"}) for c in condition.conditions],
                         style={"display": "flex", "flex-direction": "column"}), counter
     if isinstance(condition, NotCondition):
-        return html.Div([html.Span("!("), _print_rule_condition(condition.base, parameter_values, rule_id, counter=counter)[0], html.Span(")")]), counter
-    return _print_rule_leaf_condition(condition, parameter_values, rule_id, counter), counter
+        return html.Div([html.Span("!("), _print_rule_condition(condition.base, parameter_values, rule_id, setting_id, counter=counter)[0], html.Span(")")]), counter
+    return _print_rule_leaf_condition(condition, parameter_values, rule_id, setting_id, counter), counter
 
 
-def _print_rule_leaf_condition(condition: LeafCondition, parameter_values: list[Any]|None, rule_id: str, counter: Iterator[int]):
+def _print_rule_leaf_condition(condition: LeafCondition, parameter_values: list[Any]|None, rule_id: str, setting_id: int, counter: Iterator[int]):
     if ConditionUtils.condition_has_parameters(condition):
-        return _print_rule_leaf_condition_with_parameters(condition, parameter_values, rule_id, counter)
+        return _print_rule_leaf_condition_with_parameters(condition, parameter_values, rule_id, setting_id, counter)
     order_attribute = ""
     if isinstance(condition, RangeCondition):
         order_attribute += str(condition.value_range[0]) + " " + condition.operators[0] + " " + condition.attribute + " " + condition.operators[1] + str(condition.value_range[1])

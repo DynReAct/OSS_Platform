@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
-from typing import Sequence
+from typing import Sequence, Literal, Union, Annotated, Mapping
+
+from pydantic import Field, Tag
 
 from dynreact.base.model import Model
 
@@ -12,27 +14,46 @@ class ServiceHealth(Model):
 
     status: int
     "0: ok"
+    reason: str|None=None
     running_since: datetime|None=None
 
 
-class Metric(Model):
+class BaseMetric(Model):
     id: str
     labels: dict[str, str]|None=None
+    type: str
 
 
-class PrimitiveMetric(Metric):
+class PrimitiveMetric(BaseMetric):
     value: float|int
+    type: Literal["primitive"] = "primitive"
 
 
-class Histogram(Metric):
+class Histogram(BaseMetric):
     data: list[float]
     buckets: list[float]
     include_infinity: bool=True
+    type: Literal["histogram"] = "histogram"
+
+
+Metric = Annotated[Union[Annotated[PrimitiveMetric, Tag("primitive")], Annotated[Histogram, Tag("historgram")]], Field(discriminator="type")]
 
 
 class ServiceMetrics(Model):
     service_id: str
     metrics: Sequence[Metric]
+
+
+class MetricsPersistence:
+
+    def __init__(self, url: str):
+        self._url = url
+
+    def store(self, metrics: Mapping[str, ServiceMetrics], health: Mapping[str, ServiceHealth], timestamp: datetime|None=None):
+        raise NotImplementedError
+
+    def load(self, timestamp: datetime|None=None) -> tuple[dict[str, ServiceMetrics], dict[str, ServiceHealth]]:
+        raise NotImplementedError
 
 
 # Below: batch lot creation monitoring

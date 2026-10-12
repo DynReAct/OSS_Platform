@@ -2,11 +2,15 @@ node {
     properties([disableConcurrentBuilds()])
     def IMAGE_NAME = "dynreact-oss-shortterm"
     def IMAGE_TAG = "latest"
+    def BUILD_IMAGE_TAG = "build-${env.BUILD_ID}"
     def LOCAL_REGISTRY = "192.168.110.176:5000/"
 
     env.IMAGE_NAME = IMAGE_NAME
     env.LOCAL_REGISTRY = LOCAL_REGISTRY
-    env.IMAGE_TAG = IMAGE_TAG
+    env.BUILD_IMAGE_TAG = BUILD_IMAGE_TAG
+    env.LATEST_IMAGE_TAG = IMAGE_TAG
+    // Use an immutable tag throughout this run; latest remains a convenience alias.
+    env.IMAGE_TAG = BUILD_IMAGE_TAG
     env.SHORT_TERM_PLANNING_PARAMS = "default+file:/repo/ShortTermPlanning/tests/stp_context_oss_test.json"
     env.EXPECTED_STP_PROFILE = "oss"
     env.CONTAINER_NAME_PREFIX = "JENKINS_OSS_TEST_${env.BUILD_ID}"
@@ -60,18 +64,30 @@ node {
     stage('Build Docker Image') {
     sh '''
         cd ShortTermPlanning
+        docker image rm -f "$IMAGE_NAME:$BUILD_IMAGE_TAG" "$IMAGE_NAME:$LATEST_IMAGE_TAG" >/dev/null 2>&1 || true
         docker build \\
             --build-arg DOCKER_REGISTRY="$LOCAL_REGISTRY" \\
             --build-arg BUILD_DATE="\$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \\
             --build-arg JENKINS_BUILD_ID="$BUILD_ID" \\
-            -t "$IMAGE_NAME:$IMAGE_TAG" .
+            -t "$IMAGE_NAME:$BUILD_IMAGE_TAG" .
+        docker tag "$IMAGE_NAME:$BUILD_IMAGE_TAG" "$IMAGE_NAME:$LATEST_IMAGE_TAG"
     '''
     }
 
     stage('Tag & Push Image') {
         sh '''
-        docker tag "$IMAGE_NAME:$IMAGE_TAG" "$LOCAL_REGISTRY$IMAGE_NAME:$IMAGE_TAG"
-        docker push "$LOCAL_REGISTRY$IMAGE_NAME:$IMAGE_TAG"
+        docker tag "$IMAGE_NAME:$BUILD_IMAGE_TAG" "$LOCAL_REGISTRY$IMAGE_NAME:$BUILD_IMAGE_TAG"
+        docker tag "$IMAGE_NAME:$BUILD_IMAGE_TAG" "$LOCAL_REGISTRY$IMAGE_NAME:$LATEST_IMAGE_TAG"
+        docker push "$LOCAL_REGISTRY$IMAGE_NAME:$BUILD_IMAGE_TAG"
+        docker push "$LOCAL_REGISTRY$IMAGE_NAME:$LATEST_IMAGE_TAG"
+        '''
+    }
+
+    stage('Verify Runtime Image') {
+        sh '''
+        echo "Runtime image: $LOCAL_REGISTRY$IMAGE_NAME:$BUILD_IMAGE_TAG"
+        docker image inspect "$LOCAL_REGISTRY$IMAGE_NAME:$BUILD_IMAGE_TAG" --format 'RepoTags={{.RepoTags}}'
+        docker image inspect "$LOCAL_REGISTRY$IMAGE_NAME:$BUILD_IMAGE_TAG" --format 'BuildId={{index .Config.Labels "es.upm.etsii.jenkins-pi.dynreact.build_id"}}'
         '''
     }
 
@@ -129,7 +145,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e PIP_CACHE_DIR=/tmp/pip-cache \\
           --user "0:0" \\
           ${envArgs} \\
-          ${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG} \\
+          ${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG} \\
           bash -lc 'set -euo pipefail
                 source .venv/bin/activate
                    cd /app/shortterm/dynreact/tests/integration_test
@@ -158,7 +174,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           --user "0:0" \\
           ${envArgs} \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
                    python -m venv /tmp/venv
                    source .venv/bin/activate
@@ -186,7 +202,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           --user "0:0" \\
           ${envArgs} \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
                    python -m venv /tmp/venv
                    source .venv/bin/activate
@@ -215,7 +231,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           ${envArgs} \\
           --user "0:0" \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
                    python -m venv /tmp/venv
                    source .venv/bin/activate
@@ -245,7 +261,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e TOPIC_CALLBACK="$TEST_TOPIC_CALLBACK" \\
           ${envArgs} \\
           --user "0:0" \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
                    python -m venv /tmp/venv
                    source .venv/bin/activate
@@ -276,7 +292,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e REMOTE_BASE_AGENTS="1" \\
           ${envArgs} \\
           --user "0:0" \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
                    source .venv/bin/activate
                    cd /app/shortterm
@@ -306,7 +322,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e REMOTE_BASE_AGENTS="1" \\
           ${envArgs} \\
           --user "0:0" \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
                    source .venv/bin/activate
                    cd /app/shortterm
@@ -336,7 +352,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e REMOTE_BASE_AGENTS="1" \\
           ${envArgs} \\
           --user "0:0" \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
                    source .venv/bin/activate
                    cd /app/shortterm
@@ -366,7 +382,7 @@ runStageWithCleanup('Run Scenario 0') {
           -e REMOTE_BASE_AGENTS="1" \\
           ${envArgs} \\
           --user "0:0" \\
-          "${LOCAL_REGISTRY}${IMAGE_NAME}:${IMAGE_TAG}" \\
+          "${LOCAL_REGISTRY}${IMAGE_NAME}:${BUILD_IMAGE_TAG}" \\
           bash -lc 'set -euo pipefail
                    source .venv/bin/activate
                    cd /app/shortterm

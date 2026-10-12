@@ -4,12 +4,12 @@ interface that must be implemented for each specific scheduling use-case. It con
 the custom logic for building an objective function for schedules.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Mapping
 
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Equipment, Order, Material, Snapshot, EquipmentStatus, Site, ProductionPlanning, \
-    OrderAssignment, ProductionTargets, EquipmentProduction, ObjectiveFunction, SUM_MATERIAL, MaterialCategory
+    OrderAssignment, ProductionTargets, EquipmentProduction, ObjectiveFunction, SUM_MATERIAL, MaterialCategory, Lot
 
 
 class CostProvider:
@@ -77,7 +77,7 @@ class CostProvider:
         """
         #plants = [p for p in self._site.plants if p.process == process]
         plant_ids = list(targets.target_weight.keys())
-        plants = [p for p in self._site.equipment if p.process == process and p.id in plant_ids]
+        plants = {p.id: p for p in self._site.equipment if p.process == process and p.id in plant_ids}
         track_structure: bool = targets.material_weights is not None and len(targets.material_weights) > 0
         target_structure = targets.material_weights if track_structure else None
         main_category: MaterialCategory|None = ModelUtils.main_category_for_targets(targets.material_weights, self._site.material_categories) if track_structure else None
@@ -86,7 +86,7 @@ class CostProvider:
                                                 process, assignments, snapshot, targets.period, track_structure=track_structure,
                                                 main_category=main_category.id if main_category is not None else None,
                                                 orders_custom_priority=orders_custom_priority,
-                                                previous_order=previous_orders.get(plant.id) if previous_orders is not None else None) for plant in plants}
+                                                previous_order=previous_orders.get(plant.id) if previous_orders is not None else None) for plant in plants.values()}
         order_assignments = {o: ass for o, ass in assignments.items() if ass.equipment in plant_ids}
         unassigned = {o: ass for o, ass in assignments.items() if ass.equipment < 0}
         order_assignments.update(unassigned)
@@ -101,8 +101,10 @@ class CostProvider:
                     total_priority += my_prio
             else:
                 total_priority = sum(snapshot.get_order(order_id, do_raise=True).priority for order_id in order_assignments)
+        lots = ModelUtils.lots_for_assignments(plants, snapshot, order_assignments, targets.period[0], previous_orders=previous_orders)
         return ProductionPlanning(process=process, order_assignments=order_assignments, equipment_status=status,
-                                  target_structure=target_structure, total_priority=total_priority, previous_orders=previous_orders)
+                                  target_structure=target_structure, total_priority=total_priority, previous_orders=previous_orders, lots=lots)
+
 
     def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot,
                                 new_lot: bool, current_material: Material | None = None, next_material: Material | None = None,

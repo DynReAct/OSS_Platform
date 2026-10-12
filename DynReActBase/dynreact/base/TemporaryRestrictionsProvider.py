@@ -45,31 +45,35 @@ class TemporaryRestrictionsProvider:
         """
         raise NotImplementedError
 
-    def get_restriction(self, rule_id: str) -> tuple[EquipmentRestriction|None, Sequence[RuleSettings]]:
+    def get_restriction(self, rule: str) -> tuple[EquipmentRestriction|None, Sequence[RuleSettings]]:
         """
         Parameters:
-            rule_id:
+            rule:
 
         Returns:
              Restriction plus active status
         """
-        return next(((rule, settings) for rule, settings in self.equipment_restrictions() if rule.id == rule_id), (None, tuple()))
+        return next(((rule, settings) for rule, settings in self.equipment_restrictions() if rule.id == rule), (None, tuple()))
 
-    def activate(self, rule: str, settings: RuleSettings, rule_index: int|None=None) -> bool:
+    def add(self, rule: str) -> RuleSettings:
+        """Create a new rule instance (setting)."""
+        raise NotImplementedError
+
+    def delete(self, rule: str, setting_id: int) -> bool:
+        raise NotImplementedError
+
+    def store(self, rule: str, settings: RuleSettings) -> bool:
         """
         Activate or deactivate a rule, identified by its id
 
         Parameters:
             rule:
             settings:
-            rule_index: if not None, the respective configuration will be updated
+            setting_id: the respective configuration will be updated
         """
         raise NotImplementedError
 
-    def deactivate(self, rule: str, rule_index: int = 0) -> bool:
-        raise NotImplementedError
-
-    def is_active(self, rule_id: str) -> bool:
+    def is_active(self, rule_id: str, setting_id: int=0) -> bool:
         raise NotImplementedError
 
     def equipment_allowed(self, equipment: int, order: Order) -> tuple[bool, EquipmentRestriction|None]:
@@ -91,7 +95,10 @@ class TemporaryRestrictionsProvider:
             r = r.model_copy(update={"condition": adapted_condition})
         return False, r
 
+
 class RuleSettings(BaseModel, use_attribute_docstrings=True):
+    setting_id: int = 0
+    "Rule setting id. Needs to be unique within "
     active: bool
     active_equipment: Sequence[int]|None=None
     "If none, all equipments are considered selected"

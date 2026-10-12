@@ -32,7 +32,7 @@ class PerformanceModelClient(PlantPerformanceModel):
         self._meta: PerformanceModelMetadata|None = None
         self._status_update_interval: timedelta = timedelta(minutes=2)
         self._last_status_update: datetime|None = None
-        self._last_status: int = -1
+        self._last_status: ServiceHealth = ServiceHealth(status=-1)
 
     def _get_meta(self) -> PerformanceModelMetadata:
         if self._meta is None:
@@ -59,18 +59,21 @@ class PerformanceModelClient(PlantPerformanceModel):
         return self._get_meta().description
 
     def status(self) -> int:
+        return self.health().status
+
+    def health(self) -> ServiceHealth:
         now = DatetimeUtils.now()
         if self._last_status_update is None or now - self._last_status_update > self._status_update_interval:
             try:
                 result = requests.get(self._address + "health",
-                                      headers=PerformanceModelClient._attach_token({"Accept": "application/json"}, self._token))
+                                      headers=PerformanceModelClient._attach_token({"Accept": "application/json"},
+                                                                                   self._token))
                 if not result.ok:
-                    self._last_status = result.status_code
+                    self._last_status = ServiceHealth(status=result.status_code, reason=result.reason)
                 else:
-                    health = ServiceHealth.model_validate(result.json())
-                    self._last_status = health.status
-            except:
-                self._last_status = 1
+                    self._last_status = ServiceHealth.model_validate(result.json())
+            except Exception as e:
+                self._last_status = ServiceHealth(status=-1, reason=f"Internal error: {e}")
             self._last_status_update = now
         return self._last_status
 

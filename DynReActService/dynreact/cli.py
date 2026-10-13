@@ -1036,18 +1036,20 @@ def energy_prices():
     service = plugins.get_energy_cost_service(energy_type)
     if service is None:
         raise Exception(f"Energy price provider not found: {energy_type}")
-    start = DatetimeUtils.parse_datetime_str(args.start_time)
-    end = DatetimeUtils.parse_datetime_str(args.end_time)
+    start = DatetimeUtils.parse_datetime_str(args.start_time).astimezone()
+    end = DatetimeUtils.parse_datetime_str(args.end_time).astimezone()
     results = service.energy_costs(start, end)
     if isinstance(results, ServiceResultsFailed):
         print(f"  Failed to determine energy price prediction ({energy_type}): {results}")
         return
     print(f"Energy prices ({energy_type}):")
     cost_unit = results.cost_unit
-    print(f"|   Start time   |   End time  |   Price ({cost_unit}/kWh) |")
-    _format = "%Y-%m-%dT%H:%M%"
+    print( "|------------------|------------------|---------------|")
+    print(f"|    Start time    |      End time    | Price ({cost_unit}/MWh) |")
+    print( "|------------------|------------------|---------------|")
+    _format = "%Y-%m-%dT%H:%M"
     for entry in results.entries:
-        print(f"| {entry.validity[0].astimezone().strftime(_format)} | {entry.validity[1].astimezone().strftime(_format)} |  {entry.costs_per_kwh:.2f}  |")
+        print(f"| {entry.validity[0].astimezone().strftime(_format)} | {entry.validity[1].astimezone().strftime(_format)} |      {entry.costs_per_mwh:.2f}     |")
 
 
 def predict_energy():

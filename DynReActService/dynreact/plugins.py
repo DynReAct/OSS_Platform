@@ -289,6 +289,9 @@ class Plugins:
             elif provider_url.startswith("energyprices+simple:"):
                 from dynreact.base.impl.SimpleEnergyService import SimpleEnergyCostService
                 provider = SimpleEnergyCostService(provider_url)
+            elif provider_url.startswith("energyprices+http"):
+                from dynreact.base.impl.EnergyCostsClient import EnergyCostClient
+                provider = EnergyCostClient(provider_url)
             else:
                 provider = Plugins._load_energy_cost_service(provider_url)
             self._energy_cost_services[energy_type] = provider

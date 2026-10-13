@@ -151,8 +151,8 @@ class EnergyCostServiceMetadata(BaseModel, use_attribute_docstrings=True):
 class EnergyCharacteristics(BaseModel, use_attribute_docstrings=True):
 
     validity: tuple[datetime, datetime]
-    costs_per_kwh: float
-    co2_per_kwh: float|None=None
+    costs_per_mwh: float
+    co2_per_mwh: float|None=None
 
 
 class EnergyPriceCurve(BaseModel, use_attribute_docstrings=True):

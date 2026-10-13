@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from dynreact.base.EnergyService import EnergyCostService, EnergyServiceMetadata, EnergyPriceCurve, ServiceResultsFailed
+from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.monitoring import ServiceHealth
 
@@ -20,7 +21,7 @@ class EnergyCostClientConfig(BaseModel, use_attribute_docstrings=True):
     def init_from_env_vars(token: str|None=None):
         load_dotenv(override=True)
         if token is None:
-            token = os.getenv("ENERGY_SERVICE_0_TOKEN")
+            token = os.getenv("ENERGY_COST_SERVICE_0_TOKEN")
         return EnergyCostClientConfig(token=token)
 
 
@@ -30,7 +31,9 @@ class EnergyCostClient(EnergyCostService):
 
     def __init__(self, url: str, config: EnergyCostClientConfig|None=None):
         super().__init__(url)
-        address = url[7:]
+        if not url.startswith("energyprices+http:"):
+            raise NotApplicableException
+        address = url[13:]
         if not EnergyCostClient._is_valid_url(address):
             raise ValueError(f"URL seems to be invalid: {address}")
         if not config:
@@ -65,11 +68,11 @@ class EnergyCostClient(EnergyCostService):
         return self._get_meta()
 
     def energy_costs(self, start: datetime, end: datetime) -> EnergyPriceCurve|ServiceResultsFailed:
-        start_str = start.strftime(EnergyCostClient._FORMAT)
-        end_str = end.strftime(EnergyCostClient._FORMAT)
+        start_str = start.strftime(EnergyCostClient._FORMAT).replace("+", "%2B")  # encode plus sign
+        end_str = end.strftime(EnergyCostClient._FORMAT).replace("+", "%2B")
         self._init_session()
         try:
-            response = self._session.get(self._address + f"costs?start={start_str}&end={end_str}", headers={"Accept": "application/json"})
+            response = self._session.get(self._address + f"costs?start_time={start_str}&end_time={end_str}", headers={"Accept": "application/json"})
             if not response.ok:
                 jsn = None
                 try:

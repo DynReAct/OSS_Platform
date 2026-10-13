@@ -126,7 +126,7 @@ class SimpleEnergyCostService(EnergyCostService):
         return 0
 
     def energy_costs(self, start: datetime, end: datetime) -> EnergyPriceCurve:
-        if end >= start:
+        if end <= start:
             return EnergyPriceCurve(entries=tuple())
         itv_start = start
         cost_steps: Sequence[tuple[time, float]] = self._config.cost_steps
@@ -143,7 +143,7 @@ class SimpleEnergyCostService(EnergyCostService):
             while itv_end <= itv_start:
                 itv_end = itv_end + one_day
             costs = cost_steps[step_idx][1]
-            result.append(EnergyCharacteristics(validity=(itv_start, itv_end), costs_per_kwh=costs))
+            result.append(EnergyCharacteristics(validity=(itv_start, itv_end), costs_per_mwh=costs))
             itv_start = itv_end
             step_idx = next_step_idx
         return EnergyPriceCurve(entries=result)

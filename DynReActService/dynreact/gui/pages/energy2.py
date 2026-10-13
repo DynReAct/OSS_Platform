@@ -325,6 +325,7 @@ def _build_figure(site: Site, rows_by_equipment: dict[int, list[dict[str, Any]]]
         yaxis2={"title": "Cumulative energy (kWh)", "overlaying": "y", "side": "right"},
         #yaxis3={"title": "Cumulative cost (EUR)", "anchor": "free", "overlaying": "y", "side": "right", "position": 0.96},
         legend={"orientation": "h", "y": 1.02, "x": 0},
+        title = "Energy estimation results"
     )
     return fig
 

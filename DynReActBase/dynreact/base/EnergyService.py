@@ -23,6 +23,9 @@ class EnergyServiceMetadata(BaseModel, use_attribute_docstrings=True, frozen=Tru
     energy_type: EnergyType
     material_based: bool = False
     description: str|None=None
+    attribution: str | None = None
+    license_info: str | None = None
+    license_details: str | None = None
     processes: Sequence[str]|None=None
     equipment: Sequence[int]|None=None
     "Equipment ids supported. If None, all equipments can be assumed to be supported"

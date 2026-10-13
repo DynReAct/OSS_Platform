@@ -25,6 +25,7 @@ class EnergyCostClientConfig(BaseModel, use_attribute_docstrings=True):
         return EnergyCostClientConfig(token=token)
 
 
+# TODO cache
 class EnergyCostClient(EnergyCostService):
 
     _FORMAT = "%Y-%m-%dT%H:%M%z"
@@ -72,7 +73,8 @@ class EnergyCostClient(EnergyCostService):
         end_str = end.strftime(EnergyCostClient._FORMAT).replace("+", "%2B")
         self._init_session()
         try:
-            response = self._session.get(self._address + f"costs?start_time={start_str}&end_time={end_str}", headers={"Accept": "application/json"})
+            # TODO configurable path
+            response = self._session.get(self._address + f"day-ahead?start_time={start_str}&end_time={end_str}", headers={"Accept": "application/json"})
             if not response.ok:
                 jsn = None
                 try:

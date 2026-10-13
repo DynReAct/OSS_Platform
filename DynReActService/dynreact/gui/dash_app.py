@@ -88,6 +88,9 @@ def _layout():
                     dcc.Link("Energy", id="menu-perf-energy_header", className="menu-link", href="/dash/perfmodels/energy", title="Open energy performance models tab")]
     if len(state.energy_prediction_types()) > 0:
         performance_pages.append(dcc.Link("Energy2", id="menu-perf-energy2_header", className="menu-link", href="/dash/perfmodels/energy2", title="Open energy performance models tab"))
+    if len(state.energy_cost_types()) > 0:
+        performance_pages.append(
+            dcc.Link("Energy price", id="menu-perf-energy-price_header", className="menu-link", href="/dash/perfmodels/energy-price", title="Open energy price service tab"))
     menu_entries = [
         dcc.Link("Site", id="menu-site_header", className="menu-link login-required", href="/dash/site", title="Site"),
         #dcc.Link("Long term planning", id="menu-ltp_header", className="menu-link login-required", href="/dash/ltp", title="Open long term planning tab"),

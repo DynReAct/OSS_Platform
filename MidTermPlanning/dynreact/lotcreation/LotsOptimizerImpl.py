@@ -4,7 +4,7 @@ import multiprocessing.pool
 import random
 from copy import copy
 from datetime import datetime
-from typing import Any, Sequence
+from typing import Any, Sequence, Mapping
 
 import networkx as nx
 import numpy as np
@@ -12,13 +12,16 @@ import numpy.typing as npt
 
 import dynreact.lotcreation.LotCreationGoogleOR as lcor
 from dynreact.base.CostProvider import CostProvider
+from dynreact.base.EnergyService import EnergyCostService, EnergyService, ServiceResultsFailed, \
+    EnergyPrediction, EnergyPriceCurve
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo, LotsOptimizer, LotsOptimizationState
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation
+from dynreact.base.ServiceException import ServiceException
 from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Snapshot, ProductionPlanning, ProductionTargets, Site, OrderAssignment, Order, \
-    EquipmentStatus, Lot, Equipment, EquipmentProduction, ObjectiveFunction
+    EquipmentStatus, Lot, Equipment, EquipmentProduction, ObjectiveFunction, EnergyType
 from dynreact.lotcreation.TabuParams import TabuParams
 from dynreact.lotcreation.globaltsp import GlobalTspInput
 from dynreact.lotcreation.globaltsp.BranchAndBoundWithEnsembleInput2 import GlobalSearchDefault
@@ -44,6 +47,7 @@ class TabuSwap:
         return "Order " + str(self.Order) + ": " + str(self.PlantFrom) + " -> " + str(self.PlantTo)
 
 
+# TODO exact start times per equipment!
 class TabuSearch(LotsOptimizer):
 
     def __init__(self, site: Site, process: str, costs: CostProvider, snapshot: Snapshot, targets: ProductionTargets,
@@ -56,12 +60,16 @@ class TabuSearch(LotsOptimizer):
                  forced_orders:  list[str]|None = None,
                  base_lots: list[Lot]|None = None,
                  params: TabuParams|None=None,
-                 temporary_restrictions: TemporaryRestrictionsProvider | None = None
+                 temporary_restrictions: TemporaryRestrictionsProvider | None = None,
+                 energy_prices: Mapping[EnergyType, EnergyCostService] | None = None,
+                 energy_services: Mapping[EnergyType, EnergyService] | None = None,
+                 **kwargs
                  ):
         super().__init__(site, process, costs, snapshot, targets, initial_solution, min_due_date=min_due_date,
                          best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
                          orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots,
-                         temporary_restrictions=temporary_restrictions)
+                         energy_prices=energy_prices, energy_services=energy_services,
+                         temporary_restrictions=temporary_restrictions, **kwargs)
         self._params: TabuParams = params if params is not None else TabuParams()
         self._performance_restrictions: list[PerformanceEstimation]|None = None
         self._forbidden_assignments: dict[str, list[int]] = {}
@@ -80,6 +88,9 @@ class TabuSearch(LotsOptimizer):
         self._logistic_costs_by_oder: dict[str, dict[int, float]] | None = None
         self._rnd = random.Random(x=self._params.rand_seed)
         self._strict = self._params.strict
+        # keys: energy type, equipment, order
+        self._energy_predictions: Mapping[EnergyType, Mapping[int, Mapping[str, EnergyPrediction]]]|None = None
+        self._energy_price_curves: Mapping[EnergyType, EnergyPriceCurve]|None = None
 
     def check_solution(self, p: ProductionPlanning):
         last_eq = None
@@ -142,6 +153,44 @@ class TabuSearch(LotsOptimizer):
                 self._state.best_solution = planning
                 self._state.best_objective_value = objective
         return initial_plant_assignments
+
+    def _init_energy_settings(self):
+        energy_services = self._energy_services
+        if not energy_services:
+            return
+        plants = self._plants
+        orders = self._orders.values()
+        # keys: equipment, order
+        energy_predictions: dict[EnergyType, dict[int, dict[str, EnergyPrediction]]] = {}
+        for energy_type, service in energy_services.items():
+            pred_by_type: dict[int, dict[str, EnergyPrediction]] = {}
+            for equipment in plants.keys():
+                applicable_orders = [o for o in orders if equipment in o.allowed_equipment]
+                if len(applicable_orders) == 0:
+                    continue
+                result = service.bulk_energy_consumption(applicable_orders, equipment, self._snapshot.timestamp)
+                if isinstance(result, ServiceResultsFailed):
+                    raise ServiceException(result.reason, reason=f"Failed to determine energy predictions for equipment {plants[equipment].name_short or equipment}: {result.message}")
+                order_results = result.results
+                result_by_order: dict[str, EnergyPrediction] = {order.id: prediction for order, prediction in zip(applicable_orders, order_results)}
+                pred_by_type[equipment] = result_by_order
+            energy_predictions[energy_type] = pred_by_type
+        self._energy_predictions = energy_predictions
+        energy_prices = self._energy_prices
+        if not energy_prices:
+            return
+        # TODO end time is not exact...
+        # TODO in price-sensitive scheduling we need to restrict the interval to the period covered by price forecasts
+        start, end = self._targets.period
+        energy_price_curves = {}
+        for energy_type, energy_cost_service in energy_prices.items():
+            prices = energy_cost_service.energy_costs(start, end)
+            if isinstance(prices, ServiceResultsFailed):
+                raise ServiceException(prices.reason, reason=f"Failed to determine energy prices for energy type {energy_type}: {prices.message}")
+            if len(prices.entries) == 0:
+                raise ServiceException(404, reason=f"No prices found for energy type {energy_type}, received empty response")
+            energy_price_curves[energy_type] = prices
+        self._energy_price_curves = energy_price_curves
 
     def run(self, max_iterations: int|None = None, debug: bool=False, continued: bool=False) -> LotsOptimizationState:
         niter = 0
@@ -917,12 +966,16 @@ class TabuAlgorithm(LotsOptimizationAlgo):
                                   orders_custom_priority: dict[str, int] | None = None,
                                   forced_orders: list[str] | None = None,
                                   base_lots: dict[int, Lot] | None = None,
-                                  temporary_restrictions: TemporaryRestrictionsProvider|None= None
+                                  temporary_restrictions: TemporaryRestrictionsProvider|None= None,
+                                  energy_prices: Mapping[EnergyType, EnergyCostService] | None = None,
+                                  energy_services: Mapping[EnergyType, EnergyService] | None = None,
+                                  **kwargs
                                   ) -> TabuSearch:
         return TabuSearch(self._site, process, costs, snapshot, targets, initial_solution=initial_solution, min_due_date=min_due_date,
                           best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
                           orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots, params=self._params,
-                          temporary_restrictions=temporary_restrictions)
+                          temporary_restrictions=temporary_restrictions,
+                          energy_prices=energy_prices, energy_services=energy_services, **kwargs)
 
     def set_params(self, params: TabuParams):
         self._params = params

@@ -9,7 +9,7 @@ import dash_ag_grid as dash_ag
 import plotly.graph_objects as go
 
 from dynreact.auth.authentication import dash_authenticated
-from dynreact.base.EnergyService import EnergyPrediction, EnergyPredictionResultsFailed
+from dynreact.base.EnergyService import EnergyPrediction, ServiceResultsFailed
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Lot, Order, LotTimes, Site, Material
@@ -251,7 +251,7 @@ def run_energy_analysis(_: int, energy_type: Literal["electric", "heat"]|None, s
                 end_times.append(end)
                 latest_end = end
             res = energy_service.bulk_energy_consumption(orders, equipment, snap_obj.timestamp, material=materials, missing_value_ensemble=snap_obj.orders)
-            if isinstance(res, EnergyPredictionResultsFailed):
+            if isinstance(res, ServiceResultsFailed):
                 msg = f"Model application failed: {res.reason}: {res.message}"
                 if res.details:
                     msg += f" ({res.details})"

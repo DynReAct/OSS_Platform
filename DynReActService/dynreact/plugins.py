@@ -35,7 +35,7 @@ from dynreact.base.impl.FileResultsPersistence import FileResultsPersistence
 from dynreact.base.impl.FileSnapshotProvider import FileSnapshotProvider
 from dynreact.base.impl.PerformanceModelClient import PerformanceModelClientConfig
 from dynreact.base.impl.SimpleLongTermPlanning import SimpleLongTermPlanning
-from dynreact.base.model import Site
+from dynreact.base.model import Site, EnergyType
 
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.base.monitoring import MetricsPersistence
@@ -259,7 +259,7 @@ class Plugins:
     def energy_cost_types(self) -> Sequence[Literal["electric", "heat"]]:
         return tuple() if self._config.energy_cost_service is None else tuple(self._config.energy_cost_service.keys())
 
-    def get_energy_service(self, energy_type: Literal["electric", "heat"]) -> EnergyService|None:
+    def get_energy_service(self, energy_type: EnergyType) -> EnergyService|None:
         if energy_type not in self._energy_services and self._config.energy_service is not None:
             provider_url = self._config.energy_service.get(energy_type)
             site = self.get_config_provider().site_config()
@@ -279,14 +279,14 @@ class Plugins:
             self._energy_services[energy_type] = provider
         return self._energy_services.get(energy_type)
 
-    def get_energy_cost_service(self, energy_type: Literal["electric", "heat"]) -> EnergyCostService|None:
+    def get_energy_cost_service(self, energy_type: EnergyType) -> EnergyCostService|None:
         if energy_type not in self._energy_cost_services and self._config.energy_cost_service is not None:
             provider_url = self._config.energy_cost_service.get(energy_type)
             if isinstance(provider_url, EnergyCostService):
                 provider = provider_url
             elif provider_url is None:
                 provider = None
-            elif provider_url.startswith("simple:"):
+            elif provider_url.startswith("energyprices+simple:"):
                 from dynreact.base.impl.SimpleEnergyService import SimpleEnergyCostService
                 provider = SimpleEnergyCostService(provider_url)
             else:

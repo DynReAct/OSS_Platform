@@ -5,19 +5,20 @@ already contains an implementation (in the MidTermPlanning folder).
 """
 import time
 from datetime import timedelta, datetime
-from typing import Any, TypeVar, Generic, Sequence
+from typing import Any, TypeVar, Generic, Sequence, Mapping
 
 import numpy as np
 from pydantic import BaseModel
 
 from dynreact.base.CostProvider import CostProvider
+from dynreact.base.EnergyService import EnergyCostService, EnergyService
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider, RestrictionUtils, \
     EquipmentRestriction, RuleSettings
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import ProductionPlanning, PlanningData, ProductionTargets, Snapshot, OrderAssignment, Site, \
-    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction, MaterialClass
+    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction, MaterialClass, EnergyType
 from dynreact.base.monitoring import ServiceMetrics, Histogram
 
 
@@ -121,7 +122,10 @@ class LotsOptimizer(Generic[P]):
                  forced_orders: list[str] | None = None,
                  # TODO if this is set, then a corresponding initial solution should be provided(?)
                  base_lots: dict[int, Lot] | None = None,  # Keys: equipment id; used to extend existing lots
-                 temporary_restrictions: TemporaryRestrictionsProvider|None = None
+                 temporary_restrictions: TemporaryRestrictionsProvider|None = None,
+                 energy_services: Mapping[EnergyType, EnergyService] | None = None,
+                 energy_prices: Mapping[EnergyType, EnergyCostService] | None = None,
+                 **kwargs
                  ):
         self._listeners: list[OptimizationListener] = []
         self._site: Site = site
@@ -205,6 +209,8 @@ class LotsOptimizer(Generic[P]):
         self._base_assignments: dict[str, OrderAssignment]|None = {o: OrderAssignment(order=o, equipment=lot.equipment, lot=lot.id, lot_idx=idx+1)
                                                             for lot in base_lots.values() for idx, o in enumerate(lot.orders)} if base_lots is not None else None
         self._orders = LotsOptimizationAlgo.orders_apply_temporary_constraints(self._orders, temporary_restrictions, equipment=self._plant_ids) if self._orders is not None else None
+        self._energy_prices: Mapping[EnergyType, EnergyCostService]|None = energy_prices
+        self._energy_services: Mapping[EnergyType, EnergyService] | None = energy_services
 
     def process(self) -> str:
         return self._process
@@ -509,6 +515,9 @@ class LotsOptimizationAlgo:
                         orders_custom_priority: dict[str, int] | None = None,
                         forced_orders: list[str] | None = None,
                         base_lots: dict[int, Lot] | None = None,  # if this is set, then orders will be appended to those lots instead of creating new ones
+                        energy_prices: Mapping[EnergyType, EnergyCostService]|None = None,
+                        energy_services: Mapping[EnergyType, EnergyService] | None = None,
+                        **kwargs
                         ) -> LotsOptimizer:
         if initial_solution is None or targets is None:
             planning_horizon = targets.period[1] - targets.period[0] if targets is not None else timedelta(hours=8)  # XXX?
@@ -521,7 +530,8 @@ class LotsOptimizationAlgo:
         instance = self._create_instance_internal(process, snapshot, targets, cost_provider, initial_solution, min_due_date=min_due_date,
                                               best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
                                               orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots,
-                                              temporary_restrictions=self._temporary_restrictions)
+                                              temporary_restrictions=self._temporary_restrictions, 
+                                              energy_prices=energy_prices, energy_services=energy_services, **kwargs)
         if process not in self._stats:
             self._stats[process] = OptimizationStatistics(process=process)
         stats = self._stats[process]
@@ -545,7 +555,10 @@ class LotsOptimizationAlgo:
                                   orders_custom_priority: dict[str, int] | None = None,
                                   forced_orders: list[str] | None = None,
                                   base_lots: dict[int, Lot] | None = None,
-                                  temporary_restrictions: TemporaryRestrictionsProvider|None = None
+                                  temporary_restrictions: TemporaryRestrictionsProvider|None = None,
+                                  energy_prices: Mapping[EnergyType, EnergyCostService] | None = None,
+                                  energy_services: Mapping[EnergyType, EnergyService] | None = None,
+                                  **kwargs
                                   ) -> LotsOptimizer:
         raise Exception("not implemented")
 

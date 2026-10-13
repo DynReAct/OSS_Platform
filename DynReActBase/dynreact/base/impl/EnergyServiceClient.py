@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from pydantic import TypeAdapter, BaseModel
 
 from dynreact.base.EnergyService import EnergyServiceMetadata, EnergyService, EnergyPrediction, EnergyPredictionResults, \
-    EnergyPredictionResultsFailed, EnergyPredictionResultsSuccess
+    ServiceResultsFailed, EnergyPredictionResultsSuccess
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
@@ -109,10 +109,10 @@ class EnergyServiceClientHttp(EnergyService):
                            process_id: int|None=None,
                            model: str|None=None,
                            missing_value_ensemble: Sequence[Order] | None = None,
-                           **kwargs) -> EnergyPrediction|EnergyPredictionResultsFailed:
+                           **kwargs) -> EnergyPrediction | ServiceResultsFailed:
         results = self.bulk_energy_consumption([order], equipment, snapshot, *args, material={order.id: [material]} if material else None, process_id=process_id,
                                                model=model, missing_value_ensemble=missing_value_ensemble, **kwargs)
-        if isinstance(results, EnergyPredictionResultsFailed):
+        if isinstance(results, ServiceResultsFailed):
             return results
         return results.results[0]
 
@@ -154,15 +154,18 @@ class EnergyServiceClientHttp(EnergyService):
                 try:
                     jsn = response.json()
                 except:
-                    pass
-                return EnergyPredictionResultsFailed(reason=response.status_code, message=response.reason, details=jsn)
+                    try:
+                        jsn = response.text()
+                    except:
+                        pass
+                return ServiceResultsFailed(reason=response.status_code, message=response.reason, details=jsn)
             result = EnergyPredictionResultsSuccess.model_validate(response.json())
             return result
         except requests.exceptions.ConnectionError:
-            return EnergyPredictionResultsFailed(reason=1, message="Service not available")
+            return ServiceResultsFailed(reason=1, message="Service not available")
         except:
             self._get_logger().exception("Failed to contact energy service")  # TODO avoid too frequent error logs
-            return EnergyPredictionResultsFailed(reason=500, message="Internal server error")  # ?
+            return ServiceResultsFailed(reason=500, message="Internal server error")  # ?
 
     def _get_logger(self) -> logging.Logger:
         return logging.getLogger(f"dynreact.base.impl.EnergyServiceClientHttp[{self._address}]")

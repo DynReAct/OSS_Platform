@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from dynreact.app_config import DynReActSrvConfig
 from dynreact.base.AggregationProvider import AggregationLevel
 from dynreact.base.CostProvider import CostProvider
-from dynreact.base.EnergyService import EnergyPredictionResultsFailed, EnergyPrediction
+from dynreact.base.EnergyService import ServiceResultsFailed, EnergyPrediction
 from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationState, OptimizationListener
@@ -30,7 +30,7 @@ from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.impl.Scenarios import MidTermScenario, MidTermBenchmark
 from dynreact.base.model import Snapshot, Material, OrderAssignment, Order, EquipmentProduction, ProductionTargets, \
     ProductionPlanning, ObjectiveFunction, Site, LabeledItem, Lot, Process, Equipment, PlannedWorkingShift, \
-    LongTermTargets, MaterialCategory, StorageLevel, LotTimes, ProcessLotCreationSettings, TargetLotSize
+    LongTermTargets, MaterialCategory, StorageLevel, LotTimes, ProcessLotCreationSettings, TargetLotSize, EnergyType
 from dynreact.plugins import Plugins
 from dynreact.auth.authentication import authenticate
 
@@ -1008,6 +1008,48 @@ def energy_services():
         print(f"  Energy service type={energy_type}, status={service.status()}, meta={meta}")
 
 
+def energy_price_services():
+    parser = argparse.ArgumentParser(description="Show available energy cost service providers")
+    parser.parse_args()
+    config = DynReActSrvConfig()
+    plugins = Plugins(config)
+    cost_types = plugins.energy_cost_types()
+    for energy_type in cost_types:
+        service = plugins.get_energy_cost_service(energy_type)
+        meta = None
+        try:
+            meta = service.service()
+        except:
+            pass
+        print(f"  Energy cost service type={energy_type}, status={service.status()}, meta={meta}")
+
+
+def energy_prices():
+    parser = argparse.ArgumentParser(description="Show available energy cost service providers")
+    parser.add_argument("-t", "--type", help="Energy type: electric vs heat. Default: 'electric'", type=_EnergyType, default="electric", choices=[tp.value for tp in _EnergyType])
+    parser.add_argument("-st", "--start-time", help="Prediction start time. Default: now", type=str, default="now")
+    parser.add_argument("-et", "--end-time", help="Prediction start time. Default: now + 1d", type=str, default="now+1d")
+    args = parser.parse_args()
+    config = DynReActSrvConfig()
+    plugins = Plugins(config)
+    energy_type: EnergyType = args.type.value
+    service = plugins.get_energy_cost_service(energy_type)
+    if service is None:
+        raise Exception(f"Energy price provider not found: {energy_type}")
+    start = DatetimeUtils.parse_datetime_str(args.start_time)
+    end = DatetimeUtils.parse_datetime_str(args.end_time)
+    results = service.energy_costs(start, end)
+    if isinstance(results, ServiceResultsFailed):
+        print(f"  Failed to determine energy price prediction ({energy_type}): {results}")
+        return
+    print(f"Energy prices ({energy_type}):")
+    cost_unit = results.cost_unit
+    print(f"|   Start time   |   End time  |   Price ({cost_unit}/kWh) |")
+    _format = "%Y-%m-%dT%H:%M%"
+    for entry in results.entries:
+        print(f"| {entry.validity[0].astimezone().strftime(_format)} | {entry.validity[1].astimezone().strftime(_format)} |  {entry.costs_per_kwh:.2f}  |")
+
+
 def predict_energy():
     parser = argparse.ArgumentParser(description="Run the energy prediction service")
     parser.add_argument("equipment", help="Equipment id or name", type=str)
@@ -1085,7 +1127,7 @@ def predict_energy():
             for mats in materials.values():
                 mats.sort(key=lambda mat: (mat.current_process, mat.order_positions.get(process, mat.order_position or 1_000) if mat.order_positions is not None else (mat.order_position or 1000)))
         results = service.bulk_energy_consumption(orders, eq.id, snapshot.timestamp, model=args.model, material=materials, missing_value_ensemble=snapshot.orders)
-        if isinstance(results, EnergyPredictionResultsFailed):
+        if isinstance(results, ServiceResultsFailed):
             print(f"  Failed to determine energy prediction ({energy_type} for equipment {eq.name_short or eq.id}: {results}")
             continue
         predictions: Sequence[EnergyPrediction] = results.results

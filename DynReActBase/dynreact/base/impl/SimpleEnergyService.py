@@ -112,7 +112,7 @@ class SimpleEnergyCostService(EnergyCostService):
 
     def __init__(self, url: str, config: EnergyCostConfig|None=None):  # TODO pass the energy type?
         super().__init__(url)
-        if not url.startswith("simple:"):
+        if not url.startswith("energyprices+simple:"):
             raise NotApplicableException(f"URL {url} not applicable to simple energy cost service")
         self._config = config if config is not None else EnergyCostConfig()
 
@@ -121,6 +121,9 @@ class SimpleEnergyCostService(EnergyCostService):
 
     def energy_type(self) -> Literal["electric", "heat"]:
         return self._config.energy_type
+
+    def status(self) -> int:
+        return 0
 
     def energy_costs(self, start: datetime, end: datetime) -> EnergyPriceCurve:
         if end >= start:

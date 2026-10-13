@@ -9,7 +9,7 @@ The classes defined in this module are serializable and can be made accessible v
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone, date
 from numbers import Number
-from typing import Any, TypeVar, Generic, Literal, Sequence, Mapping, Annotated
+from typing import Any, TypeVar, Generic, Literal, Sequence, Mapping, Annotated, TypeAlias
 
 from pydantic import BaseModel, Field, ConfigDict, model_validator, PrivateAttr, BeforeValidator, ValidationError
 
@@ -358,6 +358,12 @@ class PlanningData(Model):
     min_due_date: datetime|None = None
     assigned_priority: int = 0
     "sum priority of assigned orders"
+    energy_usage: Mapping[EnergyType, float] | None = None
+    "Overall energy usage by energy type"
+    energy_costs: Mapping[EnergyType, float] | None = None
+    "Overall energy costs by energy type. Real costs not virtual."
+    energy_co2_emissions: Mapping[EnergyType, float] | None = None
+    "Overall CO2 emissions caused by energy usage"
 
 
 P = TypeVar("P", bound=PlanningData)
@@ -404,6 +410,9 @@ class EquipmentProduction(Model):
     "Optional target weights per material class in t"
 
 
+EnergyType: TypeAlias = Literal["electric", "heat"]
+
+
 class ObjectiveFunction(Model, extra="allow"):
     """
     Information about the objective value or virtual costs of a sequencing result, including sub-contributions.
@@ -412,6 +421,12 @@ class ObjectiveFunction(Model, extra="allow"):
 
     total_value: float
     "The overall objective function value"
+    energy_usage: Mapping[EnergyType, float]|None = None
+    "Penalty for energy usage by energy type"
+    energy_costs: Mapping[EnergyType, float]|None = None
+    "Penalty for energy costs by energy type."
+    energy_co2_emissions: Mapping[EnergyType, float]|None = None
+    "Penalty for CO2 emissions caused by energy usage"
     additive_costs: float|None=None
     """
     The sum of individual components that are monotonously increasing with respect to adding orders; excluding for instance the 

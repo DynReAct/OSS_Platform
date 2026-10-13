@@ -4,7 +4,7 @@ from typing import Literal, Sequence, Mapping, TypeAlias
 from pydantic import BaseModel
 
 from dynreact.base.SnapshotProvider import SnapshotProvider
-from dynreact.base.model import Order, Site, Material
+from dynreact.base.model import Order, Site, Material, EnergyType
 
 
 class EnergyServiceMetadata(BaseModel, use_attribute_docstrings=True, frozen=True):
@@ -20,6 +20,7 @@ class EnergyServiceMetadata(BaseModel, use_attribute_docstrings=True, frozen=Tru
     """
     id: str
     label: str
+    energy_type: EnergyType
     material_based: bool = False
     description: str|None=None
     processes: Sequence[str]|None=None
@@ -41,6 +42,13 @@ class EnergyPrediction(BaseModel, use_attribute_docstrings=True, extra="allow"):
     model: str|None = None   # model_name conflicts with pydantic conventions
     predicted_energy: float
     "The predicted energy consumption (kWh)."
+    """
+    cost_unit: str = "€"
+    predicted_costs: float|None=None
+    ""
+    predicted_emissions: Mapping[str, float] = {}
+    """
+    "Emissions, such as \"co2_tons\""
     # TODO uncertainties etc
 
 
@@ -48,16 +56,16 @@ class EnergyPredictionResultsSuccess(BaseModel, use_attribute_docstrings=True):
     results: Sequence[EnergyPrediction]
 
 
-class EnergyPredictionResultsFailed(BaseModel, use_attribute_docstrings=True):
+class ServiceResultsFailed(BaseModel, use_attribute_docstrings=True):
 
     reason: int
     "http status code, or 1 for service not available"
     message: str|None=None
-    details: dict|None=None
+    details: dict|str|None=None
 
 
 # TODO upon dropping Python 3.11 support we can replace ...: TypeAlias = by type ... =
-EnergyPredictionResults: TypeAlias = EnergyPredictionResultsSuccess | EnergyPredictionResultsFailed
+EnergyPredictionResults: TypeAlias = EnergyPredictionResultsSuccess | ServiceResultsFailed
 
 
 class EnergyService:
@@ -76,8 +84,8 @@ class EnergyService:
         """
         raise NotImplementedError
 
-    def energy_type(self) -> Literal["electric", "heat"]:
-        raise NotImplementedError
+    def energy_type(self) -> EnergyType:
+        return self.service().energy_type
 
     def energy_consumption(self,
                            order: Order,
@@ -89,7 +97,7 @@ class EnergyService:
                            process_id: int|None=None,
                            model: str|None=None,
                            missing_value_ensemble: Sequence[Order]|None=None,
-                           **kwargs) -> EnergyPrediction|EnergyPredictionResultsFailed:
+                           **kwargs) -> EnergyPrediction | ServiceResultsFailed:
         """
         An estimation of the energy required for processing an order at some equipment.
         TODO more input data needed? Start/end time, predecessor, etc?
@@ -143,7 +151,6 @@ class EnergyCostServiceMetadata(BaseModel, use_attribute_docstrings=True):
 class EnergyCharacteristics(BaseModel, use_attribute_docstrings=True):
 
     validity: tuple[datetime, datetime]
-    cost_unit: str = "€"
     costs_per_kwh: float
     co2_per_kwh: float|None=None
 
@@ -152,6 +159,7 @@ class EnergyPriceCurve(BaseModel, use_attribute_docstrings=True):
 
     entries: Sequence[EnergyCharacteristics]
     "Ordered list of entries for consecutive time interval."
+    cost_unit: str = "€"
 
 
 class EnergyCostService:
@@ -162,8 +170,14 @@ class EnergyCostService:
     def service(self) -> EnergyServiceMetadata:
         raise NotImplementedError
 
-    def energy_type(self) -> Literal["electric", "heat"]:
+    def energy_type(self) -> EnergyType:
+        return self.service().energy_type
+
+    def status(self) -> int:
+        """
+        :return: 0: service running, 1: service not available, > 10: custom error codes
+        """
         raise NotImplementedError
 
-    def energy_costs(self, start: datetime, end: datetime) -> EnergyPriceCurve:
+    def energy_costs(self, start: datetime, end: datetime) -> EnergyPriceCurve|ServiceResultsFailed:
         raise NotImplementedError

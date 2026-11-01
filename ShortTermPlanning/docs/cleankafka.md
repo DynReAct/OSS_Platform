@@ -21,3 +21,11 @@ and starts the auction, waiting for its completion.
         show_signature: true
         show_source: false
 
+
+
+## cleanup_auction function
+::: dynreact.shortterm.common.data.data_functions.cleanup_auction
+    options:
+        docstring_style: google
+        show_signature: true
+        show_source: false

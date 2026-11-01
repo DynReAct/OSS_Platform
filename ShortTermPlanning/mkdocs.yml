@@ -33,6 +33,8 @@ nav:
   - Material: material.md
   - Equipment: equipment.md
   - Common: common.md
+  - Handler: handler.md
+  - Deployment and Registry: deployment.md
   - Log: log.md
   - Functions: functions.md
   - Clean_kafka: cleankafka.md

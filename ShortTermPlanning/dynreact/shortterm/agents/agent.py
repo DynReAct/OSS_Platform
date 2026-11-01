@@ -11,8 +11,11 @@ import time
 import sys
 
 from confluent_kafka import Producer, Consumer, KafkaError
-from dynreact.shortterm.common import sendmsgtopic, KeySearch, purge_topics
+from dynreact.shortterm.common import sendmsgtopic, KeySearch, purge_topics, list_existing_topics
 import traceback
+
+REAPER_INTERVAL = 60.0
+"Default seconds between two sweeps of the reaper of a parent agent"
 
 current_partitions = 0
 UNKNOWN_TOPIC_ERRORS = {-188, -191}
@@ -53,6 +56,23 @@ def on_revoke(consumer: Any, partitions: Any) -> None:
     current_partitions = max(0, current_partitions - len(partitions))
     consumer.unassign()
 
+def _reaper_interval() -> float:
+    """Reads ``REAPER_INTERVAL`` (seconds) from the environment. Zero or negative disables the reaper.
+
+    Returns:
+        Seconds between sweeps, ``inf`` when the reaper is disabled.
+    """
+    import os
+    raw = os.environ.get("DYNREACT_REAPER_INTERVAL")
+    if raw is None or raw == "":
+        return REAPER_INTERVAL
+    try:
+        value = float(raw)
+    except ValueError:
+        return REAPER_INTERVAL
+    return value if value > 0 else float("inf")
+
+
 class Agent:
     """
     Class Generic Agent. supporting the basic concepts.
@@ -90,6 +110,10 @@ class Agent:
 
         self.iter_no_msg = 0
         self.min_verbose = 1
+        # Only parent (manager) agents set a DockerManager here; replicas keep it as None
+        self.handler: Any = None
+        self.reaper_interval = _reaper_interval()
+        self._next_reap = time.monotonic() + self.reaper_interval
         self.action_methods = {
             'PING': self.handle_ping_action, 'EXIT': self.handle_exit_action
         }
@@ -106,6 +130,29 @@ class Agent:
             }
         )
         self.consumer.subscribe([self.topic], on_assign=on_assign, on_revoke=on_revoke)
+
+    def reap_if_due(self) -> None:
+        """Sweeps the containers of this parent agent when the reaper interval has elapsed.
+
+        Only parent agents own a ``DockerManager``; for replicas this is a no-op. The sweep
+        removes exited replicas, stuck replicas and replicas of auctions whose Kafka topic no
+        longer exists. It never raises, so a Docker or Kafka failure cannot stop the agent.
+        """
+        if self.handler is None or time.monotonic() < self._next_reap:
+            return
+        self._next_reap = time.monotonic() + self.reaper_interval
+        try:
+            removed = self.handler.reap(existing_topics=list_existing_topics(self.kafka_ip))
+            if any(removed.values()):
+                # Leave a trace in the LOG, so the removal of containers can be audited
+                self.write_log(
+                    f"Reaper of {self.agent} removed {sum(removed.values())} containers {removed}: "
+                    f"{', '.join(self.handler.last_reaped)}",
+                    "0b6d3c1e-5f7a-4c58-9a52-3d6a8f1e7c42",
+                    to_stdout=True
+                )
+        except Exception as e:
+            print(f"Reaper sweep failed: {e}")
 
     def write_log(self, msg: str, identifier: str, to_stdout: bool = False) -> None:
         """
@@ -273,6 +320,7 @@ class Agent:
         """
         self.iter_no_msg += 1
 
+        self.reap_if_due()
         status = self.callback_before_message()
         if status != 'CONTINUE':
             return status

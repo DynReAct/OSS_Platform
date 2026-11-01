@@ -186,7 +186,7 @@ class Material(Agent):
                 agent="material",
                 mode="replica",
                 params=init_kwargs,
-                auto_remove=False
+                auto_remove=True
             )
 
             if self.verbose > 1:

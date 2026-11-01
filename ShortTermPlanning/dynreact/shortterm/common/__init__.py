@@ -86,6 +86,25 @@ def delete_topics(topics: list[str], silent: bool = False) -> None:
                 dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
                 raise Exception(f"{dt} | ERROR: Failed: {tp} with error {e}")
 
+def list_existing_topics(kafka_ip: str | None = None, timeout: float = 10.0) -> set[str] | None:
+    """Lists the topics currently present in the Kafka broker.
+
+    Args:
+        kafka_ip: Bootstrap servers. Defaults to the ``KAFKA_IP`` value of ``KeySearch``.
+        timeout: Seconds to wait for the broker metadata.
+
+    Returns:
+        Set of topic names, or None when the broker could not be queried. Callers must
+        treat None as "unknown", never as "no topics".
+    """
+    try:
+        admin_client = AdminClient({"bootstrap.servers": kafka_ip or KeySearch.search_for_value("KAFKA_IP")})
+        return set(admin_client.list_topics(timeout=timeout).topics.keys())
+    except Exception as e:
+        print(f"Could not list the Kafka topics: {e}")
+        return None
+
+
 class KeySearch:
     """Key search.
     

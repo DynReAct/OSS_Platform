@@ -23,3 +23,11 @@ Describe here the module purpose
         show_signature: true
         show_source: false
 
+
+
+## list_existing_topics function
+::: dynreact.shortterm.common.list_existing_topics
+    options:
+        docstring_style: google
+        show_signature: true
+        show_source: false

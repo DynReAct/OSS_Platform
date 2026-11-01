@@ -82,3 +82,53 @@ python3 ShortTermPlanning.py -v 3 -b . -rw 100 -cw 300 -aw 1200 -bw 45 -ew 100 -
 ```
 
 Be sure that the live kafka broker  and the live cost service have been properly configured in the file *config.cnf*.
+
+## Container lifecycle and reaper
+
+Each auction clones the parent agents (LOG, EQUIPMENT, MATERIAL) into one Docker container per child agent.
+Under continuous use, such as the Recommender, these containers would pile up, so the parent agents run a
+*reaper* from their message loop. It removes, among the containers launched by that parent only:
+
+- exited containers, after a grace period that leaves time to read their diagnostics;
+- running containers older than a maximum age (stuck);
+- running containers whose auction topic no longer exists in Kafka (orphans, nobody will send them `EXIT`).
+
+Every removal is recorded in the LOG of the parent agent, with the container names and the rule applied.
+
+The Recommender also deletes the Kafka topic and consumer groups of each auction once it ends
+(`cleanup_auction`). The reaper can be tuned with environment variables:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `DYNREACT_REAPER_INTERVAL` | `60` | Seconds between sweeps. Zero or negative disables the reaper. |
+| `DYNREACT_REAPER_EXITED_GRACE` | `300` | Seconds an exited container is kept. |
+| `DYNREACT_REAPER_MAX_AGE` | `10800` | Seconds after which a running container is considered stuck. |
+| `DYNREACT_REAPER_TOPIC_GRACE` | `1800` | Minimum age of a container before its topic is required to exist. |
+
+Launching a container no longer inspects every existing container, so the launch cost is constant.
+See the *Handler* page of the documentation for details.
+
+## Log files
+
+The LOG agent of each auction stores every message of the topic in `<LOG_FILE_PATH>/<topic>.log`. The files rotate
+weekly, keep the newest rotated ones, and the parent LOG removes the log files that have not been written for
+30 days. See the *Log* page of the documentation for the `DYNREACT_LOG_*` variables.
+
+## Tests
+
+The unit tests run without Kafka or Docker:
+
+```commandline
+python -m pytest tests/unit_tests -q
+```
+
+See [tests/README.md](tests/README.md) for what each file protects and how to write new tests.
+
+## Multi-VM deployment and registry scripts
+
+Use `extras/deployment/deploy_parents.sh ras|oss IMAGE_TAG` to preload the selected
+image on profile workers and start the three parents locally with verbose 1.
+`list_registry_images.sh PROFILE` lists tags and dates;
+`prune_registry_images.sh PROFILE DAYS` previews age-based manifest cleanup
+(`DYNREACT_APPLY=1` applies it). See [deployment and registry operations](docs/deployment.md)
+for env-file templates, SSH permissions, load-aware placement and protection limits.

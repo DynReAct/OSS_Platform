@@ -12,8 +12,16 @@ license = {text = "MIT"}
 dynamic = ["dependencies"]
 
 [tool.setuptools]
-packages = ["dynreact.shortterm", "dynreact.auction", "dynreact.gui_stp"]
 package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+  "dynreact.shortterm*",
+  "dynreact.auction*",
+  "dynreact.gui_stp*",
+]
+namespaces = true
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}

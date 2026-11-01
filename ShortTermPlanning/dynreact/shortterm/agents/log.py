@@ -33,31 +33,117 @@ from dynreact.shortterm.common.handler import DockerManager
 import os
 from logging.handlers import TimedRotatingFileHandler
 
+LOG_ROTATE_WHEN = "W0"
+"Default rotation of the log files: weekly, on Monday (see ``TimedRotatingFileHandler`` for the values)"
+LOG_BACKUP_COUNT = 8
+"Default number of rotated files kept for each log file"
+LOG_RETENTION_DAYS = 30.0
+"Default age in days after which a log file of the log folder is removed"
+LOG_PURGE_INTERVAL = 3600.0
+"Seconds between two purges of the log folder by the parent LOG"
+
+
+def _env_number(name: str, default: float) -> float:
+    """Reads a number from the environment, falling back to the default when unset or invalid."""
+    try:
+        return float(os.environ.get(name, ""))
+    except (TypeError, ValueError):
+        return default
+
+
+def purge_old_logs(directory: str, max_age_days: float, keep: tuple[str, ...] = ()) -> list[str]:
+    """Removes the log files of a folder that have not been written for ``max_age_days`` days.
+
+    Every auction creates its own ``<topic>.log`` file and nothing else removes it, so the folder
+    grows with each auction. Only regular ``*.log`` files placed directly in the folder are considered.
+    The method never raises: a file that cannot be removed is skipped.
+
+    Args:
+        directory: Folder holding the log files.
+        max_age_days: Age, from the last modification, after which a file is removed. Zero or negative disables the purge.
+        keep: Paths that must never be removed, such as the files currently open for writing.
+
+    Returns:
+        Paths of the removed files.
+    """
+    removed: list[str] = []
+    if max_age_days <= 0:
+        return removed
+    limit = time.time() - max_age_days * 86400
+    protected = {os.path.abspath(path) for path in keep}
+    try:
+        entries = list(os.scandir(directory))
+    except OSError as e:
+        print(f"Could not scan the log folder {directory}: {e}")
+        return removed
+    for entry in entries:
+        try:
+            if not entry.is_file(follow_symlinks=False) or not entry.name.endswith(".log"):
+                continue
+            if os.path.abspath(entry.path) in protected or entry.stat().st_mtime >= limit:
+                continue
+            os.remove(entry.path)
+            removed.append(entry.path)
+        except OSError as e:
+            print(f"Could not remove the old log {entry.path}: {e}")
+    return removed
+
+
 class LogWithExtensionHandler(TimedRotatingFileHandler):
     """
     Class holding the methods relevant for the operation of the Log agent,
     which is in charge of storing all the messages exchanged between the
     different agents through a Kafka brokering system.
 
-    This class extends Python's TimedRotatingFileHandler to allow log
-    rotation every day with the `.log` extension at the end of rotated
-    files (e.g., <<PREFIX>>.2025-07-03.log).
+    This class extends Python's TimedRotatingFileHandler to rotate the log
+    (weekly by default) with the `.log` extension at the end of rotated
+    files (e.g., <<PREFIX>>.2025-07-03.log), and to keep only the newest
+    ``backupCount`` of them.
 
     .. _Google Python Style Guide:
        https://google.github.io/styleguide/pyguide.html
     """
 
-    def __init__(self, filename: Any, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, filename: Any, when: str = LOG_ROTATE_WHEN, backupCount: int = LOG_BACKUP_COUNT,
+                 **kwargs: Any) -> None:
         """
         Constructor function for the LogWithExtensionHandler Class
+
+        Args:
+            filename: Base log file.
+            when: Rotation, as in ``TimedRotatingFileHandler``: ``midnight``, ``W0``-``W6`` (weekly)...
+            backupCount: Number of rotated files kept. Zero keeps all of them.
+            **kwargs: Other arguments of ``TimedRotatingFileHandler``, such as ``encoding`` or ``utc``.
         """
         # Remove .log for internal handling to avoid double extensions
         base, ext = os.path.splitext(filename)
         self._real_base_filename = base
         self._log_extension = ext or ".log"
-        super().__init__(filename, when="midnight", interval=1, *args, **kwargs)
+        super().__init__(filename, when=when, backupCount=backupCount, **kwargs)
         self.suffix = "%Y-%m-%d" + self._log_extension  # e.g., .2025-07-03.log
 
+    def getFilesToDelete(self) -> list[str]:
+        """
+        Lists the rotated files that exceed ``backupCount``, the oldest first.
+
+        The standard implementation looks for ``<file>.log.<date>``, which never matches the
+        ``<file>.<date>.log`` names used here, so the old files would never be removed.
+
+        Returns:
+            Paths of the rotated files to delete.
+        """
+        if self.backupCount <= 0:
+            return []
+        directory, prefix = os.path.split(self._real_base_filename)
+        pattern = re.compile(rf"^{re.escape(prefix)}\.\d{{4}}-\d{{2}}-\d{{2}}{re.escape(self._log_extension)}$")
+        try:
+            names = [name for name in os.listdir(directory or ".") if pattern.match(name)]
+        except OSError:
+            return []
+        names.sort()  # ISO dates sort chronologically
+        if len(names) <= self.backupCount:
+            return []
+        return [os.path.join(directory, name) for name in names[:len(names) - self.backupCount]]
 
     def rotation_filename(self, default_name: str) -> Any:
         """
@@ -132,6 +218,7 @@ class Log(Agent):
 
         # To store the results of the auction so far
         self.results = dict()
+        self._next_purge = 0.0   # the parent purges the log folder at startup, and then periodically
 
         # Log file
         self.log_file = log_file
@@ -247,6 +334,8 @@ class Log(Agent):
 
         handler = LogWithExtensionHandler(
             filename=self.log_file,  # Required: base log file
+            when=os.environ.get("DYNREACT_LOG_ROTATE_WHEN") or LOG_ROTATE_WHEN,  # Weekly by default
+            backupCount=int(_env_number("DYNREACT_LOG_BACKUP_COUNT", LOG_BACKUP_COUNT)),
             encoding="utf-8",  # Optional: file encoding
             utc=True  # Optional: rotate based on UTC time (set to False for local time)
         )
@@ -260,24 +349,35 @@ class Log(Agent):
         return logger
 
     def handle_write_action(self, full_msg: dict, verbose: float = float("inf")) -> str:
-        """
-        Handles the WRITE action.
+        """Writes one message to the log file.
 
-        :param dict full_msg: Message dictionary
-        :param dict verbose: Show print console output
+        Messages written by the agents carry ``payload.identifier`` and ``payload.msg``. Other messages,
+        such as ``EXIT`` or the traffic of the topic forwarded by ``callback_on_not_match``, may lack the
+        identifier, the message text, or even be plain strings. They are written too, with ``-`` as the
+        identifier and, when there is no text, the payload itself, so no message is silently dropped.
+
+        Args:
+            full_msg: Message dictionary with ``source``, ``dest``, ``action`` and ``payload``.
+            verbose: Verbosity above which the message is also printed to the console.
+
+        Returns:
+            The status ``CONTINUE``.
         """
         if 'payload' not in full_msg.keys():
             self.logger.info("HANDLE_WRITE_ERROR: payload is not a key for message")
         else:
             if isinstance(full_msg['payload'], str):
-                full_msg['payload'] = json.loads(full_msg['payload'])
+                try:
+                    full_msg['payload'] = json.loads(full_msg['payload'])
+                except ValueError:
+                    full_msg['payload'] = dict(msg=full_msg['payload'])
 
-            try:
-                self.logger.info(
-                    f"|MSG|{full_msg['source']}|{full_msg['dest']}|{full_msg['action']}|{full_msg['payload']['identifier'][0:8]}|{full_msg['payload']['msg']}"
-                )
-            except:
-                print(full_msg)
+            payload = full_msg['payload'] if isinstance(full_msg['payload'], dict) else dict(msg=str(full_msg['payload']))
+            identifier = str(payload.get('identifier') or '-')[0:8]
+            text = payload['msg'] if 'msg' in payload else json.dumps(payload, default=str)
+            self.logger.info(
+                f"|MSG|{full_msg.get('source', '-')}|{full_msg.get('dest', '-')}|{full_msg.get('action', '-')}|{identifier}|{text}"
+            )
 
             if min(verbose, self.verbose) > float(1):
                 ctme = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
@@ -353,7 +453,7 @@ class Log(Agent):
                 agent="log",
                 mode="replica",
                 params=init_kwargs,
-                auto_remove=False
+                auto_remove=True
             )
 
             if self.verbose > 1:
@@ -573,6 +673,27 @@ class Log(Agent):
             )
         return 'CONTINUE'
 
+    def purge_logs_if_due(self) -> None:
+        """Removes the old log files of the log folder, at most once per ``LOG_PURGE_INTERVAL``.
+
+        Only the parent LOG does it, since it is the only one that lives long enough. The file of this
+        agent is never removed. Failures are reported and never stop the agent.
+        """
+        if self.handler is None or time.monotonic() < self._next_purge:
+            return
+        self._next_purge = time.monotonic() + LOG_PURGE_INTERVAL
+        try:
+            removed = purge_old_logs(
+                os.path.dirname(os.path.abspath(self.log_file)),
+                _env_number("DYNREACT_LOG_RETENTION_DAYS", LOG_RETENTION_DAYS),
+                keep=(self.log_file,)
+            )
+            if removed:
+                self.write_log(f"Removed {len(removed)} old log files: {', '.join(map(os.path.basename, removed))}",
+                               "7c1f0d52-9a3b-4e6d-8b14-2f5a6c9e0d37")
+        except Exception as e:
+            print(f"Log purge failed: {e}")
+
     def callback_before_message(self) -> str:
         """
         Starts the auction when the number of present agents reaches the desired total number of agents
@@ -580,6 +701,7 @@ class Log(Agent):
         :returns: Status of the handling
         :rtype:  str
         """
+        self.purge_logs_if_due()
         start_conditions = [self.total_num_agents is not None, not self.auction_start]
         if all(start_conditions) and len(self.present_agents) == self.total_num_agents:
             if self.verbose > 1:

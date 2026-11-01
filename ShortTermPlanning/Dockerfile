@@ -56,7 +56,7 @@ ARG JENKINS_BUILD_ID=""
 LABEL org.opencontainers.image.created="${BUILD_DATE}" \
       es.upm.etsii.jenkins-pi.dynreact.build_id="${JENKINS_BUILD_ID}"
 
-RUN apt update && apt upgrade -y && apt install -y gosu
+RUN apt update && apt upgrade -y && apt install -y gosu openssh-client
 
 WORKDIR /app
 

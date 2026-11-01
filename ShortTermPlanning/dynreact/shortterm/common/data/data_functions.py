@@ -7,6 +7,7 @@ import json
 import time
 import requests
 from confluent_kafka import Producer
+from confluent_kafka.admin import AdminClient
 
 from dynreact.shortterm.common import sendmsgtopic
 from dynreact.shortterm.common.data.load_url import URL_INITIAL_STATE, URL_UPDATE_STATUS, load_url_json_get, \
@@ -175,3 +176,60 @@ def end_auction(topic: str, producer: Producer, verbose: int, wait_time: int) ->
         action="EXIT",
         vb=verbose
     )
+
+
+def cleanup_auction(topic: str, kafka_ip: str, wait_time: float = 0.0, timeout: float = 30.0) -> dict[str, int]:
+    """Deletes the Kafka leftovers of a finished auction: its topic and its consumer groups.
+
+    Every auction creates a topic and one consumer group per agent (named after the agent,
+    ``<KIND>:<topic>[:...]``). Nothing else removes them when the auction is driven by the
+    Recommender, so they pile up in the broker. Call this after ``end_auction``.
+
+    The cleanup is best effort and never raises. A replica that has not yet consumed its
+    ``EXIT`` when the topic disappears is later removed by the reaper of its parent agent.
+
+    Args:
+        topic: Topic of the auction to clean.
+        kafka_ip: Kafka bootstrap servers.
+        wait_time: Seconds to wait before deleting, so the agents can read their ``EXIT``.
+        timeout: Seconds to wait for each broker operation.
+
+    Returns:
+        Number of deleted ``topics`` and ``groups``.
+    """
+    deleted = {"topics": 0, "groups": 0}
+    if not topic:
+        return deleted
+    if wait_time > 0:
+        time.sleep(wait_time)
+    try:
+        admin_client = AdminClient({"bootstrap.servers": kafka_ip})
+    except Exception as e:
+        print(f"Could not create the Kafka admin client to clean {topic}: {e}")
+        return deleted
+
+    try:
+        for _, future in admin_client.delete_topics([topic], operation_timeout=timeout).items():
+            try:
+                future.result(timeout)
+                deleted["topics"] += 1
+            except Exception as e:
+                print(f"Could not delete the topic {topic}: {e}")
+    except Exception as e:
+        print(f"Could not delete the topic {topic}: {e}")
+
+    try:
+        listing = admin_client.list_consumer_groups().result(timeout)
+        group_ids = [g.group_id for g in listing.valid
+                     if f":{topic}:" in g.group_id or g.group_id.endswith(f":{topic}")]
+        if group_ids:
+            for group_id, future in admin_client.delete_consumer_groups(group_ids).items():
+                try:
+                    future.result(timeout)
+                    deleted["groups"] += 1
+                except Exception as e:
+                    # Groups that still have members cannot be deleted; the broker expires them later
+                    print(f"Could not delete the consumer group {group_id}: {e}")
+    except Exception as e:
+        print(f"Could not clean the consumer groups of {topic}: {e}")
+    return deleted

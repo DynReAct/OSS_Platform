@@ -91,6 +91,18 @@ node {
         '''
     }
 
+    stage('Kafka Connectivity Preflight') {
+        sh '''
+        set +x
+        docker run --rm --network host \\
+          -e KAFKA_IP \\
+          -v "${WORKSPACE}/ShortTermPlanning/extras/kafka_preflight.py:/tmp/kafka_preflight.py:ro" \\
+          "$LOCAL_REGISTRY$IMAGE_NAME:$BUILD_IMAGE_TAG" \\
+          python /tmp/kafka_preflight.py
+        '''
+    }
+
+
     stage('Replace BASE agents') {
         sh '''
         docker rm -f \

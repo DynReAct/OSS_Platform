@@ -232,3 +232,26 @@ according to its storage backend and maintenance policy. See the primary
 A custom configuration directory can be selected with `DYNREACT_CONFIG_DIR`.
 None of these scripts runs merely by being installed. Unit tests use mocked
 Docker/SSH/registry operations and do not attest live deployment readiness.
+
+## Jenkins Kafka connectivity failures
+
+Jenkins obtains `KAFKA_IP` from its credential binding, not from the deployment
+host's `agents-oss.env` or `agents-ras.env`. Updating those files does not update
+the CI broker. Keep masking enabled; do not print credentials to diagnose routing.
+
+The OSS Jenkinsfile runs `Kafka Connectivity Preflight` after image verification
+and before replacing parents or purging verification topics. It mounts
+`extras/kafka_preflight.py` into the same runtime image, with host networking and
+the existing credential passed through `-e KAFKA_IP` without logging its value.
+The script checks endpoint syntax, DNS, bootstrap TCP, read-only Kafka metadata
+and every advertised broker. It does not create/delete topics or agents.
+
+`HOST_UNREACHABLE`/`NETWORK_UNREACHABLE` indicate an OS network error; inspect the
+broker address configured in Jenkins, reachability, firewall and service health
+from the actual Jenkins agent host. `CONNECTION_REFUSED` commonly indicates an
+unavailable listener or active rejection; a timeout can also involve routing or
+filtering. TCP success followed by `METADATA_FAILED` requires checking Kafka
+health/protocol/authentication. `METADATA_OK` followed by advertised-broker failure
+requires reviewing `advertised.listeners` and network access to those addresses.
+A previously working pipeline can fail after a broker, network policy, credential
+or Jenkins agent changes; the console alone cannot distinguish those causes.

@@ -41,14 +41,6 @@ node {
         env.REST_URL = REST_URL_SECRET
         env.LOCAL_REGISTRY = REGISTRY
 
-        sh '''
-            set +x
-            umask 077
-            file=$(mktemp /tmp/dynreact-kafka.XXXXXX)
-            printf '%s' "$KAFKA_IP" > "$file"
-            echo "Destino guardado en: $file"
-        '''
-
     def runStageWithCleanup = { stageName, body ->
         stage(stageName) {
             sh '''

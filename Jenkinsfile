@@ -33,14 +33,7 @@ node {
         string(credentialsId: 'LOCAL_REGISTRY', variable: 'REGISTRY'),
         string(credentialsId: 'KAFKA_IP', variable: 'KAFKA_IP_SECRET'),
         string(credentialsId: 'LOG_FILE_PATH', variable: 'LOG_FILE_PATH_SECRET'),
-        string(credentialsId: 'REST_URL', variable: 'REST_URL_SECRET'),
-        sh '''
-            set +x
-            umask 077
-            file=$(mktemp /tmp/dynreact-kafka.XXXXXX)
-            printf '%s' "$KAFKA_IP" > "$file"
-            echo "Destino guardado en: $file"
-        '''
+        string(credentialsId: 'REST_URL', variable: 'REST_URL_SECRET')
     ]) {
 
         env.KAFKA_IP = KAFKA_IP_SECRET
@@ -48,6 +41,13 @@ node {
         env.REST_URL = REST_URL_SECRET
         env.LOCAL_REGISTRY = REGISTRY
 
+        sh '''
+            set +x
+            umask 077
+            file=$(mktemp /tmp/dynreact-kafka.XXXXXX)
+            printf '%s' "$KAFKA_IP" > "$file"
+            echo "Destino guardado en: $file"
+        '''
 
     def runStageWithCleanup = { stageName, body ->
         stage(stageName) {

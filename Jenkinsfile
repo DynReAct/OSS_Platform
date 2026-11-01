@@ -33,7 +33,7 @@ node {
         string(credentialsId: 'LOCAL_REGISTRY', variable: 'REGISTRY'),
         string(credentialsId: 'KAFKA_IP', variable: 'KAFKA_IP_SECRET'),
         string(credentialsId: 'LOG_FILE_PATH', variable: 'LOG_FILE_PATH_SECRET'),
-        string(credentialsId: 'REST_URL', variable: 'REST_URL_SECRET')
+        string(credentialsId: 'OSS_REST_URL', variable: 'REST_URL_SECRET')
     ]) {
 
         env.KAFKA_IP = KAFKA_IP_SECRET

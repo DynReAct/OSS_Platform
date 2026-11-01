@@ -255,3 +255,29 @@ health/protocol/authentication. `METADATA_OK` followed by advertised-broker fail
 requires reviewing `advertised.listeners` and network access to those addresses.
 A previously working pipeline can fail after a broker, network policy, credential
 or Jenkins agent changes; the console alone cannot distinguish those causes.
+
+
+### Profile-specific Jenkins REST credentials
+
+Create two global **Secret text** credentials before publishing/running the updated
+Jenkinsfiles:
+
+| Credential ID | Current deployment value | Pipeline |
+| --- | --- | --- |
+| `OSS_REST_URL` | `http://192.168.111.11:5016` | `OSS_Platform/Jenkinsfile` |
+| `RAS_REST_URL` | `http://192.168.110.11:5026` | `ShortTermRAS/Jenkinsfile` |
+
+Both bind their own credential to `REST_URL_SECRET` and then `env.REST_URL`.
+Every scenario receives the same profile-specific `REST_URL` through Docker's
+environment. Do not rename the runtime variable: the application expects
+`REST_URL`, not `OSS_REST_URL`/`RAS_REST_URL`. The latter names identify Jenkins
+credentials only. The original global `REST_URL` credential is no longer used by
+these two Jenkinsfiles, but retain it if other jobs still depend on it. Kafka,
+registry and log-path bindings are unchanged.
+
+These are deployment-specific addresses: OSS currently listens on the 111
+interface only; RAS listens on both private interfaces and the 110 address is
+reachable from the RAS executor. Credential separation does not fix snapshot HTTP
+500 errors; validate the requested snapshot response before running all scenarios.
+Jenkinsfiles contain credential IDs only, not credential values. Installation of
+the new IDs is a Jenkins administration step; repository edits do not create them.

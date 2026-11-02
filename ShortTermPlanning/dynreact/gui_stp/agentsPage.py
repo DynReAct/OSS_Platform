@@ -782,7 +782,7 @@ def handle_create_click(ag_create: Any, reftxt: Any, matype: Any, plnts: Any, lm
     o_mats: list[Any] = []
     for i, plant_name in enumerate(plnts):
         equip_configs[plant_name] = {
-            "start_date": dates[i]
+            "start_time": dates[i]
         }
 
     # Set up auction details

@@ -12,6 +12,7 @@ theme:
 
 nav:
   - Overview: index.md
-  - DynReActBase: ./DynReActBase/index.html
-  - ShortTermPlanning: ./ShortTermPlanning/index.html
-  - Service: ./service/index.html
+  - DynReActBase: DynReActBase/index.html
+  - LongTermPlanning: LongTermPlanning/index.html
+  - ShortTermPlanning: ShortTermPlanning/index.html
+  - Service: service/index.html

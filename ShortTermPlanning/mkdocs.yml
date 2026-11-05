@@ -22,9 +22,7 @@ plugins:
           members_order: source
           docstring_section_style: table
           docstring_style: google
-          docstring_options:
-            ignore_init_summary: false
-            trim_doctest_flags: false
+          
 
 nav:
   - Back: ../index.html

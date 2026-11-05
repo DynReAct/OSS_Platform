@@ -78,26 +78,26 @@ class FileSnapshotProvider(SnapshotProvider):
         return None
 
     def snapshots(self, start_time: datetime, end_time: datetime, order: Literal["asc", "desc"] = "asc") -> Iterator[datetime]:
-        if self._snapshot_index_complete and len(self._snapshot_ids) > 0:
-            return iter(self._snapshot_ids.values())
-        file_types = ",".join(FileSnapshotProvider._FILE_TYPES)
-        glob_pattern = os.path.join(self._folder, f"*.[{file_types}]*")
-        glob_matches = sorted(glob.glob(glob_pattern, recursive=False), reverse=order == "desc")
-        matches = [f for f in (f.replace("\\", "/") for f in glob_matches) if "snapshot" in f and ("/" not in f or f.rindex("/") < f.rindex("snapshot"))]
-        num_matches: int = len(matches)
-        if num_matches == 1:
-            ts: datetime | None = FileSnapshotProvider._extract_timestamp(matches[0])
-            if ts is None:
-                ts = DatetimeUtils.now().replace(second=0, microsecond=0)
-            self._snapshot_ids[matches[0]] = ts
-        else:
-            for file in matches:
-                ts: datetime | None = FileSnapshotProvider._extract_timestamp(file)
+        if not self._snapshot_index_complete or len(self._snapshot_ids) == 0:
+            file_types = ",".join(FileSnapshotProvider._FILE_TYPES)
+            glob_pattern = os.path.join(self._folder, f"*.[{file_types}]*")
+            glob_matches = sorted(glob.glob(glob_pattern, recursive=False))
+            matches = [f for f in (f.replace("\\", "/") for f in glob_matches) if "snapshot" in f and ("/" not in f or f.rindex("/") < f.rindex("snapshot"))]
+            num_matches: int = len(matches)
+            if num_matches == 1:
+                ts: datetime | None = FileSnapshotProvider._extract_timestamp(matches[0])
                 if ts is None:
-                    continue
-                self._snapshot_ids[file] = ts
-        self._snapshot_index_complete = True
-        return iter(self._snapshot_ids.values())
+                    ts = DatetimeUtils.now().replace(second=0, microsecond=0)
+                self._snapshot_ids[matches[0]] = ts
+            else:
+                for file in matches:
+                    ts: datetime | None = FileSnapshotProvider._extract_timestamp(file)
+                    if ts is None:
+                        continue
+                    self._snapshot_ids[file] = ts
+            self._snapshot_index_complete = True
+        timestamps = sorted({ts for ts in self._snapshot_ids.values() if start_time <= ts < end_time})
+        return reversed(timestamps) if order == "desc" else iter(timestamps)
 
     def current_snapshot_id(self) -> datetime | None:
         if self._latest_snapshot_id is not None:

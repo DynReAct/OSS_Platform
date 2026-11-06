@@ -217,3 +217,15 @@ Validate a new auction and confirm the stateful requests and advancing order IDs
 The existing HTTP-error fallback in the agent still returns zero with unchanged
 state; HTTP errors must therefore be checked separately from valid zero-cost
 first assignments.
+
+### Zero-valued fields in stateful responses
+
+`/costs/transitions-stateful` serializes default-valued state fields, including
+`status.planning.transition_costs: 0.0`. A legitimate zero setup cost must not be
+confused with a malformed response. The agent also accepts older responses that
+omit this field: a missing transition cost within a valid `planning` object is
+interpreted as zero, while the returned simulated state is retained. Missing
+`status` or `planning` objects are still handled as invalid responses.
+The empty-line regression suite covers both explicit-zero HTTP responses and
+legacy responses without the zero field. Deploy the service change and rebuild
+and redeploy agent images to install the compatibility change in the agents.

@@ -76,6 +76,29 @@ class EmptyLineCostsTest(TestCase):
             self.assertEqual(first['current_order'], 'order7')
             self.assertEqual(first['planning']['delta_weight'], 89)
 
+    def test_http_response_explicitly_contains_zero_transition_cost(self):
+        response = self.post('/costs/transitions-stateful', dict(
+            equipment=7, snapshot_id=self.snapshot.timestamp.isoformat(), current_order=None,
+            next_order='order7', next_material='a',
+            equipment_status=self.status.model_dump(mode='json', exclude_unset=True)))
+        self.assertIn('transition_costs', response['status']['planning'])
+        self.assertEqual(response['status']['planning']['transition_costs'], 0)
+        self.assertEqual(response['status']['current_order'], 'order7')
+
+    def test_agent_preserves_state_when_legacy_response_omits_zero(self):
+        initial = self.status.model_dump(mode='json')
+        def legacy_post(path, payload):
+            result = self.post(path, payload)
+            result['status']['planning'].pop('transition_costs', None)
+            return result
+        with patch.object(agent, 'load_url_json_post', side_effect=legacy_post):
+            cost, updated = agent.get_transition_cost_and_status(self.params(0), initial, 0)
+        self.assertEqual(cost, 0)
+        self.assertEqual(updated['current_order'], 'order7')
+        self.assertEqual(updated['current_material'], ['a'])
+        self.assertEqual(updated['planning']['delta_weight'], 89)
+        self.assertIsNone(initial['current_order'])
+
     def test_same_order_material_advances_weight_without_extra_order(self):
         first, _ = self.provider.update_transition_costs(
             self.plant, None, self.snapshot.orders[0], self.status, self.snapshot,

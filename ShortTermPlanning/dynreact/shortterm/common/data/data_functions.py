@@ -94,7 +94,9 @@ def get_transition_cost_and_status(
     try:
         new_status = load_url_json_post(URL_UPDATE_STATUS, payload=payload)
         new_status = new_status["status"]
-        cost = new_status["planning"]["transition_costs"]
+        # Older services omit default-valued fields. Keep the simulated state
+        # even when a valid zero transition cost is absent from the JSON.
+        cost = new_status["planning"].get("transition_costs", 0.0)
     except (requests.exceptions.HTTPError, requests.exceptions.RequestException) as e:
         print(f"Error {e} trying to check the cost. Assigning cost 0.")
         return 0, equipment_status

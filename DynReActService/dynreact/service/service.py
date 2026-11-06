@@ -504,7 +504,7 @@ def plant_status(equipment_id: int, snapshot_timestamp: datetime | str = Path(..
 
 @fastapi_app.post("/costs/transitions-stateful",
                 tags=["dynreact"],
-                response_model_exclude_unset=True,
+                response_model_exclude_unset=False,
                 response_model_exclude_none=True,
                 summary="Invoke cost service for order to order or coil to coil transitions, taking into account " +
                         "global objectives and constraints.")

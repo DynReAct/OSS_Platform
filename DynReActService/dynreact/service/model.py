@@ -35,6 +35,9 @@ class MaterialTransfer(BaseModel, use_attribute_docstrings=True):
 
 class EquipmentTransitionStateful(EquipmentTransition):
 
+    current_order: str | None = None
+    "Previous order; null for an empty line."
+
     equipment_status: EquipmentStatus
     "Optimization status, typically retrieved either from a previous optimization run, or from the ...init function"
 

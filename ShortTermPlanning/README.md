@@ -178,3 +178,42 @@ Run the focused regression checks from the repository root:
 ```sh
 PYTHONPATH=OSS_Platform/DynReActService:OSS_Platform/DynReActBase:OSS_Platform/SampleUseCase:OSS_Platform/ShortTermPlanning python OSS_Platform/ShortTermPlanning/tests/regression/test_oss_startup.py
 ```
+
+### Empty-line stateful costs
+
+An empty line has `current_order: null`. The agent must call
+`POST /costs/transitions-stateful` even for its first candidate; a zero setup cost
+must not bypass simulation. The stateful request accepts a null previous order.
+The service validates the next material and invokes the cost provider with
+`current=None` and `new_lot=True` to initialize the simulated assignment.
+Providers used by this endpoint must support this empty-line update.
+
+`SampleCostProvider` returns a deep copy with the new order/material, one lot,
+its material weight (or order weight in order mode), updated order count,
+remaining target weight and objective. The first transition adds zero setup
+cost; the overall objective may still include production and logistics terms.
+The response `costs` remains an objective object, not a scalar zero. The STP
+agent reads the cumulative `status.planning.transition_costs` as before.
+Further materials of the same order update material IDs and tonnage without
+adding another order or setup cost.
+
+Candidate evaluation does not mutate the input state. The equipment adopts the
+returned state on confirmed assignment (`move_to_next_round`); later rounds use
+that state. For FIN02, assigning order7 (995 mm) to an empty line costs zero;
+then order3 (980 mm, same finishing type) adds 2.5. With material weights 11 t
+and 15 t and a 100 t target, remaining weight must change 100 -> 89 -> 74 t.
+
+Run the agent/HTTP/provider regression (no Kafka or Docker required):
+
+```sh
+PYTHONPATH=OSS_Platform/DynReActService:OSS_Platform/DynReActBase:OSS_Platform/SampleUseCase:OSS_Platform/ShortTermPlanning:OSS_Platform/MidTermPlanning python OSS_Platform/ShortTermPlanning/tests/regression/test_empty_line_costs.py
+```
+
+Deployment requires updating DynReActService, SampleUseCase and ShortTermPlanning
+in the service environment. Rebuild the ShortTermPlanning agent image and deploy
+the parents with that image when no auctions are active; a service restart alone
+does not update code inside Docker agents. Existing children keep their old code.
+Validate a new auction and confirm the stateful requests and advancing order IDs.
+The existing HTTP-error fallback in the agent still returns zero with unchanged
+state; HTTP errors must therefore be checked separately from valid zero-cost
+first assignments.

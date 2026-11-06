@@ -105,20 +105,50 @@ class SampleCostProvider(CostProvider):
         return costs
 
     # This cannot be determined by the cost service only, because it requires the re-calculation of lots
-    def update_transition_costs(self, plant: Equipment, current: Order, next: Order, status: EquipmentStatus, snapshot: Snapshot, new_lot: bool,
+    def update_transition_costs(self, plant: Equipment, current: Order | None, next: Order, status: EquipmentStatus, snapshot: Snapshot, new_lot: bool,
                                 current_material: Material | None = None, next_material: Material | None = None, **kwargs) -> tuple[EquipmentStatus, ObjectiveFunction]:
         """
         Calculate an incremental update to the cost function
         """
         if plant.id != status.targets.equipment:
             raise Exception("Plant status for plant id " + str(status.targets.equipment) + " instead of expected " + str(plant.id))
-        if status.current_order != current.id:
-            raise Exception("Current order id in status object does not match provided order (" + str(status.current) + " - " + str(current.id) + ")")
+        if status.current_order != (current.id if current is not None else None):
+            raise Exception("Current order id in status object does not match provided order (" + str(status.current_order) + " - " + str(current.id if current is not None else None) + ")")
         if status.snapshot_id != snapshot.timestamp:
             raise Exception("Snapshot ids do not match (expected " + str(snapshot.timestamp) + ", received: " + str(status.snapshot_id) + ")")
+        if current is None:
+            # Candidate evaluation must not mutate the state shared by other bids.
+            new_status = status.model_copy(deep=True)
+            planning = new_status.planning
+            weight = next.actual_weight if next_material is None else next_material.weight
+            new_status.current_order = next.id
+            new_status.previous_order = None
+            new_status.current_material = [next_material.id] if next_material is not None else []
+            planning.delta_weight -= weight
+            planning.orders_count += 1
+            planning.lots_count += 1
+            planning.lot_weights = [*planning.lot_weights, weight]
+            planning.logistic_costs += self._logistic_costs_for_order(next, plant.id)
+            objective = self.objective_function(new_status)
+            planning.target_fct = objective.total_value
+            return new_status, objective
+
         old_planning: PlanningData = status.planning
         if current.id == next.id:
-            return status, self.objective_function(status)
+            new_status = status.model_copy(deep=True)
+            # A different material of the same order still consumes tonnage.
+            if next_material is not None and next_material.id not in (status.current_material or []):
+                new_status.current_material = [*(status.current_material or []), next_material.id]
+                new_status.planning.delta_weight -= next_material.weight
+                if new_status.planning.lot_weights:
+                    new_status.planning.lot_weights[-1] += next_material.weight
+                else:
+                    new_status.planning.lot_weights = [next_material.weight]
+                    new_status.planning.lots_count = 1
+                objective = self.objective_function(new_status)
+                new_status.planning.target_fct = objective.total_value
+                return new_status, objective
+            return new_status, self.objective_function(new_status)
         is_incomplete_first_submission: bool = old_planning.lots_count == 0 and status.current_order is not None
         new_weight = next.actual_weight if next_material is None else next_material.weight
         delta_weight = old_planning.delta_weight - new_weight

@@ -77,11 +77,6 @@ def get_transition_cost_and_status(
             print(msg_incompatible, f"The equipment {equipment_id} is not among the allowed equipments of {next_material}")
         return None, None
 
-    if current_order is None:
-        if verbose > 0:
-            print(f"First order for equipment {equipment_id}, assigning cost 0.")
-        return 0, equipment_status
-
     payload = {
         "equipment": equipment_id,
         "snapshot_id": equipment_status["snapshot_id"],

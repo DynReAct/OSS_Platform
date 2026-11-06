@@ -524,16 +524,23 @@ def target_function_update(transition: EquipmentTransitionStateful, username = u
 
     if next_order is None:
         raise HTTPException(status_code=404, detail=f"Next order {transition.next_order} not found")
+    if transition.current_order is not None and current_order is None:
+        raise HTTPException(status_code=404, detail=f"Current order {transition.current_order} not found")
 
     status = transition.equipment_status
-    if current_order is None: # first order, cost is 0
-        return TransitionInfo(status=status, costs=0)
-
     if transition.next_material is not None:
-        current_coil = snapshot.get_material(transition.current_material)
+        current_coil = snapshot.get_material(transition.current_material) if transition.current_material is not None else None
         next_coil = snapshot.get_material(transition.next_material)
-        if current_coil is None or next_coil is None:
+        if (current_order is not None and current_coil is None) or next_coil is None:
             raise HTTPException(status_code=404, detail=f"Current/Next coil {transition.current_material}/{transition.next_material} not found")
+
+    if current_order is None:
+        # A zero setup cost still consumes material and establishes the simulated state.
+        new_status, objective = _get_cost_provider().update_transition_costs(
+            plant, None, next_order, status, snapshot, new_lot=True,
+            current_material=None, next_material=next_coil,
+        )
+        return TransitionInfo(status=new_status, costs=objective)
 
     initial_solution = ProductionPlanning(process=plant.process, equipment_status={plant.id: status}, order_assignments={})
     targets = ProductionTargets(process=plant.process, target_weight={plant.id: status.targets},

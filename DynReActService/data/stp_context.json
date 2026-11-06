@@ -18,8 +18,12 @@
   },
   "TableMappings": [
     {"headerName":  "ID", "path":  "id", "pinned":  true},
-    {"headerName":  "Date", "path":  "due_date"},
-    {"headerName":  "Surface", "path":  "material_classes.surfaceTreatment"},
+    {"headerName":  "Round", "path":  "round"},
+    {"headerName":  "Due Date", "path":  "due_date"},
+    {"headerName":  "Width", "path":  "material_properties.width"},
+    {"headerName":  "Thickness Initial", "path":  "material_properties.thickness_initial"},
+    {"headerName":  "Thickness Final", "path":  "material_properties.thickness_final"},
+    {"headerName":  "Finishing Type", "path":  "material_properties.finishing_type"},
     {"headerName":  "Current Equipment", "path":  "current_equipment.[0]"}
   ]
 }

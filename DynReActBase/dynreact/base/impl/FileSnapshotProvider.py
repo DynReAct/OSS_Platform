@@ -209,7 +209,15 @@ class FileSnapshotProvider(SnapshotProvider):
             # TODO lots, inline coils, etc
             if o is None:
                 allowed_plants = [int(p) for p in row.allowed_plants.split(",")]
-                o = Order(id=order, current_processes=[process_id], allowed_equipment=allowed_plants,
+                due = getattr(row, "order_due_date", None)
+                due_date = None
+                if isinstance(due, str) and due.strip():
+                    due = due.strip()
+                    offset = DatetimeUtils.parse_duration(due[1:]) if due.startswith("+") else None
+                    due_date = timestamp + offset if offset is not None else DatetimeUtils.parse_date(due)
+                    if due_date is None:
+                        raise Exception(f"Invalid order_due_date {due} for order {order}, expected a date or +<n> with unit s, m, h, d or w")
+                o = Order(id=order, due_date=due_date, current_processes=[process_id], allowed_equipment=allowed_plants,
                           active_processes={process_id: "PENDING"}, actual_weight=weight,
                           target_weight=float(row.order_weight), material_classes={},
                           material_properties={col: row[idx] for col, idx in material_cols.items()})

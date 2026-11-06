@@ -69,13 +69,14 @@ def _get_stp_runtime_context() -> tuple[str | None, str | None, str | None, obje
 
 
 def _filter_results_to_selected_equipment(results: dict[str, Any], selected_equipment: list[str]) -> dict[str, Any]:
-    """Keep only result buckets that belong to the current auction selection."""
-    selected = {str(equipment) for equipment in selected_equipment}
-    return {
-        str(equipment): jobs
-        for equipment, jobs in results.items()
-        if str(equipment) in selected
-    }
+    """Keep only result buckets that belong to the current auction selection, keyed by equipment name."""
+    site = state.get_site()
+    names = {str(name): str(name) for name in selected_equipment}
+    for name in selected_equipment:
+        equipment = site.get_equipment_by_name(name)
+        if equipment is not None:
+            names[str(equipment.id)] = str(name)
+    return {names[str(equipment)]: jobs for equipment, jobs in results.items() if str(equipment) in names}
 
 
 EXTERNAL_PERF_URL = KeySearch.search_for_value("PERF_URL")
@@ -236,8 +237,9 @@ def make_ag_grid_for_equipment(equipment_id: Any, jobs: Any) -> Any:
                 rowData=row_data,
                 columnDefs=c_process,
                 defaultColDef={"resizable": True, "sortable": True, "filter": True},
-                style={"height": "300px", "width": "100%"},
-                columnSize="sizeToFit"  # Ensures no horizontal scroll
+                dashGridOptions={"domLayout": "autoHeight"},
+                style={"height": None, "width": "100%"},
+                columnSize="responsiveSizeToFit"  # Ensures no horizontal scroll
             )
         ])
 
@@ -947,7 +949,8 @@ def handle_refresh_click(ag_refresh: Any, reftxt: Any, auction: Any) -> Any:
     res = normalize_auction_results(res)
     res = _filter_results_to_selected_equipment(res, auction.equip)
     auction.auction_status = JobStatus.R
-    auction.set_resul(res)
+    if res or not auction.resul:
+        auction.set_resul(res)
 
     consumer.close()
     print(auction.resul)
@@ -1112,7 +1115,7 @@ def initialize_auction(topic: str, snap_name: str, resources: list,
 @app.callback(
     Output('tab-content', 'children'),
     Input('tabs', 'value'),
-    State('auction-store', 'data')
+    Input('auction-store', 'data')
 )
 def render_tab_content(selected_tab: Any, auction_data: Any) -> Any:
     """
@@ -1123,10 +1126,14 @@ def render_tab_content(selected_tab: Any, auction_data: Any) -> Any:
     :return: HTML content for the tab.
     :rtype: dash.html.Div
     """
-    if not selected_tab or not auction_data:
+    if not auction_data:
         return html.Div("No results available yet.")
 
     auction = Auction.model_validate_json(auction_data)
+    if selected_tab not in auction.resul and auction.resul:
+        selected_tab = next(iter(auction.resul))
+    if not selected_tab:
+        return html.Div("No results available yet.")
 
     if selected_tab in auction.resul:
         jobs = auction.resul[selected_tab]

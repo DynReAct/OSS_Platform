@@ -132,3 +132,49 @@ image on profile workers and start the three parents locally with verbose 1.
 `prune_registry_images.sh PROFILE DAYS` previews age-based manifest cleanup
 (`DYNREACT_APPLY=1` applies it). See [deployment and registry operations](docs/deployment.md)
 for env-file templates, SSH permissions, load-aware placement and protection limits.
+
+## OSS analytical costs and auction startup
+
+The OSS service uses `SampleCostProvider` from the `SampleUseCase` package.
+Install that package in the service virtual environment and configure the service
+(using `.env_OSS` as the template):
+
+```ini
+DYNREACT_PROFILE=oss
+COST_PROVIDER=class:dynreact.cost.CostCalculatorImpl.SampleCostProvider,sampleuc:costs
+TOPIC_GEN=Dynreact-OSS-Gen
+TOPIC_CALLBACK=Dynreact-OSS-Callback
+```
+
+The service's `dynreact.cost` package extends its package path so local providers
+and installed providers remain discoverable together. Do not copy the analytical
+formula into a local `oss.py`. A `SimpleCostProvider` without a transition table
+is not equivalent to the analytical provider. For FIN02, transitions between
+different orders cost `1 + 0.1 * abs(width1 - width2)`, plus 10 when finishing
+types differ; a missing previous order or the same order costs zero.
+
+After deployment, restart the service and validate from its working directory:
+import `dynreact.cost.CostCalculatorImpl.SampleCostProvider`, then query
+`/costs/status/{equipment}/{snapshot}?unit=material` and POST known snapshot
+orders/materials to `/costs/transitions` and `/costs/transitions-stateful`.
+Check HTTP success and the expected cost, not only systemd running status.
+These cost endpoints evaluate requests without launching auctions. Agents can
+fall back to zero costs on HTTP failures, so auction activity alone does not
+prove that analytical costs are enabled.
+
+The UI uses `Materials`; `Coils` remains a supported legacy alias in `Auction`.
+Startup counts `smats`, the material IDs actually sent for replica creation,
+for both material and order scheduling. One equipment, four materials and one
+LOG must therefore yield six expected agents. An incorrect expected count of
+two is a UI/model issue, not a reason to restart parent agents. Deploy the
+updated ShortTermPlanning package in the service environment as well.
+
+Topic names are case-sensitive and must match those of the running parents.
+Use a new auction reference after a failed startup because failure cleanup may
+have deleted the previous auction topic.
+
+Run the focused regression checks from the repository root:
+
+```sh
+PYTHONPATH=OSS_Platform/DynReActService:OSS_Platform/DynReActBase:OSS_Platform/SampleUseCase:OSS_Platform/ShortTermPlanning python OSS_Platform/ShortTermPlanning/tests/regression/test_oss_startup.py
+```

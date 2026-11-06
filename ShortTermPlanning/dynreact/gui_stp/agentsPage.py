@@ -879,14 +879,8 @@ def handle_start_click(ag_start: Any, reftxt: Any, auction: Any) -> Any:
     consumer = Consumer(consumer_config)
     consumer.subscribe([genauction(reftxt), TOPIC_CALLBACK])
 
-    # Calculate number of agents based on material type
-    if auction.matype == 'Materials':
-        num_materials = len(auction.lmats)
-    else:  # Orders
-        # For Orders, use smats (the converted list) for agent count
-        num_materials = len(auction.smats)
-
-    numag = len(auction.equip) + num_materials + 1
+    # smats contains the exact material IDs used to create replicas in both modes.
+    numag = len(auction.equip) + len(auction.smats) + 1
     print(f"Calculated {numag} agents for {auction.matype}")
 
     try:

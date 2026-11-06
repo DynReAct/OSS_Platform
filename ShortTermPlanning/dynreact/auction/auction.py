@@ -133,7 +133,7 @@ class Auction(BaseModel):
 
         clean_all_objs = [x if isinstance(x, str) else str(x) for x in self.all_objs]
 
-        if self.matype == 'Coils':
+        if self.matype in ('Materials', 'Coils'):
             self.lmats = list(set(clean_all_objs) - set(self.smats))
         else:
             self.omats = list(set(clean_all_objs) - set(self.smats))
@@ -149,14 +149,14 @@ class Auction(BaseModel):
 
         :param str rftxt: Auction Identification String
         :param list lmats: List of materials interesting to the Auction
-        :param str mtyp: Type of object being processed Coils/Orders
+        :param str mtyp: Type of object being processed Materials/Orders (Coils is a legacy alias)
         :param list smats: List of equipments interesting to the Auction
         """
         self.code = rftxt
         self.matype = mtyp
         self.smats = smats
 
-        if self.matype == 'Coils':
+        if self.matype in ('Materials', 'Coils'):
             self.lmats = lmats
             self.omats = []
         else:

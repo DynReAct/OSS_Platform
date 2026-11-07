@@ -380,5 +380,12 @@ clientside_callback(
 #    return "UTC"
 
 
+# Default STP imports this module's app. Load it only after app creation and
+# registration of the shared callbacks, but before the first dependency request.
+# Custom/profile frontends keep their existing preload in pages/stp_page.py.
+if config.stp_frontend == "default":
+    state.get_stp_page()
+
+
 if __name__ == "__main__":
     app.run(debug=True, dev_tools_ui=True)

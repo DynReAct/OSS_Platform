@@ -23,7 +23,8 @@ dash.register_page(__name__, path="/stp")
 #
 # The legacy OSS frontend `default` imports `dynreact.gui.dash_app.app`, so
 # preloading it here would create a circular import while `dash_app` is still
-# being initialized. Custom/profile-specific frontends do not have that
+# being initialized. dash_app preloads default at the end of its initialization.
+# Custom/profile-specific frontends do not have that
 # dependency and benefit from eager callback registration.
 if config.stp_frontend and config.stp_frontend != "default":
     state.get_stp_page()

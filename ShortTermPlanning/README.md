@@ -229,3 +229,35 @@ interpreted as zero, while the returned simulated state is retained. Missing
 The empty-line regression suite covers both explicit-zero HTTP responses and
 legacy responses without the zero field. Deploy the service change and rebuild
 and redeploy agent images to install the compatibility change in the agents.
+
+### OSS STP callback registration at startup
+
+Dash sends the callback dependency graph to the browser before the user visits
+STP. Registering the default OSS callbacks only from the STP page layout leaves
+the first browser session without the equipment-to-orders/materials callback,
+even though subsequent direct requests to that callback return data.
+
+`DynReActService/dynreact/gui/dash_app.py` preloads `state.get_stp_page()` at the
+end of initialization, only when `STP_FRONTEND=default`. At that point the Dash
+application and shared callbacks already exist, so `agentsPage` can import the
+application without the circular initialization encountered during page discovery.
+Custom frontends, including RAS, retain their preload in `pages/stp_page.py`.
+The loader's existing error-page handling is retained for unavailable frontends.
+
+The equipment selector populates available orders/materials but leaves the
+selection empty until the user chooses entries. For the supplied OSS snapshot,
+Orders + FIN01 offers `order3` and `order6` with `value=[]`. This is intentional;
+an empty selection does not imply empty options.
+
+The cold-start regression runs in a new process and checks the very first
+`/_dash-dependencies` response, the FIN01 callback, and HTTP access to STP, LTP
+and MTP routes. Existing profile-loader tests cover custom-frontend preloading.
+From the repository root, with the service dependencies installed:
+
+```sh
+PYTHONPATH=OSS_Platform/DynReActService:OSS_Platform/DynReActBase:OSS_Platform/SampleUseCase:OSS_Platform/ShortTermPlanning:OSS_Platform/MidTermPlanning python -m unittest discover -s OSS_Platform/DynReActService/tests/integrationtests -p test_stp_initial_dependencies.py -v
+```
+
+Deploy the updated DynReActService and restart the OSS GUI service. Reload any
+browser tabs that fetched dependencies before the fix. This callback-registration
+change does not require rebuilding agent images or modifying LTP/MTP algorithms.

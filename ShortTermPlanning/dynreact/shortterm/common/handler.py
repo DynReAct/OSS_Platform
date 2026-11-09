@@ -221,7 +221,7 @@ class DockerManager:
                 name = f"{container_prefix + '_' if container_prefix else ''}{agent.upper()}_{name}"
                 docker_network = os.environ.get("DOCKER_NETWORK")
 
-                matches = self.client.containers.list(all=True, filters={"name": f"^/?{re.escape(name)}$"})
+                matches = [] if self.remote_workers else self.client.containers.list(all=True, filters={"name": f"^/?{re.escape(name)}$"})
                 if self.remote_workers and matches:
                     if len(matches) != 1 or matches[0].labels.get('owner') != self.tag:
                         raise RuntimeError('Remote name collision outside this parent ownership')

@@ -218,3 +218,55 @@ def test_configuration_uses_agents_profile_file_even_if_old_file_exists(config):
     path,env,registry,repo,workers,ssh_dir=ops.configuration('oss')
     assert path==config/'agents-oss.env'
     assert workers==['ssh://oss@one','ssh://oss@two']
+
+
+def test_pool_caps_concurrent_starts_and_reserves_load(monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    monkeypatch.setenv('DYNREACT_LAUNCHES_PER_WORKER', '1')
+    p, clients = pool(monkeypatch)
+    for c in clients:
+        c.api.containers.return_value = []
+    barrier = threading.Barrier(2)
+    active = [0, 0]
+    peak = [0, 0]
+    guard = threading.Lock()
+    def launch(i):
+        def run(**kwargs):
+            with guard:
+                active[i] += 1
+                peak[i] = max(peak[i], active[i])
+            try:
+                barrier.wait(timeout=3)
+                return kwargs['name']
+            finally:
+                with guard:
+                    active[i] -= 1
+        return run
+    for i, c in enumerate(clients):
+        c.containers.run.side_effect = launch(i)
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(p.run, name=f'child-{i}', labels={'owner': 'oss:material'}) for i in range(4)]
+        assert len({f.result(timeout=5) for f in futures}) == 4
+    assert peak == [1, 1]
+    assert p._loads == [2, 2]
+
+
+def test_pool_same_name_retry_is_serialized(monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    p, clients = pool(monkeypatch)
+    created = threading.Event()
+    old = MagicMock(status='running', labels={'owner': 'oss:material'})
+    for c in clients:
+        c.containers.list.side_effect = lambda **kw: [old] if created.is_set() else []
+    def launch(**kwargs):
+        created.set()
+        return old
+    clients[1].containers.run.side_effect = launch
+    # Return the existing replica on just one worker.
+    clients[0].containers.list.side_effect = lambda **kw: []
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(p.run, name='same', labels={'owner': 'oss:material'}) for _ in range(2)]
+        assert all(f.result(timeout=5) is old for f in futures)
+    assert clients[1].containers.run.call_count == 1

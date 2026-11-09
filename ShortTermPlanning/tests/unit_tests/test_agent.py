@@ -108,3 +108,31 @@ def test_replicas_never_sweep(agent: Agent) -> None:
     with patch.object(agent_module, "list_existing_topics") as topics:
         agent.reap_if_due()
     topics.assert_not_called()
+
+
+def test_launch_queue_captures_parameters_and_reports_background_failure(agent):
+    import threading
+    agent.handler = MagicMock(remote_workers=['ssh://oss@one'])
+    release = threading.Event()
+    received = []
+    def launch(**kwargs):
+        assert release.wait(timeout=3)
+        received.append(kwargs['params']['variables']['value'])
+        raise RuntimeError('Docker unavailable')
+    agent.handler.launch_container.side_effect = launch
+    params = {'topic': 'auction-A', 'variables': {'value': 'original'}}
+    try:
+        agent.enqueue_replica(name='child', params=params)
+        params['variables']['value'] = 'changed'
+        release.set()
+        agent._launch_executor.shutdown(wait=True)
+        with patch.object(agent_module, 'sendmsgtopic') as sent:
+            agent.collect_launches()
+        assert received == ['original']
+        assert sent.call_args.kwargs['topic'] == 'auction-A'
+        assert sent.call_args.kwargs['action'] == 'RECIEVEERROR'
+        assert 'Docker unavailable' in sent.call_args.kwargs['payload']['msg']
+        assert agent._launch_futures == []
+    finally:
+        release.set()
+        agent._launch_executor.shutdown(wait=True)

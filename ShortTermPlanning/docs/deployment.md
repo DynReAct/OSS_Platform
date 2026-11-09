@@ -281,3 +281,26 @@ reachable from the RAS executor. Credential separation does not fix snapshot HTT
 500 errors; validate the requested snapshot response before running all scenarios.
 Jenkinsfiles contain credential IDs only, not credential values. Installation of
 the new IDs is a Jenkins administration step; repository edits do not create them.
+
+### Concurrent replica startup
+
+Parents enqueue replica launches with a bounded outstanding queue (twice their
+launch concurrency). `DYNREACT_LAUNCHES_PER_WORKER=2` sets the maximum simultaneous
+Docker starts per worker **per parent**; set it to `1` for a conservative rollout.
+Set this variable in `agents-oss.env` or `agents-ras.env` before deploying the
+updated parent image. Local Docker uses one launch thread.
+
+Worker name reconciliation runs across workers in parallel, using sparse listings
+without per-container inspection. Placement caches active counts for a batch and
+reserves capacity before starting Docker. Counts refresh after two seconds when
+no launches are in flight. Limits and reservations are local to each parent:
+independent LOG, EQUIPMENT and MATERIAL parents do not share a distributed lock.
+A worker failure blocks reconciliation; ambiguous starts are never automatically
+retried on another worker. Same-name launches are serialized within a parent.
+
+Launch failures are reported to the auction LOG on the consumer thread. The
+existing presence check still gates auction startup. Shutdown cancels queued
+launches and waits for in-flight Docker operations; periodic reaping resumes once
+the launch queue drains. Logs include total launch duration and Docker start
+duration per worker. Real startup throughput must be measured on the deployed
+fleet; offline tests do not establish a performance speedup.

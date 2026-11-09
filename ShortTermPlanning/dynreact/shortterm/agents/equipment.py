@@ -302,7 +302,7 @@ class Equipment(Agent):
             if start_time is not None:
                 init_kwargs["start_time"] = start_time
 
-            self.handler.launch_container(name=f"{topic}_{equipment}", agent="equipment", mode="replica", params=init_kwargs, auto_remove=True)
+            self.enqueue_replica(name=f"{topic}_{equipment}", agent="equipment", mode="replica", params=init_kwargs, auto_remove=True)
 
             if self.verbose > 1:
                 self.write_log(f"Creating equipment with configuration {init_kwargs}...", "f886d124-383b-497e-b2a1-841222a3e14d")

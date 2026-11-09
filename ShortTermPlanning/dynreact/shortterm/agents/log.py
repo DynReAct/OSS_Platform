@@ -448,7 +448,7 @@ class Log(Agent):
                 "variables": KeySearch.dump_model(include_env=False)
             }
 
-            self.handler.launch_container(
+            self.enqueue_replica(
                 name=topic,
                 agent="log",
                 mode="replica",

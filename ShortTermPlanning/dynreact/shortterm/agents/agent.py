@@ -9,6 +9,9 @@ import json
 import re
 import time
 import sys
+import os
+from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
 
 from confluent_kafka import Producer, Consumer, KafkaError
 from dynreact.shortterm.common import sendmsgtopic, KeySearch, purge_topics, list_existing_topics
@@ -131,6 +134,56 @@ class Agent:
         )
         self.consumer.subscribe([self.topic], on_assign=on_assign, on_revoke=on_revoke)
 
+    def enqueue_replica(self, **kwargs) -> None:
+        """Prepare on the consumer thread; only Docker I/O runs concurrently.
+
+        The outstanding queue is bounded. Errors are collected on the consumer
+        thread, where Kafka reporting and agent state remain serialized.
+        """
+        if not hasattr(self, "_launch_executor"):
+            per_worker = int(os.getenv("DYNREACT_LAUNCHES_PER_WORKER", "2"))
+            if per_worker < 1:
+                raise ValueError("DYNREACT_LAUNCHES_PER_WORKER must be positive")
+            workers = per_worker * max(1, len(self.handler.remote_workers))
+            # Local Docker keeps its previous serial behavior by default.
+            if not self.handler.remote_workers:
+                workers = 1
+            self._launch_executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="replica")
+            self._launch_futures = []
+            self._launch_queue_limit = 2 * workers
+        self.collect_launches()
+        if len(self._launch_futures) >= self._launch_queue_limit:
+            self.collect_launches(wait_one=True)
+        # Capture configuration before the next CREATE mutates KeySearch.
+        kwargs = deepcopy(kwargs)
+        envs = dict(kwargs.get("envs") or {})
+        for key in ("KAFKA_TOPIC_PREFIX", "TOPIC_GEN", "TOPIC_CALLBACK"):
+            envs[key] = KeySearch.search_for_value(key)
+        kwargs["envs"] = envs
+        future = self._launch_executor.submit(self.handler.launch_container, **kwargs)
+        self._launch_futures.append((future, kwargs["params"]["topic"], kwargs["name"]))
+
+    def collect_launches(self, wait_one=False) -> None:
+        pending = getattr(self, "_launch_futures", [])
+        if wait_one and pending:
+            from concurrent.futures import wait, FIRST_COMPLETED
+            wait([item[0] for item in pending], return_when=FIRST_COMPLETED)
+        remaining = []
+        for future, topic, name in pending:
+            if not future.done():
+                remaining.append((future, topic, name))
+                continue
+            try:
+                if future.result() is None:
+                    raise RuntimeError("Container limit reached")
+            except Exception as exc:
+                message = f"Failed to launch {name}: {exc}"
+                print(message)
+                sendmsgtopic(producer=self.producer, tsend=topic, topic=topic,
+                             source=self.agent, dest="LOG:" + topic,
+                             action="RECIEVEERROR", payload=dict(msg=message), vb=self.verbose)
+        self._launch_futures = remaining
+
     def reap_if_due(self) -> None:
         """Sweeps the containers of this parent agent when the reaper interval has elapsed.
 
@@ -138,7 +191,7 @@ class Agent:
         removes exited replicas, stuck replicas and replicas of auctions whose Kafka topic no
         longer exists. It never raises, so a Docker or Kafka failure cannot stop the agent.
         """
-        if self.handler is None or time.monotonic() < self._next_reap:
+        if getattr(self, "_launch_futures", []) or self.handler is None or time.monotonic() < self._next_reap:
             return
         self._next_reap = time.monotonic() + self.reaper_interval
         try:
@@ -320,6 +373,7 @@ class Agent:
         """
         self.iter_no_msg += 1
 
+        self.collect_launches()
         self.reap_if_due()
         status = self.callback_before_message()
         if status != 'CONTINUE':
@@ -414,14 +468,19 @@ class Agent:
             self.write_log(f"Spawned a process for agent {self.agent} to follow topic {self.topic}.", "affc0902-8218-4dd1-9df7-8bfed516c57c")
 
         status = 'GO'
-        while status != 'END':
-            status = self.read_message()
+        try:
+            while status != 'END':
+                status = self.read_message()
+        finally:
+            if hasattr(self, "_launch_executor"):
+                self._launch_executor.shutdown(wait=True, cancel_futures=True)
+                self.collect_launches()
+            self.consumer.close()
 
         # We close the consumer to release any equipment it is using
         # The producer does not need to be closed, since it is automatically garbage collected:
         # https://github.com/confluentinc/confluent-kafka-python/issues/127
         print(f"Closing consumer received status {status}")
-        self.consumer.close()
         if self.verbose > 1:
             self.write_log(f"Ending spawned process for agent {self.agent} in topic {self.topic}.", "8dc03f6b-dce4-4a52-a427-900547dd7a5a")
         # Purge only after the general LOG has fully shut down so late EXIT

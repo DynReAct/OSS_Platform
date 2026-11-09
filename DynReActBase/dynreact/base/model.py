@@ -839,28 +839,18 @@ class Snapshot(Model, Generic[MATERIAL_PROPERTIES]):
     def get_orders_equipment(self, site: Site, equipment_name: str, \
                              storage:str, assigned:int=-1) -> list[str]:
         """
-        Get a list of orders when all the materials in the order have as 
-        current_eqipment_name equal to tje equipment_name.
+        Get a list of orders for the given equipment.
 
         :param site: The site containing plant details.
         :param equipment_name: targeted the name of the equipment.
-        :param storage: Useless since the latest input from BFI (2025-02-25).
-        :param assigned: Useless and kept because of OSS_Plantform compatiiity 
+        :param storage: Storage of the equipment, used when assigned is set.
+        :param assigned: If negative, orders whose materials are all on the equipment. Otherwise, orders
+            the equipment can process with materials in its storage that are assigned to other equipment.
         :return: A list of order IDs representing the selected orders.
         """
-        # Modified by JOM 2025-02-24
-        # For RAS there is not current_equipment involving Not assigned Materials.
-        # Then, assigned is useless and code gets simplified.
-        # if assigned < 0:
-        # else:
-        #     return(list(set([coil.order for coil in self.material if \
-        #                     equipment_name in [site.get_equipment(ieq).name_short \
-        #                         for ieq in self.get_order(coil.order).allowed_equipment] \
-        #                     and coil.current_storage == storage and \
-        #                         coil.current_equipment is not None and \
-        #                         coil.current_equipment_name != equipment_name] )) )
-        #
-        # Retrieve a list of orders based on current equipment name
+        if assigned >= 0:
+            return list(dict.fromkeys(self.get_material(coil_id).order for coil_id in
+                                      self.get_material_equipment(site, equipment_name, storage, assigned)))
         unique_orders = {coil.order for coil in self.material 
                         if coil.current_equipment_name == site.get_equipment_by_name(\
                             equipment_name).name_short}

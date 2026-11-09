@@ -616,7 +616,7 @@ def set_materials(matype: Any, plants: Any) -> Any:
         for ic in unique_materials:
             res.append({"label": str(ic), "value": str(ic)})
 
-        return titx, res, DISPLAY_BLOCK, []
+        return titx, res, DISPLAY_BLOCK, [r["value"] for r in res]
     else:
         if matype == 'Materials':
             titx = 'Targeted Materials (select resources first):'
@@ -680,7 +680,7 @@ def set_ass_materials(matype: Any, plants: Any, ass_mats: Any) -> Any:
         for ic in unique_assigned_materials:
             res.append({"label": str(ic), "value": str(ic)})
 
-        return titx, res, DISPLAY_BLOCK, []
+        return titx, res, DISPLAY_BLOCK, [r["value"] for r in res]
 
     return '', [], NO_DISPLAY, []
 

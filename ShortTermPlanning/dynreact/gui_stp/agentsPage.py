@@ -528,7 +528,7 @@ def layout(*args: Any, **kwargs: Any) -> Any:
         language,
         dcc.Store(id='stored-data'),
         dcc.Store(id='has_initialized_session', data=False),
-        dcc.Store(id='auction-store', storage_type="local"),
+        dcc.Store(id='auction-store', storage_type="memory"),
         generate_page_header(snpshot),
         generate_resource_section(res_all, res_def),
         generate_materials_section(lmats, s_mats),

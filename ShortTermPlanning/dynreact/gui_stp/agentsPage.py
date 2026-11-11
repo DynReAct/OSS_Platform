@@ -667,15 +667,20 @@ def set_ass_materials(matype: Any, plants: Any, ass_mats: Any) -> Any:
 
             all_assigned_materials.extend(sorted(amts))
 
-        # Remove duplicates
-        unique_assigned_materials = []
+        # Remove duplicates and entries already in the targeted list
         seen = set()
+        for ir in plants:
+            if matype == 'Materials':
+                seen.update(snapshot.get_material_current_equipment(ir))
+            else:
+                seen.update(snapshot.get_orders_current_equipment(ir))
+        unique_assigned_materials = []
         for mat in all_assigned_materials:
             if mat not in seen:
                 unique_assigned_materials.append(mat)
                 seen.add(mat)
 
-        titx= f'Targeted {matype} (click to select from {len(amts)} entries):'
+        titx= f'Targeted {matype} (click to select from {len(unique_assigned_materials)} entries):'
 
         for ic in unique_assigned_materials:
             res.append({"label": str(ic), "value": str(ic)})

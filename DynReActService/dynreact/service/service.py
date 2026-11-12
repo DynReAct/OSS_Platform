@@ -190,7 +190,9 @@ def snapshot(response: Response, timestamp: str | datetime = Path(..., examples=
     is_relative_timestamp: bool = isinstance(timestamp, str) and timestamp.startswith("now")
     if isinstance(timestamp, str):
         timestamp = parse_datetime_str(timestamp)
-    snapshot0: Snapshot = state.get_snapshot(timestamp)
+    snapshot0: Snapshot | None = state.get_snapshot(timestamp)
+    if snapshot0 is None:
+        raise HTTPException(status_code=404, detail="No snapshot found for the requested timestamp")
     snap_provider = state.get_snapshot_provider()
     snap_copy = snapshot0.model_dump(mode="python", exclude_unset=True, exclude_none=True)
     lots_copy = {}

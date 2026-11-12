@@ -37,3 +37,15 @@ and `integration_test/test_exit_cleanup.py`. They run offline with Kafka mocked.
 `KAFKA_IP` set) and creates/deletes only its own UUID-named TEST topics. Both
 Jenkins images run these checks before publication. See
 [Shared messaging](../docs/shared_messaging.md) for guarantees and operations.
+
+`unit_tests/test_cli_lifecycle.py` protects Jenkins scenarios 00-02 from an
+unnecessary snapshot/transport dependency and checks that genuine auction
+snapshot failures still propagate and execute lifecycle cleanup. Both Jenkins
+profiles run it in the shared-messaging regression stage.
+
+
+`unit_tests/test_snapshot_preflight.py` validates the OSS job's read-only data
+readiness gate, including the pinned timestamp, profile identity, scenario
+selections and initial cost statuses. Run the actual gate with `REST_URL`,
+`SNAPSHOT_VERSION` and `SCENARIO_8_ORDER_ID` set, using
+`python extras/snapshot_preflight.py`. It never creates auctions or edits data.

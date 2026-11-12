@@ -205,3 +205,68 @@ teardown. Full Jenkins auction scenarios additionally exercise Docker launches,
 REST snapshot access and remote worker infrastructure; passing the messaging
 regressions alone does not establish the availability of those external
 services.
+
+### Jenkins startup scenarios and snapshot failures
+
+Scenarios 00 and 01 replace the auction creator with a test double and have no
+participating equipment. Scenario 02 creates a LOG replica without equipment
+or materials. These lifecycle checks must not depend on the snapshot REST
+service or transport-time data. An empty equipment order scope returns
+immediately; LOG-only creation does not construct `DataSetup` or fetch
+transport times. The CLI computes result filtering only for an actual auction
+with more than one agent, inside its lifecycle `try/finally`.
+
+This distinction fixes a failure observed after the shared-messaging stage had
+passed: Scenario 00 made an unnecessary
+`GET /snapshots/2025-01-18T08:00:00Z` while calculating an empty order scope, and
+a snapshot HTTP 500 failed the parent-startup test before its cleanup block.
+Snapshot errors for genuine equipment/material auctions remain errors and
+propagate to the caller. If result-scope preparation fails after creation, the
+CLI closes its callback reader and executes auction/parent termination.
+
+`tests/unit_tests/test_cli_lifecycle.py` reproduces the parent-only scenarios
+with an unavailable snapshot service, tests LOG-only creation without snapshot
+or transport access, verifies real material creation still loads its data, and
+checks cleanup and error propagation for a real auction's HTTP 500. Both
+Jenkins shared-messaging stages run this suite before publishing the image.
+Skipping REST in an empty lifecycle check does not repair an unavailable or
+invalid snapshot used by subsequent equipment scenarios; those need a working
+service and the configured snapshot.
+
+
+### Pinned OSS regression dataset and readiness gate
+
+The OSS job pins `SNAPSHOT_VERSION=2024-12-31T11:00:00Z` and
+`SCENARIO_8_ORDER_ID=order7`. The previous January 2025 timestamp is absent from
+the confirmed OSS endpoint (port 5016); the other profile's endpoint (port 5026)
+is not an interchangeable source. The OSS dataset contains `FIN01`/`FIN02`
+(equipment 6/7), while RAS uses different equipment names. Do not select an
+arbitrary latest snapshot to make the job pass: scenario data must be checked
+with the same selection rule used by the auction tests.
+
+`OSS Snapshot Readiness` runs in the newly built image before publication or
+parent startup. Its read-only `extras/snapshot_preflight.py` verifies the OSS
+equipment identity, loads the exact pinned timestamp, validates material/order
+references, runs the real scenario 4-8 material selector, checks that the
+scenario-8 expected order is selected, and loads initial material-based cost
+statuses for the participating equipment. It has bounded HTTP timeouts and
+never prints the credential-backed endpoint, response bodies or exception
+messages. The job forwards the configured equipment/order variables to each
+scenario container, including the scenario-8 positive result assertion.
+
+Live verification on the OSS service found 8 orders and 15 materials at the
+pinned timestamp. Scenario 6 can select two distinct FIN02 orders (`order7` and
+`order8`); scenario 8 selects one FIN01 order and two FIN02 orders. The selector
+intentionally permits fewer than the requested count in a multi-equipment
+auction when remaining orders are shared; the result assertions calculate the
+expected count using that same rule. Both equipment initial-cost requests
+returned HTTP 200. This establishes data readiness, not a complete distributed
+auction execution.
+
+The snapshot GET endpoint now returns HTTP 404 when the provider returns no
+snapshot, instead of dereferencing None and returning HTTP 500. That API change
+requires deployment of the updated DynReActService; changing the Jenkins date
+works with the currently deployed service and does not require that deployment.
+`test_snapshot_preflight.py` covers wrong dates, substituted timestamps, wrong
+profiles, incompatible selections, missing order references, unavailable
+services and credential-safe diagnostics.

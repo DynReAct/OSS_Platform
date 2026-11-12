@@ -328,8 +328,8 @@ def create_auction(
         dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
         raise Exception(f"{dt} | ERROR: Cannot specify both nmaterials and materials")
 
-    # Initialize search of latest snapshot
-    data_setup = DataSetup(verbose=verbose, snapshot_time=snapshot)
+    # LOG-only lifecycle checks have no snapshot or transport dependency.
+    data_setup = DataSetup(verbose=verbose, snapshot_time=snapshot) if equipments or materials else None
 
     # Keep track of the number of agents created
     num_agents = 0
@@ -384,6 +384,7 @@ def create_auction(
     # for as many times as specified by the user
     target_tons = target_tons or {}
     for equipment in equipments:
+        assert data_setup is not None
 
         payload_data: dict[str, Any] = dict(
             id=equipment,
@@ -422,7 +423,7 @@ def create_auction(
             data_setup=data_setup,
             equipments=equipments,
             nmaterials=nmaterials,
-        )
+        ) if data_setup is not None else {}
 
         for equipment in equipments:
             equipment_ids = re.findall(r'\d+', str(equipment))
@@ -457,11 +458,12 @@ def create_auction(
     all_materials = list(set(all_materials))
     print("Final material list size is {}".format(len(all_materials)))
 
-    transport_times = get_transport_times(transport_times_url)
+    transport_times = get_transport_times(transport_times_url) if all_materials else {}
     print(f"Transport times: {transport_times}")
 
     # Clone the master MATERIAL for each material ID
     for material in all_materials:
+        assert data_setup is not None
         sendmsgtopic(
             producer=producer,
             tsend=topic_gen,
@@ -710,8 +712,10 @@ def _equipment_order_scope(equipments: list[str], snapshot: str, nmaterials: int
     """
     Return the order ids that belong to the material selection requested for each equipment.
     """
-    data_setup = DataSetup(verbose=0, snapshot_time=snapshot)
     scope = {str(equipment): set() for equipment in equipments}
+    if not scope:
+        return scope
+    data_setup = DataSetup(verbose=0, snapshot_time=snapshot)
 
     if materials is not None:
         for material_id in materials:
@@ -982,8 +986,6 @@ def execute_short_term_planning(args: dict) -> Any:
     results = {}
 
     equip_configs = {equipment: {'start_time': start_time} for equipment in equipments} if start_time else None
-    order_scope = _equipment_order_scope(equipments=equipments, snapshot=snapshot, nmaterials=nmaterials, materials=None)
-
     consumer = None
     try:
         consumer = create_callback_consumer(ip, _key_str("TOPIC_CALLBACK"))
@@ -997,6 +999,11 @@ def execute_short_term_planning(args: dict) -> Any:
         sleep(_key_float("CLONING_WAIT"), producer=producer, verbose=verbose)
 
         if n_agents > 1:
+            # Only real auctions need order filtering. Keep REST failures within
+            # the lifecycle try/finally so accepted agents are always ended.
+            order_scope = _equipment_order_scope(
+                equipments=equipments, snapshot=snapshot, nmaterials=nmaterials, materials=None
+            )
             start_auction(topic=act, consumer=consumer, producer=producer, verbose=verbose, num_agents=n_agents)
             sleep(_key_float("AUCTION_WAIT"), producer=producer, verbose=verbose)
             results = ask_results(topic=act, producer=producer, consumer=consumer, verbose=verbose)

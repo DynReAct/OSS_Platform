@@ -997,13 +997,13 @@ def handle_end_click(ag_end: Any, reftxt: Any, auction: Any) -> Any:
     # End auction using Kafka messages
     topic = genauction(reftxt)
 
-    # Instruct all RESOURCE children to exit
+    # Instruct all EQUIPMENT children to exit
     sendmsgtopic(
         producer=producer,
         tsend=topic,
         topic=topic,
         source="UX",
-        dest="RESOURCE:" + topic + ":.*",
+        dest="EQUIPMENT:" + topic + ":.*",
         action="EXIT",
         vb=VB
     )

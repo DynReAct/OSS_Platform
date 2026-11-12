@@ -10,7 +10,7 @@ Describe here the module purpose
 ## Agent class
 
 
-::: dynreact.shortterm.agent.Agent
+::: dynreact.shortterm.agents.agent.Agent
     options:
         docstring_style: sphinx
         show_signature: true

@@ -14,12 +14,12 @@ Version History:
 
 Note:
 
-    To run scenario 05, use: python3 short_term_planning.py -v 3  -b . -rw 10 -cw 30 -aw 50 -bw 15 -ew 10 -e 14 -n 1 -g 111
-    To run scenario 06, use: python3 short_term_planning.py -v 3  -b . -rw 10 -cw 30 -aw 50 -bw 15 -ew 10 -e 14 -n 2 -g 111
-    To run scenario 07, use: python3 short_term_planning.py -v 3 -b . -rw 10 -cw 30 -aw 200 -bw 15 -ew 10 -e 14 15 -n 1 -g 111
+    To run scenario 05, use: python -m dynreact.shortterm.short_term_planning -v 3 -rw 10 -cw 30 -aw 50 -bw 15 -sw 5 -ew 10 -e 14 -n 1 -g 111
+    To run scenario 06, use: python -m dynreact.shortterm.short_term_planning -v 3 -rw 10 -cw 30 -aw 50 -bw 15 -sw 5 -ew 10 -e 14 -n 2 -g 111
+    To run scenario 07, use: python -m dynreact.shortterm.short_term_planning -v 3 -rw 10 -cw 30 -aw 200 -bw 15 -sw 5 -ew 10 -e 14 15 -n 1 -g 111
 
-    To run a reduced version, use: python3 short_term_planning.py -v 3 -b . -rw 10 -cw 30 -aw 200 -bw 15 -ew 10 -e 14 15 -n 4 -g 111
-    To run a full version, use: python3 short_term_planning.py -v 3 -b . -rw 100 -cw 300 -aw 1200 -bw 45 -ew 100 -e 14 15 -g 111
+    To run a reduced version, use: python -m dynreact.shortterm.short_term_planning -v 3 -rw 10 -cw 30 -aw 200 -bw 15 -sw 5 -ew 10 -e 14 15 -n 4 -g 111
+    To run a full version, use: python -m dynreact.shortterm.short_term_planning -v 3 -rw 100 -cw 300 -aw 1200 -bw 45 -sw 5 -ew 100 -e 14 15 -g 111
 
 """
 import time

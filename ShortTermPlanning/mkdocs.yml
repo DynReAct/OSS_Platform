@@ -37,5 +37,5 @@ nav:
   - Deployment and Registry: deployment.md
   - Log: log.md
   - Functions: functions.md
-  - Clean_kafka: cleankafka.md
+  - Kafka clean-up: cleankafka.md
   - ShortTermPlanning: shorttermplanning.md

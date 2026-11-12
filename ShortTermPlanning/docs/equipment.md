@@ -1,20 +1,11 @@
-# Resource module
+# Equipment module
 
-First Prototype of Kubernetes oriented solution for the MATERIAL agent
+EQUIPMENT agent: base agent that launches the replicas and replica that bids for materials
 
 ---
 
-## Resource class
-::: dynreact.shortterm.equipment.Resource
+## Equipment class
+::: dynreact.shortterm.agents.equipment.Equipment
     options:
         docstring_style: sphinx
         show_signature: true
-
-
-
-## create_resource function
-::: dynreact.shortterm.equipment.create_resource
-    options:
-        docstring_style: sphinx
-        show_signature: true
-

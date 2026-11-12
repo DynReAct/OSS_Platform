@@ -15,12 +15,10 @@ It does include several agent prototypes, such as
                    next auction. Confirmed assignments are interpreted at order
                    level for accumulated tonnage and processing duration.
 
-* **ShortTermPlanning.py**: Main script in charge of simulating several contexts for
-                   the auction. 
-		   The scenario requires to have a Kafka broker avaliable to all the
+* **short_term_planning.py**: Command line script that creates an auction, starts it
+                   and collects its results.
+                   The scenario requires to have a Kafka broker avaliable to all the
                    agent instances.
-                   To make possible to reset the broker queues a tool has been created
-                   and named **clean_kafka.py**.
 
 
 ## Prerequisites
@@ -74,14 +72,15 @@ poetry build
 Different use cases can be simulated by testing the following commands:
 
 ```commandline
-python3 ShortTermPlanning.py -v 3  -b . -rw 10 -cw 30 -aw 50 -bw 15 -ew 10 -r 6 -n 1
-python3 ShortTermPlanning.py -v 3  -b . -rw 10 -cw 30 -aw 50 -bw 15 -ew 10 -r 6 -n 2
-python3 ShortTermPlanning.py -v 3 -b . -rw 10 -cw 30 -aw 200 -bw 15 -ew 10 -r 6 7 -n 1
-python3 ShortTermPlanning.py -v 3 -b . -rw 10 -cw 30 -aw 200 -bw 15 -ew 10 -r 6 7 -n 4
-python3 ShortTermPlanning.py -v 3 -b . -rw 100 -cw 300 -aw 1200 -bw 45 -ew 100 -r 6 7
+python -m dynreact.shortterm.short_term_planning -v 3 -rw 10 -cw 30 -aw 50 -bw 15 -sw 5 -ew 10 -e 6 -n 1
+python -m dynreact.shortterm.short_term_planning -v 3 -rw 10 -cw 30 -aw 50 -bw 15 -sw 5 -ew 10 -e 6 -n 2
+python -m dynreact.shortterm.short_term_planning -v 3 -rw 10 -cw 30 -aw 200 -bw 15 -sw 5 -ew 10 -e 6 7 -n 1
+python -m dynreact.shortterm.short_term_planning -v 3 -rw 10 -cw 30 -aw 200 -bw 15 -sw 5 -ew 10 -e 6 7 -n 4
+python -m dynreact.shortterm.short_term_planning -v 3 -rw 100 -cw 300 -aw 1200 -bw 45 -sw 5 -ew 100 -e 6 7
 ```
 
-Be sure that the live kafka broker  and the live cost service have been properly configured in the file *config.cnf*.
+Be sure that the live kafka broker and the live cost service have been properly configured in the file
+*data/stp_context.json* (or through environment variables with the same key names).
 
 ## Container lifecycle and reaper
 

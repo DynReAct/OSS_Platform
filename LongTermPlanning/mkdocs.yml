@@ -1,0 +1,27 @@
+site_name: Dynreact Long Term Planning (LTP)
+
+site_url: ""
+use_directory_urls: false
+
+theme:
+  name: "readthedocs"
+  color_mode: light
+  highlightjs: true
+
+
+plugins:
+- mkdocstrings:
+    handlers:
+      python:
+        options:
+          members_order: source
+          show_source: true
+          docstring_section_style: table
+          docstring_style: google
+          
+
+nav:
+  - Back: ../index.html
+  - General: index.md
+  - Long term planning implementation: ltpImp.md
+  - LTP utils: ltpUtils.md

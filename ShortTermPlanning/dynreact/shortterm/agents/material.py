@@ -13,6 +13,7 @@ from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
 from dynreact.shortterm.agents.agent import Agent
 from dynreact.shortterm.common.handler import DockerManager
 import random
+import re
 
 
 def _parse_utc_datetime(value: str | None) -> datetime | None:
@@ -355,7 +356,7 @@ class Material(Agent):
             tsend=topic,
             topic=topic,
             source=self.agent,
-            dest=f"^(?!{self.assigned_equipment})(EQUIPMENT:{topic}:.*)$",
+            dest=f"^(?!{re.escape(self.assigned_equipment)}$)(EQUIPMENT:{topic}:.*)$",
             action="ASSIGNED",
             payload=dict(id=self.agent),
             vb=self.verbose

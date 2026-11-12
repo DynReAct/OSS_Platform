@@ -430,7 +430,8 @@ class Agent:
         if vals is None:
             return 'CONTINUE'
         dctmsg = json.loads(vals)
-        match = re.search(dctmsg['dest'], self.agent)
+        # dest must match the whole agent name: either the exact name or a pattern covering it
+        match = dctmsg['dest'] == self.agent or re.fullmatch(dctmsg['dest'], self.agent)
         if not match:
             self.callback_on_not_match(dctmsg)
             return 'CONTINUE'

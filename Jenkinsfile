@@ -14,9 +14,11 @@ node {
     env.SHORT_TERM_PLANNING_PARAMS = "default+file:/repo/ShortTermPlanning/tests/stp_context_oss_test.json"
     env.EXPECTED_STP_PROFILE = "oss"
     env.CONTAINER_NAME_PREFIX = "JENKINS_OSS_TEST_${env.BUILD_ID}"
-    env.TEST_KAFKA_TOPIC_PREFIX = "Dynreact_OSS"
-    env.TEST_TOPIC_GEN = "DynReact-OSS-TEST-Gen"
-    env.TEST_TOPIC_CALLBACK = "DynReact-OSS-TEST-Callback"
+    // Keep parent groups and maintenance isolated from other jobs and builds.
+    def messagingContext = "${env.BUILD_TAG}".replaceAll('[^A-Za-z0-9_-]', '-').take(100) + "-${env.BUILD_ID}"
+    env.TEST_KAFKA_TOPIC_PREFIX = "Dynreact_OSS-TEST-${messagingContext}"
+    env.TEST_TOPIC_GEN = "DynReact-OSS-TEST-${messagingContext}-Gen"
+    env.TEST_TOPIC_CALLBACK = "DynReact-OSS-TEST-${messagingContext}-Callback"
     env.DOCKER_NETWORK = "host"
     env.PERF_URL = "http://192.168.111.11:5027"
     env.TRANSPORT_TIMES_URL = "default+file:/repo/DynReActService/data/site.json"
@@ -71,6 +73,23 @@ node {
             -t "$IMAGE_NAME:$BUILD_IMAGE_TAG" .
         docker tag "$IMAGE_NAME:$BUILD_IMAGE_TAG" "$IMAGE_NAME:$LATEST_IMAGE_TAG"
     '''
+    }
+
+    stage('Shared Messaging Regression') {
+        // Exercise the exact caller/common/LOG implementation shipped to replicas.
+        // Unit checks need neither a Docker socket nor application services.
+        sh '''
+        docker run --rm --network host \\
+          -v "${WORKSPACE}:/repo:ro" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e KAFKA_IP \\
+          -e MESSAGING_TEST_KAFKA=1 \\
+          "$IMAGE_NAME:$IMAGE_TAG" \\
+          python -m pytest -q -p no:cacheprovider \\
+            /repo/ShortTermPlanning/tests/unit_tests/test_shared_messaging.py \\
+            /repo/ShortTermPlanning/tests/integration_test/test_exit_cleanup.py \\
+            /repo/ShortTermPlanning/tests/integration_test/test_shared_messaging_kafka.py
+        '''
     }
 
     stage('Tag & Push Image') {

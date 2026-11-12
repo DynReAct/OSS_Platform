@@ -277,7 +277,8 @@ class Log(Agent):
             topic,
             num_partitions=1,
             replication_factor=1,
-            config={"retention.ms": str(30000)} # 30 sec
+            # Use broker retention. A 30-second TTL can erase queued commands
+            # while a parent is busy launching a large auction.
         ))
         self.admin_client.create_topics(self.topic_list)
         if self.verbose > 1:
@@ -592,6 +593,7 @@ class Log(Agent):
             source=self.agent,
             dest=sender,
             action="AUCTIONSTARTED",
+            request_id=dctmsg.get("request_id"),
             payload={
                 "total_num_agents": self.total_num_agents or 0,
                 "present_agents": {
@@ -653,6 +655,7 @@ class Log(Agent):
             source=self.agent,
             dest=sender,
             action="RESULTS",
+            request_id=dctmsg.get("request_id"),
             payload=self.results,
             vb=self.verbose
         )

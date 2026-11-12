@@ -9,7 +9,7 @@ import requests
 from confluent_kafka import Producer
 from confluent_kafka.admin import AdminClient
 
-from dynreact.shortterm.common import sendmsgtopic
+from dynreact.shortterm.common import sendmsgtopic, protect_shared_topics
 from dynreact.shortterm.common.data.load_url import URL_INITIAL_STATE, URL_UPDATE_STATUS, load_url_json_get, \
     load_url_json_post
 
@@ -124,6 +124,10 @@ def end_auction(topic: str, producer: Producer, verbose: int, wait_time: int) ->
     :param int wait_time: Wait Time to end the auction
     """
 
+    if not topic:
+        return
+    protect_shared_topics([topic])
+
     if verbose > 0:
         msg = "Auction has ended!"
         sendmsgtopic(
@@ -197,6 +201,7 @@ def cleanup_auction(topic: str, kafka_ip: str, wait_time: float = 0.0, timeout: 
     deleted = {"topics": 0, "groups": 0}
     if not topic:
         return deleted
+    protect_shared_topics([topic])
     if wait_time > 0:
         time.sleep(wait_time)
     try:

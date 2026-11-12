@@ -23,6 +23,7 @@ Note:
 
 """
 import time
+from uuid import uuid4
 import random
 import string
 import argparse
@@ -30,11 +31,11 @@ from typing import Any, Generator, cast
 from datetime import datetime
 
 from confluent_kafka import Producer, Consumer
-from confluent_kafka.admin import AdminClient
+from confluent_kafka.admin import AdminClient, NewTopic
 import configparser
 
 from dynreact.shortterm.common.functions import get_transport_times
-from dynreact.shortterm.common import VAction, sendmsgtopic, KeySearch, initialize_keysearch_from_runtime
+from dynreact.shortterm.common import VAction, sendmsgtopic, KeySearch, initialize_keysearch_from_runtime, create_callback_consumer, shared_topics
 from dynreact.shortterm.common.data.data_functions import end_auction
 from dynreact.shortterm.common.data.data_setup import DataSetup
 import os, re, json
@@ -73,7 +74,7 @@ def _ux_group_id() -> str:
     normalized_context = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(raw_context)).strip("-")
     if normalized_context == "":
         normalized_context = "default"
-    return f"UX-{normalized_context}"
+    return f"UX-{normalized_context}-{uuid4().hex}"
 
 
 def _format_container_diagnostics(agent_label: str, containers: list[dict[str, Any]]) -> list[str]:
@@ -131,18 +132,20 @@ def topic_exist(admin_client: AdminClient, topic_name: str, verbose: int) -> Any
 
     return False
 
-def delete_all_topics(admin_client: AdminClient, verbose: int) -> None:
+def delete_all_topics(admin_client: AdminClient, verbose: int, *, offline: bool = False) -> None:
     """
-    Delete all hanging topics in the Kafka broker.
-    This is necessary when a previous execution did not finish correctly
-    and there are messages left in the general topic which may break subsequent executions.
+    Bulk-delete DynReAct auction topics only during explicitly offline maintenance.
+
+    Shared channels are always preserved. Normal execution must use scoped cleanup.
 
     :param object admin_client: A Kafka AdminClient instance
     :param int verbose: Verbosity level
     """
+    if not offline:
+        raise ValueError("Bulk Kafka cleanup requires offline=True and a quiescent context")
     topics_metadata = list_all_topics(admin_client, verbose)
     for topic_name in topics_metadata:
-        if topic_name.lower().startswith("dyn"):
+        if topic_name.lower().startswith("dyn") and topic_name not in shared_topics():
             if verbose > 0:
                 print(f"Deleting topic {topic_name}...")
             futures = admin_client.delete_topics([topic_name])
@@ -345,6 +348,13 @@ def create_auction(
     if admin_client and topic_exist(admin_client=admin_client, topic_name=act, verbose=verbose):
         raise Exception(f"Topic {act} already exists. Try with another name")
 
+    # Reserve atomically: concurrent users cannot own the same auction topic.
+    # Create it before publishing CREATE so parents can reject abandoned requests.
+    admin_client = admin_client or AdminClient({"bootstrap.servers": _key_str("KAFKA_IP")})
+    if act in shared_topics():
+        raise ValueError(f"Auction topic must not be a shared channel: {act}")
+    admin_client.create_topics([NewTopic(act, num_partitions=1, replication_factor=1)])[act].result()
+
     sendmsgtopic(
         producer=producer,
         tsend=topic_gen,
@@ -522,6 +532,7 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
     silent_checks = 0
 
     while True:
+        request_id = uuid4().hex
         sendmsgtopic(
             producer=producer,
             tsend=topic,
@@ -529,6 +540,7 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
             source="UX",
             dest="LOG:" + topic,
             action="ISAUCTIONACTIVE",
+            request_id=request_id,
             vb=verbose
         )
 
@@ -536,7 +548,8 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
         expected_source = f"LOG:{topic}"
         for message in wait_for_callback(
                 topic_callback, "AUCTIONSTARTED", consumer, verbose,
-                sleep_timeout=1, max_iters=poll_seconds, expected_source=expected_source
+                sleep_timeout=1, max_iters=poll_seconds, expected_source=expected_source,
+                expected_request_id=request_id
         ):
             print(json.dumps(message["payload"]))
             payload = json.loads(message['payload']) if isinstance(message["payload"], str) else message['payload']
@@ -588,68 +601,37 @@ def start_auction(topic: str, producer: Producer, consumer: Consumer, num_agents
 
 def wait_for_callback(
         topic: str, expected_action: str, consumer: Consumer, verbose: int,
-        sleep_timeout: int = 1, max_iters: int = 10, expected_source: str | None = None
-) -> Generator[dict[str, Any] | None, None, None]:
+        sleep_timeout: int = 1, max_iters: int = 10, expected_source: str | None = None,
+        expected_request_id: str | None = None
+) -> Generator[dict[str, Any], None, None]:
+    """Read matching UX replies within a fixed wall-clock budget.
+
+    Other auctions, malformed records and Kafka errors cannot extend the wait.
+    Application callers supply both the exact LOG source and a fresh request ID.
+    ``sleep_timeout`` remains in the signature for compatibility; poll provides
+    the wait. The budget is ``max_iters * max(1, sleep_timeout)`` seconds.
+    No offsets are committed: callback readers use explicit assignment and their
+    own positions, and never acknowledge work on behalf of parent agents.
     """
-    Starts an auction by instructing the LOG to check the presence of all agents
+    deadline = time.monotonic() + max(0, max_iters) * max(1, sleep_timeout)
+    while (remaining := deadline - time.monotonic()) > 0:
+        message = consumer.poll(timeout=min(1.0, remaining))
+        if message is None or message.error() is not None or message.topic() != topic:
+            continue
+        try:
+            payload = json.loads(message.value())
+        except (TypeError, ValueError, UnicodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("dest") != "UX" or str(payload.get("action", "")).upper() != expected_action.upper():
+            continue
+        if expected_source is not None and payload.get("source") != expected_source:
+            continue
+        if expected_request_id is not None and payload.get("request_id") != expected_request_id:
+            continue
+        yield payload
 
-    :param str topic: Topic name of the auction we want to start
-    :param str expected_action: The message action your expecting
-    :param object consumer: A Kafka Consumer instance
-    :param int verbose: Verbosity level
-    :param int sleep_timeout: Sleep timeout to wait for message
-    :param int max_iters:
-        Maximum iterations with no message (if this parameter is 1, the loop will stop once there are no more messages)
-    :param str expected_source: Optional exact message source filter.
-    """
-
-    # Consume all messages until reaching a message destined for UX or exhausting the maximum number of iterations
-    iter_no_msg = 0
-    while iter_no_msg < max_iters:
-        message_obj = consumer.poll(timeout=1)
-        if message_obj.__str__() == 'None':
-            iter_no_msg += 1
-            # if verbose > 0 and (iter_no_msg - 1) % 5 == 0:
-                # msg = f"Iteration {iter_no_msg - 1}. No message found."
-                # sendmsgtopic(
-                #     producer=producer, tsend=KeySearch.search_for_value("TOPIC_GEN"), topic=topic, source="UX", dest="LOG:" + KeySearch.search_for_value("TOPIC_GEN"),
-                #     action="WRITE", payload=dict(msg=msg), vb=verbose
-                # )
-            time.sleep(sleep_timeout)
-        else:
-            iter_no_msg = 0
-
-            if message_obj is not None:
-                messtpc = message_obj.topic()
-                vals = message_obj.value()
-                msg_error = message_obj.error()
-            else:
-                continue
-            if messtpc is None or vals is None:
-                iter_no_msg += 1
-                time.sleep(sleep_timeout)
-                continue
-
-            message_is_ok = all([
-                messtpc == topic, 'Subscribed topic not available' not in str(vals), msg_error is None
-            ])
-
-            if message_is_ok:
-
-                consumer.commit(message_obj)
-
-                dctmsg = json.loads(vals.decode("utf-8") if isinstance(vals, bytes) else vals)
-                match = re.search(dctmsg['dest'], "UX")
-                action = dctmsg['action'].upper()
-
-                if expected_source is not None and dctmsg.get('source') != expected_source:
-                    continue
-
-                if match and action == expected_action:
-                    yield dctmsg
-
-    print("No message found")
-    return None
 
 def ask_results(
         topic: str, producer: Producer, consumer: Consumer, verbose: int, wait_answer: float = 5., max_iters: int = 10
@@ -669,6 +651,7 @@ def ask_results(
     topic_gen = _key_str("TOPIC_GEN")
     topic_callback = _key_str("TOPIC_CALLBACK")
 
+    request_id = uuid4().hex
     sendmsgtopic(
         producer=producer,
         tsend=topic,
@@ -676,6 +659,7 @@ def ask_results(
         source="UX",
         dest="LOG:" + topic,
         action="ASKRESULTS",
+        request_id=request_id,
         vb=verbose
     )
     if verbose > 0:
@@ -692,7 +676,9 @@ def ask_results(
         "RESULTS",
         consumer,
         verbose,
-        expected_source=f"LOG:{topic}"
+        max_iters=max_iters,
+        expected_source=f"LOG:{topic}",
+        expected_request_id=request_id
     )
 
     for message in message_objs:
@@ -946,13 +932,6 @@ def execute_short_term_planning(args: dict) -> Any:
         'acks': 'all'  # Ensure message durability
     }
     producer = Producer(producer_config)
-    consumer_config = {
-        "bootstrap.servers": ip,
-        "group.id": _ux_group_id(),
-        "auto.offset.reset": "earliest",
-        'enable.auto.commit': False
-    }
-    consumer = Consumer(consumer_config)
     act = ""
 
     if int(rungagnts) > 0:
@@ -1005,7 +984,9 @@ def execute_short_term_planning(args: dict) -> Any:
     equip_configs = {equipment: {'start_time': start_time} for equipment in equipments} if start_time else None
     order_scope = _equipment_order_scope(equipments=equipments, snapshot=snapshot, nmaterials=nmaterials, materials=None)
 
+    consumer = None
     try:
+        consumer = create_callback_consumer(ip, _key_str("TOPIC_CALLBACK"))
         act, n_agents = create_auction(
             equipments=equipments, producer=producer, verbose=verbose,
             nmaterials=nmaterials, snapshot=snapshot, equip_configs=equip_configs
@@ -1013,7 +994,6 @@ def execute_short_term_planning(args: dict) -> Any:
 
         print(f"Creating auction for topic {act}")
 
-        consumer.subscribe([act, _key_str("TOPIC_CALLBACK")])
         sleep(_key_float("CLONING_WAIT"), producer=producer, verbose=verbose)
 
         if n_agents > 1:
@@ -1027,6 +1007,8 @@ def execute_short_term_planning(args: dict) -> Any:
                 print("----  ----")
             sleep(_key_float("SMALL_WAIT"), producer=producer, verbose=verbose)
     finally:
+        if consumer is not None:
+            consumer.close()
         end_auction(topic=act, producer=producer, verbose=verbose, wait_time=int(_key_float("SMALL_WAIT")))
         sleep(_key_float("EXIT_WAIT"), producer=producer, verbose=verbose)
 

@@ -10,7 +10,7 @@ from enum import Enum
 import dash, json, time, string, random, hashlib, datetime
 import dash_ag_grid as dash_ag
 import pandas as pd
-from confluent_kafka import Consumer, KafkaError, Message, Producer
+from confluent_kafka import KafkaError, Message, Producer
 from confluent_kafka.admin import AdminClient
 from dash import html, dcc, ctx, Input, Output, State
 from jsonpath_ng.ext import parse
@@ -19,7 +19,7 @@ from dynreact.auction.auction import Auction, JobStatus
 from dynreact.gui_stp.agents_state import AgentsState
 from dynreact.app import state
 from dynreact.gui.dash_app import app
-from dynreact.shortterm.common import KeySearch, purge_topics, delete_topics
+from dynreact.shortterm.common import KeySearch, delete_topics, create_callback_consumer
 from dynreact.shortterm.short_term_planning import (
     create_auction,
     start_auction,
@@ -819,8 +819,6 @@ def handle_create_click(ag_create: Any, reftxt: Any, matype: Any, plnts: Any, lm
         os_mats = snapshot.get_material_selected_orders(o_mats, plnts, state.get_site())
 
     # Create the auction
-    purge_topics(topics=[TOPIC_CALLBACK, TOPIC_GEN])
-
     try:
         initialize_auction(
             topic=reftxt,
@@ -876,15 +874,8 @@ def handle_start_click(ag_start: Any, reftxt: Any, auction: Any) -> Any:
         "acks": "all",
         "message.timeout.ms": 10000
     }
-    consumer_config = {
-        "bootstrap.servers": KAFKA_IP,
-        "group.id": "UX",
-        "auto.offset.reset": "earliest",
-        'enable.auto.commit': False
-    }
     producer = Producer(producer_config)
-    consumer = Consumer(consumer_config)
-    consumer.subscribe([genauction(reftxt), TOPIC_CALLBACK])
+    consumer = create_callback_consumer(KAFKA_IP, TOPIC_CALLBACK)
 
     # smats contains the exact material IDs used to create replicas in both modes.
     numag = len(auction.equip) + len(auction.smats) + 1
@@ -903,10 +894,13 @@ def handle_start_click(ag_start: Any, reftxt: Any, auction: Any) -> Any:
         auction.auction_status = JobStatus.G
 
     except Exception as e:
+        consumer.close()
         print(e)
         auction.auction_status = JobStatus.E
-        purge_topics(topics=[TOPIC_CALLBACK, TOPIC_GEN])
-        delete_topics(topics=[genauction(reftxt)])
+        try:
+            delete_topics(topics=[genauction(reftxt)])
+        except Exception as cleanup_error:
+            print(f"Could not clean failed auction {reftxt}: {cleanup_error}")
         text = (f'The auction {reftxt} failed to start, please create a new '
                 f'auction with a different name')
         auction.helper_text = text
@@ -935,29 +929,25 @@ def handle_refresh_click(ag_refresh: Any, reftxt: Any, auction: Any) -> Any:
         "acks": "all",
         "message.timeout.ms": 10000
     }
-    consumer_config = {
-        "bootstrap.servers": KAFKA_IP,
-        "group.id": "UX",
-        "auto.offset.reset": "earliest",
-        'enable.auto.commit': False
-    }
     producer = Producer(producer_config)
-    consumer = Consumer(consumer_config)
-    consumer.subscribe([genauction(reftxt), TOPIC_CALLBACK])
+    consumer = create_callback_consumer(KAFKA_IP, TOPIC_CALLBACK)
 
-    res = ask_results(
-        topic=genauction(reftxt),
-        producer=producer,
-        consumer=consumer,
-        verbose=VB
-    )
+    try:
+        res = ask_results(
+            topic=genauction(reftxt),
+            producer=producer,
+            consumer=consumer,
+            verbose=VB
+        )
+    finally:
+        consumer.close()
+
     res = normalize_auction_results(res)
     res = _filter_results_to_selected_equipment(res, auction.equip)
     auction.auction_status = JobStatus.R
     if res or not auction.resul:
         auction.set_resul(res)
 
-    consumer.close()
     print(auction.resul)
 
     # Generate tabs for each equipment

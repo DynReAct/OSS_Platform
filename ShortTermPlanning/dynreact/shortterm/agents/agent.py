@@ -13,8 +13,8 @@ import os
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 
-from confluent_kafka import Producer, Consumer, KafkaError
-from dynreact.shortterm.common import sendmsgtopic, KeySearch, purge_topics, list_existing_topics
+from confluent_kafka import Producer, Consumer, KafkaError, TopicPartition
+from dynreact.shortterm.common import sendmsgtopic, KeySearch, list_existing_topics
 import traceback
 
 REAPER_INTERVAL = 60.0
@@ -111,6 +111,7 @@ class Agent:
         if not isinstance(self.topic_callback, str) or not isinstance(self.topic_gen, str) or not isinstance(self.kafka_ip, str):
             raise RuntimeError("Kafka configuration is incomplete. Expected TOPIC_CALLBACK, TOPIC_GEN, and KAFKA_IP.")
 
+        self._startup_offsets: dict[tuple[str, int], int] = {}
         self.iter_no_msg = 0
         self.min_verbose = 1
         # Only parent (manager) agents set a DockerManager here; replicas keep it as None
@@ -129,10 +130,27 @@ class Agent:
                 "bootstrap.servers": self.kafka_ip,
                 "group.id": self.agent,
                 "auto.offset.reset": "earliest",
+                "enable.auto.commit": False,
+                "enable.auto.offset.store": False,
                 'error_cb': cast(Any, self.kafka_error_callback)
             }
         )
-        self.consumer.subscribe([self.topic], on_assign=on_assign, on_revoke=on_revoke)
+        self.consumer.subscribe([self.topic], on_assign=self.assign_partitions, on_revoke=on_revoke)
+
+    def assign_partitions(self, consumer: Any, partitions: Any) -> None:
+        """Remember the initial log boundary without seeking past pending CREATEs.
+
+        Historical EXITs address a previous parent incarnation. Compare offsets,
+        avoiding assumptions about clocks on different hosts. Rebalances retain
+        the first boundary rather than turning a current EXIT into an old one.
+        """
+        if self.topic == self.topic_gen:
+            for partition in partitions:
+                key = (partition.topic, partition.partition)
+                if key not in self._startup_offsets:
+                    _, high = consumer.get_watermark_offsets(partition, timeout=10, cached=False)
+                    self._startup_offsets[key] = high
+        on_assign(consumer, partitions)
 
     def enqueue_replica(self, **kwargs) -> None:
         """Prepare on the consumer thread; only Docker I/O runs concurrently.
@@ -274,20 +292,43 @@ class Agent:
         return 'END'
 
     def should_purge_exit_history(self) -> bool:
-        """
-        Return whether processing ``EXIT`` should purge stale messages.
-
-        Purging too early from EQUIPMENT or MATERIAL can delete the pending
-        ``EXIT`` intended for sibling base agents. The safe point is the
-        general LOG shutdown, which clean_agents() already sends last.
-        """
-        return self.topic == self.topic_gen and str(self.agent).startswith("LOG:")
+        """Compatibility hook: shared history must survive every agent shutdown."""
+        return False
 
     def purge_exit_history_if_needed(self) -> None:
-        """Purge stale general and callback messages when the shutdown point is safe."""
-        if not self.should_purge_exit_history():
-            return
-        purge_topics(topics=[self.topic, self.topic_callback])
+        """Compatibility no-op. Retention and offline maintenance own history removal."""
+
+    def parent_command_is_obsolete(self, message: Any, payload: dict) -> bool | None:
+        """Reject abandoned CREATEs and EXITs predating this parent incarnation.
+
+        ``None`` means metadata is unavailable: retry the same record rather than
+        guessing whether an auction exists. New creators reserve the auction topic
+        before publishing CREATE. Do not reuse auction names after deleting them.
+        """
+        if self.topic != self.topic_gen:
+            return False
+        action = str(payload.get("action", "")).upper()
+        if action == "EXIT":
+            boundary = self._startup_offsets.get((message.topic(), message.partition()))
+            return boundary is not None and message.offset() < boundary
+        if action != "CREATE":
+            return False
+        auction_topic = payload.get("topic")
+        if not isinstance(auction_topic, str) or not auction_topic or auction_topic in (self.topic_gen, self.topic_callback):
+            return True
+        body = payload.get("payload")
+        if not isinstance(body, dict):
+            return True
+        variables = body.get("variables", {})
+        if not isinstance(variables, dict):
+            return True
+        # A shared parent's routing must never be changed by another context's CREATE.
+        for key, expected in (("TOPIC_GEN", self.topic_gen), ("TOPIC_CALLBACK", self.topic_callback),
+                              ("KAFKA_IP", self.kafka_ip)):
+            if key in variables and variables[key] != expected:
+                return True
+        topics = list_existing_topics(self.kafka_ip)
+        return None if topics is None else auction_topic not in topics
 
     def process_message(self, action: str, dctmsg: dict) -> str:
         """
@@ -407,13 +448,9 @@ class Agent:
         if message_obj.error() is not None:
             self.callback_on_topic_not_available()
             return 'CONTINUE'
-        else:
-            # Commit the message to indicate Kafka that it has already been processed,
-            # so the same message is not received again
-            self.consumer.commit(message_obj)
-
         # If the topic of the message doesn't match this topic, go to the next iteration
         if messtpc != self.topic:
+            self.consumer.commit(message_obj, asynchronous=False)
             return 'CONTINUE'
 
         # If the message contains an error, raise it
@@ -428,12 +465,30 @@ class Agent:
 
         # If the destinations of the message do not include this AGENT, go to the next iteration
         if vals is None:
+            self.consumer.commit(message_obj, asynchronous=False)
             return 'CONTINUE'
-        dctmsg = json.loads(vals)
+        try:
+            dctmsg = json.loads(vals)
+            if not isinstance(dctmsg, dict) or not isinstance(dctmsg.get('dest'), str):
+                raise ValueError("Invalid message envelope")
+            match = dctmsg['dest'] == self.agent or re.fullmatch(dctmsg['dest'], self.agent)
+        except (ValueError, TypeError, UnicodeError, re.error):
+            self.consumer.commit(message_obj, asynchronous=False)
+            return 'CONTINUE'
         # dest must match the whole agent name: either the exact name or a pattern covering it
-        match = dctmsg['dest'] == self.agent or re.fullmatch(dctmsg['dest'], self.agent)
         if not match:
             self.callback_on_not_match(dctmsg)
+            self.consumer.commit(message_obj, asynchronous=False)
+            return 'CONTINUE'
+
+        obsolete = self.parent_command_is_obsolete(message_obj, dctmsg)
+        if obsolete is None:
+            self.consumer.seek(TopicPartition(messtpc, part, offst))
+            time.sleep(1)
+            return 'CONTINUE'
+        if obsolete:
+            print(f"Ignoring obsolete or misrouted parent command: {dctmsg.get('action')} for {dctmsg.get('topic')}")
+            self.consumer.commit(message_obj, asynchronous=False)
             return 'CONTINUE'
 
         # Reset the count of empty checks
@@ -449,10 +504,12 @@ class Agent:
             )
 
         # Perform the action and get the corresponding status
-        action = dctmsg['action'].upper()
+        action = str(dctmsg.get('action', '')).upper()
         if self.verbose > self.min_verbose:
             self.write_log(f"Performing action {action}...", "91a4b9b6-8ed0-4fce-b5c2-196e764280af")
         status = self.process_message(action=action, dctmsg=dctmsg)
+        # Persist EXIT before closing; otherwise it can shut down the next parent.
+        self.consumer.commit(message_obj, asynchronous=False)
         if self.verbose > self.min_verbose:
             self.write_log(f"Resulting status: {status}", "b3d9c000-ed40-4cfd-a5f6-57a3d980c184")
 
@@ -474,7 +531,8 @@ class Agent:
                 status = self.read_message()
         finally:
             if hasattr(self, "_launch_executor"):
-                self._launch_executor.shutdown(wait=True, cancel_futures=True)
+                # CREATEs already accepted into the queue must finish on normal shutdown.
+                self._launch_executor.shutdown(wait=True, cancel_futures=False)
                 self.collect_launches()
             self.consumer.close()
 
@@ -484,6 +542,3 @@ class Agent:
         print(f"Closing consumer received status {status}")
         if self.verbose > 1:
             self.write_log(f"Ending spawned process for agent {self.agent} in topic {self.topic}.", "8dc03f6b-dce4-4a52-a427-900547dd7a5a")
-        # Purge only after the general LOG has fully shut down so late EXIT
-        # traces from sibling base agents do not survive into the next startup.
-        self.purge_exit_history_if_needed()

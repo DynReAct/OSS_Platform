@@ -18,13 +18,12 @@ plugins:
 - mkdocstrings:
     handlers:
       python:
+        paths: [.]
         options:
           members_order: source
+          show_source: false
           docstring_section_style: table
-          docstring_style: google
-          docstring_options:
-            ignore_init_summary: false
-            trim_doctest_flags: false
+          docstring_style: sphinx
 
 nav:
   - Back: ../index.html
@@ -37,5 +36,6 @@ nav:
   - Deployment and Registry: deployment.md
   - Log: log.md
   - Functions: functions.md
+  - Shared messaging and concurrency: shared_messaging.md
   - Kafka clean-up: cleankafka.md
   - ShortTermPlanning: shorttermplanning.md

@@ -27,7 +27,7 @@ import re
 import time
 
 from confluent_kafka import Producer
-from dynreact.shortterm.common import VAction, KeySearch, initialize_keysearch_from_runtime, purge_topics
+from dynreact.shortterm.common import VAction, KeySearch, initialize_keysearch_from_runtime
 from dynreact.shortterm.short_term_planning import clean_agents, run_general_agents
 
 
@@ -38,10 +38,9 @@ def _normalize_profile_token(value: str | None) -> str | None:
     lowered = str(value).strip().lower()
     if lowered == "":
         return None
-    if "oss" in lowered:
-        return "oss"
-    if "ras" in lowered:
-        return "ras"
+    match = re.search(r"(?:^|[-_])(oss|ras)(?:$|[-_])", lowered)
+    if match:
+        return match.group(1)
     return None
 
 
@@ -161,8 +160,7 @@ def main() -> Any:
             "Validated replace_base context for "
             f"profile={resolved_profile}, topic_gen={topic_gen}, topic_callback={topic_callback}."
         )
-        print(f"Purging verification topics: {topic_gen}, {topic_callback}, DYN_TEST")
-    purge_topics(topics=[topic_callback, topic_gen, "DYN_TEST"])
+        print("Preserving shared Kafka history while replacing base agents.")
 
     clean_agents(producer=producer, verbose=verbose, rungagnts=rungagnts)
     run_general_agents(producer=producer, gagents=rungagnts, verbose=verbose)

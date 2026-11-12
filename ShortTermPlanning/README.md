@@ -260,3 +260,8 @@ PYTHONPATH=OSS_Platform/DynReActService:OSS_Platform/DynReActBase:OSS_Platform/S
 Deploy the updated DynReActService and restart the OSS GUI service. Reload any
 browser tabs that fetched dependencies before the fix. This callback-registration
 change does not require rebuilding agent images or modifying LTP/MTP algorithms.
+
+
+See [Concurrent auctions and shared Kafka channels](docs/shared_messaging.md) for channel ownership,
+request correlation, parent restart behavior, retention, safe cleanup and Jenkins
+verification. Shared parent/callback history is never purged by an auction.

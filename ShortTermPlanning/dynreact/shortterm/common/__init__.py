@@ -10,9 +10,10 @@ import argparse
 from datetime import datetime
 import os
 import traceback
+from uuid import uuid4
 
-from confluent_kafka import KafkaError, Message, Producer, OFFSET_END, TopicPartition
-from confluent_kafka.admin import AdminClient
+from confluent_kafka import KafkaException, KafkaError, Message, Producer, Consumer, OFFSET_END, TopicPartition
+from confluent_kafka.admin import AdminClient, NewTopic
 from flatdict import FlatDict
 
 from dynreact.shortterm.shorttermtargets import ShortTermTargets
@@ -37,21 +38,83 @@ def _compute_partition_topic(topic_name: str, admin_client: AdminClient) -> Any:
         partitions = md.topics[topic_name].partitions
         return list(map(lambda p: TopicPartition(topic_name, int(p), offset=OFFSET_END), partitions.keys()))
 
-def purge_topics(topics: list[str]) -> None:
+def shared_topics() -> set[str]:
+    """Return the configured parent and callback channels; neither belongs to an auction."""
+    return {str(value) for key in ("TOPIC_GEN", "TOPIC_CALLBACK")
+            if (value := KeySearch.search_for_value(key))}
+
+
+def protect_shared_topics(topics: list[str], *, allow_shared: bool = False) -> None:
+    """Reject an entire destructive request before contacting Kafka.
+
+    ``allow_shared`` is reserved for explicitly offline maintenance on an isolated
+    broker/context. A message's age or a momentary zero lag is not authorization.
     """
-    Function to purge list of topics.
+    protected = shared_topics().intersection(topics)
+    if protected and not allow_shared:
+        raise ValueError(f"Refusing to delete shared Kafka history: {sorted(protected)}")
+
+
+def create_callback_consumer(kafka_ip: str, callback_topic: str) -> Consumer:
+    """Create an independent callback reader positioned before the next request.
+
+    Explicit assignment at each partition's high watermark avoids both historical
+    replay and the subscribe/latest race (assignment occurring after the reply).
+    Call this before sending requests, and always close the returned consumer.
+    Request IDs still distinguish replies from other readers and delayed replies.
+    """
+    # The first requester may arrive before any callback has ever been produced.
+    # Create-only is harmless to an existing channel and preserves its configuration.
+    admin = AdminClient({"bootstrap.servers": kafka_ip})
+    try:
+        admin.create_topics([NewTopic(callback_topic, num_partitions=1, replication_factor=1)])[callback_topic].result()
+    except KafkaException as exc:
+        if exc.args[0].code() != KafkaError.TOPIC_ALREADY_EXISTS:
+            raise
+    consumer = Consumer({
+        "bootstrap.servers": kafka_ip,
+        "group.id": f"UX-{uuid4().hex}",
+        "enable.auto.commit": False,
+        "enable.auto.offset.store": False,
+        "allow.auto.create.topics": False,
+    })
+    try:
+        metadata = consumer.list_topics(topic=callback_topic, timeout=10)
+        topic_metadata = metadata.topics[callback_topic]
+        if topic_metadata.error is not None or not topic_metadata.partitions:
+            raise RuntimeError(f"Callback topic unavailable: {callback_topic}")
+        partitions = []
+        for partition in topic_metadata.partitions:
+            tp = TopicPartition(callback_topic, partition)
+            _, high = consumer.get_watermark_offsets(tp, timeout=10, cached=False)
+            partitions.append(TopicPartition(callback_topic, partition, high))
+        consumer.assign(partitions)
+        return consumer
+    except BaseException:
+        consumer.close()
+        raise
+
+
+def purge_topics(topics: list[str], *, allow_shared: bool = False) -> None:
+    """
+    Delete all retained records in the requested topics.
+
+    Shared channels are rejected unless explicitly opted into offline maintenance.
 
     :param str topics: Topic names to search partitions for.
 
     returns: list of purged topics.
     """
 
+    protect_shared_topics(topics, allow_shared=allow_shared)
     admin_client = AdminClient({"bootstrap.servers": KeySearch.search_for_value("KAFKA_IP")})
 
     topics_partitions = []
     for topic in topics:
         topics_partitions.extend(_compute_partition_topic(topic, admin_client))
 
+    if not topics_partitions:
+        return
     delete_results = admin_client.delete_records(topics_partitions)
 
     for tp, f in delete_results.items():
@@ -61,15 +124,16 @@ def purge_topics(topics: list[str]) -> None:
             dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z%z")
             raise Exception(f"{dt} | ERROR: Failed: {tp} with error {e}")
 
-def delete_topics(topics: list[str], silent: bool = False) -> None:
+def delete_topics(topics: list[str], silent: bool = False, *, allow_shared: bool = False) -> None:
     """
-    Function to delete list of topics.
+    Delete topics, rejecting shared channels before any broker operation.
 
     :param str topics: Topic names to search partitions for.
 
     returns: list of purged topics.
     """
 
+    protect_shared_topics(topics, allow_shared=allow_shared)
     admin_client = AdminClient({"bootstrap.servers": KeySearch.search_for_value("KAFKA_IP")})
 
     topics_partitions = []
@@ -321,7 +385,7 @@ class VAction(argparse.Action):
         Function able to handle the arguments.
 
         :param object parser: Object in charge of processing the operation.
-        :param dict dict: Dictionary of arguments.
+        :param dict args: Dictionary of arguments.
         :param dict values: Dictionary of values.
         :param str option_string: Options requested.
         """
@@ -348,7 +412,8 @@ def confirm(err: KafkaError | None, msg: Message) -> None:
 
 
 def sendmsgtopic(producer: Producer, tsend: str, topic: str, source: str, dest: str,
-                 action: str, payload: dict[str, Any] | None = None, vb: int = 0) -> None:
+                 action: str, payload: dict[str, Any] | None = None, vb: int = 0,
+                 request_id: str | None = None) -> None:
     """
     Send message to a Kafka topic.
 
@@ -360,6 +425,7 @@ def sendmsgtopic(producer: Producer, tsend: str, topic: str, source: str, dest: 
     :param str action: The action to be performed.
     :param dict payload: The payload of the message. Defaults to {"msg": "-"}
     :param int vb: Verbosity level. Defaults to 0.
+    :param str request_id: Optional correlation ID, echoed by LOG callbacks.
     """
     if payload is None:
         payload = {"msg": "-"}
@@ -370,6 +436,8 @@ def sendmsgtopic(producer: Producer, tsend: str, topic: str, source: str, dest: 
         dest=dest,
         payload=payload
     )
+    if request_id is not None:
+        msg["request_id"] = request_id
     mtxt = json.dumps(msg)
     try:
         producer.produce(value=mtxt.encode("utf-8"), topic=tsend, on_delivery=confirm) # 30 seconds

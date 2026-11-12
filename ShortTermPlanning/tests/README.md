@@ -29,3 +29,11 @@ run in any order.
   they are the contract with the other agents.
 * Every test documents the behaviour it protects in its name. Add a docstring when the reason is not obvious.
 * Integration tests (`tests/integration_test`) need a live Kafka broker and a Docker daemon.
+
+
+The shared-channel concurrency regressions live in `unit_tests/test_shared_messaging.py`
+and `integration_test/test_exit_cleanup.py`. They run offline with Kafka mocked.
+`integration_test/test_shared_messaging_kafka.py` is opt-in (`MESSAGING_TEST_KAFKA=1`,
+`KAFKA_IP` set) and creates/deletes only its own UUID-named TEST topics. Both
+Jenkins images run these checks before publication. See
+[Shared messaging](../docs/shared_messaging.md) for guarantees and operations.

@@ -4,6 +4,7 @@ from datetime import datetime, timezone, timedelta
 from dynreact.base.model import Site, LongTermTargets, StorageLevel, EquipmentAvailability, Process, Equipment, Storage, \
     ProductionTargets, MaterialConstraint, MaterialCategory, MaterialClass, Lot
 from dynreact.ltp.LtpInstance import LtpInstance
+from dynreact.ltp.LtpParams import LtpParams
 
 
 class LtpTest(unittest.TestCase):
@@ -62,7 +63,7 @@ class LtpTest(unittest.TestCase):
                                                    for idx in range(3)]
         plant_availabilities: dict[int, EquipmentAvailability] = {p: EquipmentAvailability(equipment=p, period=period,
                                                         daily_baseline=timedelta(days=1)) for p in range(num_plants)}
-        instance = LtpInstance("test0", site, structure, initial_storage_levels, shifts, plant_availabilities)
+        instance = LtpInstance("test0", site, LtpParams(), structure, initial_storage_levels, shifts, plant_availabilities)
         # TODO return structure
         targets, storage_levels = instance.start(fail_on_validation_error=True)
         LtpTest._ensure_initial_storage_levels_match(initial_storage_levels, storage_levels)
@@ -108,7 +109,7 @@ class LtpTest(unittest.TestCase):
             0: EquipmentAvailability(equipment=0, period=period, daily_baseline=timedelta(days=1), deltas={start.date(): -timedelta(days=1)}),
             1: EquipmentAvailability(equipment=1, period=period, daily_baseline=timedelta(days=1))
         }
-        instance = LtpInstance("test1", site, structure, initial_storage_levels, shifts, plant_availabilities)
+        instance = LtpInstance("test1", site, LtpParams(), structure, initial_storage_levels, shifts, plant_availabilities)
         targets, storage_levels = instance.start(fail_on_validation_error=True)
         LtpTest._ensure_initial_storage_levels_match(initial_storage_levels, storage_levels)
         sub_targets0: dict[str, list[ProductionTargets]] = targets.production_sub_targets
@@ -170,7 +171,7 @@ class LtpTest(unittest.TestCase):
             0: EquipmentAvailability(equipment=0, period=period, daily_baseline=timedelta(days=1), deltas={start.date(): -timedelta(days=1)}),
             1: EquipmentAvailability(equipment=1, period=period, daily_baseline=timedelta(days=1))
         }
-        instance = LtpInstance("test2", site, structure, initial_storage_levels, shifts, plant_availabilities)
+        instance = LtpInstance("test2", site, LtpParams(), structure, initial_storage_levels, shifts, plant_availabilities)
         targets, storage_levels = instance.start(fail_on_validation_error=True)
         LtpTest._ensure_initial_storage_levels_match(initial_storage_levels, storage_levels)
         sub_targets0: dict[str, list[ProductionTargets]] = targets.production_sub_targets
@@ -232,7 +233,7 @@ class LtpTest(unittest.TestCase):
         eq1 = plants[-1].id
         lots1 = [Lot(id=f"Lot_{eq1}.{idx}", equipment=eq1, active=True, status=4, orders=[f"order_{idx*3 + oidx}" for oidx in range(3)], processing_status="PENDING",
                      weight=8, material_weights={mat2: 8}, start_time=start + timedelta(hours=idx*8), end_time=start + timedelta(hours=(idx+1)*8)) for idx in range(3)]
-        instance = LtpInstance("test3", site, structure, initial_storage_levels, shifts, plant_availabilities, frozen_lots={1: lots1})
+        instance = LtpInstance("test3", site, LtpParams(), structure, initial_storage_levels, shifts, plant_availabilities, frozen_lots={1: lots1})
         targets, storage_levels = instance.start(fail_on_validation_error=True)
         LtpTest._ensure_initial_storage_levels_match(initial_storage_levels, storage_levels)
         sub_targets0: dict[str, list[ProductionTargets]] = targets.production_sub_targets
@@ -282,7 +283,7 @@ class LtpTest(unittest.TestCase):
         shifts: list[tuple[datetime, datetime]] = [(start+timedelta(hours=8*idx), start+timedelta(hours=8*(idx+1))) for idx in range(3)]
         plant_availabilities: dict[int, EquipmentAvailability] = {p: EquipmentAvailability(equipment=p, period=period,
                                                         daily_baseline=timedelta(days=1)) for p in range(3)}
-        instance = LtpInstance("test_branch", site, structure, initial_storage_levels, shifts, plant_availabilities)
+        instance = LtpInstance("test_branch", site, LtpParams(), structure, initial_storage_levels, shifts, plant_availabilities)
         targets, storage_levels = instance.start(fail_on_validation_error=True)
         LtpTest._ensure_initial_storage_levels_match(initial_storage_levels, storage_levels)
 
@@ -336,7 +337,7 @@ class LtpTest(unittest.TestCase):
         shifts: list[tuple[datetime, datetime]] = [(start+timedelta(hours=8*idx), start+timedelta(hours=8*(idx+1))) for idx in range(3)]
         plant_availabilities: dict[int, EquipmentAvailability] = {p: EquipmentAvailability(equipment=p, period=period,
                                                         daily_baseline=timedelta(days=1)) for p in range(len(plants))}
-        instance = LtpInstance("test_branch_proc", site, structure, initial_storage_levels, shifts, plant_availabilities)
+        instance = LtpInstance("test_branch_proc", site, LtpParams(), structure, initial_storage_levels, shifts, plant_availabilities)
         targets, storage_levels = instance.start(fail_on_validation_error=True)
         LtpTest._ensure_initial_storage_levels_match(initial_storage_levels, storage_levels)
 
@@ -348,5 +349,58 @@ class LtpTest(unittest.TestCase):
         assert all(abs(level - mat_levels.get(mat))/total_prod_expected < 0.1 for mat, level in targets_expected.items()), \
                 f"Unexpected production for materials: expected {targets_expected}, got {mat_levels}"
 
+    # TODO works with shift allocator disabled
+    def test_ltp_respects_material_throughput(self):
+        """
+        Two processes with a single equipment unit each, and two material classes.
+        One of the two classes can only be produced at reduced speed on the second line.
+        """
+        processes = ("test_proc0", "test_proc1")
+        mat1 = "matclass1"
+        mat2 = "matclass2"
+        storages = [Storage(name_short="A", equipment=[0], capacity_weight=100),
+                    Storage(name_short="B", equipment=[1], capacity_weight=100),
+                    Storage(name_short="DONE", equipment=[])]
+        # capacity: 24t/day or 8t/shift
+        plants = [Equipment(id=0, name_short="P0", process=processes[0], storage_in="A", storages_out=["B"], throughput_capacity=1),
+                  Equipment(id=1, name_short="P1", process=processes[1], storage_in="B", storages_out=["DONE"], throughput_capacity=1,
+                            material_throughput={mat2: 0.5}),]
+        mat_cats = [MaterialCategory(id="cat1", name="Material Category 1", classes=[
+            MaterialClass(id=mat1, name="Class 1", category="cat1"),
+            MaterialClass(id=mat2, name="Class 2", category="cat1"),
+        ])]
+        process_objects = [Process(name_short=processes[0], process_ids=[0]), Process(name_short=processes[1], process_ids=[1])]
+        site = Site(
+            processes=process_objects, equipment=plants, storages=storages, material_categories=mat_cats
+        )
+        start = datetime(year=2026, month=5, day=1, tzinfo=timezone.utc)
+        end = datetime(year=2026, month=5, day=2, tzinfo=timezone.utc)
+        period = (start, end)
+        total_prod_expected = 16  # since storage 2 starts empty, we can at most finish 16 units
+        targets_expected = {mat1: 8, mat2: 8}   # mat1: achievable, mat2: not achievable
+        structure = LongTermTargets(period=period, production_targets=targets_expected, total_production=total_prod_expected)
+        initial_storage_levels: dict[str, StorageLevel] = {
+            "A": StorageLevel(storage="A", filling_level=0.5, timestamp=start, material_levels={mat1: 0.25, mat2: 0.25}),
+            "B": StorageLevel(storage="B", filling_level=0., timestamp=start, material_levels={mat1: 0., mat2: 0.})
+        }
+        shifts: list[tuple[datetime, datetime]] = [(start+timedelta(hours=8*idx), start+timedelta(hours=8*(idx+1))) for idx in range(3)]
+        plant_availabilities: dict[int, EquipmentAvailability] = {p: EquipmentAvailability(equipment=p, period=period, daily_baseline=timedelta(days=1)) for p in range(3)}
+        # TODO support shifts allocator too
+        instance = LtpInstance("test_mat_performance", site, LtpParams(disable_shifts_allocator=True), structure, initial_storage_levels, shifts, plant_availabilities)
+        targets, storage_levels = instance.start(fail_on_validation_error=True)
+        LtpTest._ensure_initial_storage_levels_match(initial_storage_levels, storage_levels)
 
-
+        sub_targets0: dict[str, list[ProductionTargets]] = targets.production_sub_targets
+        assert all(process in sub_targets0 for process in processes), f"Process not scheduled: {next(process for process in processes if process not in sub_targets0)}"
+        final_level = storage_levels[-1]["DONE"]
+        mat_levels = final_level.material_levels
+        assert final_level.filling_level > 8, f"Total production too small. Wanted: {total_prod_expected:.2f}, got {final_level.filling_level:.2f}"
+        assert mat_levels.get(mat1, 0.) >= 4, f"Total production for mat1 too small. Wanted: {targets_expected.get(mat1):.2f}, got {mat_levels.get(mat1, 0.):.2f}"
+        # this one is tricky; in order to achieve the total target it would be beneficial to only produce mat1, whereas the mat2 target requires some mat2...
+        # we impose that some mat2 be processed at least
+        assert mat_levels.get(mat2, 0.) >= 1, f"Total production for mat2 too small. Wanted: {targets_expected.get(mat2):.2f}, got {mat_levels.get(mat2, 0.):.2f}"
+        assert (final_level.filling_level - sum(mat_levels.values()))/total_prod_expected < 0.02, f"Material levels do not add up to total filling level {final_level.filling_level:.2f}, mat: {mat_levels}"
+        share_mat1 = mat_levels.get(mat1, 0.) / final_level.filling_level
+        share_mat2 = mat_levels.get(mat2, 0.) / final_level.filling_level
+        # print(f"  MATERIAL mix ({share_mat1:.2f}, {share_mat2:.2f}), theoretical capacity: {16 * (share_mat1 + 0.5 * share_mat2):.2f}, produced: {final_level.filling_level:.2f}")
+        assert final_level.filling_level <= 16 * (share_mat1 + 0.5 * share_mat2) + 0.1, f"Total production {final_level.filling_level:.2f} exceeds max capacity {16 * (share_mat1 + 0.5 * share_mat2):.2f} for the given material mix ({share_mat1:.2f}, {share_mat2:.2f})"

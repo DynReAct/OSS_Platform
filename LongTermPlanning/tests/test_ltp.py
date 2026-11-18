@@ -349,8 +349,8 @@ class LtpTest(unittest.TestCase):
         assert all(abs(level - mat_levels.get(mat))/total_prod_expected < 0.1 for mat, level in targets_expected.items()), \
                 f"Unexpected production for materials: expected {targets_expected}, got {mat_levels}"
 
-    # TODO works with shift allocator disabled
-    def test_ltp_respects_material_throughput(self):
+    @staticmethod
+    def _test_ltp_respects_material_throughput_base(use_allocator: bool):
         """
         Two processes with a single equipment unit each, and two material classes.
         One of the two classes can only be produced at reduced speed on the second line.
@@ -386,7 +386,7 @@ class LtpTest(unittest.TestCase):
         shifts: list[tuple[datetime, datetime]] = [(start+timedelta(hours=8*idx), start+timedelta(hours=8*(idx+1))) for idx in range(3)]
         plant_availabilities: dict[int, EquipmentAvailability] = {p: EquipmentAvailability(equipment=p, period=period, daily_baseline=timedelta(days=1)) for p in range(3)}
         # TODO support shifts allocator too
-        instance = LtpInstance("test_mat_performance", site, LtpParams(disable_shifts_allocator=True), structure, initial_storage_levels, shifts, plant_availabilities)
+        instance = LtpInstance("test_mat_performance", site, LtpParams(disable_shifts_allocator=not use_allocator), structure, initial_storage_levels, shifts, plant_availabilities)
         targets, storage_levels = instance.start(fail_on_validation_error=True)
         LtpTest._ensure_initial_storage_levels_match(initial_storage_levels, storage_levels)
 
@@ -404,3 +404,74 @@ class LtpTest(unittest.TestCase):
         share_mat2 = mat_levels.get(mat2, 0.) / final_level.filling_level
         # print(f"  MATERIAL mix ({share_mat1:.2f}, {share_mat2:.2f}), theoretical capacity: {16 * (share_mat1 + 0.5 * share_mat2):.2f}, produced: {final_level.filling_level:.2f}")
         assert final_level.filling_level <= 16 * (share_mat1 + 0.5 * share_mat2) + 0.1, f"Total production {final_level.filling_level:.2f} exceeds max capacity {16 * (share_mat1 + 0.5 * share_mat2):.2f} for the given material mix ({share_mat1:.2f}, {share_mat2:.2f})"
+
+    def test_ltp_respects_material_throughput_no_shifts_alloc(self):
+        LtpTest._test_ltp_respects_material_throughput_base(use_allocator=False)
+
+    def test_ltp_respects_material_throughput_with_shifts_alloc(self):
+        LtpTest._test_ltp_respects_material_throughput_base(use_allocator=True)
+
+    @staticmethod
+    def _test_ltp_respects_material_throughput2_base(use_allocator: bool):
+        """
+        Two processes with a single equipment unit each, and two material categories, one of which determines the
+        throughput capacity of the first equipment.
+        """
+        processes = ("test_proc0", "test_proc1")
+        materials = [f"matclass{idx}" for idx in range(1, 6)]
+        storages = [Storage(name_short="A", equipment=[0], capacity_weight=100),
+                    Storage(name_short="B", equipment=[1], capacity_weight=100),
+                    Storage(name_short="DONE", equipment=[])]
+        # capacity: 24t/day or 8t/shift
+        plants = [Equipment(id=0, name_short="P0", process=processes[0], storage_in="A", storages_out=["B"], throughput_capacity=1,
+                            material_throughput={materials[1]: 0.5, materials[2]: 2}),
+                  Equipment(id=1, name_short="P1", process=processes[1], storage_in="B", storages_out=["DONE"], throughput_capacity=2)]
+        mat_cats = [MaterialCategory(id="cat1", name="Material Category 1", classes=[
+            MaterialClass(id=materials[0], name="Class 1", category="cat1"),
+            MaterialClass(id=materials[1], name="Class 2", category="cat1"),
+            MaterialClass(id=materials[2], name="Class 3", category="cat1"),
+        ]), MaterialCategory(id="cat2", name="Material Category 2", classes=[
+            MaterialClass(id=materials[3], name="Class 4", category="cat2"),
+            MaterialClass(id=materials[4], name="Class 5", category="cat2"),
+        ])]
+        process_objects = [Process(name_short=processes[0], process_ids=[0]), Process(name_short=processes[1], process_ids=[1])]
+        site = Site(
+            processes=process_objects, equipment=plants, storages=storages, material_categories=mat_cats
+        )
+        start = datetime(year=2026, month=5, day=1, tzinfo=timezone.utc)
+        end = datetime(year=2026, month=5, day=2, tzinfo=timezone.utc)
+        period = (start, end)
+        total_prod_expected = 24  # since storage 2 starts empty, we can at most finish 32 units
+        targets_expected = {materials[0]: 7, materials[1]: 7, materials[2]: 10, materials[3]: 16, materials[4]: 8}
+        structure = LongTermTargets(period=period, production_targets=targets_expected, total_production=total_prod_expected)
+        initial_storage_levels: dict[str, StorageLevel] = {
+            "A": StorageLevel(storage="A", filling_level=0.6, timestamp=start,
+                              material_levels={materials[0]: 0.2, materials[1]: 0.2, materials[2]: 0.2, materials[3]: 0.3, materials[4]: 0.3}),
+            "B": StorageLevel(storage="B", filling_level=0., timestamp=start, material_levels={mat: 0. for mat in materials})
+        }
+        shifts: list[tuple[datetime, datetime]] = [(start+timedelta(hours=8*idx), start+timedelta(hours=8*(idx+1))) for idx in range(3)]
+        plant_availabilities: dict[int, EquipmentAvailability] = {p: EquipmentAvailability(equipment=p, period=period, daily_baseline=timedelta(days=1)) for p in range(3)}
+        instance = LtpInstance("test_mat_performance2", site, LtpParams(disable_shifts_allocator=not use_allocator), structure, initial_storage_levels, shifts, plant_availabilities)
+        targets, storage_levels = instance.start(fail_on_validation_error=True)
+        LtpTest._ensure_initial_storage_levels_match(initial_storage_levels, storage_levels)
+
+        sub_targets0: dict[str, list[ProductionTargets]] = targets.production_sub_targets
+        assert all(process in sub_targets0 for process in processes), f"Process not scheduled: {next(process for process in processes if process not in sub_targets0)}"
+        final_level = storage_levels[-1]["DONE"]
+        mat_levels = final_level.material_levels
+        # 16 is what could be achieved if all materials had the default throughput
+        assert final_level.filling_level > 17, f"Total production too small. Wanted: {total_prod_expected:.2f}, got {final_level.filling_level:.2f}"
+        #assert (final_level.filling_level - sum(mat_levels.values()))/total_prod_expected < 0.02, f"Material levels do not add up to total filling level {final_level.filling_level:.2f}, mat: {mat_levels}"
+        share_mat1 = mat_levels.get(materials[0], 0.) / final_level.filling_level
+        share_mat2 = mat_levels.get(materials[1], 0.) / final_level.filling_level
+        share_mat3 = mat_levels.get(materials[2], 0.) / final_level.filling_level
+        max_capacity = 16 * (share_mat1 + 0.5 * share_mat2 + 2 * share_mat3)
+        #print(f"  MATERIAL mix ({share_mat1:.2f}, {share_mat2:.2f}, {share_mat3:.2f}), theoretical capacity plant 1: {max_capacity:.2f}, produced: {final_level.filling_level:.2f}. " +
+        #      f"Distribution: {mat_levels.get(materials[0], 0.):.2f}, {mat_levels.get(materials[1], 0.):.2f}, {mat_levels.get(materials[2], 0.):.2f}")
+        assert final_level.filling_level <= max_capacity + 0.1, f"Total production {final_level.filling_level:.2f} exceeds max capacity {max_capacity:.2f} for the given material mix ({share_mat1:.2f}, {share_mat2:.2f}, {share_mat3:.2f})"
+
+    def test_ltp_respects_material_throughput2_no_shifts_alloc(self):
+        LtpTest._test_ltp_respects_material_throughput2_base(use_allocator=False)
+
+    def test_ltp_respects_material_throughput2_with_shifts_alloc(self):
+        LtpTest._test_ltp_respects_material_throughput2_base(use_allocator=True)

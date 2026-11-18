@@ -469,3 +469,153 @@ class ShiftAllocationTest(unittest.TestCase):
             weight_cat1 = sum(weight for mat, weight in target.material_weights.items() if mat in classes_cats1)
             weight_cat2 = sum(weight for mat, weight in target.material_weights.items() if mat in classes_cats2)
             assert abs(weight_cat1-weight_cat2) < 1e-3, f"Different total material weight for categories 1 and 2: {weight_cat1}, {weight_cat2} in shift {idx}"
+
+    def test_shift_allocation_respects_variable_material_throughput1(self):
+        """
+        Equipment throughput material-dependent. In this case the shift allocator should just pass through the initial
+        solution, since it is already well-aligned to shifts.
+        """
+        process = "test_proc0"
+        storages = [Storage(name_short="A", equipment=[0], capacity_weight=100),
+                    Storage(name_short="DONE", equipment=[])]
+        mat1 = "matclass1"
+        mat2 = "matclass2"
+        throughput_mat1 = 1.
+        throughput_mat2 = 0.25
+        # capacity: 24t/day, but only 12t/day for mat2
+        plants = [Equipment(id=0, name_short="Plant0", process=process, storage_in="A", storages_out=["DONE"], throughput_capacity=throughput_mat1,
+                            material_throughput={mat2: throughput_mat2}) ]
+        mat_cats = [
+            MaterialCategory(id="cat1", name="Cat1", classes=[
+                MaterialClass(id=mat1, name="Mat1", category="cat1"),
+                MaterialClass(id=mat2, name="Mat2", category="cat1")
+            ])
+        ]
+        site = Site(
+            processes=[Process(name_short=process, process_ids=[0])],
+            equipment=plants, storages=storages, material_categories=mat_cats
+        )
+        # 4 days of production, equipment capacity: 96t
+        start = datetime(year=2026, month=5, day=1, tzinfo=timezone.utc)
+        end = datetime(year=2026, month=5, day=2, tzinfo=timezone.utc)
+        period = (start, end)
+        # not feasible
+        structure = LongTermTargets(period=period, total_production=48, production_targets={mat1: 12, mat2: 12})
+        # four days, 12 shifts
+        shifts: list[tuple[datetime, datetime]] = [(start + timedelta(hours=8 * idx), start + timedelta(hours=8 * (idx + 1))) for idx in range(3)]
+        num_shifts = len(shifts)
+        plant_availabilities: dict[int, EquipmentAvailability] = {p: EquipmentAvailability(equipment=p, period=period, daily_baseline=timedelta(days=1)) for p in (0, 1)}
+        # need to start with a config that is valid but may easily lead to an invalid shift-adapted result
+        # initial result: produce only mat2 in first shift, only mat1 thereafter
+        mat_shape = sum(1 for cat in mat_cats for _ in cat.classes) + 1
+        hours_per_shift = 8
+        equipment_to_storages = {0: {"DONE": np.zeros(shape=(mat_shape, num_shifts), dtype=np.float64)}}
+        # amounts per class
+        equipment_to_storages[0]["DONE"][1, 0] = throughput_mat2 * hours_per_shift
+        equipment_to_storages[0]["DONE"][0, 1:3] = throughput_mat1 * hours_per_shift
+        equipment_to_storages[0]["DONE"][2, 0] = throughput_mat2 * hours_per_shift
+        equipment_to_storages[0]["DONE"][2, 1:3] = throughput_mat1 * hours_per_shift
+        total_prod = throughput_mat2 * hours_per_shift + 2 * throughput_mat1 * hours_per_shift
+        storages_to_equipment = {"A": {0: np.zeros(shape=(mat_shape, num_shifts), dtype=np.float64)}}
+        storages_to_equipment["A"][0][1, 0] = throughput_mat2 * hours_per_shift
+        storages_to_equipment["A"][0][0, 1:3] = throughput_mat1 * hours_per_shift
+        storages_to_equipment["A"][0][2, 0] = throughput_mat2 * hours_per_shift
+        storages_to_equipment["A"][0][2, 1:3] = throughput_mat1 * hours_per_shift
+        done_level = np.zeros(shape=(mat_shape, num_shifts + 1), dtype=np.float64)
+        done_level[1, 1:] = throughput_mat2 * hours_per_shift
+        done_level[0, 2:] = throughput_mat1 * hours_per_shift * np.array([1., 2.])
+        done_level[2, :] = done_level[0, :] + done_level[1, :]
+        a_level = np.zeros(shape=(mat_shape, num_shifts + 1), dtype=np.float64)
+        a_level[0, :] = 0.25 * np.ones(shape=(num_shifts + 1, ), dtype=np.float64)
+        a_level[1, :] = 0.25 * np.ones(shape=(num_shifts + 1,), dtype=np.float64)
+        a_level[2, :] = a_level[0, :] + a_level[1, :]
+        storage_levels = {"A": a_level, "DONE": done_level}
+
+        allocator = ShiftAllocator(site, structure, shifts, plant_availabilities, storage_levels, equipment_to_storages, storages_to_equipment, rand_seed=42)
+        result, levels = allocator.run(fail_on_validation_error=True)
+        assert process in result.production_sub_targets, "Process missing in allocator result"
+        proc0_targets: list[ProductionTargets] = result.production_sub_targets[process]
+        active_shifts0 = [t for t in proc0_targets if 0 in t.target_weight and t.target_weight[0].total_weight >= 1e-4]
+        active_count = len(active_shifts0)
+        assert active_count > 0, "No shifts allocated for process 0"
+        assert active_count == num_shifts, f"Not all shifts allocated for process 0: {active_count}, wanted: {num_shifts}"
+        for stg_levels in levels:
+            assert all(stg in stg_levels for stg in ("A", "DONE")), f"Storage missing in levels {stg_levels.keys()}: {[stg for stg in ("A", "DONE") if stg not in stg_levels.keys()]}"
+        final_level = levels[-1]["DONE"]
+        assert abs((final_level.filling_level - total_prod) / total_prod) < 0.05, f"Total production after shift allocator {final_level.filling_level:.2f} deviates from original {total_prod:.2f}, contrary to expections"
+
+    def test_shift_allocation_respects_variable_material_throughput2(self):
+        """
+        Equipment throughput material-dependent. Contrary to the above, in this case the shift allocator cannot simply
+        pass through the initial solution, as it is not well-aligned to shifts.
+        """
+        process = "test_proc0"
+        storages = [Storage(name_short="A", equipment=[0], capacity_weight=100),
+                    Storage(name_short="DONE", equipment=[])]
+        mat1 = "matclass1"
+        mat2 = "matclass2"
+        throughput_mat1 = 1.
+        throughput_mat2 = 0.25
+        # capacity: 24t/day, but only 12t/day for mat2
+        plants = [Equipment(id=0, name_short="Plant0", process=process, storage_in="A", storages_out=["DONE"], throughput_capacity=throughput_mat1,
+                            material_throughput={mat2: throughput_mat2}) ]
+        mat_cats = [
+            MaterialCategory(id="cat1", name="Cat1", classes=[
+                MaterialClass(id=mat1, name="Mat1", category="cat1"),
+                MaterialClass(id=mat2, name="Mat2", category="cat1")
+            ])
+        ]
+        site = Site(
+            processes=[Process(name_short=process, process_ids=[0])],
+            equipment=plants, storages=storages, material_categories=mat_cats
+        )
+        # 4 days of production, equipment capacity: 96t
+        start = datetime(year=2026, month=5, day=1, tzinfo=timezone.utc)
+        end = datetime(year=2026, month=5, day=2, tzinfo=timezone.utc)
+        period = (start, end)
+        # not feasible
+        structure = LongTermTargets(period=period, total_production=48, production_targets={mat1: 12, mat2: 12})
+        # four days, 12 shifts
+        shifts: list[tuple[datetime, datetime]] = [(start + timedelta(hours=8 * idx), start + timedelta(hours=8 * (idx + 1))) for idx in range(3)]
+        num_shifts = len(shifts)
+        plant_availabilities: dict[int, EquipmentAvailability] = {p: EquipmentAvailability(equipment=p, period=period, daily_baseline=timedelta(days=1)) for p in (0, 1)}
+        # need to start with a config that is valid but may easily lead to an invalid shift-adapted result
+        # initial result: produce only mat2 in first shift, only mat1 thereafter
+        mat_shape = sum(1 for cat in mat_cats for _ in cat.classes) + 1
+        hours_per_shift = 8
+        equipment_to_storages = {0: {"DONE": np.zeros(shape=(mat_shape, num_shifts), dtype=np.float64)}}
+        # amounts per class
+        equipment_to_storages[0]["DONE"][1, 0] = throughput_mat2 / 3 * hours_per_shift
+        equipment_to_storages[0]["DONE"][0, 1:3] = (throughput_mat1 * 2 / 3 + throughput_mat2 / 3) * hours_per_shift
+        equipment_to_storages[0]["DONE"][2, 0] = throughput_mat2 / 3 * hours_per_shift
+        equipment_to_storages[0]["DONE"][2, 1:3] = (throughput_mat1 * 2 / 3 + throughput_mat2 / 3) * hours_per_shift
+        total_prod = throughput_mat2 * hours_per_shift + 4/3 * throughput_mat1 * hours_per_shift
+        storages_to_equipment = {"A": {0: np.zeros(shape=(mat_shape, num_shifts), dtype=np.float64)}}
+        storages_to_equipment["A"][0][1, 0] = throughput_mat2 / 3 * hours_per_shift
+        storages_to_equipment["A"][0][0, 1:3] = (throughput_mat1 * 2 / 3 + throughput_mat2 / 3) * hours_per_shift
+        storages_to_equipment["A"][0][2, 0] = throughput_mat2 / 3 * hours_per_shift
+        storages_to_equipment["A"][0][2, 1:3] = (throughput_mat1 * 2 / 3 + throughput_mat2 / 3) * hours_per_shift
+        done_level = np.zeros(shape=(mat_shape, num_shifts + 1), dtype=np.float64)
+        done_level[1, 1:] = throughput_mat2 / 3 * hours_per_shift * np.array([1., 2., 3.])
+        done_level[0, 2:] = throughput_mat1 * 2/3 * hours_per_shift * np.array([1., 2.])
+        done_level[2, :] = done_level[0, :] + done_level[1, :]
+        a_level = np.zeros(shape=(mat_shape, num_shifts + 1), dtype=np.float64)
+        a_level[0, :] = 0.25 * np.ones(shape=(num_shifts + 1, ), dtype=np.float64)
+        a_level[1, :] = 0.25 * np.ones(shape=(num_shifts + 1,), dtype=np.float64)
+        a_level[2, :] = a_level[0, :] + a_level[1, :]
+        storage_levels = {"A": a_level, "DONE": done_level}
+
+        allocator = ShiftAllocator(site, structure, shifts, plant_availabilities, storage_levels, equipment_to_storages, storages_to_equipment, rand_seed=42)
+        result, levels = allocator.run(fail_on_validation_error=True)
+        assert process in result.production_sub_targets, "Process missing in allocator result"
+        proc0_targets: list[ProductionTargets] = result.production_sub_targets[process]
+        active_shifts0 = [t for t in proc0_targets if 0 in t.target_weight and t.target_weight[0].total_weight >= 1e-4]
+        active_count = len(active_shifts0)
+        assert active_count > 0, "No shifts allocated for process 0"
+        assert active_count == num_shifts, f"Not all shifts allocated for process 0: {active_count}, wanted: {num_shifts}"
+        for stg_levels in levels:
+            assert all(stg in stg_levels for stg in ("A", "DONE")), f"Storage missing in levels {stg_levels.keys()}: {[stg for stg in ("A", "DONE") if stg not in stg_levels.keys()]}"
+        final_level = levels[-1]["DONE"]
+        assert abs((final_level.filling_level - total_prod) / total_prod) < 0.05, f"Total production after shift allocator {final_level.filling_level:.2f} deviates from original {total_prod:.2f}, contrary to expections"
+
+

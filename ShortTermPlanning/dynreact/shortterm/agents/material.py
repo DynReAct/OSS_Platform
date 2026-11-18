@@ -13,6 +13,7 @@ from dynreact.shortterm.common.data.load_url import DOCKER_REPLICA
 from dynreact.shortterm.agents.agent import Agent
 from dynreact.shortterm.common.handler import DockerManager
 import random
+import re
 
 
 def _parse_utc_datetime(value: str | None) -> datetime | None:
@@ -181,12 +182,12 @@ class Material(Agent):
                 "variables": KeySearch.dump_model(include_env=False)
             }
 
-            self.handler.launch_container(
+            self.enqueue_replica(
                 name=f"{topic}_{material}",
                 agent="material",
                 mode="replica",
                 params=init_kwargs,
-                auto_remove=False
+                auto_remove=True
             )
 
             if self.verbose > 1:
@@ -355,7 +356,7 @@ class Material(Agent):
             tsend=topic,
             topic=topic,
             source=self.agent,
-            dest=f"^(?!{self.assigned_equipment})(EQUIPMENT:{topic}:.*)$",
+            dest=f"^(?!{re.escape(self.assigned_equipment)}$)(EQUIPMENT:{topic}:.*)$",
             action="ASSIGNED",
             payload=dict(id=self.agent),
             vb=self.verbose

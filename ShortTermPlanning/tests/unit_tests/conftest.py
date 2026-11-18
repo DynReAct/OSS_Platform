@@ -102,3 +102,23 @@ def material_agent(mock_kafka: Any) -> Any:
     material.consumer = mock_kafka[1]
 
     return material
+
+
+@pytest.fixture(autouse=True)
+def stp_config() -> Generator[None, None, None]:
+    """Installs a complete STP configuration for each test and restores the previous one afterwards.
+
+    Every test starts from the same known configuration, so tests do not depend on the order
+    in which they run nor on what another test left in the global ``KeySearch`` state.
+    """
+    from dynreact.shortterm.common import KeySearch as _KeySearch
+    from dynreact.shortterm.shorttermtargets import ShortTermTargets as _Targets
+    from dynreact.shortterm.timedelay import TimeDelay
+    previous = _KeySearch._global_config
+    _KeySearch.set_global(_Targets(
+        KAFKA_IP="127.0.0.1:9092", REST_URL="http://localhost", PERF_URL="http://localhost",
+        TOPIC_GEN="dynGEN", TOPIC_CALLBACK="dynCB", LOG_FILE_PATH="/tmp/dynreact-test-logs", VB=0,
+        TimeDelays=TimeDelay(AUCTION_WAIT=1, COUNTERBID_WAIT=5, EXIT_WAIT=1, CLONING_WAIT=1, RUNNING_WAIT=1, SMALL_WAIT=1),
+    ))
+    yield
+    _KeySearch._global_config = previous

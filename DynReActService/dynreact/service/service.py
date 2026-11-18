@@ -190,7 +190,9 @@ def snapshot(response: Response, timestamp: str | datetime = Path(..., examples=
     is_relative_timestamp: bool = isinstance(timestamp, str) and timestamp.startswith("now")
     if isinstance(timestamp, str):
         timestamp = parse_datetime_str(timestamp)
-    snapshot0: Snapshot = state.get_snapshot(timestamp)
+    snapshot0: Snapshot | None = state.get_snapshot(timestamp)
+    if snapshot0 is None:
+        raise HTTPException(status_code=404, detail="No snapshot found for the requested timestamp")
     snap_provider = state.get_snapshot_provider()
     snap_copy = snapshot0.model_dump(mode="python", exclude_unset=True, exclude_none=True)
     lots_copy = {}
@@ -504,7 +506,7 @@ def plant_status(equipment_id: int, snapshot_timestamp: datetime | str = Path(..
 
 @fastapi_app.post("/costs/transitions-stateful",
                 tags=["dynreact"],
-                response_model_exclude_unset=True,
+                response_model_exclude_unset=False,
                 response_model_exclude_none=True,
                 summary="Invoke cost service for order to order or coil to coil transitions, taking into account " +
                         "global objectives and constraints.")
@@ -524,16 +526,23 @@ def target_function_update(transition: EquipmentTransitionStateful, username = u
 
     if next_order is None:
         raise HTTPException(status_code=404, detail=f"Next order {transition.next_order} not found")
+    if transition.current_order is not None and current_order is None:
+        raise HTTPException(status_code=404, detail=f"Current order {transition.current_order} not found")
 
     status = transition.equipment_status
-    if current_order is None: # first order, cost is 0
-        return TransitionInfo(status=status, costs=0)
-
     if transition.next_material is not None:
-        current_coil = snapshot.get_material(transition.current_material)
+        current_coil = snapshot.get_material(transition.current_material) if transition.current_material is not None else None
         next_coil = snapshot.get_material(transition.next_material)
-        if current_coil is None or next_coil is None:
+        if (current_order is not None and current_coil is None) or next_coil is None:
             raise HTTPException(status_code=404, detail=f"Current/Next coil {transition.current_material}/{transition.next_material} not found")
+
+    if current_order is None:
+        # A zero setup cost still consumes material and establishes the simulated state.
+        new_status, objective = _get_cost_provider().update_transition_costs(
+            plant, None, next_order, status, snapshot, new_lot=True,
+            current_material=None, next_material=next_coil,
+        )
+        return TransitionInfo(status=new_status, costs=objective)
 
     initial_solution = ProductionPlanning(process=plant.process, equipment_status={plant.id: status}, order_assignments={})
     targets = ProductionTargets(process=plant.process, target_weight={plant.id: status.targets},

@@ -1,23 +1,18 @@
-# Clean_kafka module
+# Kafka clean-up
 
-This program runs the scripts required to start the general agents,
-clones them for an auction with the resources indicated by the user,
-and starts the auction, waiting for its completion.
+Deletion of the Kafka topic and consumer groups of an auction once it ends.
 
 ---
 
-## delete_all_topics function
-::: dynreact.shortterm.clean_kafka.delete_all_topics
+
+## cleanup_auction function
+::: dynreact.shortterm.common.data.data_functions.cleanup_auction
     options:
-        docstring_style: sphinx
+        docstring_style: google
         show_signature: true
         show_source: false
 
 
-## sleep function
-::: dynreact.shortterm.clean_kafka.sleep
-    options:
-        docstring_style: sphinx
-        show_signature: true
-        show_source: false
-
+See [Concurrent auctions and shared Kafka channels](shared_messaging.md) for channel ownership,
+request correlation, parent restart behavior, retention, safe cleanup and Jenkins
+verification. Shared parent/callback history is never purged by an auction.

@@ -1,4 +1,4 @@
-# ShortTermPlanning module
+# short_term_planning module
 
 This program runs the scripts required to start the general agents,
 clones them for an auction with the resources indicated by the user,
@@ -12,42 +12,31 @@ individual coil length.
 ---
 
 ## delete_all_topics function
-::: dynreact.shortterm.ShortTermPlanning.delete_all_topics
+::: dynreact.shortterm.short_term_planning.delete_all_topics
     options:
         docstring_style: sphinx
         show_signature: true
         show_source: false
-
-
-## run_script function
-::: dynreact.shortterm.ShortTermPlanning.run_script
-    options:
-        docstring_style: sphinx
-        show_signature: true
-        show_source: false
-
 
 
 ## run_general_agents function
-::: dynreact.shortterm.ShortTermPlanning.run_general_agents
+::: dynreact.shortterm.short_term_planning.run_general_agents
     options:
         docstring_style: sphinx
         show_signature: true
         show_source: false
-
 
 
 ## create_auction function
-::: dynreact.shortterm.ShortTermPlanning.create_auction
+::: dynreact.shortterm.short_term_planning.create_auction
     options:
         docstring_style: sphinx
         show_signature: true
         show_source: false
 
 
-
 ## start_auction function
-::: dynreact.shortterm.ShortTermPlanning.start_auction
+::: dynreact.shortterm.short_term_planning.start_auction
     options:
         docstring_style: sphinx
         show_signature: true
@@ -55,7 +44,7 @@ individual coil length.
 
 
 ## ask_results function
-::: dynreact.shortterm.ShortTermPlanning.ask_results
+::: dynreact.shortterm.short_term_planning.ask_results
     options:
         docstring_style: sphinx
         show_signature: true
@@ -63,7 +52,7 @@ individual coil length.
 
 
 ## end_auction function
-::: dynreact.shortterm.ShortTermPlanning.end_auction
+::: dynreact.shortterm.common.data.data_functions.end_auction
     options:
         docstring_style: sphinx
         show_signature: true
@@ -71,7 +60,7 @@ individual coil length.
 
 
 ## sleep function
-::: dynreact.shortterm.ShortTermPlanning.sleep
+::: dynreact.shortterm.short_term_planning.sleep
     options:
         docstring_style: sphinx
         show_signature: true

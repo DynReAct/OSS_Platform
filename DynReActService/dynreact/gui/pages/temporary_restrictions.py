@@ -442,7 +442,7 @@ def snapshot_changed(snapshot: str|None, rule_id: str|None, lang: str|None):
     return cols, rows
 
 
-def _parameter_control(param: ParameterValue[Any], parameter: Any|None, rule_id: str, setting_id: int, counter: Iterator[int]):
+def _parameter_control(param: "ParameterValue[Any]", parameter: Any|None, rule_id: str, setting_id: int, counter: Iterator[int]):
     cnt = next(counter)
     el_id = {"role": "temprest-parameter-control", "id": rule_id, "setting": setting_id, "count": cnt}
     value = parameter if parameter is not None else param.default_value

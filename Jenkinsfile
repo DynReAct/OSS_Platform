@@ -14,33 +14,34 @@ node {
     env.SHORT_TERM_PLANNING_PARAMS = "default+file:/repo/ShortTermPlanning/tests/stp_context_oss_test.json"
     env.EXPECTED_STP_PROFILE = "oss"
     env.CONTAINER_NAME_PREFIX = "JENKINS_OSS_TEST_${env.BUILD_ID}"
-    env.TEST_KAFKA_TOPIC_PREFIX = "Dynreact_OSS"
-    env.TEST_TOPIC_GEN = "DynReact-OSS-TEST-Gen"
-    env.TEST_TOPIC_CALLBACK = "DynReact-OSS-TEST-Callback"
+    // Keep parent groups and maintenance isolated from other jobs and builds.
+    def messagingContext = "${env.BUILD_TAG}".replaceAll('[^A-Za-z0-9_-]', '-').take(100) + "-${env.BUILD_ID}"
+    env.TEST_KAFKA_TOPIC_PREFIX = "Dynreact_OSS-TEST-${messagingContext}"
+    env.TEST_TOPIC_GEN = "DynReact-OSS-TEST-${messagingContext}-Gen"
+    env.TEST_TOPIC_CALLBACK = "DynReact-OSS-TEST-${messagingContext}-Callback"
     env.DOCKER_NETWORK = "host"
     env.PERF_URL = "http://192.168.111.11:5027"
     env.TRANSPORT_TIMES_URL = "default+file:/repo/DynReActService/data/site.json"
 
-    env.SNAPSHOT_VERSION = "2025-01-18T08:00:00Z"
+    env.SNAPSHOT_VERSION = "2024-12-31T11:00:00Z"
     env.SCENARIO_4_5_EQUIPMENT = "7" // One Equipment, One Material
     env.SCENARIO_6_EQUIPMENT = "7" // One Equipment, Two Material
     env.SCENARIO_7_EQUIPMENTS = "6 7" // Two Equipments, One Material
     env.SCENARIO_8_EQUIPMENTS = "6 7" // Two Equipments, shared material
-    env.SCENARIO_8_ORDER_ID = "1193611" 
+    env.SCENARIO_8_ORDER_ID = "order7"
 
      // Wrap all secret text credentials at once
     withCredentials([
         string(credentialsId: 'LOCAL_REGISTRY', variable: 'REGISTRY'),
         string(credentialsId: 'KAFKA_IP', variable: 'KAFKA_IP_SECRET'),
         string(credentialsId: 'LOG_FILE_PATH', variable: 'LOG_FILE_PATH_SECRET'),
-        string(credentialsId: 'REST_URL', variable: 'REST_URL_SECRET')
+        string(credentialsId: 'OSS_REST_URL', variable: 'REST_URL_SECRET')
     ]) {
 
         env.KAFKA_IP = KAFKA_IP_SECRET
         env.LOG_FILE_PATH = LOG_FILE_PATH_SECRET
         env.REST_URL = REST_URL_SECRET
         env.LOCAL_REGISTRY = REGISTRY
-
 
     def runStageWithCleanup = { stageName, body ->
         stage(stageName) {
@@ -74,6 +75,39 @@ node {
     '''
     }
 
+    stage('OSS Snapshot Readiness') {
+        // Validate actual data before publishing an image or launching parents.
+        sh '''
+        set +x
+        docker run --rm --network host \\
+          -e REST_URL -e SNAPSHOT_VERSION \\
+          -e SCENARIO_4_5_EQUIPMENT -e SCENARIO_6_EQUIPMENT \\
+          -e SCENARIO_7_EQUIPMENTS -e SCENARIO_8_EQUIPMENTS -e SCENARIO_8_ORDER_ID \\
+          -v "${WORKSPACE}/ShortTermPlanning/extras/snapshot_preflight.py:/tmp/snapshot_preflight.py:ro" \\
+          "$IMAGE_NAME:$IMAGE_TAG" \\
+          python /tmp/snapshot_preflight.py
+        '''
+    }
+
+    stage('Shared Messaging Regression') {
+        // Exercise the exact caller/common/LOG implementation shipped to replicas.
+        // Unit checks need neither a Docker socket nor application services.
+        sh '''
+        docker run --rm --network host \\
+          -v "${WORKSPACE}:/repo:ro" \\
+          -e PYTHONDONTWRITEBYTECODE=1 \\
+          -e KAFKA_IP \\
+          -e MESSAGING_TEST_KAFKA=1 \\
+          "$IMAGE_NAME:$IMAGE_TAG" \\
+          python -m pytest -q -p no:cacheprovider \\
+            /repo/ShortTermPlanning/tests/unit_tests/test_shared_messaging.py \\
+            /repo/ShortTermPlanning/tests/unit_tests/test_cli_lifecycle.py \\
+            /repo/ShortTermPlanning/tests/unit_tests/test_snapshot_preflight.py \\
+            /repo/ShortTermPlanning/tests/integration_test/test_exit_cleanup.py \\
+            /repo/ShortTermPlanning/tests/integration_test/test_shared_messaging_kafka.py
+        '''
+    }
+
     stage('Tag & Push Image') {
         sh '''
         docker tag "$IMAGE_NAME:$BUILD_IMAGE_TAG" "$LOCAL_REGISTRY$IMAGE_NAME:$BUILD_IMAGE_TAG"
@@ -90,6 +124,18 @@ node {
         docker image inspect "$LOCAL_REGISTRY$IMAGE_NAME:$BUILD_IMAGE_TAG" --format 'BuildId={{index .Config.Labels "es.upm.etsii.jenkins-pi.dynreact.build_id"}}'
         '''
     }
+
+    stage('Kafka Connectivity Preflight') {
+        sh '''
+        set +x
+        docker run --rm --network host \\
+          -e KAFKA_IP \\
+          -v "${WORKSPACE}/ShortTermPlanning/extras/kafka_preflight.py:/tmp/kafka_preflight.py:ro" \\
+          "$LOCAL_REGISTRY$IMAGE_NAME:$BUILD_IMAGE_TAG" \\
+          python /tmp/kafka_preflight.py
+        '''
+    }
+
 
     stage('Replace BASE agents') {
         sh '''
@@ -272,7 +318,7 @@ runStageWithCleanup('Run Scenario 0') {
     }
 
     runStageWithCleanup('Run Scenario 5') {
-        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX', 'SCENARIO_4_5_EQUIPMENT']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -302,7 +348,7 @@ runStageWithCleanup('Run Scenario 0') {
     }
 
     runStageWithCleanup('Run Scenario 6') {
-        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX', 'SCENARIO_6_EQUIPMENT']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -332,7 +378,7 @@ runStageWithCleanup('Run Scenario 0') {
     }
 
     runStageWithCleanup('Run Scenario 7') {
-        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX', 'SCENARIO_7_EQUIPMENTS']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests
@@ -362,7 +408,7 @@ runStageWithCleanup('Run Scenario 0') {
     }
 
     runStageWithCleanup('Run Scenario 8') {
-        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX']
+        def vars = ['KAFKA_IP', 'LOG_FILE_PATH', 'REST_URL', 'PERF_URL', 'TRANSPORT_TIMES_URL', 'SHORT_TERM_PLANNING_PARAMS', 'SNAPSHOT_VERSION', 'CONTAINER_NAME_PREFIX', 'SCENARIO_8_EQUIPMENTS', 'SCENARIO_8_ORDER_ID']
         def envArgs = vars.collect { varName -> "-e ${varName}=\"${env.getProperty(varName)}\"" }.join(' ')
         sh """
         # Run container to execute tests

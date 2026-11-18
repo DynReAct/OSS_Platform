@@ -71,6 +71,13 @@ class ServiceTest(unittest.TestCase):
         #assert snapshot == self._snapshot, "Snapshots do not match"
         DynReActAssertions.assert_snapshots_equal(snapshot, self._snapshot)
 
+    def test_missing_snapshot_returns_404_instead_of_a_server_error(self):
+        from unittest.mock import patch
+        with patch("dynreact.service.service.state.get_snapshot", return_value=None):
+            response = self._client.get("/snapshots/2025-01-18T08:00:00Z")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "No snapshot found for the requested timestamp"
+
     def test_transition_costs(self):
         order1 = self._snapshot.orders[0].id
         order2 = self._snapshot.orders[1].id

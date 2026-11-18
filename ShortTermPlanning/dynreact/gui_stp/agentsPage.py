@@ -10,7 +10,7 @@ from enum import Enum
 import dash, json, time, string, random, hashlib, datetime
 import dash_ag_grid as dash_ag
 import pandas as pd
-from confluent_kafka import Consumer, KafkaError, Message, Producer
+from confluent_kafka import KafkaError, Message, Producer
 from confluent_kafka.admin import AdminClient
 from dash import html, dcc, ctx, Input, Output, State
 from jsonpath_ng.ext import parse
@@ -19,7 +19,7 @@ from dynreact.auction.auction import Auction, JobStatus
 from dynreact.gui_stp.agents_state import AgentsState
 from dynreact.app import state
 from dynreact.gui.dash_app import app
-from dynreact.shortterm.common import KeySearch, purge_topics, delete_topics
+from dynreact.shortterm.common import KeySearch, delete_topics, create_callback_consumer
 from dynreact.shortterm.short_term_planning import (
     create_auction,
     start_auction,
@@ -69,13 +69,14 @@ def _get_stp_runtime_context() -> tuple[str | None, str | None, str | None, obje
 
 
 def _filter_results_to_selected_equipment(results: dict[str, Any], selected_equipment: list[str]) -> dict[str, Any]:
-    """Keep only result buckets that belong to the current auction selection."""
-    selected = {str(equipment) for equipment in selected_equipment}
-    return {
-        str(equipment): jobs
-        for equipment, jobs in results.items()
-        if str(equipment) in selected
-    }
+    """Keep only result buckets that belong to the current auction selection, keyed by equipment name."""
+    site = state.get_site()
+    names = {str(name): str(name) for name in selected_equipment}
+    for name in selected_equipment:
+        equipment = site.get_equipment_by_name(name)
+        if equipment is not None:
+            names[str(equipment.id)] = str(name)
+    return {names[str(equipment)]: jobs for equipment, jobs in results.items() if str(equipment) in names}
 
 
 EXTERNAL_PERF_URL = KeySearch.search_for_value("PERF_URL")
@@ -236,8 +237,9 @@ def make_ag_grid_for_equipment(equipment_id: Any, jobs: Any) -> Any:
                 rowData=row_data,
                 columnDefs=c_process,
                 defaultColDef={"resizable": True, "sortable": True, "filter": True},
-                style={"height": "300px", "width": "100%"},
-                columnSize="sizeToFit"  # Ensures no horizontal scroll
+                dashGridOptions={"domLayout": "autoHeight"},
+                style={"height": None, "width": "100%"},
+                columnSize="responsiveSizeToFit"  # Ensures no horizontal scroll
             )
         ])
 
@@ -526,7 +528,7 @@ def layout(*args: Any, **kwargs: Any) -> Any:
         language,
         dcc.Store(id='stored-data'),
         dcc.Store(id='has_initialized_session', data=False),
-        dcc.Store(id='auction-store', storage_type="local"),
+        dcc.Store(id='auction-store', storage_type="memory"),
         generate_page_header(snpshot),
         generate_resource_section(res_all, res_def),
         generate_materials_section(lmats, s_mats),
@@ -614,7 +616,7 @@ def set_materials(matype: Any, plants: Any) -> Any:
         for ic in unique_materials:
             res.append({"label": str(ic), "value": str(ic)})
 
-        return titx, res, DISPLAY_BLOCK, []
+        return titx, res, DISPLAY_BLOCK, [r["value"] for r in res]
     else:
         if matype == 'Materials':
             titx = 'Targeted Materials (select resources first):'
@@ -665,20 +667,25 @@ def set_ass_materials(matype: Any, plants: Any, ass_mats: Any) -> Any:
 
             all_assigned_materials.extend(sorted(amts))
 
-        # Remove duplicates
-        unique_assigned_materials = []
+        # Remove duplicates and entries already in the targeted list
         seen = set()
+        for ir in plants:
+            if matype == 'Materials':
+                seen.update(snapshot.get_material_current_equipment(ir))
+            else:
+                seen.update(snapshot.get_orders_current_equipment(ir))
+        unique_assigned_materials = []
         for mat in all_assigned_materials:
             if mat not in seen:
                 unique_assigned_materials.append(mat)
                 seen.add(mat)
 
-        titx= f'Targeted {matype} (click to select from {len(amts)} entries):'
+        titx= f'Targeted {matype} (click to select from {len(unique_assigned_materials)} entries):'
 
         for ic in unique_assigned_materials:
             res.append({"label": str(ic), "value": str(ic)})
 
-        return titx, res, DISPLAY_BLOCK, []
+        return titx, res, DISPLAY_BLOCK, [r["value"] for r in res]
 
     return '', [], NO_DISPLAY, []
 
@@ -782,7 +789,7 @@ def handle_create_click(ag_create: Any, reftxt: Any, matype: Any, plnts: Any, lm
     o_mats: list[Any] = []
     for i, plant_name in enumerate(plnts):
         equip_configs[plant_name] = {
-            "start_date": dates[i]
+            "start_time": dates[i]
         }
 
     # Set up auction details
@@ -812,8 +819,6 @@ def handle_create_click(ag_create: Any, reftxt: Any, matype: Any, plnts: Any, lm
         os_mats = snapshot.get_material_selected_orders(o_mats, plnts, state.get_site())
 
     # Create the auction
-    purge_topics(topics=[TOPIC_CALLBACK, TOPIC_GEN])
-
     try:
         initialize_auction(
             topic=reftxt,
@@ -869,24 +874,11 @@ def handle_start_click(ag_start: Any, reftxt: Any, auction: Any) -> Any:
         "acks": "all",
         "message.timeout.ms": 10000
     }
-    consumer_config = {
-        "bootstrap.servers": KAFKA_IP,
-        "group.id": "UX",
-        "auto.offset.reset": "earliest",
-        'enable.auto.commit': False
-    }
     producer = Producer(producer_config)
-    consumer = Consumer(consumer_config)
-    consumer.subscribe([genauction(reftxt), TOPIC_CALLBACK])
+    consumer = create_callback_consumer(KAFKA_IP, TOPIC_CALLBACK)
 
-    # Calculate number of agents based on material type
-    if auction.matype == 'Materials':
-        num_materials = len(auction.lmats)
-    else:  # Orders
-        # For Orders, use smats (the converted list) for agent count
-        num_materials = len(auction.smats)
-
-    numag = len(auction.equip) + num_materials + 1
+    # smats contains the exact material IDs used to create replicas in both modes.
+    numag = len(auction.equip) + len(auction.smats) + 1
     print(f"Calculated {numag} agents for {auction.matype}")
 
     try:
@@ -902,10 +894,13 @@ def handle_start_click(ag_start: Any, reftxt: Any, auction: Any) -> Any:
         auction.auction_status = JobStatus.G
 
     except Exception as e:
+        consumer.close()
         print(e)
         auction.auction_status = JobStatus.E
-        purge_topics(topics=[TOPIC_CALLBACK, TOPIC_GEN])
-        delete_topics(topics=[genauction(reftxt)])
+        try:
+            delete_topics(topics=[genauction(reftxt)])
+        except Exception as cleanup_error:
+            print(f"Could not clean failed auction {reftxt}: {cleanup_error}")
         text = (f'The auction {reftxt} failed to start, please create a new '
                 f'auction with a different name')
         auction.helper_text = text
@@ -934,28 +929,25 @@ def handle_refresh_click(ag_refresh: Any, reftxt: Any, auction: Any) -> Any:
         "acks": "all",
         "message.timeout.ms": 10000
     }
-    consumer_config = {
-        "bootstrap.servers": KAFKA_IP,
-        "group.id": "UX",
-        "auto.offset.reset": "earliest",
-        'enable.auto.commit': False
-    }
     producer = Producer(producer_config)
-    consumer = Consumer(consumer_config)
-    consumer.subscribe([genauction(reftxt), TOPIC_CALLBACK])
+    consumer = create_callback_consumer(KAFKA_IP, TOPIC_CALLBACK)
 
-    res = ask_results(
-        topic=genauction(reftxt),
-        producer=producer,
-        consumer=consumer,
-        verbose=VB
-    )
+    try:
+        res = ask_results(
+            topic=genauction(reftxt),
+            producer=producer,
+            consumer=consumer,
+            verbose=VB
+        )
+    finally:
+        consumer.close()
+
     res = normalize_auction_results(res)
     res = _filter_results_to_selected_equipment(res, auction.equip)
     auction.auction_status = JobStatus.R
-    auction.set_resul(res)
+    if res or not auction.resul:
+        auction.set_resul(res)
 
-    consumer.close()
     print(auction.resul)
 
     # Generate tabs for each equipment
@@ -995,13 +987,13 @@ def handle_end_click(ag_end: Any, reftxt: Any, auction: Any) -> Any:
     # End auction using Kafka messages
     topic = genauction(reftxt)
 
-    # Instruct all RESOURCE children to exit
+    # Instruct all EQUIPMENT children to exit
     sendmsgtopic(
         producer=producer,
         tsend=topic,
         topic=topic,
         source="UX",
-        dest="RESOURCE:" + topic + ":.*",
+        dest="EQUIPMENT:" + topic + ":.*",
         action="EXIT",
         vb=VB
     )
@@ -1118,7 +1110,7 @@ def initialize_auction(topic: str, snap_name: str, resources: list,
 @app.callback(
     Output('tab-content', 'children'),
     Input('tabs', 'value'),
-    State('auction-store', 'data')
+    Input('auction-store', 'data')
 )
 def render_tab_content(selected_tab: Any, auction_data: Any) -> Any:
     """
@@ -1129,10 +1121,14 @@ def render_tab_content(selected_tab: Any, auction_data: Any) -> Any:
     :return: HTML content for the tab.
     :rtype: dash.html.Div
     """
-    if not selected_tab or not auction_data:
+    if not auction_data:
         return html.Div("No results available yet.")
 
     auction = Auction.model_validate_json(auction_data)
+    if selected_tab not in auction.resul and auction.resul:
+        selected_tab = next(iter(auction.resul))
+    if not selected_tab:
+        return html.Div("No results available yet.")
 
     if selected_tab in auction.resul:
         jobs = auction.resul[selected_tab]

@@ -49,3 +49,13 @@ def test_validate_safe_replace_base_context_rejects_profile_mismatch() -> None:
             topic_prefix="Dynreact_RAS",
             expected_profile="oss",
         )
+
+
+@pytest.mark.parametrize("profile, job", [("oss", "ras-downstream"), ("ras", "oss-upstream")])
+def test_build_context_does_not_override_explicit_profile_prefix(profile, job):
+    assert _validate_safe_replace_base_context(
+        topic_gen=f"DynReact-{profile}-TEST-jenkins-{job}-42-Gen",
+        topic_callback=f"DynReact-{profile}-TEST-jenkins-{job}-42-Callback",
+        topic_prefix=f"Dynreact_{profile}-TEST-jenkins-{job}-42",
+        expected_profile=profile,
+    ) == profile

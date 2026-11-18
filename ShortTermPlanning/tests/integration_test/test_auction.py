@@ -38,8 +38,8 @@ def initialize() -> Generator[None, None, None]:
         The value produced by the underlying planning, UI, or test helper logic.
     """
     print("Setting up for a test.")
-    print("Purging topics.")
-    purge_topics(topics=[topic_callback, topic_gen, 'DYN_TEST'])
+    # Preserve parent/callback channels: other stages and clients may still need them.
+    purge_topics(topics=['DYN_TEST'])
 
     remote_base_agents = os.environ.get("REMOTE_BASE_AGENTS") == "1"
     producer = None

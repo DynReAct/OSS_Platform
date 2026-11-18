@@ -322,12 +322,14 @@ def set_next_prev_snaps(snapshot: str|None):
     next_snap = sp.next(next_t)
     while next_snap is not None and next_snap <= snapshot:
         next_t = next_t + delta
-        next_snap = sp.next(next_t)
+        following = sp.next(next_t)
+        next_snap = following if following != next_snap else None
     prev_t = snapshot - delta
     prev_snap = sp.previous(prev_t)
     while prev_snap is not None and prev_snap >= snapshot:
         prev_t = prev_t - delta
-        prev_snap = sp.previous(prev_t)
+        preceding = sp.previous(prev_t)
+        prev_snap = preceding if preceding != prev_snap else None
     if next_snap is not None:
         next_snap = state.as_timezone(next_snap)
     if prev_snap is not None:
@@ -381,6 +383,13 @@ clientside_callback(
 #def init_timezone(pathname):
 #    # Return default timezone - client will override via JavaScript if needed
 #    return "UTC"
+
+
+# Default STP imports this module's app. Load it only after app creation and
+# registration of the shared callbacks, but before the first dependency request.
+# Custom/profile frontends keep their existing preload in pages/stp_page.py.
+if config.stp_frontend == "default":
+    state.get_stp_page()
 
 
 if __name__ == "__main__":

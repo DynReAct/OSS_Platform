@@ -614,8 +614,9 @@ class ModelUtils:
             capa: float | None = eq_obj.throughput_capacity
             lot_throughputs: dict[str, float] = {}
             if eq_obj.material_throughput:
+                sample_order_by_lot = {lot: next(iter(lot_orders.values()))  for lot, lot_orders in lots.items()}
                 # determine if any of the specific material classes applies; per lot
-                mat_by_lot = {lot.id: next((mat for mat in snapshot.get_order(lot.orders[0], do_raise=True).material_classes.values() if mat in eq_obj.material_throughput), None) for lot in plant_lots}
+                mat_by_lot = {lot: next((mat for mat in snapshot.get_order(order, do_raise=True).material_classes.values() if mat in eq_obj.material_throughput), None) for lot, order in sample_order_by_lot.items()}
                 for lt, mat in mat_by_lot.items():
                     if mat is None:
                         continue

@@ -1,6 +1,6 @@
 import unittest
 from datetime import datetime, timedelta
-from typing import Callable
+from typing import Callable, Mapping
 
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo, LotsOptimizer, LotsOptimizationState, OptimizationListener
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
@@ -8,18 +8,19 @@ from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.impl.TestPerformanceModel import TestPerformanceModel, TestPerformanceConfig, PlantPerformanceBasic, \
     Concatenation, BaseCondition
 from dynreact.base.model import Site, Process, Equipment, ProductionTargets, ProductionPlanning, Snapshot, Order, \
-    Material, OrderAssignment, EquipmentStatus, Model, EquipmentProduction, Lot, ObjectiveFunction, PlannedWorkingShift
+    Material, OrderAssignment, EquipmentStatus, Model, EquipmentProduction, Lot, ObjectiveFunction, PlannedWorkingShift, \
+    MaterialCategory, MaterialClass
 
 from dynreact.lotcreation.LotsOptimizerImpl import TabuAlgorithm
 from dynreact.base.impl.SimpleCostProvider import SimpleCostProvider
 from dynreact.lotcreation.TabuParams import TabuParams
 
 
-def _init_algo(site: Site, n_parallel: int|None = None) -> LotsOptimizationAlgo:
+def _init_algo(site: Site, n_parallel: int|None = None, t_allowed: float|None=None) -> LotsOptimizationAlgo:
     algo: TabuAlgorithm = TabuAlgorithm("default:tabu-search", site)
     # disable limited number of tsps per worker to guarantee deterministic test behaviour
     # params.tsp_solver_global_timeout = 2  # higher timeout in tests to avoid spurious failures?
-    algo.set_params(TabuParams(tsp_solver_final_tsp=False, max_tsps_per_worker=-1, rand_seed=42, strict=True, NParallel=n_parallel))
+    algo.set_params(TabuParams(tsp_solver_final_tsp=False, max_tsps_per_worker=-1, rand_seed=42, strict=True, NParallel=n_parallel, TAllowed=t_allowed))
     return algo
 
 
@@ -736,7 +737,42 @@ class OptimizationTest(unittest.TestCase):
         listener.check()
 
     def test_lots_timing_works_without_shifts(self):
-        pass  # TODO
+        process = "test_proc_lottimes0"
+        process_id = 0
+        plant = 1
+        # ensure 2 orders of 10t can be processed per shift
+        plants = [Equipment(id=plant, name_short=f"Plant{plant}", process=process, throughput_capacity=20/8)]
+        start_time = datetime(year=2026, month=11, day=19, hour=12)
+        shift_duration = timedelta(hours=8)
+        planning_period = (start_time, start_time + 4 * shift_duration)
+        test_site = Site(processes=[Process(name_short=process, process_ids=[process_id])], equipment=plants, storages=[], material_categories=[])
+        orders = [OptimizationTest._create_order(f"o_{o}", [plant], 10) for o in range(4)]   # 2 shifts needed to process all orders
+        snapshot = Snapshot(timestamp=start_time, orders=orders, material=OptimizationTest._create_coils_for_orders(orders, process_id), inline_material={}, lots={})
+        transition_costs = { o1.id: {o2.id: 0 if o1 == o2 else 1 for o2 in orders} for o1 in orders}
+        costs = SimpleCostProvider("simple:costs", test_site, transition_costs, missing_weight_costs=100)
+        target_weight: float = sum(o.actual_weight for o in orders)
+        targets: ProductionTargets = ProductionTargets(process=process, target_weight={plant: EquipmentProduction(equipment=plant, total_weight=target_weight) for p in plants}, period=planning_period)
+        algo: LotsOptimizationAlgo = _init_algo(test_site, n_parallel=1)  # much faster with N=1
+        start_assignments: dict[str, OrderAssignment] = {o.id: OrderAssignment(order=o.id, equipment=-1, lot="", lot_idx=-1) for o in orders}
+        initial_status: dict[int, EquipmentStatus] = {plant: costs.evaluate_equipment_assignments(targets.target_weight.get(plant), process, start_assignments, snapshot, planning_period)}
+        initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
+        optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
+
+        def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
+            all_lots = solution.get_lots()
+            assert len(all_lots) == 1, f"Expected updated lots for one plants, got {len(all_lots)}"
+            lots = all_lots.get(1)
+            first_lot = lots[0]
+            final_lot = lots[-1]  # likely the same
+            assert first_lot.start_time is not None and first_lot.end_time is not None, f"Lot times not set (0)"
+            assert final_lot.start_time is not None and final_lot.end_time is not None, f"Lot times not set (-1)"
+            assert first_lot.start_time == start_time, f"Expected lot to start with planning period start ({start_time}), got lot start time {first_lot.start_time}"
+            assert final_lot.end_time == start_time + 2 * shift_duration, f"Unexpected lot end time. Wanted: {start_time + 2 * shift_duration}, got {final_lot.end_time}"
+
+        listener = InterruptionTestListener(check_expected_lots)
+        optimization.add_listener(listener)
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=20)  # with 4 orders available and 1 equipment, the optimization should not take too long
+        listener.check()
 
     def test_lots_timing_works_with_shifts(self):
         process = "test_proc_lottimes"
@@ -763,7 +799,7 @@ class OptimizationTest(unittest.TestCase):
         initial_status: dict[int, EquipmentStatus] = {plant: costs.evaluate_equipment_assignments(targets.target_weight.get(plant), process, start_assignments, snapshot, planning_period)}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, shifts=shifts)
-
+        
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
             all_lots = solution.get_lots()
             assert len(all_lots) == 1, f"Expected updated lots for one plants, got {len(all_lots)}"
@@ -781,11 +817,56 @@ class OptimizationTest(unittest.TestCase):
         optimization_state: LotsOptimizationState = optimization.run(max_iterations=20)  # with 4 orders available and 1 equipment, the optimization should not take too long
         listener.check()
 
+    def test_lots_timing_works_with_material_dependent_throughput(self):
+        process = "test_proc_lottimes_mat"
+        process_id = 0
+        plant = 1
+        # ensure 2 orders of 10t can be processed per shift
+        mat_cat = "cat"
+        materials = [f"{mat_cat}_mat1", f"{mat_cat}_mat2"]
+        # throughput is such that 2 orders of type mat1 can be produced in one shift, and 1 order of type mat2
+        plants = [Equipment(id=plant, name_short=f"Plant{plant}", process=process, throughput_capacity=20/8, material_throughput={materials[1]: 10/8})]
+        start_time = datetime(year=2026, month=11, day=19, hour=12)
+        shift_duration = timedelta(hours=8)
+        planning_period = (start_time, start_time + 4 * shift_duration)
+        test_site = Site(processes=[Process(name_short=process, process_ids=[process_id])], equipment=plants, storages=[], material_categories=[
+                MaterialCategory(id=mat_cat, name=mat_cat, classes=(MaterialClass(id=materials[0], name=materials[0], category=mat_cat), MaterialClass(id=materials[1], name=materials[1], category=mat_cat)))])
+        orders = [OptimizationTest._create_order(f"o_{o}", [plant], 10, material_classes={mat_cat: materials[int(o/2)]}) for o in range(4)]
+        snapshot = Snapshot(timestamp=start_time, orders=orders, material=OptimizationTest._create_coils_for_orders(orders, process_id), inline_material={}, lots={})
+        # ensure material of different classes ends up in different lots =>
+        transition_costs = {o1.id: {o2.id: 0 if idx1 == idx2 else 1 if int(idx1/2) == int(idx2/2) else 5 for idx2, o2 in enumerate(orders)} for idx1, o1 in enumerate(orders)}
+        costs = SimpleCostProvider("simple:costs", test_site, transition_costs, missing_weight_costs=100)
+        target_weight: float = sum(o.actual_weight for o in orders)
+        targets: ProductionTargets = ProductionTargets(process=process, target_weight={plant: EquipmentProduction(equipment=plant, total_weight=target_weight) for p in plants}, period=planning_period)
+        algo: LotsOptimizationAlgo = _init_algo(test_site, t_allowed=4, n_parallel=1)  # much faster with N=1
+        start_assignments: dict[str, OrderAssignment] = {o.id: OrderAssignment(order=o.id, equipment=-1, lot="", lot_idx=-1) for o in orders}
+        initial_status: dict[int, EquipmentStatus] = {plant: costs.evaluate_equipment_assignments(targets.target_weight.get(plant), process, start_assignments, snapshot, planning_period)}
+        initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
+        optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
+
+        def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
+            all_lots = solution.get_lots()
+            assert len(all_lots) == 1, f"Expected updated lots for one plants, got {len(all_lots)}"
+            lots = all_lots.get(1)
+            first_lot = lots[0]
+            final_lot = lots[-1]  # must not be the same here
+            assert first_lot.start_time is not None and first_lot.end_time is not None, f"Lot times not set (0)"
+            assert final_lot.start_time is not None and final_lot.end_time is not None, f"Lot times not set (-1)"
+            assert first_lot.start_time == start_time, f"Expected lot to start with planning period start ({start_time}), got lot start time {first_lot.start_time}"
+            assert final_lot.end_time == start_time + 3 * shift_duration, f"Unexpected lot end time. Wanted: {start_time + 3 * shift_duration}, got {final_lot.end_time}"
+
+        listener = InterruptionTestListener(check_expected_lots)
+        optimization.add_listener(listener)
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=20)  # with 4 orders available and 1 equipment, the optimization should not take too long
+        listener.check()
+
+
+
 
     @staticmethod
-    def _create_order(id: str, plants: list[int], weight: float, due_date: datetime|None=None, priority: int=0):
+    def _create_order(id: str, plants: list[int], weight: float, due_date: datetime|None=None, priority: int=0, material_classes: Mapping[str, str]|None=None):
         return Order(id=id, allowed_equipment=plants, target_weight=weight, actual_weight=weight, due_date=due_date, material_properties=TestMaterial(material_id="test"),
-                     current_processes=[], active_processes={}, priority=priority)
+                     current_processes=[], active_processes={}, priority=priority, material_classes=material_classes)
 
     @staticmethod
     def _create_coils_for_orders(orders: list[Order], process: int) -> list[Material]:  # one coil per order

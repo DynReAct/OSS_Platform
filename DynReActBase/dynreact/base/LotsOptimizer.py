@@ -502,6 +502,7 @@ class LotsOptimizationAlgo:
                         # optionally, specify the orders to be planned explicitly
                         # TODO option to specify the urgency(?)
                         orders: list[str]|None = None,
+                        shifts: Mapping[int, Sequence[PlannedWorkingShift]] | None = None,
                         # the next two are for initialization from a previous optimization run
                         best_solution: ProductionPlanning[P] | None = None,
                         history: list[ObjectiveFunction] | None = None,
@@ -523,7 +524,7 @@ class LotsOptimizationAlgo:
         instance = self._create_instance_internal(process, snapshot, targets, cost_provider, initial_solution, min_due_date=min_due_date,
                                               best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
                                               orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots,
-                                              temporary_restrictions=self._temporary_restrictions)
+                                              temporary_restrictions=self._temporary_restrictions, shifts=shifts)
         if process not in self._stats:
             self._stats[process] = OptimizationStatistics(process=process)
         stats = self._stats[process]
@@ -547,7 +548,8 @@ class LotsOptimizationAlgo:
                                   orders_custom_priority: dict[str, int] | None = None,
                                   forced_orders: list[str] | None = None,
                                   base_lots: dict[int, Lot] | None = None,
-                                  temporary_restrictions: TemporaryRestrictionsProvider|None = None
+                                  temporary_restrictions: TemporaryRestrictionsProvider|None = None,
+                                  shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None=None
                                   ) -> LotsOptimizer:
         raise Exception("not implemented")
 

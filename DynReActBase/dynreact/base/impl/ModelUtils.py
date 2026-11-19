@@ -577,8 +577,9 @@ class ModelUtils:
         return result
 
     @staticmethod
-    def lots_for_assignments(equipment: dict[int, Equipment], snapshot: Snapshot, assignments: dict[str, OrderAssignment], start_time: datetime,
-                              previous_orders: dict[int, str] | None = None) -> dict[int, list[Lot]]:
+    def lots_for_assignments(equipment: Mapping[int, Equipment], snapshot: Snapshot, assignments: Mapping[str, OrderAssignment], start_time: datetime,
+                              previous_orders: Mapping[int, str] | None = None, shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None = None,
+                              lots_active: bool=False) -> dict[int, list[Lot]]:
         """
         :return: dictionary with keys = equipment ids, values = lots
         """
@@ -600,22 +601,29 @@ class ModelUtils:
         for plant_id, lots in result.items():
             lots_sorted: list[str] = sorted(lots)
             plant_lots: list[Lot] = []
-            existing_lots = {lot.id: lot for lot in snapshot.lots.get(plant_id, _empty) if
-                             lot.end_time is not None and lot.active}
+            eq_obj = equipment[plant_id]
+            existing_lots = {lot.id: lot for lot in snapshot.lots.get(plant_id, _empty) if lot.end_time is not None and lot.active}
             has_existing = len(existing_lots) > 0
-            lot_start = max(lot.end_time for lot in existing_lots.values()) if len(existing_lots) > 0 else start_time
+            lot_start = max(lot.end_time for lot in existing_lots.values()) if has_existing else start_time
             if previous_orders is not None and plant_id in previous_orders:
                 prev_order = snapshot.get_order(previous_orders[plant_id])
                 if prev_order is not None and prev_order.lots is not None:
-                    match = next((lot_id for lot_id in prev_order.lots.values() if lot_id in existing_lots), None)
+                    match = next((lot_id for lot_id in prev_order.lots.values() if lot_id in existing_lots.keys()), None)
                     if match is not None:
                         lot_start = existing_lots[match].end_time
-            # assuming full capacity operation => probably ok at this point
-            capa: float | None = equipment[plant_id].throughput_capacity
+            capa: float | None = eq_obj.throughput_capacity
+            lot_throughputs: dict[str, float] = {}
+            if eq_obj.material_throughput:
+                # determine if any of the specific material classes applies; per lot
+                mat_by_lot = {lot.id: next((mat for mat in snapshot.get_order(lot.orders[0], do_raise=True).material_classes.values() if mat in eq_obj.material_throughput), None) for lot in plant_lots}
+                for lt, mat in mat_by_lot.items():
+                    if mat is None:
+                        continue
+                    lot_throughputs[lt] = eq_obj.material_throughput[mat]
+            eq_shifts: list[PlannedWorkingShift]|None = list(shifts.get(plant_id, _empty)) if shifts is not None else None
             for lot_id in lots_sorted:
                 order_data: dict[int, str] = lots[lot_id]
-                all_orders = [order for order in (snapshot.get_order(order) for order in order_data.values()) if
-                              order is not None]
+                all_orders = [order for order in (snapshot.get_order(order) for order in order_data.values()) if order is not None]
                 mat_weights = {}
                 lot_weight = 0.
                 for order in all_orders:
@@ -623,16 +631,44 @@ class ModelUtils:
                         mat_weights[cl] = mat_weights.get(cl, 0.) + order.actual_weight
                     lot_weight += order.actual_weight
                 lot_indices: list[int] = sorted(order_data)
-                start_time = None
-                end_time = None
-                if capa is not None and capa > 0:
-                    duration = timedelta(hours=lot_weight / capa)
-                    start_time = lot_start
-                    end_time = lot_start + duration
-                    lot_start = end_time
-                lot = Lot(id=lot_id, equipment=plant_id, active=True, status=0,
-                          orders=[order_data[idx] for idx in lot_indices], weight=lot_weight,
-                          material_weights=mat_weights, start_time=start_time, end_time=end_time)
+                start_time_lot = None
+                end_time_lot = None
+                if eq_shifts is not None:
+                    while len(eq_shifts) > 0 and eq_shifts[0].period[1] <= lot_start:
+                        eq_shifts.pop(0)
+                    if len(eq_shifts) == 0:
+                        lot_start = None
+                    elif eq_shifts[0].period[0] > lot_start:
+                        lot_start = eq_shifts[0].period[0]
+                lot_throughput = lot_throughputs.get(lot_id, capa)
+                if lot_start is not None and lot_throughput is not None and lot_throughput > 0:
+                    duration = timedelta(hours=lot_weight / lot_throughput)
+                    if eq_shifts is not None and len(eq_shifts) > 0:  # should never be empty here
+                        start_time_lot = max(eq_shifts[0].period[0], lot_start)
+                        aggregated_duration = timedelta()
+                        # determine end of lot
+                        full_shifts_cnt = 0
+                        for idx, shift in enumerate(eq_shifts):
+                            if idx == 0 and shift.period[0] < lot_start:
+                                shift_fraction = shift.worktime / (shift.period[1] - shift.period[0])
+                                shift = shift.model_copy(update={"period": (lot_start, shift.period[1]), "worktime": shift_fraction * (shift.period[1] - lot_start) })
+                            if aggregated_duration + shift.worktime < duration:
+                                aggregated_duration += shift.worktime
+                                full_shifts_cnt += 1
+                            else:
+                                shift_fraction = (duration-aggregated_duration)/shift.worktime
+                                aggregated_duration = duration
+                                end_time_lot = shift.period[0] + shift_fraction * (shift.period[1] - shift.period[0])
+                                break
+                        if end_time_lot is None:  # not enough shifts scheduled
+                            end_time_lot = eq_shifts[-1].period[1] + (duration - aggregated_duration)
+                        eq_shifts = eq_shifts[full_shifts_cnt:]
+                    else:
+                        start_time_lot = lot_start
+                        end_time_lot = lot_start + duration
+                        lot_start = end_time_lot
+                lot = Lot(id=lot_id, equipment=plant_id, active=lots_active and start_time_lot is not None, status=1, orders=[order_data[idx] for idx in lot_indices], weight=lot_weight,
+                          material_weights=mat_weights, start_time=start_time_lot, end_time=end_time_lot)
                 plant_lots.append(lot)
             result_sorted[plant_id] = plant_lots
         return result_sorted

@@ -901,7 +901,7 @@ def update_plants(snapshot: str,
         else:
             elements.append(html.Div())
         start_time = prev_lot_obj.end_time if prev_lot_obj is not None else snapshot_obj.timestamp
-        shifts: typing.Sequence[PlannedWorkingShift] = [shift for shift in shifts_provider.load(plant.id, start_time, max_end_time, limit=100) if shift.worktime > zero_duration]
+        shifts: typing.Sequence[PlannedWorkingShift] = [shift for shift in shifts_provider.load(plant.id, start_time, max_end_time, limit=250) if shift.worktime > zero_duration]
         if len(shifts) == 0:
             fraction_duration = 0
         else:

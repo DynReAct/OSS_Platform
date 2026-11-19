@@ -485,18 +485,22 @@ class TabuSearch(LotsOptimizer):
             planning.order_assignments = {o: ass for o, ass in planning.order_assignments.items() if o not in self._base_assignments}
 
         # slp = [[sl1[i] for i in range(len(sl1)) if (i % self.params.NParallel) == r] for r in range(self.params.NParallel)]
-        slp: list[list[OrderAssignment]] = [[sl1[i] for i in range(len(sl1)) if (i % self._params.NParallel) == r] for r in range(self._params.NParallel)]
+        n_parallel = min(self._params.NParallel, len(sl1))
+        slp: list[list[OrderAssignment]] = [[sl1[i] for i in range(len(sl1)) if (i % n_parallel) == r] for r in range(n_parallel)]
         # slist: list[OrderAssignment], TabuList: set[Any], tabu_search: LotsAllocator, planning: ProductionPlanning
         rand_seeds = [self._params.rand_seed + worker_cnt + idx if self._params.rand_seed is not None else None for idx in range(len(slp))]
-        items = [CTabuWorker(sl, TabuList, self._allocator, planning, self._params.max_tsps_per_worker, rand_seed=rand_seeds[idx]) for idx, sl in enumerate(slp)]
+        items = [CTabuWorker(sl, TabuList, self._allocator, planning, self._params.max_tsps_per_worker, self._shifts, rand_seed=rand_seeds[idx]) for idx, sl in enumerate(slp)]
         solutions: list[tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]] = []
 
         # parallel tabu search loop
-        if self._params.NParallel > 1:
+        if n_parallel > 1:
             for result in pool.imap(BestN, items):
-                solutions.append(result)
+                if result is not None:
+                    solutions.append(result)
         else:  # serial tabu search loop
-            solutions.append(items[0].BestN())
+            result = items[0].BestN()
+            if result is not None:
+                solutions.append(result)
 
         swpbest: TabuSwap = None
         best_solution: ProductionPlanning = None
@@ -919,12 +923,13 @@ class TabuAlgorithm(LotsOptimizationAlgo):
                                   orders_custom_priority: dict[str, int] | None = None,
                                   forced_orders: list[str] | None = None,
                                   base_lots: dict[int, Lot] | None = None,
-                                  temporary_restrictions: TemporaryRestrictionsProvider|None= None
+                                  temporary_restrictions: TemporaryRestrictionsProvider|None= None,
+                                  shifts: Mapping[int, Sequence[PlannedWorkingShift]] | None = None
                                   ) -> TabuSearch:
         return TabuSearch(self._site, process, costs, snapshot, targets, initial_solution=initial_solution, min_due_date=min_due_date,
                           best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
                           orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots, params=self._params,
-                          temporary_restrictions=temporary_restrictions)
+                          temporary_restrictions=temporary_restrictions, shifts=shifts)
 
     def set_params(self, params: TabuParams):
         self._params = params
@@ -932,7 +937,8 @@ class TabuAlgorithm(LotsOptimizationAlgo):
 
 class CTabuWorker:
 
-    def __init__(self,  slist: list[OrderAssignment], TabuList: set[Any], tabu_search: LotsAllocator, planning: ProductionPlanning, max_tsps: int, rand_seed: int|None=None):
+    def __init__(self,  slist: list[OrderAssignment], TabuList: set[Any], tabu_search: LotsAllocator, planning: ProductionPlanning, max_tsps: int,
+                    shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None, rand_seed: int|None=None):
         self.slist: list[OrderAssignment] = slist
         self.TabuList: set[TabuSwap] = TabuList
         self.tabu_search: LotsAllocator = tabu_search
@@ -940,9 +946,10 @@ class CTabuWorker:
         self.max_tsps = max_tsps
         order_ids = [ass.order for ass in self.slist]
         self.orders: dict[str, Order] = {oid: self.tabu_search._orders[oid] for oid in order_ids}
+        self._shifts = shifts
         self.rand_seed: int|None = rand_seed
 
-    def BestN(self) -> tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]:
+    def BestN(self) -> tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]|None:
         targets: ProductionTargets = self.tabu_search._targets
         costs: CostProvider = self.tabu_search._costs
         snapshot = self.tabu_search._snapshot
@@ -960,6 +967,8 @@ class CTabuWorker:
         track_structure: bool = targets.material_weights is not None
         best_timed_out: bool = False
         swaps: list[TabuSwap] = self._get_swaps()
+        if len(swaps) == 0:
+            return None
         dummy_swaps: list[TabuSwap] = []  # for those we will not solve the TSP
         if self.max_tsps >= 0 and len(swaps) > self.max_tsps:
             # every worker has a limited budget of TSPs to solve, so we need to select those
@@ -1032,8 +1041,7 @@ class CTabuWorker:
                 assert len(new_assignments) == len(order_assignments), "Assignments missing"
             planning_candidate = ProductionPlanning(process=planning.process, order_assignments=new_assignments,
                                equipment_status=plant_status, target_structure=targets.material_weights,
-                               total_priority=planning.total_priority,
-                                previous_orders=previous_orders)
+                               total_priority=planning.total_priority, previous_orders=previous_orders)
             total_objectives = costs.process_objective_function(planning_candidate)
             #total_objectives = CostProvider.sum_objectives([self.costs.objective_function(status) for status in plant_status.values()])
             objective_fct = total_objectives.total_value
@@ -1091,8 +1099,8 @@ class CTabuWorker:
         set_later = False
         if best_solution.lots is None:
             set_later = True
-            best_solution.lots = ModelUtils.lots_for_assignments(plants, snapshot, best_solution.order_assignments,
-                                                                 targets.period[0], previous_orders=previous_orders)
+            best_solution.lots = ModelUtils.lots_for_assignments(plants, snapshot, best_solution.order_assignments, targets.period[0],
+                                                        previous_orders=previous_orders, shifts=self._shifts)
         return best_swap, best_solution, best_objective
 
     def _eval_dummy_swap(self, swap: TabuSwap) -> tuple[ProductionPlanning, ObjectiveFunction]:

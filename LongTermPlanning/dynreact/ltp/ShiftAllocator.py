@@ -126,6 +126,8 @@ class ShiftAllocator:
                 hours_by_shift: list[float] = LtpUtils._availability_to_hours(shifts, self._plant_availabilities[equipment.id])
                 limited_shifts = {shift_idx: h for shift_idx, h in enumerate(hours_by_shift) if h < hours_per_shift}
                 excluded_material: Sequence[str] | None = equipment.material_constraints.excluded if equipment.material_constraints is not None and len(equipment.material_constraints.excluded) > 0 else None
+                # TODO there is no longer a fixed production capacity, but it may depend on the material mix!
+                # Idea: use material mix from initial solution to determine the shift capacity(?)
                 prod_capacity = equipment.throughput_capacity * hours_per_shift
                 target_prod: np.ndarray = self._equipment_targets[equipment.id][:, shift_idx]
                 shift_targets = equipment_production_delta[equipment.id] + target_prod

@@ -54,6 +54,9 @@ class LtpInstance:
                                    fail_on_error=fail_on_validation_error, prefix="::LtpInstance equipment validation::")
             LtpUtils.analyze_storages(equipment_to_storages_flow, storages_to_equipment_flow, storage_levels, self._site, len(self._shifts),
                                    fail_on_error=fail_on_validation_error, prefix="::LtpInstance storage validation::")
+        if self._params.disable_shifts_allocator:
+            storage_levels["DONE"] = storage_levels["DONE"] * self._structure.total_production  # TODO ok?
+            return LtpUtils.to_results(self._site, self._shifts, self._structure, storage_levels, storages_to_equipment_flow, equipment_to_storages_flow)
         ## store results for later evaluation
         # LtpUtils.store_results(self._site, self._structure, self._shifts, self._availabilities,
         #                       storage_levels, storages_to_equipment_flow, equipment_to_storages_flow, "ltp_result.json", frozen_horizons=frozen_horizons)
@@ -183,7 +186,17 @@ class LtpInstance:
             hours_by_shift: list[float] = LtpUtils._availability_to_hours(shifts, self._availabilities[eq.id])
             limited_shifts = {shift_idx: h for shift_idx, h in enumerate(hours_by_shift) if h < hours_per_shift}
             excluded_material: Sequence[str]|None = eq.material_constraints.excluded if eq.material_constraints is not None and len(eq.material_constraints.excluded) > 0 else None
-            prod_capacity = eq.throughput_capacity * hours_per_shift
+            throughput = eq.throughput_capacity
+            has_mat_specific_throughput = False
+            mat_specific_throughput_cat = None
+            if eq.material_throughput is not None and len(eq.material_throughput) > 0:
+                throughput_categories = set([cat for cat, classes in material_categories.items() if any(c in classes for c in eq.material_throughput.keys())])
+                if len(throughput_categories) > 1:
+                    raise Exception(f"Cannot handle case of throughput specification for more than one material category: {eq.material_throughput}")
+                mat_specific_throughput_cat = next(iter(throughput_categories))
+                has_mat_specific_throughput = True
+                throughput = max(list(eq.material_throughput.values()) + [eq.throughput_capacity])
+            prod_capacity = throughput * hours_per_shift
             eq_lots: Sequence[Lot]|None = self._frozen_lots.get(eq.id) if frozen_horizons is not None else None
             # For each lot we need to determine its share per shift. Outer keys: lot ids, inner keys: shift index, value: share (0-1)
             shift_shares_by_lot: dict[str, dict[int, float]]|None = {lot.id: LtpInstance._shift_shares_for_lot((lot.start_time, lot.end_time), shifts, hours_by_shift) for lot in eq_lots} \
@@ -192,6 +205,14 @@ class LtpInstance:
             in_flow = None
             if eq.storage_in is not None:
                 u_flow = pc.RealVariable(name=f"u_flow_stg_eq_{eq.storage_in}_{eq.id}", shape=(classes_cnt + 1, num_shifts), lower=0.0, upper=prod_capacity)
+                if has_mat_specific_throughput:
+                    main_mats: list[str] = material_categories[mat_specific_throughput_cat]
+                    capacity_by_main_cats: dict[int, float] = {material_classes.index(mat): eq.material_throughput.get(mat, eq.throughput_capacity) for mat in main_mats}
+                    for mat_idx, mat_throughput in capacity_by_main_cats.items():
+                        if mat_throughput < throughput:
+                            flow_problem.require(u_flow[mat_idx, :] <= mat_throughput * hours_per_shift)
+                    flow_problem.require([u_flow[-1, shift_idx]**2 <= pc.sum([u_flow[mat, shift_idx] * (mat_throughput * hours_per_shift)
+                                                                                                for mat, mat_throughput in capacity_by_main_cats.items()]) for shift_idx in range(num_shifts)])
                 LtpUtils._set_material_constraints(flow_problem, u_flow, material_categories)
                 if frozen_horizons is not None and eq.id in frozen_horizons:
                     frozen_horizon: datetime = frozen_horizons[eq.id]
@@ -208,7 +229,7 @@ class LtpInstance:
                         # step 2: determine resulting production
                         total_weight = sum(lt.weight * shift_shares_by_lot[lt.id][shift_idx] for lt in shift_lots)
                         # determine if this exceeds the theoretical maximum => then need to reduce
-                        max_capacity = eq.throughput_capacity * hours_by_shift[shift_idx]  # TODO material-dependent capacity
+                        max_capacity = throughput * hours_by_shift[shift_idx]  # TODO material-dependent capacity
                         factor = 1
                         if total_weight > max_capacity:
                             total_weight = max_capacity
@@ -234,7 +255,7 @@ class LtpInstance:
                 # shift constraints
                 if len(limited_shifts) > 0:
                     # applied to the full production (class index -1)
-                    flow_problem.require([u_flow[-1, shift_idx] <= shift_hours * eq.throughput_capacity for shift_idx, shift_hours in limited_shifts.items()])
+                    flow_problem.require([u_flow[-1, shift_idx] <= shift_hours * throughput for shift_idx, shift_hours in limited_shifts.items()])
                 # equipment material constraints
                 if excluded_material is not None:
                     flow_problem.require([u_flow[material_classes.index(mat), :] == 0 for mat in excluded_material])
@@ -259,6 +280,16 @@ class LtpInstance:
                     forbidden_classes = forbidden_classes + [mat for mat in storage_material_constraints[stg] if mat not in forbidden_classes]
                 if forbidden_classes is not None:
                     flow_problem.require([u_flow[material_classes.index(mat), :] == 0 for mat in forbidden_classes])
+                if has_mat_specific_throughput:
+                    main_mats: list[str] = material_categories[mat_specific_throughput_cat]
+                    capacity_by_main_cats: dict[int, float] = {material_classes.index(mat): eq.material_throughput.get(mat, eq.throughput_capacity) for mat in main_mats if
+                                                               forbidden_classes is None or mat not in forbidden_classes}
+                    for mat_idx, mat_throughput in capacity_by_main_cats.items():
+                        if mat_throughput < throughput:
+                            flow_problem.require(u_flow[mat_idx, :] <= mat_throughput * hours_per_shift)
+                    for shift_idx in range(num_shifts):
+                        flow_problem.require(u_flow[-1, shift_idx]**2 <=
+                                             pc.sum([u_flow[mat, shift_idx] * (mat_throughput * hours_per_shift) for mat, mat_throughput in capacity_by_main_cats.items()]))
                 equipment_to_storage[eq.id][stg] = u_flow
                 out_flows.append(u_flow)
             # in flow == out flow, per mat class and shift

@@ -12,6 +12,8 @@ class LtpParams:
     "Enable some debugging checks and messages"
     max_iterations: int = 250
     "Maximum number of iterations for the Picos solver. See https://picos-api.gitlab.io/picos/api/picos.modeling.options.html#option-max-iterations."
+    disable_shifts_allocator: bool = False
+    "Unless this is set to true, the LTP will try to use as few shifts as possible."
     weight_storage_level: float = 1.
     "The optimization tries to keep storage levels close to 50%. This factor can be used to adapt the weight of this target in the objective function"
     weight_storage_level_input: float = 1.
@@ -24,6 +26,7 @@ class LtpParams:
     def __init__(self,
         debug: bool|None = None,
         max_iterations: int|None = None,
+        disable_shifts_allocator: bool|None= None,
         weight_storage_level: float|None = None,
         weight_storage_level_input: float|None = None,
         weight_storage_level_material_final: float|None = None,
@@ -36,6 +39,9 @@ class LtpParams:
         if max_iterations is None:
             max_iterations = int(os.getenv("LTP_ITERATIONS", LtpParams.max_iterations))
         self.max_iterations = max_iterations
+        if disable_shifts_allocator is None:
+            disable_shifts_allocator = os.getenv("LTP_DISABLE_SHIFTS_ALLOCATOR", "false").lower() in ("1", "true")
+        self.disable_shifts_allocator = disable_shifts_allocator
         if weight_storage_level is None:
             weight_storage_level = float(os.getenv("LTP_WEIGHT_STORAGE_LEVEL", LtpParams.weight_storage_level))
         self.weight_storage_level = weight_storage_level

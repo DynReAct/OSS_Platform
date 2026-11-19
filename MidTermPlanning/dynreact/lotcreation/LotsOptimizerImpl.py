@@ -4,7 +4,7 @@ import multiprocessing.pool
 import random
 from copy import copy
 from datetime import datetime
-from typing import Any, Sequence
+from typing import Any, Sequence, Mapping
 
 import networkx as nx
 import numpy as np
@@ -18,7 +18,7 @@ from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, Performan
 from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Snapshot, ProductionPlanning, ProductionTargets, Site, OrderAssignment, Order, \
-    EquipmentStatus, Lot, Equipment, EquipmentProduction, ObjectiveFunction
+    PlannedWorkingShift, Lot, EquipmentStatus, Lot, Equipment, EquipmentProduction, ObjectiveFunction, PlannedWorkingShift
 from dynreact.lotcreation.TabuParams import TabuParams
 from dynreact.lotcreation.globaltsp import GlobalTspInput
 from dynreact.lotcreation.globaltsp.BranchAndBoundWithEnsembleInput2 import GlobalSearchDefault
@@ -56,12 +56,14 @@ class TabuSearch(LotsOptimizer):
                  forced_orders:  list[str]|None = None,
                  base_lots: list[Lot]|None = None,
                  params: TabuParams|None=None,
-                 temporary_restrictions: TemporaryRestrictionsProvider | None = None
+                 shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None = None,
+                 temporary_restrictions: TemporaryRestrictionsProvider | None = None,
+                 **kwargs
                  ):
         super().__init__(site, process, costs, snapshot, targets, initial_solution, min_due_date=min_due_date,
                          best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
                          orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots,
-                         temporary_restrictions=temporary_restrictions)
+                         temporary_restrictions=temporary_restrictions, shifts=shifts, **kwargs)
         self._params: TabuParams = params if params is not None else TabuParams()
         self._performance_restrictions: list[PerformanceEstimation]|None = None
         self._forbidden_assignments: dict[str, list[int]] = {}

@@ -5,7 +5,7 @@ already contains an implementation (in the MidTermPlanning folder).
 """
 import time
 from datetime import timedelta, datetime
-from typing import Any, TypeVar, Generic, Sequence
+from typing import Any, TypeVar, Generic, Sequence, Mapping
 
 import numpy as np
 from pydantic import BaseModel
@@ -13,11 +13,10 @@ from pydantic import BaseModel
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.SnapshotProvider import SnapshotProvider
-from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider, RestrictionUtils, \
-    EquipmentRestriction, RuleSettings
+from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider, RestrictionUtils, EquipmentRestriction, RuleSettings
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import ProductionPlanning, PlanningData, ProductionTargets, Snapshot, OrderAssignment, Site, \
-    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction, MaterialClass
+    PlannedWorkingShift, ObjectiveFunction, Lot, Material, Equipment, Order, EquipmentStatus, MaterialClass, EquipmentProduction
 from dynreact.base.monitoring import ServiceMetrics, Histogram
 
 
@@ -121,7 +120,9 @@ class LotsOptimizer(Generic[P]):
                  forced_orders: list[str] | None = None,
                  # TODO if this is set, then a corresponding initial solution should be provided(?)
                  base_lots: dict[int, Lot] | None = None,  # Keys: equipment id; used to extend existing lots
-                 temporary_restrictions: TemporaryRestrictionsProvider|None = None
+                 temporary_restrictions: TemporaryRestrictionsProvider|None = None,
+                 shifts: Mapping[int, Sequence[PlannedWorkingShift]] | None = None,
+                 **kwargs
                  ):
         self._listeners: list[OptimizationListener] = []
         self._site: Site = site
@@ -205,6 +206,7 @@ class LotsOptimizer(Generic[P]):
         self._base_assignments: dict[str, OrderAssignment]|None = {o: OrderAssignment(order=o, equipment=lot.equipment, lot=lot.id, lot_idx=idx+1)
                                                             for lot in base_lots.values() for idx, o in enumerate(lot.orders)} if base_lots is not None else None
         self._orders = LotsOptimizationAlgo.orders_apply_temporary_constraints(self._orders, temporary_restrictions, equipment=self._plant_ids) if self._orders is not None else None
+        self._shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None = shifts
 
     def process(self) -> str:
         return self._process

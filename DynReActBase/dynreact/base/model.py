@@ -388,6 +388,10 @@ class EquipmentStatus(Model, Generic[P]):
     "Previous order id"
     current_material: list[str] | None = None
     "Material ids belonging to the currently processed order, if not the complete order"
+    current_start_time: datetime | None = None
+    "Estimated processing start time for current order or material"
+    current_end_time: datetime|None = None
+    "Estimated processing end time after current order or material"
     # @deprecated
     current: str|None = Field(None, deprecated=True)
     # @deprecated

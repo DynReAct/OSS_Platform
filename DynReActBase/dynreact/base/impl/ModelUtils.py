@@ -1,3 +1,4 @@
+from bisect import bisect_right
 from datetime import datetime, timedelta, date
 from typing import Mapping, Sequence
 
@@ -673,3 +674,69 @@ class ModelUtils:
                 plant_lots.append(lot)
             result_sorted[plant_id] = plant_lots
         return result_sorted
+
+    @staticmethod
+    def processing_time_for_duration(
+            total_duration: timedelta,
+            earliest_start_time: datetime,
+            shifts: Sequence[PlannedWorkingShift],
+            shift_starts: Sequence[datetime]|None=None) -> tuple[datetime|None, datetime|None, float]:
+        """
+        Determines the actual processing time based on shift information at a line.
+
+        Parameters:
+            total_duration: for full-capacity operation
+            earliest_start_time:
+            shifts:
+            shift_starts:
+
+        Returns:
+            start, end time, indicator if complete processing is possible within the specified shifts; if equal to 1, then full processing is possible,
+            otherwise the fraction indicates the portion processed
+        """
+        if len(shifts) == 0:
+            return None, None, 0
+        last = shifts[-1]
+        if earliest_start_time >= last.period[1]:
+            return None, None, 0
+        if earliest_start_time >= last.period[0] or len(shifts) == 1:
+            frac_worktime = last.worktime / (last.period[1] - last.period[0])
+            start = max(earliest_start_time, last.period[0])
+            end = min(last.period[1], start + total_duration / frac_worktime)
+            fraction = 1 if end <= last.period[1] else (end-start) / total_duration * frac_worktime
+            return start, end, fraction
+        shift_starts = shift_starts or [s.period[0] for s in shifts]
+        # binary search
+        shift_idx = bisect_right(shift_starts, earliest_start_time)
+        previous = shifts[shift_idx-1]
+        if earliest_start_time < previous.period[1]:
+            start_idx = shift_idx-1
+        else:
+            start_idx = shift_idx
+        done: timedelta = timedelta()
+        start = None
+        end = None
+        for shift_idx in range(start_idx, len(shifts)):
+            is_first = shift_idx == start_idx
+            shift = shifts[shift_idx]
+            start = start or max(earliest_start_time, shift.period[0])
+            max_duration = shift.worktime
+            if is_first and start > shift.period[0]:
+                max_duration = (start - shift.period[0])/(shift.period[1] - shift.period[0]) * max_duration
+            if done + max_duration <= total_duration:
+                done = done + max_duration
+                end = shift.period[1]
+                if done == total_duration:
+                    break
+            else:
+                missing_duration = total_duration - done
+                frac_working = shift.worktime / (shift.period[1] - shift.period[0])
+                end = (start if is_first else shift.period[0]) + missing_duration / frac_working
+                done = total_duration
+                break
+        fraction = 1 if done >= total_duration else done/total_duration
+        return start, end, fraction
+
+
+
+

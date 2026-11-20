@@ -47,7 +47,7 @@ class OptimizationTest(unittest.TestCase):
         start_assignments: dict[str, OrderAssignment] = {o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for o in orders}  # nothing assigned yet
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
-        algo: LotsOptimizationAlgo = _init_algo(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site, n_parallel=1)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
@@ -94,7 +94,7 @@ class OptimizationTest(unittest.TestCase):
         }
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
-        algo: LotsOptimizationAlgo = _init_algo(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site, n_parallel=1)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
@@ -179,7 +179,7 @@ class OptimizationTest(unittest.TestCase):
         start_assignments: dict[str, OrderAssignment] = {o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for o in orders}  # nothing assigned yet
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
-        algo: LotsOptimizationAlgo = _init_algo(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site, n_parallel=1)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
@@ -221,7 +221,7 @@ class OptimizationTest(unittest.TestCase):
         start_assignments: dict[str, OrderAssignment] = {o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for o in orders}  # nothing assigned yet
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
-        algo: LotsOptimizationAlgo = _init_algo(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site, n_parallel=1)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, orders_custom_priority=custom_priorities)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
@@ -265,7 +265,7 @@ class OptimizationTest(unittest.TestCase):
                                                        snapshot, planning_period, previous_order=orders[0].id) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,
                                                                   equipment_status=initial_status, previous_orders={p_id: orders[0].id})
-        algo: LotsOptimizationAlgo = _init_algo(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site, n_parallel=1)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
@@ -302,7 +302,7 @@ class OptimizationTest(unittest.TestCase):
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments,
                                                        snapshot, planning_period, previous_order=orders[0].id) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,equipment_status=initial_status)
-        algo: LotsOptimizationAlgo = _init_algo(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site, n_parallel=1)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
@@ -386,7 +386,7 @@ class OptimizationTest(unittest.TestCase):
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments,
                                                        snapshot, planning_period, previous_order=orders[0].id) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,equipment_status=initial_status)
-        algo: LotsOptimizationAlgo = _init_algo(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site, n_parallel=1)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, forced_orders=[special_order])
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
@@ -432,7 +432,7 @@ class OptimizationTest(unittest.TestCase):
         start_assignments.update({o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for idx, o in enumerate(orders) if o.id not in orders_in_lots})
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments,equipment_status=initial_status, previous_orders={p: lot.orders[-1] for p, lot in initial_lots.items()})
-        algo: LotsOptimizationAlgo = _init_algo(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site, n_parallel=1)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution, base_lots=initial_lots)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
@@ -659,12 +659,12 @@ class OptimizationTest(unittest.TestCase):
         start_assignments: dict[str, OrderAssignment] = { o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for o in orders}
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period, previous_order=previous_orders[p.id]) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status, previous_orders=previous_orders)
-        algo: LotsOptimizationAlgo = _init_algo(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site, n_parallel=1)
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution)
 
         def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
             all_lots = solution.get_lots()
-            assert len(all_lots) == 2, f"Expected updated lots for two plants, got {len(all_lots)}"
+            assert len(all_lots) == 2, f"Expected updated lots for two plants, got {len(all_lots)}, for plants: {list(all_lots.keys())}"
             lots_flat = [lot for lots in all_lots.values() for lot in lots]
             assert len(lots_flat) == 2, f"Expected two updated lots, got {len(lots_flat)}"
             first = all_lots.get(0)
@@ -708,7 +708,7 @@ class OptimizationTest(unittest.TestCase):
 
         target_weight: float = sum(o.actual_weight for o in orders)/2
         targets: ProductionTargets = ProductionTargets(process=process, target_weight={p.id: EquipmentProduction(equipment=p.id, total_weight=target_weight) for p in plants},period=planning_period)
-        algo: LotsOptimizationAlgo = _init_algo(test_site)
+        algo: LotsOptimizationAlgo = _init_algo(test_site, n_parallel=1)
         start_solution = algo.heuristic_solution(process, snapshot, timedelta(days=1), costs, None, targets, [o.id for o in all_orders], previous_orders=previous_orders)[0]
         start_assignments: dict[str, OrderAssignment] = start_solution.order_assignments
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period, previous_order=previous_orders[p.id]) for p in plants}
@@ -860,13 +860,10 @@ class OptimizationTest(unittest.TestCase):
         optimization_state: LotsOptimizationState = optimization.run(max_iterations=20)  # with 4 orders available and 1 equipment, the optimization should not take too long
         listener.check()
 
-
-
-
     @staticmethod
     def _create_order(id: str, plants: list[int], weight: float, due_date: datetime|None=None, priority: int=0, material_classes: Mapping[str, str]|None=None):
         return Order(id=id, allowed_equipment=plants, target_weight=weight, actual_weight=weight, due_date=due_date, material_properties=TestMaterial(material_id="test"),
-                     current_processes=[], active_processes={}, priority=priority, material_classes=material_classes)
+                     current_processes=[], active_processes={}, priority=priority, material_classes=material_classes or {})
 
     @staticmethod
     def _create_coils_for_orders(orders: list[Order], process: int) -> list[Material]:  # one coil per order

@@ -207,6 +207,25 @@ class LotsOptimizer(Generic[P]):
                                                             for lot in base_lots.values() for idx, o in enumerate(lot.orders)} if base_lots is not None else None
         self._orders = LotsOptimizationAlgo.orders_apply_temporary_constraints(self._orders, temporary_restrictions, equipment=self._plant_ids) if self._orders is not None else None
         self._shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None = shifts
+        start_time = targets.period[0]
+        equipment_starts: dict[int, datetime] = {p: start_time for p in target_plants}
+        if initial_solution is not None and initial_solution.previous_orders is not None:
+            start_orders = initial_solution.previous_orders
+            for p, order in start_orders.items():
+                o_obj = snapshot.get_order(order)
+                if o_obj is not None and o_obj.lot_start_end_times and process in o_obj.lot_start_end_times:
+                    end_time = o_obj.lot_start_end_times[process][1]
+                    if end_time > targets.period[0]:
+                        equipment_starts[p] = end_time
+        _empty = tuple()
+        if shifts:
+            for p in target_plants:
+                eq_shifts = shifts.get(p, _empty)
+                if len(eq_shifts) == 0:  # how to deal with this case? Probably nothing should be allocated then? Same case if eq is not included in shifts
+                    continue
+                if eq_shifts[0].period[0] > equipment_starts[p]:
+                    equipment_starts[p] = eq_shifts[0].period[0]
+        self._equipment_start_times: Mapping[int, datetime] = equipment_starts
 
     def process(self) -> str:
         return self._process

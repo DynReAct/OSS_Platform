@@ -654,9 +654,10 @@ class LotsAllocator:
             end = None
             throughput = capa_by_order.get(next_order.id, capa)
             if throughput is not None:
-                start = self._equipment_start_times[plant_id] if len(route) == 0 else status.current_end_time
+                start = self._equipment_start_times[plant_id] if len(route) == 0 else status[0].current_end_time
                 duration = timedelta(hours=next_order.actual_weight / throughput)
-                start, end, frac = ModelUtils.processing_time_for_duration(duration, start, eq_shifts, shift_starts=eq_shifts_start) \
+                if start is not None:
+                    start, end, frac = ModelUtils.processing_time_for_duration(duration, start, eq_shifts, shift_starts=eq_shifts_start) \
                             if eq_shifts is not None else (start, start + duration, 1)
                 # TODO what if frac < 1?
             if len(route) == 0:
@@ -1312,8 +1313,6 @@ class CTabuWorker:
                 if o1 != o2:
                     return True
         return False
-
-
 
 
 # must be defined in global scope for being useable with pool.imap

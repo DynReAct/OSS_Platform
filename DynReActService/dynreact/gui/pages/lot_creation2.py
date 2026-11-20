@@ -1853,6 +1853,7 @@ def update_figure(history: list[float]|None):
           Output("lots2-warning-message", "className"),
 
           State({"role": "snapshot-selector", "page": translations_key}, "data"),
+          State("lots2-planning-itv-start", "data"),
           State("lots2-check-use-lot-range", "value"),
           State("lots2-check-append_to_lot", "value"),
           State("lots2-details-plants", "children"),
@@ -1884,6 +1885,7 @@ def update_figure(history: list[float]|None):
           Input("lang", "data")
           )
 def process_changed(snapshot: datetime|None,
+                    period_start,
                     use_lot_range0: list[Literal[""]],
                     append_to_lots0: list[Literal[""]],
                     target_elements: list[Component]|None,
@@ -2024,7 +2026,7 @@ def process_changed(snapshot: datetime|None,
                 selection_disabled, title, interval, True, warning_message, warning_class)
     result_selector_hidden = selected_init_method != "result"
     # here start optimization
-    start_disabled, error_msg, info_msg = check_start_optimization(changed_ids, process, snapshot, iterations, horizon_hours, selected_init_method,
+    start_disabled, error_msg, info_msg = check_start_optimization(changed_ids, process, snapshot, iterations, period_start, horizon_hours, selected_init_method,
                 existing_solution if selected_init_method == "result" else None, use_lot_range, append_to_lots, target_elements, perf_model_elements, material_structure,
                 orders_custom_priority, selected_order_rows, create_comment, store_results, _tab)
     if len(warning_message) == 0 and info_msg is not None:
@@ -2100,7 +2102,7 @@ def continue_optimization(changed_ids: list[str], process: str|None, iterations:
 
 
 #TODO take into account planning horizon / horizon hours?
-def check_start_optimization(changed_ids: list[str], process: str|None, snapshot: datetime|None, iterations: int|None,
+def check_start_optimization(changed_ids: list[str], process: str|None, snapshot: datetime|None, iterations: int|None, period_start: str|None,
                              horizon_hours: int, selected_init_method: Literal["heuristic", "duedate", "snapshot", "result"],
                              existing_solution: str|None,
                              use_lot_range: bool,
@@ -2124,7 +2126,8 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
         return is_running, None, None
     snapshot_obj = state.get_snapshot(snapshot)
     horizon = timedelta(hours=horizon_hours)
-    period: tuple[datetime, datetime] = (snapshot_obj.timestamp, snapshot_obj.timestamp + horizon)
+    start_time = DatetimeUtils.parse_date(period_start) or snapshot_obj.timestamp
+    period: tuple[datetime, datetime] = (start_time, start_time + horizon)
     is_start_command = "lots2-start" in changed_ids and not is_running
     if append_to_lots and not is_running and tab == "settings":  # only if tab is settings to avoid too frequent updates
         # fail if there is a plant without selected lot
@@ -2148,7 +2151,6 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
         try:
             snapshot_obj = state.get_snapshot(snapshot)
             horizon = timedelta(hours=horizon_hours)
-            period: tuple[datetime, datetime] = (snapshot_obj.timestamp, snapshot_obj.timestamp + horizon)
             persistence = state.get_results_persistence()
             optimization_state: LotsOptimizationState | None = None
             initial_solution: ProductionPlanning|None = None
@@ -2221,11 +2223,11 @@ def check_start_optimization(changed_ids: list[str], process: str|None, snapshot
                 raise Exception("No orders included")  # TODO
             if create_comment is not None and len(create_comment) > 0 and parameters is not None:
                 parameters["comment"] = create_comment
+            shifts: typing.Mapping[int, Sequence[PlannedWorkingShift]] = state.get_shifts_provider().load_all(targets.period[0], targets.period[0] + timedelta(days=8), equipments=list(targets.target_weight.keys()), limit=250)
             optimization: LotsOptimizer[any] = optimization_algo.create_instance(process,
                     snapshot_obj, state.get_cost_provider(), targets=targets, initial_solution=initial_solution, min_due_date=None,
                     best_solution=best_solution, history=history, parameters=parameters, orders=orders, performance_models=perf_models,
-                    orders_custom_priority=orders_custom_priority)   # TODO due date?
-            # state.get_optimization_state().stop()  # TODO required?
+                    orders_custom_priority=orders_custom_priority, shifts=shifts)   # TODO due date?
             time_id: str = DatetimeUtils.format(DatetimeUtils.now(), use_zone=False).replace("-", "").replace(":", "").replace("T", "")
             lot_creation_listener = FrontendOptimizationListener(id=process + "_" + time_id if existing_solution is None else existing_solution,
                 persistence=persistence, store_results=store_results, optimization=optimization, initial_state=optimization_state, parameters=parameters)

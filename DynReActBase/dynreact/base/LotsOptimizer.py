@@ -206,7 +206,8 @@ class LotsOptimizer(Generic[P]):
         self._base_assignments: dict[str, OrderAssignment]|None = {o: OrderAssignment(order=o, equipment=lot.equipment, lot=lot.id, lot_idx=idx+1)
                                                             for lot in base_lots.values() for idx, o in enumerate(lot.orders)} if base_lots is not None else None
         self._orders = LotsOptimizationAlgo.orders_apply_temporary_constraints(self._orders, temporary_restrictions, equipment=self._plant_ids) if self._orders is not None else None
-        self._shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None = shifts
+        _td = timedelta()
+        self._shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None = {eq: [s for s in eq_shifts if s.worktime > _td] for eq, eq_shifts in shifts.items()} if shifts is not None else None
         start_time = targets.period[0]
         equipment_starts: dict[int, datetime] = {p: start_time for p in target_plants}
         if initial_solution is not None and initial_solution.previous_orders is not None:
@@ -225,6 +226,9 @@ class LotsOptimizer(Generic[P]):
                     continue
                 if eq_shifts[0].period[0] > equipment_starts[p]:
                     equipment_starts[p] = eq_shifts[0].period[0]
+        if initial_solution and not initial_solution.lots:
+            initial_solution.lots = ModelUtils.lots_for_assignments(self._plants, snapshot, initial_solution.order_assignments, targets.period[0],
+                                                                    previous_orders=self._previous_orders, shifts=shifts)
         self._equipment_start_times: Mapping[int, datetime] = equipment_starts
 
     def process(self) -> str:

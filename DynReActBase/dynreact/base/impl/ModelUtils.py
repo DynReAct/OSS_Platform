@@ -668,7 +668,7 @@ class ModelUtils:
                     else:
                         start_time_lot = lot_start
                         end_time_lot = lot_start + duration
-                        lot_start = end_time_lot
+                    lot_start = end_time_lot
                 lot = Lot(id=lot_id, equipment=plant_id, active=lots_active and start_time_lot is not None, status=1, orders=[order_data[idx] for idx in lot_indices], weight=lot_weight,
                           material_weights=mat_weights, start_time=start_time_lot, end_time=end_time_lot)
                 plant_lots.append(lot)

@@ -1,7 +1,9 @@
-from datetime import datetime
-from typing import Literal, Sequence, Mapping, TypeAlias
+from bisect import bisect_right
+from datetime import datetime, timedelta
+from typing import Literal, Sequence, Mapping, TypeAlias, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
+from typing_extensions import Self
 
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.model import Order, Site, Material, EnergyType
@@ -163,6 +165,49 @@ class EnergyPriceCurve(BaseModel, use_attribute_docstrings=True):
     entries: Sequence[EnergyCharacteristics]
     "Ordered list of entries for consecutive time interval."
     cost_unit: str = "€"
+    # internally used fields below; set in model validator
+    start_end: tuple[datetime, datetime]|None
+    start_times: tuple[datetime, ...]
+
+    @model_validator(mode="before")
+    def validate(self) -> Self:
+        if not self.start_end and len(self.entries) > 0:
+            self.start_end = (self.entries[0].validity[0], self.entries[-1].validity[1])
+        if not self.start_times:
+            self.start_times = tuple([e.validity[0] for e in self.entries])
+        return self
+
+    def average_price(self, start: datetime, end: datetime, default_price: float|None=None):
+        """
+        Parameters:
+            start:
+            end:
+            default_price:
+        Returns:
+             price in
+        """
+        if not self.start_end or end <= self.start_end[0] or start >= self.start_end[1] or end < start:
+            return default_price
+        if end <= self.entries[0].validity[1]:
+            return self.entries[0].costs_per_mwh
+        if start >= self.entries[-1].validity[0]:
+            return self.entries[-1].costs_per_mwh
+        start_idx = bisect_right(self.start_times, start) - 1
+        total_duration: timedelta = timedelta()
+        total_value: timedelta = timedelta()
+        for entry in self.entries[start_idx:]:
+            validity = entry.validity
+            if start > validity[0]:
+                if end <= validity[1]:
+                    return entry.costs_per_mwh
+                delta = validity[1] - start
+            elif end <= validity[0]:
+                break
+            else:
+                delta = validity[1] - validity[0]
+            total_duration += delta
+            total_value += entry.costs_per_mwh * delta
+        return total_value / total_duration
 
 
 class EnergyCostService:

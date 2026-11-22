@@ -598,7 +598,10 @@ class LotsAllocator:
                     targets: ProductionTargets, params: TabuParams, total_priority: int|None, forbidden_assignments: dict[str, list[int]],
                     forced_orders: list[str]|None, previous_orders: dict[int, str]|None, base_lots: dict[int, Lot]|None, base_lot_weights: dict[int, float]|None,
                     base_assignments: dict[str, OrderAssignment]|None, main_category: str|None, orders_custom_priority: dict[str, int] | None,
-                    shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None, equipment_start_times: Mapping[int, datetime]):
+                    shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None, equipment_start_times: Mapping[int, datetime],
+                   # keys: energy type, equipment, order
+                    energy_predictions: Mapping[EnergyType, Mapping[int, Mapping[str, EnergyPrediction]]] | None = None,
+                    energy_price_curves: Mapping[EnergyType, EnergyPriceCurve] | None = None):
         self._process = process
         self._plants = plants
         self._orders = orders
@@ -616,6 +619,11 @@ class LotsAllocator:
         self._main_category = main_category
         self._orders_custom_priority = orders_custom_priority
         self._equipment_start_times: Mapping[int, datetime] = equipment_start_times
+        # keys: energy type, equipment, order
+        self._energy_predictions: Mapping[EnergyType, Mapping[int, Mapping[str, EnergyPrediction]]] | None = energy_predictions \
+                if energy_predictions is not None and len(energy_predictions) > 0 else None
+        self._energy_price_curves: Mapping[EnergyType, EnergyPriceCurve] | None = energy_price_curves \
+                if energy_price_curves is not None and len(energy_price_curves) > 0 else None
         # keys: equipment id; material class id
         self._mat_throughput: Mapping[int, Mapping[str, float]] = {p.id: p.material_throughput for p in plants.values() if p.material_throughput is not None}
         self._shifts: Mapping[int, Sequence[PlannedWorkingShift]] | None = shifts
@@ -694,6 +702,17 @@ class LotsAllocator:
             bound_factor = 0 if num_orders < 5 else 1 if num_orders >= 10 else 0.25 + (num_orders - 5) / 5 * 0.75
         elif bound_factor < 0:
             bound_factor = 0
+        energy_prices: Mapping[EnergyType, EnergyPriceCurve] | None = self._energy_price_curves
+        energy_predictions: Mapping[EnergyType,Mapping[str, EnergyPrediction]] | None = None
+        has_energy: bool = False
+        energy_costs_factor: float|None = self._params.energy_costs_penalty
+        if self._energy_predictions is not None and self._energy_price_curves is not None:
+            energy_predictions = {et: pred[plant_id] for et, pred in self._energy_predictions.items() if plant_id in pred and len(pred[plant_id] > 0)}
+            energy_prices = self._energy_price_curves
+            if len(energy_predictions) == 0:
+                energy_predictions = None
+            else:
+                has_energy = True
 
         def global_costs(route: npt.NDArray[np.uint16], next_item: np.uint16, status: tuple[EquipmentStatus, ObjectiveFunction]) -> tuple[EquipmentStatus, ObjectiveFunction]:
             # Note that material structure need not be considered here, it is fixed by the order assignments to equipment
@@ -712,12 +731,37 @@ class LotsAllocator:
                 oid = next_order.id
                 assignments = {oid: OrderAssignment(order=oid, equipment=plant_id, lot=dummy_lot, lot_idx=1)}
                 assignments.update({o.id: OrderAssignment(order=o.id, equipment=-1, lot="", lot_idx=-1) for o in orders if o.id != oid})
-                status = self._costs.evaluate_equipment_assignments(plant_targets, self._process, assignments, snapshot, self._targets.period,
+                status0 = self._costs.evaluate_equipment_assignments(plant_targets, self._process, assignments, snapshot, self._targets.period,
                                                                     previous_order=prev_order, orders_custom_priority=self._orders_custom_priority)
                 if end is not None:  # TODO update also objective function
-                    status.current_start_time = start
-                    status.current_end_time = end
-                return status, costs.objective_function(status)
+                    status0.current_start_time = start
+                    status0.current_end_time = end
+                obj = costs.objective_function(status0)
+                if end is not None and has_energy:
+                    energy_usage = {}
+                    energy_costs = {}
+                    energy_costs_obj = {}
+                    for e_type, predictions in energy_predictions.items():
+                        pred: EnergyPrediction | None = predictions.get(oid)
+                        if pred is not None:  # TODO what if it is? Option to use a default?
+                            energy_usage[e_type] = pred.predicted_energy
+                            # if energy_usage_obj:  # ?
+                            #    energy_usage_obj[e_type] = energy_usage_obj.get(e_type, 0.) + pred.predicted_energy * [TODO factor]
+                            if energy_prices and e_type in energy_prices and energy_costs:
+                                # determine cost factor for the considered time interval!
+                                # TODO handle None case, respectively provide a reasonable default # IMPORTANT
+                                avg_price = energy_prices[e_type].average_price(start, end)
+                                if avg_price is not None:
+                                    energy_costs[e_type] = pred.predicted_energy
+                                    if energy_costs_factor:
+                                        energy_costs_obj[e_type] = pred.predicted_energy * energy_costs_factor
+                    if len(energy_usage) > 0:
+                        status0.energy_usage = energy_usage
+                    if len(energy_costs) > 0:
+                        status0.energy_costs = energy_costs
+                    if len(energy_costs_obj) > 0:
+                        obj.energy_costs = energy_costs_obj
+                return status0, obj
             current: Order = orders[route[-1]]
             next_o: Order = orders[next_item]
             new_lot: bool = len(route) == 0 or self.create_new_lot_costs_based(transition_costs[route[-1], next_item])
@@ -725,6 +769,31 @@ class LotsAllocator:
             if end is not None:  # TODO update also objective function
                 new_status.current_start_time = start
                 new_status.current_end_time = end
+            if end is not None and has_energy and status[0].energy_usage:
+                new_status.energy_usage = dict(status[0].energy_usage)
+                new_status.energy_costs = dict(status[0].energy_costs)
+                #old_obj = status[1]
+                energy_usage = new_status.energy_usage
+                energy_costs = new_status.energy_costs
+                energy_usage_obj = dict(status[1].energy_usage) if status[1].energy_usage is not None else None
+                energy_costs_obj = dict(status[1].energy_costs) if status[1].energy_costs is not None else None
+                new_obj.energy_usage = energy_usage_obj
+                new_obj.energy_costs = energy_costs_obj
+                for e_type, predictions in energy_predictions.items():
+                    pred: EnergyPrediction|None = predictions.get(next_o.id)
+                    if pred is not None:  # TODO what if it is? Option to use a default?
+                        energy_usage[e_type] = energy_usage.get(e_type, 0.) + pred.predicted_energy
+                        #if energy_usage_obj:  # ?
+                        #    energy_usage_obj[e_type] = energy_usage_obj.get(e_type, 0.) + pred.predicted_energy * [TODO factor]
+                        if energy_prices and e_type in energy_prices and energy_costs:
+                            # determine cost factor for the considered time interval!
+                            # TODO handle None case, respectively provide a reasonable default
+                            avg_price = energy_prices[e_type].average_price(start, end)
+                            if avg_price is not None:
+                                costs = avg_price * pred.predicted_energy / 1e3
+                                energy_costs[e_type] = energy_costs.get(e_type, 0.) + costs
+                                if energy_costs_obj:
+                                    energy_costs_obj[e_type] = energy_costs.get(e_type, 0.) + costs * energy_costs_factor
             return new_status, new_obj
 
         def eval_costs(status: tuple[EquipmentStatus, ObjectiveFunction], is_final: bool) -> float:
@@ -1026,6 +1095,9 @@ class TabuAlgorithm(LotsOptimizationAlgo):
             raise NotApplicableException()
         self._params = TabuParams()
 
+    def set_params(self, params: TabuParams):
+        self._params = params
+
     def _create_instance_internal(self, process: str, snapshot: Snapshot, targets: ProductionTargets,
                                   costs: CostProvider, initial_solution: ProductionPlanning, min_due_date: datetime|None = None,
                                   # the next two are for initialization from a previous optimization run
@@ -1046,9 +1118,6 @@ class TabuAlgorithm(LotsOptimizationAlgo):
                           orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots, params=self._params,
                           temporary_restrictions=temporary_restrictions, shifts=shifts,
                           energy_prices=energy_prices, energy_services=energy_services, **kwargs)
-
-    def set_params(self, params: TabuParams):
-        self._params = params
 
 
 class CTabuWorker:

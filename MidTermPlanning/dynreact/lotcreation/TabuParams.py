@@ -24,6 +24,8 @@ class TabuParams:
     "Maximum transition cost within lot; cf. new lot costs in cost provider (default: 3, for SimpleCostProvider)"
     CostNaN: float = 50.0
     "default if cost can not be calculated"
+    energy_costs_penalty: float|None = None
+    "If unset, energy-sensitive scheduling is not applied. Factor for conversion of actual costs into virtual costs."
     init_order_on_start: bool = True
     "Test setting"
     tsp_solver_global_costs: Literal["ortools", "globalbb", "default"] = "default"
@@ -86,6 +88,7 @@ class TabuParams:
                  NParallel: int|None = None,
                  TAllowed: float|None = None,
                  CostNaN: float|None = None,
+                 energy_costs_penalty: float|None = None,
                  init_order_on_start: bool|None=None,
                  tsp_solver_global_costs: Literal["ortools", "globalbb", "default"]|None = None,
                  tsp_solver_global_bound_factor: float | None = None,
@@ -125,6 +128,11 @@ class TabuParams:
             CostNaN = float(os.getenv("TABU_COST_NAN", TabuParams.CostNaN))
         self.CostNaN = CostNaN
         "default if cost cannot be calculated"
+        if energy_costs_penalty is None:
+            ec0 = os.getenv("ENERGY_COSTS_PENALTY")
+            if ec0:
+                energy_costs_penalty = float(ec0)
+        self.energy_costs_penalty = energy_costs_penalty
         if init_order_on_start is None:
             init_order_on_start0 = os.getenv("INIT_ORDER_ON_START")
             if init_order_on_start0 is not None:

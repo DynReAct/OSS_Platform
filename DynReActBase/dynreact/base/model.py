@@ -398,6 +398,10 @@ class EquipmentStatus(Model, Generic[P]):
     "Estimated processing start time for current order or material"
     current_end_time: datetime|None = None
     "Estimated processing end time after current order or material"
+    energy_usage: Mapping[EnergyType, float]|None = None
+    "Energy usage by type"
+    energy_costs: Mapping[EnergyType, float] | None = None
+    "Energy costs by type"
     # @deprecated
     current: str|None = Field(None, deprecated=True)
     # @deprecated

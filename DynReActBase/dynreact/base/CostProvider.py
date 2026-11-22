@@ -5,11 +5,12 @@ the custom logic for building an objective function for schedules.
 """
 
 from datetime import datetime, timedelta
-from typing import Mapping
+from typing import Mapping, Sequence
 
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Equipment, Order, Material, Snapshot, EquipmentStatus, Site, ProductionPlanning, \
-    OrderAssignment, ProductionTargets, EquipmentProduction, ObjectiveFunction, SUM_MATERIAL, MaterialCategory, Lot
+    OrderAssignment, ProductionTargets, EquipmentProduction, ObjectiveFunction, SUM_MATERIAL, MaterialCategory, Lot, \
+    PlannedWorkingShift
 
 
 class CostProvider:
@@ -65,7 +66,7 @@ class CostProvider:
 
     def evaluate_order_assignments(self, process: str, assignments: dict[str, OrderAssignment], targets: ProductionTargets,
                                    snapshot: Snapshot, total_priority: int|None = None, orders_custom_priority: dict[str, int]|None=None,
-                                   previous_orders: dict[int, str]|None = None) -> ProductionPlanning:
+                                   previous_orders: dict[int, str]|None = None, shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None=None) -> ProductionPlanning:
         """
 
         Parameters:
@@ -101,7 +102,7 @@ class CostProvider:
                     total_priority += my_prio
             else:
                 total_priority = sum(snapshot.get_order(order_id, do_raise=True).priority for order_id in order_assignments)
-        lots = ModelUtils.lots_for_assignments(plants, snapshot, order_assignments, targets.period[0], previous_orders=previous_orders)
+        lots = ModelUtils.lots_for_assignments(plants, snapshot, order_assignments, targets.period[0], previous_orders=previous_orders, shifts=shifts, lots_active=True)  # XXX why active?
         return ProductionPlanning(process=process, order_assignments=order_assignments, equipment_status=status,
                                   target_structure=target_structure, total_priority=total_priority, previous_orders=previous_orders, lots=lots)
 

@@ -14,11 +14,10 @@ from dynreact.base.CostProvider import CostProvider
 from dynreact.base.EnergyService import EnergyCostService, EnergyService
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.SnapshotProvider import SnapshotProvider
-from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider, RestrictionUtils, \
-    EquipmentRestriction, RuleSettings
+from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider, RestrictionUtils, EquipmentRestriction, RuleSettings
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import ProductionPlanning, PlanningData, ProductionTargets, Snapshot, OrderAssignment, Site, \
-    EquipmentStatus, Equipment, Order, Material, Lot, EquipmentProduction, ObjectiveFunction, MaterialClass, EnergyType
+    PlannedWorkingShift, ObjectiveFunction, Lot, Material, Equipment, Order, EquipmentStatus, MaterialClass, EquipmentProduction, EnergyType
 from dynreact.base.monitoring import ServiceMetrics, Histogram
 
 
@@ -125,6 +124,7 @@ class LotsOptimizer(Generic[P]):
                  temporary_restrictions: TemporaryRestrictionsProvider|None = None,
                  energy_services: Mapping[EnergyType, EnergyService] | None = None,
                  energy_prices: Mapping[EnergyType, EnergyCostService] | None = None,
+                 shifts: Mapping[int, Sequence[PlannedWorkingShift]] | None = None,
                  **kwargs
                  ):
         self._listeners: list[OptimizationListener] = []
@@ -211,6 +211,30 @@ class LotsOptimizer(Generic[P]):
         self._orders = LotsOptimizationAlgo.orders_apply_temporary_constraints(self._orders, temporary_restrictions, equipment=self._plant_ids) if self._orders is not None else None
         self._energy_prices: Mapping[EnergyType, EnergyCostService]|None = energy_prices
         self._energy_services: Mapping[EnergyType, EnergyService] | None = energy_services
+        _td = timedelta()
+        self._shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None = {eq: [s for s in eq_shifts if s.worktime > _td] for eq, eq_shifts in shifts.items()} if shifts is not None else None
+        start_time = targets.period[0]
+        equipment_starts: dict[int, datetime] = {p: start_time for p in target_plants}
+        if initial_solution is not None and initial_solution.previous_orders is not None:
+            start_orders = initial_solution.previous_orders
+            for p, order in start_orders.items():
+                o_obj = snapshot.get_order(order)
+                if o_obj is not None and o_obj.lot_start_end_times and process in o_obj.lot_start_end_times:
+                    end_time = o_obj.lot_start_end_times[process][1]
+                    if end_time > targets.period[0]:
+                        equipment_starts[p] = end_time
+        _empty = tuple()
+        if shifts:
+            for p in target_plants:
+                eq_shifts = shifts.get(p, _empty)
+                if len(eq_shifts) == 0:  # how to deal with this case? Probably nothing should be allocated then? Same case if eq is not included in shifts
+                    continue
+                if eq_shifts[0].period[0] > equipment_starts[p]:
+                    equipment_starts[p] = eq_shifts[0].period[0]
+        if initial_solution and not initial_solution.lots:
+            initial_solution.lots = ModelUtils.lots_for_assignments(self._plants, snapshot, initial_solution.order_assignments, targets.period[0],
+                                                                    previous_orders=self._previous_orders, shifts=shifts)
+        self._equipment_start_times: Mapping[int, datetime] = equipment_starts
 
     def process(self) -> str:
         return self._process
@@ -506,6 +530,7 @@ class LotsOptimizationAlgo:
                         # optionally, specify the orders to be planned explicitly
                         # TODO option to specify the urgency(?)
                         orders: list[str]|None = None,
+                        shifts: Mapping[int, Sequence[PlannedWorkingShift]] | None = None,
                         # the next two are for initialization from a previous optimization run
                         best_solution: ProductionPlanning[P] | None = None,
                         history: list[ObjectiveFunction] | None = None,
@@ -530,7 +555,7 @@ class LotsOptimizationAlgo:
         instance = self._create_instance_internal(process, snapshot, targets, cost_provider, initial_solution, min_due_date=min_due_date,
                                               best_solution=best_solution, history=history, parameters=parameters, performance_models=performance_models,
                                               orders_custom_priority=orders_custom_priority, forced_orders=forced_orders, base_lots=base_lots,
-                                              temporary_restrictions=self._temporary_restrictions, 
+                                              temporary_restrictions=self._temporary_restrictions, shifts=shifts,
                                               energy_prices=energy_prices, energy_services=energy_services, **kwargs)
         if process not in self._stats:
             self._stats[process] = OptimizationStatistics(process=process)
@@ -556,6 +581,7 @@ class LotsOptimizationAlgo:
                                   forced_orders: list[str] | None = None,
                                   base_lots: dict[int, Lot] | None = None,
                                   temporary_restrictions: TemporaryRestrictionsProvider|None = None,
+                                  shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None=None,
                                   energy_prices: Mapping[EnergyType, EnergyCostService] | None = None,
                                   energy_services: Mapping[EnergyType, EnergyService] | None = None,
                                   **kwargs

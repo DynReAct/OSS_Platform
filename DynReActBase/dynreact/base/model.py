@@ -36,6 +36,11 @@ class ProcessInformation(Model):
     FIXME in general this will be dependent on the material class
     """
     #throughput_capacity_mat: dict[str, float]|None = None  # key: material class id, value: throughput in ...
+    treatment_time: datetime | None = None
+    """
+    An average duration of the treatment at this equipment or process, if it can be reasonably well specified. 
+    Used by the long-term planning.
+    """
 
 
 def _parse_range(rng: str) -> Sequence[int]:
@@ -100,6 +105,9 @@ class Equipment(LabeledItem, ProcessInformation):
     """
     material_constraints: MaterialConstraint | None = None
     "Constraints on the type of material that can be processed by this equipment."
+    material_throughput: Mapping[str, float]|None = None
+    "If the throughput is material-dependent, this can be specified here."
+
 
     def get_equipment_name(self, idp: int):
         return self.name_short
@@ -386,6 +394,10 @@ class EquipmentStatus(Model, Generic[P]):
     "Previous order id"
     current_material: list[str] | None = None
     "Material ids belonging to the currently processed order, if not the complete order"
+    current_start_time: datetime | None = None
+    "Estimated processing start time for current order or material"
+    current_end_time: datetime|None = None
+    "Estimated processing end time after current order or material"
     # @deprecated
     current: str|None = Field(None, deprecated=True)
     # @deprecated

@@ -14,7 +14,7 @@ import numpy.typing as npt
 import dynreact.lotcreation.LotCreationGoogleOR as lcor
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.EnergyService import EnergyCostService, EnergyService, ServiceResultsFailed, \
-    EnergyPrediction, EnergyPriceCurve
+    EnergyPrediction, EnergyPriceCurve, EnergyUtils
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo, LotsOptimizer, LotsOptimizationState
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation
@@ -81,19 +81,22 @@ class TabuSearch(LotsOptimizer):
             self._order_priorities.update(orders_custom_priority)
         self._initialized: bool = False
         self._tabu_list: set[TabuSwap] = set()
+        energy_predictions, energy_price_curves = TabuSearch._init_energy_settings(self._plants, self._orders, snapshot.timestamp,
+                                                        self._targets.period, energy_services, energy_prices)
+        # keys: energy type, equipment, order
+        self._energy_predictions: Mapping[EnergyType, Mapping[int, Mapping[str, EnergyPrediction]]]|None = energy_predictions
+        self._energy_price_curves: Mapping[EnergyType, EnergyPriceCurve]|None = energy_price_curves
         self._allocator: LotsAllocator = LotsAllocator(process, self._plants, self._orders, self._snapshot, self._costs,
                                               self._targets, self._params, self._total_priority, self._forbidden_assignments, self._forced_orders, self._previous_orders,
                                               self._base_lots, self._base_lot_weights,  self._base_assignments, self._main_category,self._orders_custom_priority,
-                                              self._shifts, self._equipment_start_times)
+                                              self._shifts, self._equipment_start_times,
+                                              energy_predictions=energy_predictions, energy_price_curves=energy_price_curves)
         # the three below are needed for reshuffling only and will be initialized lazily
         self._allowed_equipment_by_order: dict[str, list[int]]|None = None
         self._assignment_costs_by_oder: dict[str, dict[int, float]]|None = None
         self._logistic_costs_by_oder: dict[str, dict[int, float]] | None = None
         self._rnd = random.Random(x=self._params.rand_seed)
         self._strict = self._params.strict
-        # keys: energy type, equipment, order
-        self._energy_predictions: Mapping[EnergyType, Mapping[int, Mapping[str, EnergyPrediction]]]|None = None
-        self._energy_price_curves: Mapping[EnergyType, EnergyPriceCurve]|None = None
 
     def check_solution(self, p: ProductionPlanning):
         last_eq = None
@@ -157,12 +160,14 @@ class TabuSearch(LotsOptimizer):
                 self._state.best_objective_value = objective
         return initial_plant_assignments
 
-    def _init_energy_settings(self):
-        energy_services = self._energy_services
-        if not energy_services:
-            return
-        plants = self._plants
-        orders = self._orders.values()
+    @staticmethod
+    def _init_energy_settings(plants: Mapping[int, Equipment], orders_dict: dict[str, Order]|None,
+                        snapshot: datetime, target_period: tuple[datetime, datetime],
+                        energy_services: Mapping[EnergyType, EnergyService] | None,
+                        energy_prices: Mapping[EnergyType, EnergyCostService] | None):
+        if not energy_services or not orders_dict:
+            return None, None
+        orders = orders_dict.values()
         # keys: equipment, order
         energy_predictions: dict[EnergyType, dict[int, dict[str, EnergyPrediction]]] = {}
         for energy_type, service in energy_services.items():
@@ -171,20 +176,19 @@ class TabuSearch(LotsOptimizer):
                 applicable_orders = [o for o in orders if equipment in o.allowed_equipment]
                 if len(applicable_orders) == 0:
                     continue
-                result = service.bulk_energy_consumption(applicable_orders, equipment, self._snapshot.timestamp)
+                result = service.bulk_energy_consumption(applicable_orders, equipment, snapshot)
                 if isinstance(result, ServiceResultsFailed):
                     raise ServiceException(result.reason, reason=f"Failed to determine energy predictions for equipment {plants[equipment].name_short or equipment}: {result.message}")
                 order_results = result.results
                 result_by_order: dict[str, EnergyPrediction] = {order.id: prediction for order, prediction in zip(applicable_orders, order_results)}
                 pred_by_type[equipment] = result_by_order
             energy_predictions[energy_type] = pred_by_type
-        self._energy_predictions = energy_predictions
-        energy_prices = self._energy_prices
+#        self._energy_predictions = energy_predictions
         if not energy_prices:
-            return
+            return energy_predictions, None
         # TODO end time is not exact...
         # TODO in price-sensitive scheduling we need to restrict the interval to the period covered by price forecasts
-        start, end = self._targets.period
+        start, end = target_period
         energy_price_curves = {}
         for energy_type, energy_cost_service in energy_prices.items():
             prices = energy_cost_service.energy_costs(start, end)
@@ -193,7 +197,7 @@ class TabuSearch(LotsOptimizer):
             if len(prices.entries) == 0:
                 raise ServiceException(404, reason=f"No prices found for energy type {energy_type}, received empty response")
             energy_price_curves[energy_type] = prices
-        self._energy_price_curves = energy_price_curves
+        return energy_predictions, energy_price_curves
 
     def run(self, max_iterations: int|None = None, debug: bool=False, continued: bool=False) -> LotsOptimizationState:
         niter = 0
@@ -269,7 +273,6 @@ class TabuSearch(LotsOptimizer):
                 # optimal solution found
                 break
             next_step: tuple[TabuSwap, ProductionPlanning, ObjectiveFunction] = self.FindNextStep(self._state.current_solution, TabuList, pool, worker_cnt)
-
             worker_cnt += self._params.NParallel
             if next_step is None or next_step[0] is None:
                 break
@@ -707,7 +710,7 @@ class LotsAllocator:
         has_energy: bool = False
         energy_costs_factor: float|None = self._params.energy_costs_penalty
         if self._energy_predictions is not None and self._energy_price_curves is not None:
-            energy_predictions = {et: pred[plant_id] for et, pred in self._energy_predictions.items() if plant_id in pred and len(pred[plant_id] > 0)}
+            energy_predictions = {et: pred[plant_id] for et, pred in self._energy_predictions.items() if plant_id in pred and len(pred[plant_id]) > 0}
             energy_prices = self._energy_price_curves
             if len(energy_predictions) == 0:
                 energy_predictions = None
@@ -747,12 +750,12 @@ class LotsAllocator:
                             energy_usage[e_type] = pred.predicted_energy
                             # if energy_usage_obj:  # ?
                             #    energy_usage_obj[e_type] = energy_usage_obj.get(e_type, 0.) + pred.predicted_energy * [TODO factor]
-                            if energy_prices and e_type in energy_prices and energy_costs:
+                            if energy_prices and e_type in energy_prices:
                                 # determine cost factor for the considered time interval!
                                 # TODO handle None case, respectively provide a reasonable default # IMPORTANT
                                 avg_price = energy_prices[e_type].average_price(start, end)
                                 if avg_price is not None:
-                                    energy_costs[e_type] = pred.predicted_energy
+                                    energy_costs[e_type] = pred.predicted_energy * avg_price
                                     if energy_costs_factor:
                                         energy_costs_obj[e_type] = pred.predicted_energy * energy_costs_factor
                     if len(energy_usage) > 0:
@@ -761,39 +764,22 @@ class LotsAllocator:
                         status0.energy_costs = energy_costs
                     if len(energy_costs_obj) > 0:
                         obj.energy_costs = energy_costs_obj
+                        sum_obj = sum(energy_costs_obj.values())
+                        obj.total_value += sum_obj
+                        obj.additive_costs += sum_obj
+                        # TODO energy costs for non-scheduled orders
                 return status0, obj
             current: Order = orders[route[-1]]
             next_o: Order = orders[next_item]
             new_lot: bool = len(route) == 0 or self.create_new_lot_costs_based(transition_costs[route[-1], next_item])
             new_status, new_obj = self._costs.update_transition_costs(plant, current, next_o, status[0], snapshot, new_lot=new_lot, orders_custom_priority=self._orders_custom_priority)
-            if end is not None:  # TODO update also objective function
+            if end is not None:
                 new_status.current_start_time = start
                 new_status.current_end_time = end
-            if end is not None and has_energy and status[0].energy_usage:
-                new_status.energy_usage = dict(status[0].energy_usage)
-                new_status.energy_costs = dict(status[0].energy_costs)
-                #old_obj = status[1]
-                energy_usage = new_status.energy_usage
-                energy_costs = new_status.energy_costs
-                energy_usage_obj = dict(status[1].energy_usage) if status[1].energy_usage is not None else None
-                energy_costs_obj = dict(status[1].energy_costs) if status[1].energy_costs is not None else None
-                new_obj.energy_usage = energy_usage_obj
-                new_obj.energy_costs = energy_costs_obj
-                for e_type, predictions in energy_predictions.items():
-                    pred: EnergyPrediction|None = predictions.get(next_o.id)
-                    if pred is not None:  # TODO what if it is? Option to use a default?
-                        energy_usage[e_type] = energy_usage.get(e_type, 0.) + pred.predicted_energy
-                        #if energy_usage_obj:  # ?
-                        #    energy_usage_obj[e_type] = energy_usage_obj.get(e_type, 0.) + pred.predicted_energy * [TODO factor]
-                        if energy_prices and e_type in energy_prices and energy_costs:
-                            # determine cost factor for the considered time interval!
-                            # TODO handle None case, respectively provide a reasonable default
-                            avg_price = energy_prices[e_type].average_price(start, end)
-                            if avg_price is not None:
-                                costs = avg_price * pred.predicted_energy / 1e3
-                                energy_costs[e_type] = energy_costs.get(e_type, 0.) + costs
-                                if energy_costs_obj:
-                                    energy_costs_obj[e_type] = energy_costs.get(e_type, 0.) + costs * energy_costs_factor
+            if end is not None and has_energy and status[0].energy_usage is not None:
+                new_status, new_obj = EnergyUtils.update_energy_costs(status[0], status[1], new_status, new_obj,
+                                                start, end, energy_predictions, energy_prices, energy_costs_factor)
+                # TODO energy costs for non-scheduled orders
             return new_status, new_obj
 
         def eval_costs(status: tuple[EquipmentStatus, ObjectiveFunction], is_final: bool) -> float:
@@ -801,6 +787,7 @@ class LotsAllocator:
             # estimates by subtracting it and hence can apply better shortcutting
             return status[1].additive_costs if not is_final else status[1].total_value - status[1].weight_deviation
 
+        has_global_costs = has_global_costs or has_energy
         empty_status = costs.equipment_status(snapshot, plant, self._targets.period, plant_targets.total_weight)
         if solver_id == "default":
             ortootls_timeout = pre_timeout if pre_timeout is not None and pre_timeout > 0 else None if pre_timeout is not None else self._params.tsp_solver_ortools_timeout
@@ -812,7 +799,8 @@ class LotsAllocator:
             solver = GlobalSearchBB(bound_factor_upcoming_costs=bound_factor)
         else:
             raise ValueError(f"Invalid solver id {solver_id}")
-        data: GlobalTspInput = GlobalTspInput(local_transition_costs=transition_costs, local_start_costs=start_costs, empty_state=(empty_status, costs.objective_function(empty_status)),
+        data: GlobalTspInput = GlobalTspInput(local_transition_costs=transition_costs, local_start_costs=start_costs,
+                                              empty_state=(empty_status, costs.objective_function(empty_status)),
                                               time_limit=timeout, transition_costs=global_costs, eval_costs=eval_costs)
         result = solver.find_shortest_path_global(data)
         route = result.route

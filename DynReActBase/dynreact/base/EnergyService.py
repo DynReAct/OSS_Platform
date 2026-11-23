@@ -2,11 +2,13 @@ from bisect import bisect_right
 from datetime import datetime, timedelta
 from typing import Literal, Sequence, Mapping, TypeAlias, Any
 
+import numpy as np
 from pydantic import BaseModel, model_validator
 from typing_extensions import Self
 
 from dynreact.base.SnapshotProvider import SnapshotProvider
-from dynreact.base.model import Order, Site, Material, EnergyType
+from dynreact.base.model import Order, Site, Material, EnergyType, EquipmentStatus, ObjectiveFunction, \
+    ProductionPlanning, Snapshot
 
 
 class EnergyServiceMetadata(BaseModel, use_attribute_docstrings=True, frozen=True):
@@ -171,10 +173,20 @@ class EnergyPriceCurve(BaseModel, use_attribute_docstrings=True):
 
     @model_validator(mode="before")
     def validate(self) -> Self:
-        if not self.start_end and len(self.entries) > 0:
-            self.start_end = (self.entries[0].validity[0], self.entries[-1].validity[1])
-        if not self.start_times:
-            self.start_times = tuple([e.validity[0] for e in self.entries])
+        is_dict = isinstance(self, dict)
+        start_end = self.get("start_end") if is_dict else self.start_end
+        entries = self.get("entries") if is_dict else self.entries
+        start_times = self.get("start_times") if is_dict else self.start_times
+        if not start_end and len(entries) > 0:
+            start_end = (entries[0].validity[0], entries[-1].validity[1])
+        if not start_times:
+            start_times = tuple([e.validity[0] for e in entries])
+        if is_dict:
+            self["start_end"] = start_end
+            self["start_times"] = start_times
+        else:
+            self.start_end = start_end
+            self.start_times = start_times
         return self
 
     def average_price(self, start: datetime, end: datetime, default_price: float|None=None):
@@ -229,3 +241,162 @@ class EnergyCostService:
 
     def energy_costs(self, start: datetime, end: datetime) -> EnergyPriceCurve|ServiceResultsFailed:
         raise NotImplementedError
+
+
+class EnergyUtils:
+
+    @staticmethod
+    def evaluate_process_energy_costs(planning: ProductionPlanning, objective: ObjectiveFunction, snapshot: Snapshot,
+                                        energy_predictions: Mapping[EnergyType, Mapping[int, Mapping[str, EnergyPrediction]]] | None,
+                                        energy_prices: Mapping[EnergyType, EnergyPriceCurve] | None,
+                                        energy_costs_factor: float | None,
+                                        default_energy_price: Mapping[EnergyType, float]
+                                        ) -> tuple[ProductionPlanning, ObjectiveFunction]:
+        """
+        Assumptions:
+            * planning.lots is set, and lot times are provided where possible
+        TODO need exact order times instead of lot times only
+        Parameters:
+            planning:
+            objective:
+            snapshot:
+            energy_predictions:
+            energy_prices:
+            energy_costs_factor:
+            default_energy_price: in €/MWh (or other currency unit/MWh)
+        Returns:
+             the modified planning and objective objects
+        """
+        if not planning.lots:
+            raise ValueError("Lots not set in planning object")
+        if not energy_predictions:
+            return planning, objective
+        _empty = tuple()
+        unassigned_orders: list[str] = []
+        for eq, status in planning.equipment_status.items():
+            eq_lots = planning.lots.get(eq, _empty)
+            for lot in eq_lots:
+                if lot.start_time is None or lot.end_time is None or lot.weight is None:
+                    unassigned_orders.extend(lot.orders)
+                    continue
+                start = lot.start_time
+                duration = lot.end_time - start
+                order_times = []  # TODO use exact order times instead, if known
+                for order in lot.orders:
+                    end = start + snapshot.get_order(order, do_raise=True).actual_weight/lot.weight * duration
+                    order_times.append((start, end))
+                    start = end
+                eq_energy_predictions = {et: pred[eq] for et, pred in energy_predictions.items() if eq in pred and len(pred[eq]) > 0}
+                if len(eq_energy_predictions) == 0:
+                    eq_energy_predictions = None
+                EnergyUtils.evaluate_equipment_energy_costs(status, objective, lot.orders, order_times,
+                                                    eq_energy_predictions, energy_prices, energy_costs_factor, default_energy_price)
+        unassigned_orders.extend([ass.order for ass in planning.order_assignments.values() if ass.equipment < 0])
+        if len(unassigned_orders) > 0:
+            for e_type, predictions in energy_predictions.items():
+                unassigned_energy = 0.
+                for order in unassigned_orders:
+                    energies = [dct[order].predicted_energy for dct in predictions.values() if order in dct]
+                    if len(energies) == 0:
+                        continue
+                    mean_energy = np.mean(energies)
+                    unassigned_energy += mean_energy
+                if unassigned_energy > 0:
+                    # TODO store unassigned energy in planning object! Cannot allocate to equipment status
+                    if e_type in default_energy_price:
+                        default_price = default_energy_price[e_type]
+                        costs = default_price * unassigned_energy / 1e3
+                        # TODO store unassigned energy costs in planning object too
+                        obj = costs * energy_costs_factor
+                        objective.energy_costs[e_type] = objective.energy_costs.get(e_type, 0.) + obj
+        return planning, objective
+
+    @staticmethod
+    def evaluate_equipment_energy_costs(status: EquipmentStatus, objective: ObjectiveFunction,
+                              orders: Sequence[str], order_times: Sequence[tuple[datetime, datetime]],
+                              energy_predictions: Mapping[EnergyType, Mapping[str, EnergyPrediction]] | None,
+                              energy_prices: Mapping[EnergyType, EnergyPriceCurve] | None,
+                              energy_costs_factor: float | None, default_energy_price: Mapping[EnergyType, float]
+                              ) -> tuple[EquipmentStatus, ObjectiveFunction]:
+        """
+        Modifies the status and objective objects and returns them
+        """
+        if not energy_predictions:
+            return status, objective
+        energy_usage = {}
+        energy_costs = {}
+        energy_costs_obj = {}
+        for order, o_times in zip(orders, order_times):
+            for e_type, predictions in energy_predictions.items():
+                pred: EnergyPrediction | None = predictions.get(order)
+                if pred is not None:
+                    energy_usage[e_type] = energy_usage.get(e_type, 0.) + pred.predicted_energy
+                    if energy_prices and e_type in energy_prices:
+                        # determine cost factor for the considered time interval!
+                        # TODO handle None case, respectively provide a reasonable default # IMPORTANT
+                        avg_price = energy_prices[e_type].average_price(o_times[0], o_times[1])
+                        if avg_price is None:
+                            avg_price = default_energy_price.get(e_type)
+                        if avg_price is not None:
+                            energy_costs[e_type] = energy_costs.get(e_type, 0.) + pred.predicted_energy * avg_price
+                            if energy_costs_factor:
+                                energy_costs_obj[e_type] = energy_costs_obj.get(e_type, 0) + pred.predicted_energy * energy_costs_factor
+        if len(energy_usage) > 0:
+            status.energy_usage = energy_usage
+        if len(energy_costs) > 0:
+            status.energy_costs = energy_costs
+        if len(energy_costs_obj) > 0:
+            objective.energy_costs = energy_costs_obj
+            sum_obj = sum(energy_costs_obj.values())
+            objective.total_value += sum_obj
+            objective.additive_costs += sum_obj
+        return status, objective
+
+    # TODO energy costs for non-scheduled orders
+    @staticmethod
+    def update_energy_costs(status: EquipmentStatus, objective: ObjectiveFunction,
+                            new_status: EquipmentStatus, new_objective: ObjectiveFunction,
+                            start: datetime, end: datetime,
+                            energy_predictions: Mapping[EnergyType, Mapping[str, EnergyPrediction]] | None,
+                            energy_prices: Mapping[EnergyType, EnergyPriceCurve] | None,
+                            energy_costs_factor: float|None) -> tuple[EquipmentStatus, ObjectiveFunction]:
+        """
+        Modifies the passed new_status and new_objective objects in place and returns them
+        Parameters:
+            status:
+            objective:
+            energy_predictions: prediction by order id
+
+        Return:
+
+        """
+        if energy_predictions is None or len(energy_predictions) == 0 or status.energy_usage is None:
+            return new_status, new_objective
+        new_status.energy_usage = dict(status.energy_usage)
+        new_status.energy_costs = dict(status.energy_costs) if status.energy_costs is not None else None
+        # old_obj = status[1]
+        energy_usage = new_status.energy_usage
+        energy_costs = new_status.energy_costs
+        energy_usage_obj = dict(objective.energy_usage) if objective.energy_usage is not None else None
+        energy_costs_obj = dict(objective.energy_costs) if objective.energy_costs is not None else None
+        new_objective.energy_usage = energy_usage_obj
+        new_objective.energy_costs = energy_costs_obj
+        for e_type, predictions in energy_predictions.items():
+            pred: EnergyPrediction | None = predictions.get(new_status.current_order)
+            if pred is not None:  # TODO what if it is? Option to use a default?
+                energy_usage[e_type] = energy_usage.get(e_type, 0.) + pred.predicted_energy
+                # if energy_usage_obj:  # ?
+                #    energy_usage_obj[e_type] = energy_usage_obj.get(e_type, 0.) + pred.predicted_energy * [TODO factor]
+                if energy_prices and e_type in energy_prices and energy_costs:
+                    # determine cost factor for the considered time interval
+                    # TODO handle None case, respectively provide a reasonable default
+                    avg_price = energy_prices[e_type].average_price(start, end)
+                    if avg_price is not None:
+                        e_costs = avg_price * pred.predicted_energy / 1e3
+                        energy_costs[e_type] = energy_costs.get(e_type, 0.) + e_costs
+                        if energy_costs_obj:
+                            obj = e_costs * energy_costs_factor
+                            energy_costs_obj[e_type] = energy_costs_obj.get(e_type, 0.) + obj
+                            new_objective.total_value += obj
+                            new_objective.additive_costs += obj
+        return new_status, new_objective

@@ -6,6 +6,7 @@ from dynreact.base.EnergyService import EnergyService, EnergyServiceMetadata, En
     EnergyCostService
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo, LotsOptimizer, OptimizationListener, LotsOptimizationState
 from dynreact.base.SnapshotProvider import SnapshotProvider
+from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.impl.SimpleCostProvider import SimpleCostProvider
 from dynreact.base.impl.SimpleEnergyService import SimpleEnergyService, EnergyConfig, EnergyCostConfig, \
     SimpleEnergyCostService
@@ -71,6 +72,73 @@ class EnergySchedulingTest(unittest.TestCase):
         optimization_state: LotsOptimizationState = optimization.run(max_iterations=5)
         listener.check()
 
+    def test_energy_sensitive_scheduling_respects_equipment_characteristics(self):
+        """
+        4 orders with different energy characteristics to be scheduled at two plants.
+        The initial configuration has orders 1 and 2 at plant 1 and the other two at plant 2,
+        but from an energy costs perspective it is more appropriate to swap them.
+        """
+        process = "energyTestProcess"
+        process_id = 0
+        plants = (0, 1)
+        equipment = [Equipment(id=plant, name_short=f"Plant{plant}", process=process, throughput_capacity=20/8) for plant in plants]
+        test_site = Site(
+            processes=[Process(name_short=process, process_ids=[process_id])],
+            equipment=equipment, storages=[], material_categories=[]
+        )
+        snap_date = datetime(2024, 5, 1).astimezone()
+        order_ids0 = (1, 2, 3, 4)
+        order_ids = [f"o{o}" for o in order_ids0]
+        orders = [EnergySchedulingTest._create_order(order, plants, 10) for order in order_ids]
+        snapshot = Snapshot(timestamp=snap_date, orders=orders, material=tuple(), inline_material={}, lots={})
+        transition_costs = {f"o{o1}": {f"o{o2}": 0 if o1 == o2 else 1 for o2 in order_ids0} for o1 in order_ids0}
+        # cheaper to keep the initial configuration, assignment cost for a total swap: 4*2 = 8
+        assignment_costs = {f"o{o}": {plants[0 if o < 2 else 1]: 2} for o in order_ids0}
+        costs = SimpleCostProvider("simple:costs", test_site, transition_costs, assignment_costs=assignment_costs)
+        planning_period = (snapshot.timestamp, snapshot.timestamp + timedelta(days=1))
+        target_weight = sum(o.actual_weight for o in orders)/2   # half of the production per equipment
+        targets: ProductionTargets = ProductionTargets(process=process, target_weight={p: EquipmentProduction(equipment=p, total_weight=target_weight) for p in plants}, period=planning_period)
+        start_assignments: dict[str, OrderAssignment] = {
+            order_ids[0]: OrderAssignment(equipment=plants[0], order=order_ids[0], lot=f"Lot_{plants[0]}_1", lot_idx=1),
+            order_ids[1]: OrderAssignment(equipment=plants[0], order=order_ids[1], lot=f"Lot_{plants[0]}_1", lot_idx=2),
+            order_ids[2]: OrderAssignment(equipment=plants[1], order=order_ids[2], lot=f"Lot_{plants[1]}_1", lot_idx=1),
+            order_ids[3]: OrderAssignment(equipment=plants[1], order=order_ids[3], lot=f"Lot_{plants[1]}_1", lot_idx=2),
+        }
+        initial_status: dict[int, EquipmentStatus] = {p: costs.evaluate_equipment_assignments(targets.target_weight.get(p), process, start_assignments, snapshot, planning_period) for p in plants}
+        shift_duration = timedelta(hours=8)
+        shifts = {plant: (PlannedWorkingShift(equipment=plant, period=(snap_date, snap_date + shift_duration), worktime=shift_duration),) for plant in plants}
+        lots = ModelUtils.lots_for_assignments({p.id: p for p in equipment}, snapshot, start_assignments, planning_period[0], shifts=shifts)[0]
+        initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status, lits=lots)
+        algo: LotsOptimizationAlgo = _init_algo(test_site, n_parallel=1, energy_factor=1, default_energy_price={"electric": 1.5})
+
+        sp = TestSnapshotProvider(test_site, snapshot)
+        #
+        energy_prediction: Mapping[EnergyType, EnergyService] = {"electric": TestEnergyProvider(test_site, sp,
+                            energies={plants[0]: {orders[0].id: 5, orders[1].id: 5, orders[2].id: 4, orders[3].id: 4, },
+                                      plants[1]: {orders[0].id: 4, orders[1].id: 4, orders[2].id: 5, orders[3].id: 5 }})}
+        # the energy price is constant
+        cc = EnergyCostConfig(energy_type="electric", cost_steps=((time(), 3.), ))
+        energy_prices: Mapping[EnergyType, EnergyCostService] = {"electric": SimpleEnergyCostService("energyprices+simple:", config=cc)}
+        # expected energy costs for the initial configuration: 4 * 15 = 60
+        # expected energy costs for the optimal configuration: 4 * 12 = 48
+        # => hence the swapped config is preferred, despite the additional assignment costs of 8
+        optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution,
+                                            shifts=shifts, energy_prices=energy_prices, energy_services=energy_prediction)
+
+        def check_expected_lots(solution: ProductionPlanning, objective: ObjectiveFunction):
+            all_lots = solution.get_lots()
+            assert len(all_lots) == len(plants), f"Unexpected number of plants scheduled: {len(all_lots)}, wanted: {len(plants)}"
+            scheduled_orders = [o for lots in all_lots.values() for lot in lots for o in lot.orders]
+            assert len(scheduled_orders) == len(orders), f"Not all orders scheduled: {len(scheduled_orders)}, wanted {len(orders)}"
+            first_plant_lots = all_lots[plants[0]]
+            first_plant_orders = [o for lot in first_plant_lots for o in lot.orders]
+            first_plant_order_ids = [int(o[1:]) for o in first_plant_orders]
+            assert all(o > 1 for o in first_plant_order_ids), f"Unexpected configuration at plant 0; scheduled orders {first_plant_order_ids}, wanted: (2,3)"
+
+        listener = InterruptionTestListener(check_expected_lots)
+        optimization.add_listener(listener)
+        optimization_state: LotsOptimizationState = optimization.run(max_iterations=5)
+        listener.check()
 
 
     @staticmethod

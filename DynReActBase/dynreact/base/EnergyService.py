@@ -287,7 +287,7 @@ class EnergyUtils:
             if status.energy_costs is not None:
                 if objective.energy_costs is None:
                     objective.energy_costs = {}
-                for e_type, costs in status.energy_costs:
+                for e_type, costs in status.energy_costs.items():
                     objective.energy_costs[e_type] = objective.energy_costs.get(e_type, 0.) + costs * energy_costs_factor
                 continue
             eq_lots = planning.lots.get(eq, _empty)

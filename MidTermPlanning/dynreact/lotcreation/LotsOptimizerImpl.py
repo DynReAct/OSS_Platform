@@ -810,7 +810,8 @@ class LotsAllocator:
             if duration is not None and start_time is not None:
                 o_start, o_end, o_frac = ModelUtils.processing_time_for_duration(duration, start_time, eq_shifts, shift_starts=eq_shifts_start) \
                         if eq_shifts is not None else (start_time, start_time + duration, 1)
-                order_times[order.id] = (o_start, o_end)
+                if o_end is not None:
+                    order_times[order.id] = (o_start, o_end)
                 start_time = o_end
                 if len(lot_orders) == 0:
                     lot_start = o_start

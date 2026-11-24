@@ -1283,7 +1283,7 @@ class CTabuWorker:
         if best_solution.lots is None:
             set_later = True
             best_solution.lots = ModelUtils.lots_for_assignments(plants, snapshot, best_solution.order_assignments, targets.period[0],
-                                                        previous_orders=previous_orders, shifts=self.tabu_search._shifts)
+                                                        previous_orders=previous_orders, shifts=self.tabu_search._shifts)[0]
         return best_swap, best_solution, best_objective
 
     # TODO energy evaluation of updated plant status objects
@@ -1386,7 +1386,7 @@ class CTabuWorker:
         if target_plant < 0:
             all_assignments[swap.Order] = OrderAssignment(order=swap.Order, equipment=-1, lot="", lot_idx=-1)
         lots = ModelUtils.lots_for_assignments(self.tabu_search._plants, self.tabu_search._snapshot, all_assignments, targets.period[0], previous_orders=previous_orders,
-                                               shifts=self.tabu_search._shifts)
+                                               shifts=self.tabu_search._shifts)[0]
         planning_candidate = ProductionPlanning(process=planning.process, order_assignments=all_assignments, equipment_status=plant_status, target_structure=targets.material_weights,
                                                 total_priority=planning.total_priority, previous_orders=previous_orders, lots=lots)
         total_objectives = costs.process_objective_function(planning_candidate)

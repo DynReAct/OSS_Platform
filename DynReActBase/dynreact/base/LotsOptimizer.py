@@ -233,7 +233,7 @@ class LotsOptimizer(Generic[P]):
                     equipment_starts[p] = eq_shifts[0].period[0]
         if initial_solution and not initial_solution.lots:
             initial_solution.lots = ModelUtils.lots_for_assignments(self._plants, snapshot, initial_solution.order_assignments, targets.period[0],
-                                                                    previous_orders=self._previous_orders, shifts=shifts)
+                                                                    previous_orders=self._previous_orders, shifts=shifts)[0]
         self._equipment_start_times: Mapping[int, datetime] = equipment_starts
 
     def process(self) -> str:

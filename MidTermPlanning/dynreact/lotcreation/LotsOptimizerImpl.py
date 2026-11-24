@@ -90,7 +90,8 @@ class TabuSearch(LotsOptimizer):
                                               self._targets, self._params, self._total_priority, self._forbidden_assignments, self._forced_orders, self._previous_orders,
                                               self._base_lots, self._base_lot_weights,  self._base_assignments, self._main_category,self._orders_custom_priority,
                                               self._shifts, self._equipment_start_times,
-                                              energy_predictions=energy_predictions, energy_price_curves=energy_price_curves)
+                                              energy_predictions=energy_predictions, energy_price_curves=energy_price_curves,
+                                              energy_costs_default=self._params.energy_costs_default)
         # the three below are needed for reshuffling only and will be initialized lazily
         self._allowed_equipment_by_order: dict[str, list[int]]|None = None
         self._assignment_costs_by_oder: dict[str, dict[int, float]]|None = None
@@ -604,7 +605,8 @@ class LotsAllocator:
                     shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None, equipment_start_times: Mapping[int, datetime],
                    # keys: energy type, equipment, order
                     energy_predictions: Mapping[EnergyType, Mapping[int, Mapping[str, EnergyPrediction]]] | None = None,
-                    energy_price_curves: Mapping[EnergyType, EnergyPriceCurve] | None = None):
+                    energy_price_curves: Mapping[EnergyType, EnergyPriceCurve] | None = None,
+                    energy_costs_default: Mapping[EnergyType, float]|None=None):
         self._process = process
         self._plants = plants
         self._orders = orders
@@ -627,6 +629,7 @@ class LotsAllocator:
                 if energy_predictions is not None and len(energy_predictions) > 0 else None
         self._energy_price_curves: Mapping[EnergyType, EnergyPriceCurve] | None = energy_price_curves \
                 if energy_price_curves is not None and len(energy_price_curves) > 0 else None
+        self._energy_costs_default = energy_costs_default
         # keys: equipment id; material class id
         self._mat_throughput: Mapping[int, Mapping[str, float]] = {p.id: p.material_throughput for p in plants.values() if p.material_throughput is not None}
         self._shifts: Mapping[int, Sequence[PlannedWorkingShift]] | None = shifts
@@ -707,6 +710,7 @@ class LotsAllocator:
             bound_factor = 0
         energy_prices: Mapping[EnergyType, EnergyPriceCurve] | None = self._energy_price_curves
         energy_predictions: Mapping[EnergyType,Mapping[str, EnergyPrediction]] | None = None
+        energy_costs_default = self._energy_costs_default
         has_energy: bool = False
         energy_costs_factor: float|None = self._params.energy_costs_penalty
         if self._energy_predictions is not None and self._energy_price_curves is not None:
@@ -741,6 +745,9 @@ class LotsAllocator:
                     status0.current_end_time = end
                 obj = costs.objective_function(status0)
                 if end is not None and has_energy:
+                    status0, obj = EnergyUtils.evaluate_equipment_energy_costs(status0, obj, (oid, ), ((start, end), ),
+                                                        energy_predictions, energy_prices, energy_costs_default, energy_costs_factor)
+                    """
                     energy_usage = {}
                     energy_costs = {}
                     energy_costs_obj = {}
@@ -767,7 +774,7 @@ class LotsAllocator:
                         sum_obj = sum(energy_costs_obj.values())
                         obj.total_value += sum_obj
                         obj.additive_costs += sum_obj
-                        # TODO energy costs for non-scheduled orders
+                    """
                 return status0, obj
             current: Order = orders[route[-1]]
             next_o: Order = orders[next_item]
@@ -778,8 +785,7 @@ class LotsAllocator:
                 new_status.current_end_time = end
             if end is not None and has_energy and status[0].energy_usage is not None:
                 new_status, new_obj = EnergyUtils.update_energy_costs(status[0], status[1], new_status, new_obj,
-                                                start, end, energy_predictions, energy_prices, energy_costs_factor)
-                # TODO energy costs for non-scheduled orders
+                                            start, end, energy_predictions, energy_prices, energy_costs_default, energy_costs_factor)
             return new_status, new_obj
 
         def eval_costs(status: tuple[EquipmentStatus, ObjectiveFunction], is_final: bool) -> float:
@@ -1280,7 +1286,7 @@ class CTabuWorker:
                                                         previous_orders=previous_orders, shifts=self.tabu_search._shifts)
         return best_swap, best_solution, best_objective
 
-    # TODO time evaluation => ?
+    # TODO energy evaluation of updated plant status objects
     def _eval_dummy_swap(self, swap: TabuSwap) -> tuple[ProductionPlanning, ObjectiveFunction]:
         targets: ProductionTargets = self.tabu_search._targets
         costs: CostProvider = self.tabu_search._costs
@@ -1384,6 +1390,12 @@ class CTabuWorker:
         planning_candidate = ProductionPlanning(process=planning.process, order_assignments=all_assignments, equipment_status=plant_status, target_structure=targets.material_weights,
                                                 total_priority=planning.total_priority, previous_orders=previous_orders, lots=lots)
         total_objectives = costs.process_objective_function(planning_candidate)
+        if self.tabu_search._energy_predictions is not None:
+            # Note: this will take into account the unchanged energy state of equipment not affected by the swap,
+            # and recalculate the energy costs for other equipment; also unassigned orders energy costs are reevaluated.
+            # TODO exact order times would be required here (from lots?)
+            planning_candidate, total_objectives = EnergyUtils.evaluate_process_energy_costs(planning_candidate, total_objectives, snapshot,
+                        self.tabu_search._energy_predictions, self.tabu_search._energy_price_curves, self.tabu_search._energy_costs_default, self.tabu_search._params.energy_costs_penalty)
         return planning_candidate, total_objectives
 
 

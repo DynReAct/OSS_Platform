@@ -249,8 +249,8 @@ class EnergyUtils:
     def evaluate_process_energy_costs(planning: ProductionPlanning, objective: ObjectiveFunction, snapshot: Snapshot,
                                         energy_predictions: Mapping[EnergyType, Mapping[int, Mapping[str, EnergyPrediction]]] | None,
                                         energy_prices: Mapping[EnergyType, EnergyPriceCurve] | None,
-                                        energy_costs_factor: float | None,
-                                        default_energy_price: Mapping[EnergyType, float]
+                                        default_energy_price: Mapping[EnergyType, float],
+                                        energy_costs_factor: float | None
                                         ) -> tuple[ProductionPlanning, ObjectiveFunction]:
         """
         Assumptions:
@@ -274,6 +274,13 @@ class EnergyUtils:
         _empty = tuple()
         unassigned_orders: list[str] = []
         for eq, status in planning.equipment_status.items():
+            # energy costs have been evaluated already for this equipment => common case in mtp solver, when the equipment is not affected by a swap
+            if status.energy_costs is not None:
+                if objective.energy_costs is None:
+                    objective.energy_costs = {}
+                for e_type, costs in status.energy_costs:
+                    objective.energy_costs[e_type] = objective.energy_costs.get(e_type, 0.) + costs
+                continue
             eq_lots = planning.lots.get(eq, _empty)
             for lot in eq_lots:
                 if lot.start_time is None or lot.end_time is None or lot.weight is None:
@@ -312,12 +319,12 @@ class EnergyUtils:
         return planning, objective
 
     @staticmethod
-    def evaluate_equipment_energy_costs(status: EquipmentStatus, objective: ObjectiveFunction,
-                              orders: Sequence[str], order_times: Sequence[tuple[datetime, datetime]],
+    def evaluate_equipment_energy_costs(status: EquipmentStatus, objective: ObjectiveFunction|None,
+                              orders: Sequence[str], order_times: Sequence[tuple[datetime, datetime]|None],
                               energy_predictions: Mapping[EnergyType, Mapping[str, EnergyPrediction]] | None,
                               energy_prices: Mapping[EnergyType, EnergyPriceCurve] | None,
-                              energy_costs_factor: float | None, default_energy_price: Mapping[EnergyType, float]
-                              ) -> tuple[EquipmentStatus, ObjectiveFunction]:
+                              default_energy_price: Mapping[EnergyType, float], energy_costs_factor: float | None,
+                              ) -> tuple[EquipmentStatus, ObjectiveFunction|None]:
         """
         Modifies the status and objective objects and returns them
         """
@@ -325,7 +332,7 @@ class EnergyUtils:
             return status, objective
         energy_usage = {}
         energy_costs = {}
-        energy_costs_obj = {}
+        energy_costs_obj = {} if objective is not None else None
         for order, o_times in zip(orders, order_times):
             for e_type, predictions in energy_predictions.items():
                 pred: EnergyPrediction | None = predictions.get(order)
@@ -333,19 +340,18 @@ class EnergyUtils:
                     energy_usage[e_type] = energy_usage.get(e_type, 0.) + pred.predicted_energy
                     if energy_prices and e_type in energy_prices:
                         # determine cost factor for the considered time interval!
-                        # TODO handle None case, respectively provide a reasonable default # IMPORTANT
-                        avg_price = energy_prices[e_type].average_price(o_times[0], o_times[1])
+                        avg_price = energy_prices[e_type].average_price(o_times[0], o_times[1]) if o_times is not None else None
                         if avg_price is None:
                             avg_price = default_energy_price.get(e_type)
                         if avg_price is not None:
                             energy_costs[e_type] = energy_costs.get(e_type, 0.) + pred.predicted_energy * avg_price
-                            if energy_costs_factor:
+                            if energy_costs_factor and energy_costs_obj is not None:
                                 energy_costs_obj[e_type] = energy_costs_obj.get(e_type, 0) + pred.predicted_energy * energy_costs_factor
         if len(energy_usage) > 0:
             status.energy_usage = energy_usage
         if len(energy_costs) > 0:
             status.energy_costs = energy_costs
-        if len(energy_costs_obj) > 0:
+        if energy_costs_obj is not None and len(energy_costs_obj) > 0:
             objective.energy_costs = energy_costs_obj
             sum_obj = sum(energy_costs_obj.values())
             objective.total_value += sum_obj
@@ -359,6 +365,7 @@ class EnergyUtils:
                             start: datetime, end: datetime,
                             energy_predictions: Mapping[EnergyType, Mapping[str, EnergyPrediction]] | None,
                             energy_prices: Mapping[EnergyType, EnergyPriceCurve] | None,
+                            default_energy_price: Mapping[EnergyType, float],
                             energy_costs_factor: float|None) -> tuple[EquipmentStatus, ObjectiveFunction]:
         """
         Modifies the passed new_status and new_objective objects in place and returns them

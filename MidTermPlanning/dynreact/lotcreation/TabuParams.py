@@ -1,6 +1,6 @@
 import multiprocessing as mp
 import os
-from typing import Literal
+from typing import Literal, Mapping
 
 import dotenv
 
@@ -26,6 +26,15 @@ class TabuParams:
     "default if cost can not be calculated"
     energy_costs_penalty: float|None = None
     "If unset, energy-sensitive scheduling is not applied. Factor for conversion of actual costs into virtual costs."
+    energy_costs_default: Mapping[Literal["electric", "heat"], float] = {}
+    """
+    Actual energy costs per MWh, not virtual ones. 
+    Note: this cost factor is applied to orders that are not scheduled, or whose processing time cannot be 
+    determined. It is important to apply a reasonable energy cost for those as well, to ensure that, on the one hand,
+    the algorithm does not try to avoid scheduling orders at all to save energy costs, but at the same time
+    to ensure that in periods of very high prices there is some incentive to avoid scheduling energy-intensive 
+    products.
+    """
     init_order_on_start: bool = True
     "Test setting"
     tsp_solver_global_costs: Literal["ortools", "globalbb", "default"] = "default"
@@ -89,6 +98,7 @@ class TabuParams:
                  TAllowed: float|None = None,
                  CostNaN: float|None = None,
                  energy_costs_penalty: float|None = None,
+                 energy_costs_default: Mapping[Literal["electric", "heat"], float]|None=None,
                  init_order_on_start: bool|None=None,
                  tsp_solver_global_costs: Literal["ortools", "globalbb", "default"]|None = None,
                  tsp_solver_global_bound_factor: float | None = None,
@@ -133,6 +143,16 @@ class TabuParams:
             if ec0:
                 energy_costs_penalty = float(ec0)
         self.energy_costs_penalty = energy_costs_penalty
+        if energy_costs_default is None:
+            ec_def = os.getenv("ENERGY_COSTS_DEFAULT")
+            if ec_def is not None:
+                entries = [entry for entry in (entry.strip() for entry in ec_def.split(";")) if entry != ""]
+                if len(entries) > 0:
+                    energy_costs_default = {key: float(val) for key, val in (entry.split("=") for entry in entries)}
+                    invalids = [key for key in energy_costs_default.keys() if key not in ("electric", "heat")]
+                    if len(invalids) > 0:
+                        raise ValueError(f"Invalid key(s) for energy costs: {invalids}")
+                    self.energy_costs_default = energy_costs_default
         if init_order_on_start is None:
             init_order_on_start0 = os.getenv("INIT_ORDER_ON_START")
             if init_order_on_start0 is not None:

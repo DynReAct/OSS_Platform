@@ -276,7 +276,7 @@ class EnergyUtils:
         Returns:
              the modified planning and objective objects
         """
-        if not planning.lots:
+        if planning.lots is None:
             raise ValueError("Lots not set in planning object")
         if not energy_predictions:
             return planning, objective

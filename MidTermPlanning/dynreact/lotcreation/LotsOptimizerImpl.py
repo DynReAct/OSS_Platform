@@ -188,7 +188,6 @@ class TabuSearch(LotsOptimizer):
         if not energy_prices:
             return energy_predictions, None
         # TODO end time is not exact...
-        # TODO in price-sensitive scheduling we need to restrict the interval to the period covered by price forecasts
         start, end = target_period
         energy_price_curves = {}
         for energy_type, energy_cost_service in energy_prices.items():
@@ -228,8 +227,7 @@ class TabuSearch(LotsOptimizer):
             if self._base_lots is not None:  # append to existing lots
                 initial_plant_assignments = {orders: plant for orders, plant in initial_plant_assignments.items() if orders not in self._base_assignments}
             init_on_start = self._params.init_order_on_start
-            vbest = self._allocator.optimize_lots(initial_plant_assignments) if init_on_start else self._state.best_solution
-            target_vbest0 = self._costs.process_objective_function(vbest) if init_on_start else self._state.best_objective_value
+            vbest, target_vbest0 = self._allocator.optimize_lots(initial_plant_assignments) if init_on_start else (self._state.best_solution, self._state.best_objective_value)
             target_vbest = target_vbest0.total_value
             self._state.current_solution = vbest
             self._state.current_object_value = target_vbest0
@@ -526,7 +524,7 @@ class TabuSearch(LotsOptimizer):
                     lst = orders_by_plant[other_eq]
                     if order1 in lst:
                         lst.remove(order1)
-        new_planning: ProductionPlanning = self._allocator.optimize_lots(order_plant_assignment)
+        new_planning: ProductionPlanning = self._allocator.optimize_lots(order_plant_assignment)[0]
         return new_planning
 
     def FindNextStep(self, planning: ProductionPlanning, TabuList: set[Any], pool: multiprocessing.pool.Pool|None, worker_cnt: int) -> tuple[TabuSwap, ProductionPlanning, ObjectiveFunction]:
@@ -994,11 +992,11 @@ class LotsAllocator:
     def create_new_lot_costs_based(self, transition_costs: float) -> bool:
         return transition_costs > self._params.TAllowed
 
-    def optimize_lots(self, order_plant_assignments: dict[str, int]) -> ProductionPlanning:
+    def optimize_lots(self, order_plant_assignments: dict[str, int]) -> tuple[ProductionPlanning, ObjectiveFunction]:
         # This method is used to optimize the initial configuration, therefore we apply higher timeouts than in the
         # iteration step optimization, which is on the hot path and less critical.
         or_timeout = 3*self._params.tsp_solver_ortools_timeout if self._params.tsp_solver_ortools_timeout is not None else None
-        new_lots: dict[int, list[Lot]] = self.assign_lots(order_plant_assignments, timeout=self._params.tsp_solver_final_timeout, pre_timeout=or_timeout)[0]
+        new_lots, order_times, _ = self.assign_lots(order_plant_assignments, timeout=self._params.tsp_solver_final_timeout, pre_timeout=or_timeout)
         new_assignments: dict[str, OrderAssignment] = {}
         for plant, lots in new_lots.items():
             for lot in lots:
@@ -1008,8 +1006,15 @@ class LotsAllocator:
             if order not in new_assignments:
                 new_assignments[order] = OrderAssignment(equipment=-1, order=order, lot="", lot_idx=-1)
         new_planning: ProductionPlanning = self._costs.evaluate_order_assignments(self._process, new_assignments, self._targets, self._snapshot,
-                                                        total_priority=self._total_priority, previous_orders=self._previous_orders)
-        return new_planning
+                                                        total_priority=self._total_priority, previous_orders=self._previous_orders, shifts=self._shifts)
+        obj = self._costs.process_objective_function(new_planning)
+        if self._energy_predictions is not None:
+            # Note: this will take into account the unchanged energy state of equipment not affected by the swap,
+            # and recalculate the energy costs for other equipment; also unassigned orders energy costs are reevaluated.
+            new_candidate, obj = EnergyUtils.evaluate_process_energy_costs(new_planning, obj, self._snapshot,
+                        self._energy_predictions, self._energy_price_curves, self._energy_costs_default,
+                        self._params.energy_costs_penalty, order_times=order_times)
+        return new_planning, obj
 
     @staticmethod
     def _adapt_lot_sizes(lots: list[Lot], orders: dict[str, Order], min_lot: float, max_lot: float, plant_id: int, lot_prefix: str):

@@ -102,7 +102,7 @@ class CostProvider:
                     total_priority += my_prio
             else:
                 total_priority = sum(snapshot.get_order(order_id, do_raise=True).priority for order_id in order_assignments)
-        lots = ModelUtils.lots_for_assignments(plants, snapshot, order_assignments, targets.period[0], previous_orders=previous_orders, shifts=shifts, lots_active=True)  # XXX why active?
+        lots = ModelUtils.lots_for_assignments(plants, snapshot, order_assignments, targets.period[0], previous_orders=previous_orders, shifts=shifts, lots_active=True)[0]  # XXX why active?
         return ProductionPlanning(process=process, order_assignments=order_assignments, equipment_status=status,
                                   target_structure=target_structure, total_priority=total_priority, previous_orders=previous_orders, lots=lots)
 

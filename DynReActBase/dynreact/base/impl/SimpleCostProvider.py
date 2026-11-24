@@ -122,7 +122,6 @@ class SimpleCostProvider(CostProvider):
             return EquipmentStatus(targets=equipment_targets, snapshot_id=snapshot.timestamp, planning_period=planning_period, current_order=order_id, previous_order=previous_order,
                                    planning=PlanningData(target_fct=total_costs, transition_costs=transition_costs, lots_count=num_assignments, orders_count=num_assignments,
                                               delta_weight=delta_weight, min_due_date=min_due_date, assigned_priority=prio, assignment_costs=assignment_costs, logistic_costs=logistic_costs))
-        # plant_assignments = sorted(plant_assignments, key=lambda a: (a.lot, a.lot_idx))  # FIXME uses deprecated lot field
         transition_costs: float = 0
         total_weight: float = 0
         previous_lot: str = ""

@@ -116,11 +116,10 @@ class SimpleCostProvider(CostProvider):
                 logistic_costs += self.logistic_costs(plant_obj, order)
                 assignment_costs += self.assignment_costs(plant_obj, order)
             weight_diff_costs = self._weight_deviation_costs(delta_weight)
-            total_costs = transition_costs + weight_diff_costs + assignment_costs
+            total_costs = transition_costs + weight_diff_costs + assignment_costs + logistic_costs
             return EquipmentStatus(targets=equipment_targets, snapshot_id=snapshot.timestamp, planning_period=planning_period, current_order=order_id, previous_order=previous_order,
                                    planning=PlanningData(target_fct=total_costs, transition_costs=transition_costs, lots_count=num_assignments, orders_count=num_assignments,
                                               delta_weight=delta_weight, min_due_date=min_due_date, assigned_priority=prio, assignment_costs=assignment_costs, logistic_costs=logistic_costs))
-        # plant_assignments = sorted(plant_assignments, key=lambda a: (a.lot, a.lot_idx))  # FIXME uses deprecated lot field
         transition_costs: float = 0
         total_weight: float = 0
         previous_lot: str = ""
@@ -169,7 +168,7 @@ class SimpleCostProvider(CostProvider):
         weight_deviation = self._weight_deviation_costs(planning.delta_weight)
         assign_costs = planning.assignment_costs
         lot_costs = max(0, planning.lots_count - 1) * self._new_lot_costs
-        additive_costs = transition_costs + log_costs + weight_deviation + lot_costs + assign_costs
+        additive_costs = transition_costs + log_costs + lot_costs + assign_costs
         result = additive_costs + weight_deviation
         return ObjectiveFunction(total_value=result, lots_count=planning.lots_count, weight_deviation=weight_deviation,
                                  transition_costs=transition_costs, logistic_costs=log_costs, assignment_costs=assign_costs, additive_costs=additive_costs)

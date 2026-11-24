@@ -636,8 +636,9 @@ class LotsAllocator:
         self._shift_starts: Mapping[int, Sequence[datetime]]|None = {p: [shift.period[0] for shift in eq_shifts] for p, eq_shifts in shifts.items()} if shifts is not None else None
 
     # previously: CalcSolution (although it also determined the PlantStatus objects)
-    def assign_lots(self, order_plant_assignments: dict[str, int], timeout: float|None=None, pre_timeout: int|None=None) -> tuple[dict[int, list[Lot]], bool]:
-        """Returns lots plus information if the algo ran into a timeout"""
+    def assign_lots(self, order_plant_assignments: dict[str, int], timeout: float|None=None, pre_timeout: int|None=None
+                    ) -> tuple[dict[int, list[Lot]], dict[str, tuple[datetime, datetime]], bool]:
+        """Returns lots plus order times plus information if the algo ran into a timeout"""
         # remember the plants involved here
         plant_ids: set[int] = set(order_plant_assignments.values())
         result: dict[int, list[Lot]] = {}
@@ -645,16 +646,18 @@ class LotsAllocator:
         global_costs = self._costs.path_dependent_costs(self._process)
         # solver = GlobalSearchDefault(bound_factor_upcoming_costs=0.5, timeout_pre_solvers=1) if global_costs else GoogleOrSolver()  # TODO parameters TODO option to use other solvers?
         timed_out: bool = False
+        order_times: dict[str, tuple[datetime, datetime]] = {}
         for plant_id in plant_ids:
             if plant_id < 0:
                 continue
             order_ids: list[str] = [o for o, plant in order_plant_assignments.items() if plant == plant_id]
             orders: dict[str, Order] = {o: self._orders[o] if self._orders is not None else self._snapshot.get_order(o, do_raise=True) for o in order_ids}
-            lots, timeout_hit = self.assign_lots_internal(plant_id, list(orders.values()), global_costs, self._snapshot, bound_factor=self._params.tsp_solver_global_bound_factor,
+            lots, new_order_times, timeout_hit = self.assign_lots_internal(plant_id, list(orders.values()), global_costs, self._snapshot, bound_factor=self._params.tsp_solver_global_bound_factor,
                                       timeout=timeout if timeout is not None else self._params.tsp_solver_global_timeout,
                                       pre_timeout=pre_timeout, solver_id=self._params.tsp_solver_global_costs)
             if timeout_hit:
                 timed_out = True
+            order_times.update(new_order_times)
             #lots: list[Lot] = self.assign_lots_googleor(plant_id, orders) if "googleor" in tsp_method else self.assign_lots_bf(plant_id, orders, bound_factor=self._params.tsp_solver_global_bound_factor,
             #                               timeout=self._params.tsp_solver_global_bound_timeout, init_nearest_neighbours=self._params.tsp_solver_init_nearest_neighbours)
             #if global_costs and len(orders) <= 40 and tsp_method == "googleor_global1":
@@ -675,10 +678,11 @@ class LotsAllocator:
         if self._base_lots is not None:  # in this case we only want to extend the existing lots
             addon = {p: lots[0] for p, lots in result.items()}
             result = {p: [self._adapt_base_lots(lot, addon.get(p, None))] for p, lot in self._base_lots.items()}
-        return result, timed_out
+        return result, order_times, timed_out
 
     def assign_lots_internal(self, plant_id: int, orders: list[Order], has_global_costs: bool, snapshot: Snapshot,
-                       bound_factor: float|None=None, timeout: float|None=None, pre_timeout: int|None=None, solver_id: str|None=None) -> tuple[list[Lot], bool|None]:
+                       bound_factor: float|None=None, timeout: float|None=None, pre_timeout: int|None=None, solver_id: str|None=None
+                             ) -> tuple[list[Lot], Mapping[str, tuple[datetime, datetime]], bool|None]:
         """Returns lots, plus indicator if timeout has been hit"""
         timeout = timeout if timeout is not None and timeout > 0 else None if timeout is not None else self._params.tsp_solver_global_timeout
         # TODO better to reshuffle lots separately? At least if there are too many orders?
@@ -740,41 +744,13 @@ class LotsAllocator:
                 assignments.update({o.id: OrderAssignment(order=o.id, equipment=-1, lot="", lot_idx=-1) for o in orders if o.id != oid})
                 status0 = self._costs.evaluate_equipment_assignments(plant_targets, self._process, assignments, snapshot, self._targets.period,
                                                                     previous_order=prev_order, orders_custom_priority=self._orders_custom_priority)
-                if end is not None:  # TODO update also objective function
+                if end is not None:
                     status0.current_start_time = start
                     status0.current_end_time = end
                 obj = costs.objective_function(status0)
                 if end is not None and has_energy:
-                    status0, obj = EnergyUtils.evaluate_equipment_energy_costs(status0, obj, (oid, ), ((start, end), ),
+                    status0, obj = EnergyUtils.evaluate_equipment_energy_costs(status0, obj, (oid, ), {oid: (start, end)},
                                                         energy_predictions, energy_prices, energy_costs_default, energy_costs_factor)
-                    """
-                    energy_usage = {}
-                    energy_costs = {}
-                    energy_costs_obj = {}
-                    for e_type, predictions in energy_predictions.items():
-                        pred: EnergyPrediction | None = predictions.get(oid)
-                        if pred is not None:  # TODO what if it is? Option to use a default?
-                            energy_usage[e_type] = pred.predicted_energy
-                            # if energy_usage_obj:  # ?
-                            #    energy_usage_obj[e_type] = energy_usage_obj.get(e_type, 0.) + pred.predicted_energy * [TODO factor]
-                            if energy_prices and e_type in energy_prices:
-                                # determine cost factor for the considered time interval!
-                                # TODO handle None case, respectively provide a reasonable default # IMPORTANT
-                                avg_price = energy_prices[e_type].average_price(start, end)
-                                if avg_price is not None:
-                                    energy_costs[e_type] = pred.predicted_energy * avg_price
-                                    if energy_costs_factor:
-                                        energy_costs_obj[e_type] = pred.predicted_energy * energy_costs_factor
-                    if len(energy_usage) > 0:
-                        status0.energy_usage = energy_usage
-                    if len(energy_costs) > 0:
-                        status0.energy_costs = energy_costs
-                    if len(energy_costs_obj) > 0:
-                        obj.energy_costs = energy_costs_obj
-                        sum_obj = sum(energy_costs_obj.values())
-                        obj.total_value += sum_obj
-                        obj.additive_costs += sum_obj
-                    """
                 return status0, obj
             current: Order = orders[route[-1]]
             next_o: Order = orders[next_item]
@@ -817,6 +793,7 @@ class LotsAllocator:
         last_order: Order | None = None
         start_time = self._equipment_start_times[plant_id]
         lot_start = None
+        order_times: dict[str, tuple[datetime, datetime]] = {}
         for idx in route:
             costs = 0 if last_order is None else transition_costs[last_idx, idx]
             order: Order = orders[idx]
@@ -833,6 +810,7 @@ class LotsAllocator:
             if duration is not None and start_time is not None:
                 o_start, o_end, o_frac = ModelUtils.processing_time_for_duration(duration, start_time, eq_shifts, shift_starts=eq_shifts_start) \
                         if eq_shifts is not None else (start_time, start_time + duration, 1)
+                order_times[order.id] = (o_start, o_end)
                 start_time = o_end
                 if len(lot_orders) == 0:
                     lot_start = o_start
@@ -844,7 +822,7 @@ class LotsAllocator:
         if len(lot_orders) > 0:
             lots.append(Lot(id="LC_" + plant.name_short + "." + f"{lot_count:02d}", equipment=plant_id, active=False, status=1,
                     orders=[o.id for o in lot_orders], weight=sum(o.actual_weight for o in lot_orders), start_time=lot_start, end_time=start_time))
-        return lots, result.timeout_reached
+        return lots, order_times, result.timeout_reached
 
     # Note: this method is on the hot path, we should maintain the list of shift start times in a dedicated array
     @staticmethod
@@ -1164,7 +1142,7 @@ class CTabuWorker:
             assignments_for_lc = {o: order_assignments[o].equipment for o in affected_orders if order_assignments[o].equipment >= 0}
             if swp.PlantTo >= 0:
                 assignments_for_lc[swp.Order] = swp.PlantTo
-            new_assigned_lots, timeout_hit = self.tabu_search.assign_lots(assignments_for_lc)
+            new_assigned_lots, new_order_times, timeout_hit = self.tabu_search.assign_lots(assignments_for_lc)
             if is_lot_append:  # expensive, only required if we are appending to existing lots
                 for plant, lots in new_assigned_lots.items():
                     for lot in lots:
@@ -1228,6 +1206,12 @@ class CTabuWorker:
             total_objectives = costs.process_objective_function(planning_candidate)
             #total_objectives = CostProvider.sum_objectives([self.costs.objective_function(status) for status in plant_status.values()])
             objective_fct = total_objectives.total_value
+            if self.tabu_search._energy_predictions is not None:
+                # Note: this will take into account the unchanged energy state of equipment not affected by the swap,
+                # and recalculate the energy costs for other equipment; also unassigned orders energy costs are reevaluated.
+                planning_candidate, total_objectives = EnergyUtils.evaluate_process_energy_costs(planning_candidate, total_objectives, snapshot,
+                            self.tabu_search._energy_predictions, self.tabu_search._energy_price_curves, self.tabu_search._energy_costs_default,
+                            self.tabu_search._params.energy_costs_penalty, order_times=new_order_times)
             if objective_fct < objective_value:
                 objective_value = objective_fct
                 best_objective = total_objectives
@@ -1252,7 +1236,7 @@ class CTabuWorker:
             # if there are global costs, run the TSP again for the plants with new configurations but this time with higher resource budget
             plant_by_order: dict[str, int] = {o: ass.equipment for o, ass in best_solution.order_assignments.items() if ass.equipment >= 0}
             pre_timeout = 2 * self.tabu_search._params.tsp_solver_ortools_timeout if self.tabu_search._params.tsp_solver_ortools_timeout is not None else None
-            final_lots, _ = self.tabu_search.assign_lots(plant_by_order, timeout=self.tabu_search._params.tsp_solver_final_timeout, pre_timeout=pre_timeout)  # : dict[int, list[Lot]]
+            final_lots, new_order_times, __ = self.tabu_search.assign_lots(plant_by_order, timeout=self.tabu_search._params.tsp_solver_final_timeout, pre_timeout=pre_timeout)  # : dict[int, list[Lot]]
             old_lots: dict[int, list[Lot]] = best_solution.get_lots()
             lots_differ = len(final_lots) != len(old_lots) or any(p not in old_lots for p in final_lots.keys()) or  \
                           any(CTabuWorker._lots_differ(final_lots[p], old_lots[p]) for p in final_lots.keys())
@@ -1276,6 +1260,12 @@ class CTabuWorker:
                 #new_sol = ProductionPlanning(process=planning.process, order_assignments=assignments, equipment_status=plant_status, target_structure=targets.material_weights,
                 #                                        total_priority=planning.total_priority, previous_orders=previous_orders)
                 total_objectives = costs.process_objective_function(new_sol)
+                if self.tabu_search._energy_predictions is not None:
+                    # Note: this will take into account the unchanged energy state of equipment not affected by the swap,
+                    # and recalculate the energy costs for other equipment; also unassigned orders energy costs are reevaluated.
+                    new_sol, total_objectives = EnergyUtils.evaluate_process_energy_costs(new_sol, total_objectives, snapshot,
+                                self.tabu_search._energy_predictions, self.tabu_search._energy_price_curves, self.tabu_search._energy_costs_default,
+                                self.tabu_search._params.energy_costs_penalty, order_times=new_order_times)
                 if total_objectives.total_value < best_objective.total_value:
                     best_solution = new_sol
                     best_objective = total_objectives
@@ -1385,17 +1375,17 @@ class CTabuWorker:
         all_assignments.update({o: ass for o, ass in old_assignments.items() if ass.equipment < 0 and o != swap.Order})
         if target_plant < 0:
             all_assignments[swap.Order] = OrderAssignment(order=swap.Order, equipment=-1, lot="", lot_idx=-1)
-        lots = ModelUtils.lots_for_assignments(self.tabu_search._plants, self.tabu_search._snapshot, all_assignments, targets.period[0], previous_orders=previous_orders,
-                                               shifts=self.tabu_search._shifts)[0]
+        lots, order_times = ModelUtils.lots_for_assignments(self.tabu_search._plants, self.tabu_search._snapshot, all_assignments, targets.period[0], previous_orders=previous_orders,
+                                               shifts=self.tabu_search._shifts)
         planning_candidate = ProductionPlanning(process=planning.process, order_assignments=all_assignments, equipment_status=plant_status, target_structure=targets.material_weights,
                                                 total_priority=planning.total_priority, previous_orders=previous_orders, lots=lots)
         total_objectives = costs.process_objective_function(planning_candidate)
         if self.tabu_search._energy_predictions is not None:
             # Note: this will take into account the unchanged energy state of equipment not affected by the swap,
             # and recalculate the energy costs for other equipment; also unassigned orders energy costs are reevaluated.
-            # TODO exact order times would be required here (from lots?)
             planning_candidate, total_objectives = EnergyUtils.evaluate_process_energy_costs(planning_candidate, total_objectives, snapshot,
-                        self.tabu_search._energy_predictions, self.tabu_search._energy_price_curves, self.tabu_search._energy_costs_default, self.tabu_search._params.energy_costs_penalty)
+                        self.tabu_search._energy_predictions, self.tabu_search._energy_price_curves, self.tabu_search._energy_costs_default,
+                        self.tabu_search._params.energy_costs_penalty, order_times=order_times)
         return planning_candidate, total_objectives
 
 

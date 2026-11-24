@@ -44,17 +44,18 @@ class EnergySchedulingTest(unittest.TestCase):
         start_assignments: dict[str, OrderAssignment] = {o.id: OrderAssignment(equipment=-1, order=o.id, lot="", lot_idx=-1) for o in orders}  # nothing assigned yet
         initial_status: dict[int, EquipmentStatus] = {p.id: costs.evaluate_equipment_assignments(targets.target_weight.get(p.id), process, start_assignments, snapshot, planning_period) for p in plants}
         initial_solution: ProductionPlanning = ProductionPlanning(process=process, order_assignments=start_assignments, equipment_status=initial_status)
-        algo: LotsOptimizationAlgo = _init_algo(test_site, n_parallel=1, energy_factor=1)
+        algo: LotsOptimizationAlgo = _init_algo(test_site, n_parallel=1, energy_factor=1, default_energy_price={"electric": 1.5})
         shift_duration = timedelta(hours=8)
         shifts = {plants[0].id: (PlannedWorkingShift(equipment=plant, period=(snap_date, snap_date+shift_duration), worktime=shift_duration),)}
         sp = TestSnapshotProvider(test_site, snapshot)
         #
         energy_prediction: Mapping[EnergyType, EnergyService] = {"electric": TestEnergyProvider(test_site, sp,
                                 energies={plants[0].id: {orders[0].id: 2, orders[1].id: 1}})}
-        cc = EnergyCostConfig(energy_type="electric", cost_steps=((time(), 2.), (time(hour=4), 1.)))
-        energy_prices: Mapping[EnergyType, EnergyCostService] = {"electric": SimpleEnergyCostService("energyprices+simple:", cc)}
-        # expected energy prices if o1 -> o2: 4 for order 1, 2 for order 1 => sum 6
-        # expected energy prices if o2 -> o1: 2 for order 2, 2 for order 1 => sum 4
+        # the energy price for the first four hours of the day is twice as high as for the rest
+        cc = EnergyCostConfig(energy_type="electric", cost_steps=((time(), 3.), (time(hour=4), 1.)))
+        energy_prices: Mapping[EnergyType, EnergyCostService] = {"electric": SimpleEnergyCostService("energyprices+simple:", config=cc)}
+        # expected energy prices if o1 -> o2: 6 for order 1, 1 for order 2 => sum 7
+        # expected energy prices if o2 -> o1: 3 for order 2, 2 for order 1 => sum 5
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution,
                                             shifts=shifts, energy_prices=energy_prices, energy_services=energy_prediction)
 
@@ -83,10 +84,12 @@ class TestMaterial(Model):
     material_id: str
 
 
-def _init_algo(site: Site, n_parallel: int|None = None, t_allowed: float|None=None, energy_factor: float|None=None) -> LotsOptimizationAlgo:
+def _init_algo(site: Site, n_parallel: int|None = None, t_allowed: float|None=None, energy_factor: float|None=None,
+               default_energy_price: Mapping[Literal["electric", "heat"], float]|None=None) -> LotsOptimizationAlgo:
     algo: TabuAlgorithm = TabuAlgorithm("default:tabu-search", site)
     algo.set_params(TabuParams(tsp_solver_final_tsp=False, max_tsps_per_worker=-1, rand_seed=42,
-                               strict=True, NParallel=n_parallel, TAllowed=t_allowed, energy_costs_penalty=energy_factor))
+                               strict=True, NParallel=n_parallel, TAllowed=t_allowed,
+                               energy_costs_penalty=energy_factor, energy_costs_default=default_energy_price))
     return algo
 
 

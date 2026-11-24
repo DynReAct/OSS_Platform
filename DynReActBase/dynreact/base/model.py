@@ -543,6 +543,14 @@ class ProductionPlanning(Model, Generic[P]):
     "Initial conditions for the optimization"
     lots: Mapping[int, Sequence[Lot]]|None = None
     "Lots cache (keys: lot id); if not set, the get_lots() method reconstructs the lots"
+    energy_usage: Mapping[EnergyType, float]|None = None
+    "Estimated total energy usage by energy type"
+    energy_costs: Mapping[EnergyType, float]|None = None
+    "Estimated total energy costs by energy type"
+    energy_usage_unassigned: Mapping[EnergyType, float] | None = None
+    "Share of total energy usage from unassigned orders"
+    energy_costs_unassigned: Mapping[EnergyType, float] | None = None
+    "Share of total energy costs from unassigned orders"
 
     def get_lots(self, orders: dict[str, Order]|None=None, cache: bool=False) -> dict[int, list[Lot]]:
         """

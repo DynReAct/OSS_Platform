@@ -105,7 +105,8 @@ class EnergyCostConfig:
                     raise Exception(f"Empty/invalid energy price configuration: {steps}")
                 if any(pd.isna(value) for value in c_steps):
                     raise Exception(f"Invalid energy price configuration: {steps}, parsed as {c_steps}")
-                self.cost_steps = c_steps
+                cost_steps = c_steps
+        self.cost_steps = cost_steps
 
 
 class SimpleEnergyCostService(EnergyCostService):

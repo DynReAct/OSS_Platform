@@ -13,8 +13,7 @@ import numpy.typing as npt
 
 import dynreact.lotcreation.LotCreationGoogleOR as lcor
 from dynreact.base.CostProvider import CostProvider
-from dynreact.base.EnergyService import EnergyCostService, EnergyService, ServiceResultsFailed, \
-    EnergyPrediction, EnergyPriceCurve, EnergyUtils
+from dynreact.base.EnergyService import EnergyCostService, EnergyService, ServiceResultsFailed, EnergyPrediction, EnergyUtils
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo, LotsOptimizer, LotsOptimizationState
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation
@@ -23,6 +22,7 @@ from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsPro
 from dynreact.base.impl.ModelUtils import ModelUtils
 from dynreact.base.model import Snapshot, ProductionPlanning, ProductionTargets, Site, OrderAssignment, Order, \
     PlannedWorkingShift, Lot, EquipmentStatus, Lot, Equipment, EquipmentProduction, ObjectiveFunction, PlannedWorkingShift, EnergyType
+from dynreact.base.model_timeseries import MemoryTimeseries, Timeseries
 from dynreact.lotcreation.TabuParams import TabuParams
 from dynreact.lotcreation.globaltsp import GlobalTspInput
 from dynreact.lotcreation.globaltsp.BranchAndBoundWithEnsembleInput2 import GlobalSearchDefault
@@ -85,7 +85,7 @@ class TabuSearch(LotsOptimizer):
                                                         self._targets.period, energy_services, energy_prices)
         # keys: energy type, equipment, order
         self._energy_predictions: Mapping[EnergyType, Mapping[int, Mapping[str, EnergyPrediction]]]|None = energy_predictions
-        self._energy_price_curves: Mapping[EnergyType, EnergyPriceCurve]|None = energy_price_curves
+        self._energy_price_curves: Mapping[EnergyType, Timeseries]|None = energy_price_curves
         self._allocator: LotsAllocator = LotsAllocator(process, self._plants, self._orders, self._snapshot, self._costs,
                                               self._targets, self._params, self._total_priority, self._forbidden_assignments, self._forced_orders, self._previous_orders,
                                               self._base_lots, self._base_lot_weights,  self._base_assignments, self._main_category,self._orders_custom_priority,
@@ -152,7 +152,7 @@ class TabuSearch(LotsOptimizer):
             best_is_current: bool = self._state.best_solution == self._state.current_solution
             new_assignments = {o: ass for o, ass in self._state.current_solution.order_assignments.items() if o in initial_plant_assignments}
             planning = self._costs.evaluate_order_assignments(self._process, new_assignments, targets=self._targets, snapshot=self._snapshot,
-                                                            total_priority=self._total_priority, previous_orders=self._previous_orders)
+                                                            total_priority=self._total_priority, previous_orders=self._previous_orders, shifts=self._shifts)
             objective: ObjectiveFunction = self._costs.process_objective_function(planning)
             self._state.current_solution = planning
             self._state.current_object_value = objective
@@ -194,7 +194,7 @@ class TabuSearch(LotsOptimizer):
             prices = energy_cost_service.energy_costs(start, end)
             if isinstance(prices, ServiceResultsFailed):
                 raise ServiceException(prices.reason, reason=f"Failed to determine energy prices for energy type {energy_type}: {prices.message}")
-            if len(prices.entries) == 0:
+            if len(prices) == 0:
                 raise ServiceException(404, reason=f"No prices found for energy type {energy_type}, received empty response")
             energy_price_curves[energy_type] = prices
         return energy_predictions, energy_price_curves
@@ -603,7 +603,7 @@ class LotsAllocator:
                     shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None, equipment_start_times: Mapping[int, datetime],
                    # keys: energy type, equipment, order
                     energy_predictions: Mapping[EnergyType, Mapping[int, Mapping[str, EnergyPrediction]]] | None = None,
-                    energy_price_curves: Mapping[EnergyType, EnergyPriceCurve] | None = None,
+                    energy_price_curves: Mapping[EnergyType, Timeseries] | None = None,
                     energy_costs_default: Mapping[EnergyType, float]|None=None):
         self._process = process
         self._plants = plants
@@ -625,7 +625,7 @@ class LotsAllocator:
         # keys: energy type, equipment, order
         self._energy_predictions: Mapping[EnergyType, Mapping[int, Mapping[str, EnergyPrediction]]] | None = energy_predictions \
                 if energy_predictions is not None and len(energy_predictions) > 0 else None
-        self._energy_price_curves: Mapping[EnergyType, EnergyPriceCurve] | None = energy_price_curves \
+        self._energy_price_curves: Mapping[EnergyType, Timeseries] | None = energy_price_curves \
                 if energy_price_curves is not None and len(energy_price_curves) > 0 else None
         self._energy_costs_default = energy_costs_default
         # keys: equipment id; material class id
@@ -710,7 +710,7 @@ class LotsAllocator:
             bound_factor = 0 if num_orders < 5 else 1 if num_orders >= 10 else 0.25 + (num_orders - 5) / 5 * 0.75
         elif bound_factor < 0:
             bound_factor = 0
-        energy_prices: Mapping[EnergyType, EnergyPriceCurve] | None = self._energy_price_curves
+        energy_prices: Mapping[EnergyType, Timeseries] | None = self._energy_price_curves
         energy_predictions: Mapping[EnergyType,Mapping[str, EnergyPrediction]] | None = None
         energy_costs_default = self._energy_costs_default
         has_energy: bool = False

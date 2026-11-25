@@ -125,14 +125,14 @@ def update_graph(_: int, energy_type: Literal["electric", "heat"]|None, snapshot
         costs = cost_service.energy_costs(start_time, end_time)
         if isinstance(costs, ServiceResultsFailed):
             return True, f"Failed to determine energy costs: {costs.reason}, {costs.message}.", dash.no_update
-        if len(costs.entries) == 0:
+        if len(costs) == 0:
             return True, f"No price entries found", dash.no_update
     except Exception as e:
         return True, f"Internal error: {e}", dash.no_update
     fig = go.Figure()
     x_values = []
     y_values = []
-    for entry in costs.entries:
+    for entry in costs.values(start=start_time, end=end_time):
         x_values.append(entry.validity[0])
         y_values.append(entry.costs_per_mwh)
     fig.add_trace(go.Scatter(x=x_values, y=y_values, mode="lines+markers", line={"color": "red", "shape": "hv"}, name=f"Energy costs"))
@@ -141,7 +141,7 @@ def update_graph(_: int, energy_type: Literal["electric", "heat"]|None, snapshot
         height=568,
         title="Energy price",
         xaxis={"title": "Time", "range": [start_value, end_value]},
-        yaxis={"title": f"Costs ({costs.cost_unit}/MWh)"},
+        yaxis={"title": f"Costs ({costs.unit}/MWh)"},
         #yaxis2={"title": "Cumulative energy (kWh)", "overlaying": "y", "side": "right"},
         legend={"orientation": "h", "y": 1.02, "x": 0},
     )

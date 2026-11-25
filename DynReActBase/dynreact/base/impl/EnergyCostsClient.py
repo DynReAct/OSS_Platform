@@ -7,9 +7,10 @@ import requests
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from dynreact.base.EnergyService import EnergyCostService, EnergyServiceMetadata, EnergyPriceCurve, ServiceResultsFailed
+from dynreact.base.EnergyService import EnergyCostService, EnergyServiceMetadata, ServiceResultsFailed
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
+from dynreact.base.model_timeseries import Timeseries, MemoryTimeseries
 from dynreact.base.monitoring import ServiceHealth
 
 
@@ -68,7 +69,7 @@ class EnergyCostClient(EnergyCostService):
     def service(self) -> EnergyServiceMetadata:
         return self._get_meta()
 
-    def energy_costs(self, start: datetime, end: datetime) -> EnergyPriceCurve|ServiceResultsFailed:
+    def energy_costs(self, start: datetime, end: datetime) -> MemoryTimeseries|ServiceResultsFailed:
         start_str = start.strftime(EnergyCostClient._FORMAT).replace("+", "%2B")  # encode plus sign
         end_str = end.strftime(EnergyCostClient._FORMAT).replace("+", "%2B")
         self._init_session()
@@ -85,7 +86,7 @@ class EnergyCostClient(EnergyCostService):
                     except:
                         pass
                 return ServiceResultsFailed(reason=response.status_code, message=response.reason, details=jsn)
-            result = EnergyPriceCurve.model_validate(response.json())
+            result = MemoryTimeseries.model_validate(response.json())
             return result
         except requests.exceptions.ConnectionError:
             return ServiceResultsFailed(reason=1, message="Service not available")

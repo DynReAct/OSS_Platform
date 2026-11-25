@@ -9,6 +9,7 @@ from typing_extensions import Self
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.model import Order, Site, Material, EnergyType, EquipmentStatus, ObjectiveFunction, \
     ProductionPlanning, Snapshot
+from dynreact.base.model_timeseries import MemoryTimeseries, Timeseries
 
 
 class EnergyServiceMetadata(BaseModel, use_attribute_docstrings=True, frozen=True):
@@ -155,81 +156,6 @@ class EnergyCostServiceMetadata(BaseModel, use_attribute_docstrings=True):
     description: str|None=None
 
 
-class EnergyCharacteristics(BaseModel, use_attribute_docstrings=True):
-
-    validity: tuple[datetime, datetime]
-    costs_per_mwh: float
-    co2_per_mwh: float|None=None
-
-
-class EnergyPriceCurve(BaseModel, use_attribute_docstrings=True):
-
-    entries: Sequence[EnergyCharacteristics]
-    "Ordered list of entries for consecutive time interval."
-    cost_unit: str = "€"
-    # internally used fields below; set in model validator
-    start_end: tuple[datetime, datetime]|None
-    start_times: tuple[datetime, ...]
-    strictly_nonnegative: bool
-
-    @model_validator(mode="before")
-    def validate(self) -> Self:
-        is_dict = isinstance(self, dict)
-        start_end = self.get("start_end") if is_dict else self.start_end
-        entries = self.get("entries") if is_dict else self.entries
-        is_entry_dict = isinstance(entries[0], Mapping) if len(entries) > 0 else False
-        start_times = self.get("start_times") if is_dict else self.start_times
-        if not start_end and len(entries) > 0:
-            start_end = (entries[0].validity[0], entries[-1].validity[1]) if not is_entry_dict else \
-                (entries[0].get("validity")[0], entries[-1].get("validity")[1])
-        if not start_times:
-            start_times = tuple([e.validity[0] for e in entries]) if not is_entry_dict else \
-                tuple([e.get("validity")[0] for e in entries])
-        nonnegative = all(e.costs_per_mwh >= 0 for e in entries) if not is_entry_dict else \
-                all(e.get("costs_per_mwh") >= 0 for e in entries)
-        if is_dict:
-            self["start_end"] = start_end
-            self["start_times"] = start_times
-            self["strictly_nonnegative"] = nonnegative
-        else:
-            self.start_end = start_end
-            self.start_times = start_times
-            self.strictly_nonnegative = nonnegative
-        return self
-
-    def average_price(self, start: datetime, end: datetime, default_price: float|None=None):
-        """
-        Parameters:
-            start:
-            end:
-            default_price:
-        Returns:
-             price in
-        """
-        if not self.start_end or end <= self.start_end[0] or start >= self.start_end[1] or end < start:
-            return default_price
-        if end <= self.entries[0].validity[1]:
-            return self.entries[0].costs_per_mwh
-        if start >= self.entries[-1].validity[0]:
-            return self.entries[-1].costs_per_mwh
-        start_idx = bisect_right(self.start_times, start) - 1
-        total_duration: timedelta = timedelta()
-        total_value: timedelta = timedelta()
-        for entry in self.entries[start_idx:]:
-            validity = entry.validity
-            if start > validity[0]:
-                if end <= validity[1]:
-                    return entry.costs_per_mwh
-                delta = validity[1] - start
-            elif end <= validity[0]:
-                break
-            else:
-                delta = validity[1] - validity[0]
-            total_duration += delta
-            total_value += entry.costs_per_mwh * delta
-        return total_value / total_duration
-
-
 class EnergyCostService:
 
     def __init__(self, url: str):
@@ -241,13 +167,16 @@ class EnergyCostService:
     def energy_type(self) -> EnergyType:
         return self.service().energy_type
 
+    def unit(self) -> str:
+        return "€/MWh"
+
     def status(self) -> int:
         """
         :return: 0: service running, 1: service not available, > 10: custom error codes
         """
         raise NotImplementedError
 
-    def energy_costs(self, start: datetime, end: datetime) -> EnergyPriceCurve|ServiceResultsFailed:
+    def energy_costs(self, start: datetime, end: datetime) -> Timeseries|ServiceResultsFailed:
         raise NotImplementedError
 
 
@@ -256,7 +185,7 @@ class EnergyUtils:
     @staticmethod
     def evaluate_process_energy_costs(planning: ProductionPlanning, objective: ObjectiveFunction, snapshot: Snapshot,
                                         energy_predictions: Mapping[EnergyType, Mapping[int, Mapping[str, EnergyPrediction]]] | None,
-                                        energy_prices: Mapping[EnergyType, EnergyPriceCurve] | None,
+                                        energy_prices: Mapping[EnergyType, Timeseries] | None,
                                         default_energy_price: Mapping[EnergyType, float],
                                         energy_costs_factor: float | None,
                                         order_times: Mapping[str, tuple[datetime, datetime]]|None = None
@@ -353,7 +282,7 @@ class EnergyUtils:
     def evaluate_equipment_energy_costs(status: EquipmentStatus, objective: ObjectiveFunction|None,
                               orders: Sequence[str], order_times: Mapping[str, tuple[datetime, datetime]],
                               energy_predictions: Mapping[EnergyType, Mapping[str, EnergyPrediction]] | None,
-                              energy_prices: Mapping[EnergyType, EnergyPriceCurve] | None,
+                              energy_prices: Mapping[EnergyType, Timeseries] | None,
                               default_energy_price: Mapping[EnergyType, float], energy_costs_factor: float | None,
                               ) -> tuple[EquipmentStatus, ObjectiveFunction|None]:
         """
@@ -372,7 +301,7 @@ class EnergyUtils:
                     energy_usage[e_type] = energy_usage.get(e_type, 0.) + pred.predicted_energy
                     if energy_prices and e_type in energy_prices:
                         # determine cost factor for the considered time interval!
-                        avg_price = energy_prices[e_type].average_price(o_times[0], o_times[1]) if o_times is not None else None
+                        avg_price = energy_prices[e_type].avg(start=o_times[0], end=o_times[1])[0] if o_times is not None else None
                         if avg_price is None:
                             avg_price = default_energy_price.get(e_type)
                         if avg_price is not None:
@@ -396,7 +325,7 @@ class EnergyUtils:
                             new_status: EquipmentStatus, new_objective: ObjectiveFunction,
                             start: datetime, end: datetime,
                             energy_predictions: Mapping[EnergyType, Mapping[str, EnergyPrediction]] | None,
-                            energy_prices: Mapping[EnergyType, EnergyPriceCurve] | None,
+                            energy_prices: Mapping[EnergyType, Timeseries] | None,
                             default_energy_price: Mapping[EnergyType, float],
                             energy_costs_factor: float|None) -> tuple[EquipmentStatus, ObjectiveFunction]:
         """
@@ -436,7 +365,7 @@ class EnergyUtils:
                 energy_usage[e_type] = energy_usage.get(e_type, 0.) + pred.predicted_energy
                 if energy_prices and e_type in energy_prices and energy_costs:
                     # determine cost factor for the considered time interval
-                    avg_price = energy_prices[e_type].average_price(start, end)
+                    avg_price = energy_prices[e_type].avg(start=start, end=end)[0]
                     if avg_price is None:
                         avg_price = default_energy_price.get(e_type)
                     if avg_price is not None:

@@ -5,11 +5,11 @@ from typing import Literal, Mapping, Sequence
 import pandas as pd
 from dotenv import load_dotenv
 
-from dynreact.base.EnergyService import EnergyService, EnergyServiceMetadata, EnergyCostService, \
-    EnergyCostServiceMetadata, EnergyPriceCurve, EnergyCharacteristics, EnergyPrediction
+from dynreact.base.EnergyService import EnergyService, EnergyServiceMetadata, EnergyCostService, EnergyCostServiceMetadata,  EnergyPrediction
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.model import Site, Order, Material
+from dynreact.base.model_timeseries import MemoryTimeseries, DataPoint
 
 
 class EnergyConfig:
@@ -126,9 +126,9 @@ class SimpleEnergyCostService(EnergyCostService):
     def status(self) -> int:
         return 0
 
-    def energy_costs(self, start: datetime, end: datetime) -> EnergyPriceCurve:
+    def energy_costs(self, start: datetime, end: datetime) -> MemoryTimeseries:
         if end <= start:
-            return EnergyPriceCurve(entries=tuple())
+            return MemoryTimeseries(entries=tuple())
         itv_start = start
         cost_steps: Sequence[tuple[time, float]] = self._config.cost_steps
         num_steps = len(cost_steps)
@@ -136,7 +136,7 @@ class SimpleEnergyCostService(EnergyCostService):
         step_idx: int = next((idx for idx, (tm, _) in enumerate(cost_steps) if tm > start_t), 0)
         step_idx = step_idx - 1 if step_idx > 0 else num_steps - 1
         one_day = timedelta(days=1)
-        result: list[EnergyCharacteristics] = []
+        result: list[DataPoint] = []
         while itv_start < end:
             next_step_idx = (step_idx + 1) % num_steps
             itv_end_time = cost_steps[next_step_idx][0]
@@ -144,7 +144,7 @@ class SimpleEnergyCostService(EnergyCostService):
             while itv_end <= itv_start:
                 itv_end = itv_end + one_day
             costs = cost_steps[step_idx][1]
-            result.append(EnergyCharacteristics(validity=(itv_start, itv_end), costs_per_mwh=costs))
+            result.append(DataPoint(validity=(itv_start, itv_end), value=costs))
             itv_start = itv_end
             step_idx = next_step_idx
-        return EnergyPriceCurve(entries=result)
+        return MemoryTimeseries(entries=result)

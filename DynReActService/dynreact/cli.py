@@ -1043,12 +1043,12 @@ def energy_prices():
         print(f"  Failed to determine energy price prediction ({energy_type}): {results}")
         return
     print(f"Energy prices ({energy_type}):")
-    cost_unit = results.cost_unit
+    cost_unit = service.unit
     print( "|------------------|------------------|---------------|")
     print(f"|    Start time    |      End time    | Price ({cost_unit}/MWh) |")
     print( "|------------------|------------------|---------------|")
     _format = "%Y-%m-%dT%H:%M"
-    for entry in results.entries:
+    for entry in results.values(start, end):
         print(f"| {entry.validity[0].astimezone().strftime(_format)} | {entry.validity[1].astimezone().strftime(_format)} |      {entry.costs_per_mwh:.2f}     |")
 
 

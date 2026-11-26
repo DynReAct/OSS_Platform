@@ -1,5 +1,5 @@
 import os
-from typing import Literal
+from typing import Literal, Sequence
 
 from dotenv import load_dotenv
 
@@ -73,6 +73,8 @@ class DynReActSrvConfig:
     energy_cost_service: dict[str, str] | None = None
     "Keys: energy types ('electric', 'heat'), values: provider id"
     "Optional energy analysis provider. Preferred values: `default+file:./data/energy_context.json` or `ras+file:./data/config/energy_context.json`."
+    energy_kpi_service: Sequence[str]|None = None
+    "Note that the order of service urls is important; the index serves as an id for the service"
     stp_frontend: str = "default"  # default is the frontend provided in this module
     material_order_allocation_frontend: str|None = None
     "Optionally register a frontend for a custom material-order allocation service"
@@ -123,6 +125,7 @@ class DynReActSrvConfig:
                  energy_provider: str|None = None,
                  energy_service: dict[str, str]|None = None,
                  energy_cost_service: dict[str, str] | None = None,
+                 energy_kpi_service: Sequence[str] | None = None,
                  stp_frontend: str|None = None,
                  material_order_allocation_frontend: str|None = None,
                  temporary_restrictions: str | None = None,
@@ -280,6 +283,11 @@ class DynReActSrvConfig:
                             (entry.split("=") for entry in energy_cost_service0.split(",") if "=" in entry)) if len(key) > 0 and len(value) > 0}
         if len(energy_cost_service) > 0:
             self.energy_cost_service = energy_cost_service
+        if energy_kpi_service is None:
+            energy_kpi_service = [item for item in (item.strip() for item in os.getenv("DYNREACT_ENERGY_KPI_SERVICE", "").split(",")) if item]
+            if len(energy_kpi_service) == 0:
+                energy_kpi_service = None
+        self.energy_kpi_service = energy_kpi_service
         if stp_frontend is None:
             stp_frontend = os.getenv("STP_FRONTEND", DynReActSrvConfig.stp_frontend)
         self.stp_frontend = stp_frontend

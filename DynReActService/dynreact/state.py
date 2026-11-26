@@ -7,6 +7,7 @@ from dynreact.base.AggregationProvider import AggregationProvider
 from dynreact.base.ConfigurationProvider import ConfigurationProvider
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.DowntimeProvider import DowntimeProvider
+from dynreact.base.EnergyService import EnergyKpiService
 from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.LotSink import LotSink
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo
@@ -271,14 +272,8 @@ class DynReActSrvState:
     def energy_prediction_types(self) -> Sequence[Literal["electric", "heat"]]:
         return self._plugins.energy_prediction_types()
 
-    def energy_cost_types(self) -> Sequence[Literal["electric", "heat"]]:
-        return self._plugins.energy_cost_types()
-
     def get_energy_service(self, energy_type: Literal["electric", "heat"]):
         return self._plugins.get_energy_service(energy_type)
-
-    def get_energy_cost_service(self, energy_type: Literal["electric", "heat"]):
-        return self._plugins.get_energy_cost_service(energy_type)
 
     def get_snapshot_solution(self, process: str, snapshot: datetime|None=None,
                               horizon:  timedelta|None=None) -> tuple[ProductionPlanning, ProductionTargets]|None:
@@ -338,7 +333,18 @@ class DynReActSrvState:
         return self._plugins.get_plant_performance_models()
 
     def get_lot_sinks(self, if_exists: bool=False) -> dict[str, LotSink]:
-        return self._plugins.get_lot_sinks()
+        return self._plugins.get_lot_sinks(if_exists=if_exists)
+
+    def get_energy_kpi_services(self, energy_type: str | None = None, property: str | None = None) -> Mapping[str, EnergyKpiService]:
+        return self._plugins.get_energy_kpi_services(energy_type=energy_type, property=property)
+
+    # TODO migrate to get_energy_kpi_services
+    def get_energy_cost_service(self, energy_type: Literal["electric", "heat"]):
+        return self._plugins.get_energy_cost_service(energy_type)
+
+    # TODO migrate to energy kpi services
+    def energy_cost_types(self) -> Sequence[Literal["electric", "heat"]]:
+        return self._plugins.energy_cost_types()
 
     def metrics(self) -> Mapping[str, ServiceMetrics]:
         services = []

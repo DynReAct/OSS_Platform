@@ -7,7 +7,7 @@ import requests
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from dynreact.base.EnergyService import EnergyCostService, EnergyServiceMetadata, ServiceResultsFailed
+from dynreact.base.EnergyService import EnergyPriceService, EnergyServiceMetadata, ServiceResultsFailed
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model_timeseries import Timeseries, MemoryTimeseries
@@ -26,8 +26,9 @@ class EnergyCostClientConfig(BaseModel, use_attribute_docstrings=True):
         return EnergyCostClientConfig(token=token)
 
 
+# TODO migrate to EnergyKpiService
 # TODO cache
-class EnergyCostClient(EnergyCostService):
+class EnergyCostClient(EnergyPriceService):
 
     _FORMAT = "%Y-%m-%dT%H:%M%z"
 
@@ -69,7 +70,7 @@ class EnergyCostClient(EnergyCostService):
     def service(self) -> EnergyServiceMetadata:
         return self._get_meta()
 
-    def energy_costs(self, start: datetime, end: datetime) -> MemoryTimeseries|ServiceResultsFailed:
+    def data(self, start: datetime, end: datetime) -> MemoryTimeseries | ServiceResultsFailed:
         start_str = start.strftime(EnergyCostClient._FORMAT).replace("+", "%2B")  # encode plus sign
         end_str = end.strftime(EnergyCostClient._FORMAT).replace("+", "%2B")
         self._init_session()

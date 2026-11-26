@@ -2,9 +2,9 @@ import math
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from itertools import chain
 from typing import TypeVar, Generic, Iterator, Literal, Sequence, Self, Mapping
 
+import pandas as pd
 from pydantic import BaseModel, model_validator
 
 DATA_TYPE = TypeVar("DATA_TYPE", bound=float|int|bool)
@@ -12,6 +12,7 @@ DATA_TYPE = TypeVar("DATA_TYPE", bound=float|int|bool)
 
 @dataclass(frozen=True)
 class DataPoint(BaseModel, Generic[DATA_TYPE]):
+
 
     validity: tuple[datetime, datetime]
     value: DATA_TYPE
@@ -191,4 +192,70 @@ class MemoryTimeseries(BaseModel, Timeseries[DATA_TYPE], use_attribute_docstring
 
     def __len__(self):
         return len(self.entries)
+
+
+class PandasTimeseries(Timeseries):
+
+    import pandas as pd
+
+    def __init__(self, df: pd.DataFrame, col_idx: int|str=1):
+        """Assuming that the index column is of datetime type"""
+        self._df = df
+        self._index = df.index
+        self._data_col = col_idx if isinstance(col_idx, int) else list(df.columns).index(col_idx)
+
+    def values(self, start: datetime|None=None, end: datetime|None=None, direction: Literal["asc", "desc"]="asc") -> Iterator[DataPoint[DATA_TYPE]]:
+        df = self._df
+        asc = direction != "desc"
+        if asc and start is not None:
+            df = df[self._index >= start]
+        elif not asc and end is not None:
+            df = df[self._index < end]
+        if direction == "desc":
+            df = df[::-1]
+        return PandasIterator(iter(df.itertuples(index=True)), self._data_col, desc=not asc)
+
+
+class PandasIterator(Iterator[DataPoint]):
+
+    def __init__(self, it: Iterator[DataPoint], data_col: int, desc: bool=False):
+        self._it = it
+        self._data_col = data_col
+        self._desc = desc
+        self._last_row = None
+        self._previous_delta: timedelta|None = None
+        try:
+            self._last_row = next(it)
+        except StopIteration:
+            pass
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        last_row = self._last_row
+        if last_row is None:
+            raise StopIteration
+        next_row = None
+        try:
+            next_row = next(self._it)
+        except StopIteration:
+            pass
+        ts0 = last_row[0]
+        ts1 = next_row[0] if next_row is not None else ts0 + self._previous_delta if self._previous_delta is not None else ts0 + timedelta(days=365)  # ?
+        if self._desc:
+            ts0, ts1 = (ts1, ts0)
+        self._previous_delta = ts1 - ts0
+        value = last_row[self._data_col]
+        self._last_row = next_row
+        return DataPoint(validity=(ts0, ts1), value=value)
+
+
+# Read a CSV file into memory, as a pandas dataframe
+# A more efficient version iterating the rows on demand could be created, as well
+def csv_memory_timeseries(file: str, col_idx: int|str = 1, separator: str=",", index_col: str|None=None, skiprows: int|Sequence[int]|None=None) -> PandasTimeseries:
+    df = pd.read_csv(file, sep=separator, index_col=index_col, skiprows=skiprows)
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df.index = pd.to_datetime(df.index)
+    return PandasTimeseries(df, col_idx=col_idx)
 

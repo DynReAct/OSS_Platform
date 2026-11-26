@@ -5,7 +5,7 @@ from typing import Literal, Mapping, Sequence
 import pandas as pd
 from dotenv import load_dotenv
 
-from dynreact.base.EnergyService import EnergyService, EnergyServiceMetadata, EnergyCostService, EnergyCostServiceMetadata,  EnergyPrediction
+from dynreact.base.EnergyService import EnergyService, EnergyServiceMetadata, EnergyPriceService, EnergyPropertyServiceMetadata,  EnergyPrediction
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.model import Site, Order, Material
@@ -109,7 +109,8 @@ class EnergyCostConfig:
         self.cost_steps = cost_steps
 
 
-class SimpleEnergyCostService(EnergyCostService):
+# TODO migrate to EnergyKpiService
+class SimpleEnergyCostService(EnergyPriceService):
 
     def __init__(self, url: str, config: EnergyCostConfig|None=None):  # TODO pass the energy type?
         super().__init__(url)
@@ -117,8 +118,8 @@ class SimpleEnergyCostService(EnergyCostService):
             raise NotApplicableException(f"URL {url} not applicable to simple energy cost service")
         self._config = config if config is not None else EnergyCostConfig()
 
-    def service(self) -> EnergyCostServiceMetadata:
-        return EnergyCostServiceMetadata(id="simple", label="Simple energy cost service for testing")
+    def service(self) -> EnergyPropertyServiceMetadata:
+        return EnergyPropertyServiceMetadata(id="simple", label="Simple energy cost service for testing")
 
     def energy_type(self) -> Literal["electric", "heat"]:
         return self._config.energy_type
@@ -126,7 +127,7 @@ class SimpleEnergyCostService(EnergyCostService):
     def status(self) -> int:
         return 0
 
-    def energy_costs(self, start: datetime, end: datetime) -> MemoryTimeseries:
+    def data(self, start: datetime, end: datetime) -> MemoryTimeseries:
         if end <= start:
             return MemoryTimeseries(entries=tuple())
         itv_start = start

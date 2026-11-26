@@ -13,7 +13,7 @@ import numpy.typing as npt
 
 import dynreact.lotcreation.LotCreationGoogleOR as lcor
 from dynreact.base.CostProvider import CostProvider
-from dynreact.base.EnergyService import EnergyCostService, EnergyService, ServiceResultsFailed, EnergyPrediction, EnergyUtils
+from dynreact.base.EnergyService import EnergyPriceService, EnergyService, ServiceResultsFailed, EnergyPrediction, EnergyUtils
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo, LotsOptimizer, LotsOptimizationState
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel, PerformanceEstimation
@@ -62,7 +62,7 @@ class TabuSearch(LotsOptimizer):
                  base_lots: list[Lot]|None = None,
                  params: TabuParams|None=None,
                  temporary_restrictions: TemporaryRestrictionsProvider | None = None,
-                 energy_prices: Mapping[EnergyType, EnergyCostService] | None = None,
+                 energy_prices: Mapping[EnergyType, EnergyPriceService] | None = None,
                  energy_services: Mapping[EnergyType, EnergyService] | None = None,
                  shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None = None,
                  **kwargs
@@ -163,9 +163,9 @@ class TabuSearch(LotsOptimizer):
 
     @staticmethod
     def _init_energy_settings(plants: Mapping[int, Equipment], orders_dict: dict[str, Order]|None,
-                        snapshot: datetime, target_period: tuple[datetime, datetime],
-                        energy_services: Mapping[EnergyType, EnergyService] | None,
-                        energy_prices: Mapping[EnergyType, EnergyCostService] | None):
+                              snapshot: datetime, target_period: tuple[datetime, datetime],
+                              energy_services: Mapping[EnergyType, EnergyService] | None,
+                              energy_prices: Mapping[EnergyType, EnergyPriceService] | None):
         if not energy_services or not orders_dict:
             return None, None
         orders = orders_dict.values()
@@ -191,7 +191,7 @@ class TabuSearch(LotsOptimizer):
         start, end = target_period
         energy_price_curves = {}
         for energy_type, energy_cost_service in energy_prices.items():
-            prices = energy_cost_service.energy_costs(start, end)
+            prices = energy_cost_service.data(start, end)
             if isinstance(prices, ServiceResultsFailed):
                 raise ServiceException(prices.reason, reason=f"Failed to determine energy prices for energy type {energy_type}: {prices.message}")
             if len(prices) == 0:
@@ -1087,7 +1087,7 @@ class TabuAlgorithm(LotsOptimizationAlgo):
                                   base_lots: dict[int, Lot] | None = None,
                                   temporary_restrictions: TemporaryRestrictionsProvider|None= None,
                                   shifts: Mapping[int, Sequence[PlannedWorkingShift]] | None = None,
-                                  energy_prices: Mapping[EnergyType, EnergyCostService] | None = None,
+                                  energy_prices: Mapping[EnergyType, EnergyPriceService] | None = None,
                                   energy_services: Mapping[EnergyType, EnergyService] | None = None,
                                   **kwargs
                                   ) -> TabuSearch:

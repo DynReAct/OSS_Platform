@@ -122,7 +122,7 @@ def update_graph(_: int, energy_type: Literal["electric", "heat"]|None, snapshot
     start_time = start_time.replace(tzinfo=local_tz)
     end_time = end_time.replace(tzinfo=local_tz)
     try:
-        costs = cost_service.energy_costs(start_time, end_time)
+        costs = cost_service.data(start_time, end_time)
         if isinstance(costs, ServiceResultsFailed):
             return True, f"Failed to determine energy costs: {costs.reason}, {costs.message}.", dash.no_update
         if len(costs) == 0:

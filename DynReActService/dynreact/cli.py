@@ -1038,7 +1038,7 @@ def energy_prices():
         raise Exception(f"Energy price provider not found: {energy_type}")
     start = DatetimeUtils.parse_datetime_str(args.start_time).astimezone()
     end = DatetimeUtils.parse_datetime_str(args.end_time).astimezone()
-    results = service.energy_costs(start, end)
+    results = service.data(start, end)
     if isinstance(results, ServiceResultsFailed):
         print(f"  Failed to determine energy price prediction ({energy_type}): {results}")
         return

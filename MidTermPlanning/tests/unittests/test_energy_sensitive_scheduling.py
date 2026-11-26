@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, time
 from typing import Mapping, Sequence, Literal, Iterator, Callable
 
 from dynreact.base.EnergyService import EnergyService, EnergyServiceMetadata, EnergyPrediction, ServiceResultsFailed, \
-    EnergyCostService
+    EnergyPriceService
 from dynreact.base.LotsOptimizer import LotsOptimizationAlgo, LotsOptimizer, OptimizationListener, LotsOptimizationState
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.impl.ModelUtils import ModelUtils
@@ -54,7 +54,7 @@ class EnergySchedulingTest(unittest.TestCase):
                                 energies={plants[0].id: {orders[0].id: 2, orders[1].id: 1}})}
         # the energy price for the first four hours of the day is twice as high as for the rest
         cc = EnergyCostConfig(energy_type="electric", cost_steps=((time(), 3.), (time(hour=4), 1.)))
-        energy_prices: Mapping[EnergyType, EnergyCostService] = {"electric": SimpleEnergyCostService("energyprices+simple:", config=cc)}
+        energy_prices: Mapping[EnergyType, EnergyPriceService] = {"electric": SimpleEnergyCostService("energyprices+simple:", config=cc)}
         # expected energy prices if o1 -> o2: 6 for order 1, 1 for order 2 => sum 7
         # expected energy prices if o2 -> o1: 3 for order 2, 2 for order 1 => sum 5
         optimization: LotsOptimizer = algo.create_instance(process, snapshot, costs, targets=targets, initial_solution=initial_solution,
@@ -118,7 +118,7 @@ class EnergySchedulingTest(unittest.TestCase):
                                       plants[1]: {orders[0].id: 4, orders[1].id: 4, orders[2].id: 5, orders[3].id: 5 }})}
         # the energy price is constant
         cc = EnergyCostConfig(energy_type="electric", cost_steps=((time(), 3.), ))
-        energy_prices: Mapping[EnergyType, EnergyCostService] = {"electric": SimpleEnergyCostService("energyprices+simple:", config=cc)}
+        energy_prices: Mapping[EnergyType, EnergyPriceService] = {"electric": SimpleEnergyCostService("energyprices+simple:", config=cc)}
         # expected energy costs for the initial configuration: 4 * 15 = 60
         # expected energy costs for the optimal configuration: 4 * 12 = 48
         # => hence the swapped config is preferred, despite the additional assignment costs of 8

@@ -4,13 +4,13 @@ import importlib.util
 import logging
 import sys
 import traceback
-from typing import Any, Literal, Sequence
+from typing import Any, Literal, Sequence, Mapping
 
 from dynreact.auth.authentication import get_permission_manager
 from dynreact.base.ConfigurationProvider import ConfigurationProvider
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.DowntimeProvider import DowntimeProvider
-from dynreact.base.EnergyService import EnergyService, EnergyCostService
+from dynreact.base.EnergyService import EnergyService, EnergyPriceService, EnergyKpiService
 from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.LotSink import LotSink
@@ -67,7 +67,8 @@ class Plugins:
         self._metrics_persistence: MetricsPersistence|None = None
         self._permissions: PermissionManager|None = None
         self._energy_services: dict[str, EnergyService|None] = {}  # keys: energy type (electric, heat, ...)
-        self._energy_cost_services: dict[str, EnergyCostService|None] = {}
+        #self._energy_cost_services: dict[str, EnergyPriceService | None] = {}  # moved to KPI services
+        self._energy_kpi_services: Mapping[str, EnergyKpiService]|None = None
 
 
     @staticmethod
@@ -256,6 +257,7 @@ class Plugins:
     def energy_prediction_types(self) -> Sequence[Literal["electric", "heat"]]:
         return tuple() if self._config.energy_service is None else tuple(self._config.energy_service.keys())
 
+    # TODO migrate to energy kpi services
     def energy_cost_types(self) -> Sequence[Literal["electric", "heat"]]:
         return tuple() if self._config.energy_cost_service is None else tuple(self._config.energy_cost_service.keys())
 
@@ -279,10 +281,13 @@ class Plugins:
             self._energy_services[energy_type] = provider
         return self._energy_services.get(energy_type)
 
-    def get_energy_cost_service(self, energy_type: EnergyType) -> EnergyCostService|None:
+    def get_energy_cost_service(self, energy_type: EnergyType) -> EnergyPriceService | None:
+        dct = self.get_energy_kpi_services(energy_type=energy_type, property="energy_price")
+        return next((eps for eps in dct.values()), None)
+        """
         if energy_type not in self._energy_cost_services and self._config.energy_cost_service is not None:
             provider_url = self._config.energy_cost_service.get(energy_type)
-            if isinstance(provider_url, EnergyCostService):
+            if isinstance(provider_url, EnergyPriceService):
                 provider = provider_url
             elif provider_url is None:
                 provider = None
@@ -296,6 +301,27 @@ class Plugins:
                 provider = Plugins._load_energy_cost_service(provider_url)
             self._energy_cost_services[energy_type] = provider
         return self._energy_cost_services.get(energy_type)
+        """
+
+    def get_energy_kpi_services(self, energy_type: str|None=None, property: str|None=None) -> Mapping[str, EnergyKpiService]:
+        if self._energy_kpi_services is None:
+            results = {}
+            if self._config.energy_kpi_service is not None:
+                for cfg in self._config.energy_kpi_service:
+                    if cfg.startswith("file+"):
+                        from dynreact.base.impl.FileBasedEnergyPropertyService import FileBasedEnergyKpiService
+                        srv = FileBasedEnergyKpiService(cfg)
+                    else:
+                        srv = Plugins._load_module("dynreact.energykpi", cfg, self._profile, EnergyKpiService)
+                    results[srv.service().id] = srv
+            self._energy_kpi_services = results
+        services = dict(self._energy_kpi_services)
+        if energy_type:
+            services = {sid: s for sid, s in services.items() if s.energy_type() == energy_type}
+        if property:
+            services = {sid: s for sid, s in services.items() if s.property() == property}
+        return services
+
 
     def load_short_term_planning(self):
         uri = self._config.short_term_planning
@@ -405,7 +431,7 @@ class Plugins:
         return instantiate_first_matching(class_name, EnergyService, site, sp, config, do_raise=True)
 
     @staticmethod
-    def _load_energy_cost_service(config: str) -> EnergyCostService | None:
+    def _load_energy_cost_service(config: str) -> EnergyPriceService | None:
         if "::" not in config:
             return None
         idx = config.index("::")
@@ -416,7 +442,7 @@ class Plugins:
         token = config[last_idx + 2:] if has_token else None
         # actually a generic client config
         config = PerformanceModelClientConfig(address=uri, token=token)
-        return instantiate_first_matching(class_name, EnergyCostService,  config, do_raise=True)
+        return instantiate_first_matching(class_name, EnergyPriceService, config, do_raise=True)
 
     @staticmethod
     def _load_module(

@@ -10,7 +10,7 @@ from dynreact.auth.authentication import get_permission_manager
 from dynreact.base.ConfigurationProvider import ConfigurationProvider
 from dynreact.base.CostProvider import CostProvider
 from dynreact.base.DowntimeProvider import DowntimeProvider
-from dynreact.base.EnergyService import EnergyService, EnergyPriceService, EnergyKpiService
+from dynreact.base.EnergyService import EnergyService, EnergyKpiService
 from dynreact.base.LongTermPlanning import LongTermPlanning
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.LotSink import LotSink
@@ -281,7 +281,7 @@ class Plugins:
             self._energy_services[energy_type] = provider
         return self._energy_services.get(energy_type)
 
-    def get_energy_cost_service(self, energy_type: EnergyType) -> EnergyPriceService | None:
+    def get_energy_cost_service(self, energy_type: EnergyType) -> EnergyKpiService | None:
         dct = self.get_energy_kpi_services(energy_type=energy_type, property="energy_price")
         return next((eps for eps in dct.values()), None)
         """
@@ -309,7 +309,7 @@ class Plugins:
             if self._config.energy_kpi_service is not None:
                 for cfg in self._config.energy_kpi_service:
                     if cfg.startswith("file+"):
-                        from dynreact.base.impl.FileBasedEnergyPropertyService import FileBasedEnergyKpiService
+                        from dynreact.base.impl.FileBasedEnergyKpiService import FileBasedEnergyKpiService
                         srv = FileBasedEnergyKpiService(cfg)
                     else:
                         srv = Plugins._load_module("dynreact.energykpi", cfg, self._profile, EnergyKpiService)
@@ -430,6 +430,7 @@ class Plugins:
         config = PerformanceModelClientConfig(address=uri, token=token)
         return instantiate_first_matching(class_name, EnergyService, site, sp, config, do_raise=True)
 
+    """  # TODO handle http client
     @staticmethod
     def _load_energy_cost_service(config: str) -> EnergyPriceService | None:
         if "::" not in config:
@@ -443,6 +444,7 @@ class Plugins:
         # actually a generic client config
         config = PerformanceModelClientConfig(address=uri, token=token)
         return instantiate_first_matching(class_name, EnergyPriceService, config, do_raise=True)
+     """
 
     @staticmethod
     def _load_module(

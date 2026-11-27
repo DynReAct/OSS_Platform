@@ -4,7 +4,7 @@ from typing import Sequence
 
 import pandas as pd
 
-from dynreact.base.EnergyService import ServiceResultsFailed, EnergyPropertyServiceMetadata, EnergyKpiService
+from dynreact.base.EnergyService import ServiceResultsFailed, EnergyKpiServiceMetadata, EnergyKpiService
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.model_timeseries import Timeseries, csv_memory_timeseries
 
@@ -95,19 +95,12 @@ class FileBasedEnergyKpiService(EnergyKpiService):
         cfg = cfg or CsvFileConfig()
         self._cfg = cfg
         self._format = "csv"
-        self._meta = EnergyPropertyServiceMetadata(id=cfg.id, label=cfg.label, description=cfg.description, energy_type=self._cfg.energy_type)
+        self._meta = EnergyKpiServiceMetadata(id=cfg.id, label=cfg.label, description=cfg.description, energy_type=cfg.energy_type,
+                                              property=cfg.property, unit=cfg.unit)
         self._data: pd.DataFrame|None = None
 
-    def service(self) -> EnergyPropertyServiceMetadata:
+    def service(self) -> EnergyKpiServiceMetadata:
         return self._meta
-
-    def property(self) -> str:
-        """Specify the property, such as \"energy_price\""""
-        return self._cfg.property
-
-    def unit(self) -> str:
-        """Specify the unit, such as \"€/MWh\""""
-        return self._cfg.unit
 
     def status(self) -> int:
         """

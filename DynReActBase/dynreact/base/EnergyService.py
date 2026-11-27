@@ -143,7 +143,7 @@ class EnergyService:
                                         model=model, missing_value_ensemble=missing_value_ensemble, **kwargs) for order, mat in entries])
 
 
-class EnergyPropertyServiceMetadata(BaseModel, use_attribute_docstrings=True, frozen=True):
+class EnergyKpiServiceMetadata(BaseModel, use_attribute_docstrings=True, frozen=True):
     """Provides metadata about the energy estimation service.
 
     Attributes:
@@ -155,6 +155,11 @@ class EnergyPropertyServiceMetadata(BaseModel, use_attribute_docstrings=True, fr
     label: str
     description: str|None=None
     energy_type: str
+    "Energy type, such as \"electric\" or \"heat\""
+    property: str
+    "Property/KPI, such as energy_price"
+    unit: str = ""
+    "the unit, such as \"€/MWh\""
 
 
 class EnergyKpiService:
@@ -162,19 +167,20 @@ class EnergyKpiService:
     def __init__(self, url: str):
         self._url = url
 
-    def service(self) -> EnergyPropertyServiceMetadata:
+    def service(self) -> EnergyKpiServiceMetadata:
         raise NotImplementedError
 
-    def energy_type(self) -> EnergyType:
-        raise self.service().energy_type
+    def energy_type(self) -> str:
+        """Examples: \"electric\", \"heat\""""
+        return self.service().energy_type
 
     def property(self) -> str:
         """Specify the property, such as \"energy_price\""""
-        raise NotImplementedError
+        return self.service().property
 
     def unit(self) -> str:
         """Specify the unit, such as \"€/MWh\""""
-        return ""
+        return self.service().unit
 
     def status(self) -> int:
         """
@@ -184,16 +190,6 @@ class EnergyKpiService:
 
     def data(self, start: datetime|None=None, end: datetime|None=None) -> Timeseries | ServiceResultsFailed:
         raise NotImplementedError
-
-
-class EnergyPriceService(EnergyKpiService):
-
-    def property(self) -> str:
-        return "energy_price"
-
-    def unit(self) -> str:
-        return "€/MWh"
-
 
 
 class EnergyUtils:

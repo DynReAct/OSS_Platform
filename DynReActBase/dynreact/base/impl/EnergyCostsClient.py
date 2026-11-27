@@ -7,7 +7,7 @@ import requests
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from dynreact.base.EnergyService import EnergyPriceService, EnergyServiceMetadata, ServiceResultsFailed
+from dynreact.base.EnergyService import ServiceResultsFailed, EnergyKpiService, EnergyKpiServiceMetadata
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.impl.DatetimeUtils import DatetimeUtils
 from dynreact.base.model_timeseries import Timeseries, MemoryTimeseries
@@ -26,9 +26,8 @@ class EnergyCostClientConfig(BaseModel, use_attribute_docstrings=True):
         return EnergyCostClientConfig(token=token)
 
 
-# TODO migrate to EnergyKpiService
 # TODO cache
-class EnergyCostClient(EnergyPriceService):
+class EnergyCostClient(EnergyKpiService):
 
     _FORMAT = "%Y-%m-%dT%H:%M%z"
 
@@ -44,21 +43,21 @@ class EnergyCostClient(EnergyPriceService):
         self._address = EnergyCostClient._fix_path(address)
         self._config = config
         self._token = config.token
-        self._meta: EnergyServiceMetadata | None = None
+        self._meta: EnergyKpiServiceMetadata | None = None
         self._status_update_interval: timedelta = timedelta(minutes=2)
         self._last_status_update: datetime | None = None
         self._last_status: int = -1
         self._session: requests.Session|None = None
         self._get_logger().info("Energy cost HTTP client starting")
 
-    def _get_meta(self) -> EnergyServiceMetadata:
+    def _get_meta(self) -> EnergyKpiServiceMetadata:
         if self._meta is None:
             # TODO error handling etc
             self._init_session()
             result = self._session.get(self._address + "model", headers={"Accept": "application/json"})
             result.raise_for_status()
             json = result.json()
-            self._meta = EnergyServiceMetadata.model_validate(json)
+            self._meta = EnergyKpiServiceMetadata.model_validate(json)
         return self._meta
 
     def __str__(self):
@@ -67,10 +66,12 @@ class EnergyCostClient(EnergyPriceService):
         except:
             return f"EnergyCostClientHttp[address={self._address}] (disconnected)"
 
-    def service(self) -> EnergyServiceMetadata:
+    def service(self) -> EnergyKpiServiceMetadata:
         return self._get_meta()
 
-    def data(self, start: datetime, end: datetime) -> MemoryTimeseries | ServiceResultsFailed:
+    def data(self, start: datetime|None=None, end: datetime|None=None) -> MemoryTimeseries | ServiceResultsFailed:
+        start = start or Timeseries._DAY0
+        end = end or Timeseries._LAST_DAY
         start_str = start.strftime(EnergyCostClient._FORMAT).replace("+", "%2B")  # encode plus sign
         end_str = end.strftime(EnergyCostClient._FORMAT).replace("+", "%2B")
         self._init_session()

@@ -11,7 +11,7 @@ import numpy as np
 from pydantic import BaseModel
 
 from dynreact.base.CostProvider import CostProvider
-from dynreact.base.EnergyService import EnergyPriceService, EnergyService
+from dynreact.base.EnergyService import EnergyService, EnergyKpiService
 from dynreact.base.PlantPerformanceModel import PlantPerformanceModel
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.TemporaryRestrictionsProvider import TemporaryRestrictionsProvider, RestrictionUtils, EquipmentRestriction, RuleSettings
@@ -123,7 +123,7 @@ class LotsOptimizer(Generic[P]):
                  base_lots: dict[int, Lot] | None = None,  # Keys: equipment id; used to extend existing lots
                  temporary_restrictions: TemporaryRestrictionsProvider|None = None,
                  energy_services: Mapping[EnergyType, EnergyService] | None = None,
-                 energy_prices: Mapping[EnergyType, EnergyPriceService] | None = None,
+                 energy_prices: Mapping[EnergyType, EnergyKpiService] | None = None,
                  shifts: Mapping[int, Sequence[PlannedWorkingShift]] | None = None,
                  **kwargs
                  ):
@@ -209,7 +209,7 @@ class LotsOptimizer(Generic[P]):
         self._base_assignments: dict[str, OrderAssignment]|None = {o: OrderAssignment(order=o, equipment=lot.equipment, lot=lot.id, lot_idx=idx+1)
                                                             for lot in base_lots.values() for idx, o in enumerate(lot.orders)} if base_lots is not None else None
         self._orders = LotsOptimizationAlgo.orders_apply_temporary_constraints(self._orders, temporary_restrictions, equipment=self._plant_ids) if self._orders is not None else None
-        self._energy_prices: Mapping[EnergyType, EnergyPriceService] | None = energy_prices
+        self._energy_prices: Mapping[EnergyType, EnergyKpiService] | None = energy_prices
         self._energy_services: Mapping[EnergyType, EnergyService] | None = energy_services
         _td = timedelta()
         self._shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None = {eq: [s for s in eq_shifts if s.worktime > _td] for eq, eq_shifts in shifts.items()} if shifts is not None else None
@@ -540,7 +540,7 @@ class LotsOptimizationAlgo:
                         orders_custom_priority: dict[str, int] | None = None,
                         forced_orders: list[str] | None = None,
                         base_lots: dict[int, Lot] | None = None,  # if this is set, then orders will be appended to those lots instead of creating new ones
-                        energy_prices: Mapping[EnergyType, EnergyPriceService] | None = None,
+                        energy_prices: Mapping[EnergyType, EnergyKpiService] | None = None,
                         energy_services: Mapping[EnergyType, EnergyService] | None = None,
                         **kwargs
                         ) -> LotsOptimizer:
@@ -582,7 +582,7 @@ class LotsOptimizationAlgo:
                                   base_lots: dict[int, Lot] | None = None,
                                   temporary_restrictions: TemporaryRestrictionsProvider|None = None,
                                   shifts: Mapping[int, Sequence[PlannedWorkingShift]]|None=None,
-                                  energy_prices: Mapping[EnergyType, EnergyPriceService] | None = None,
+                                  energy_prices: Mapping[EnergyType, EnergyKpiService] | None = None,
                                   energy_services: Mapping[EnergyType, EnergyService] | None = None,
                                   **kwargs
                                   ) -> LotsOptimizer:

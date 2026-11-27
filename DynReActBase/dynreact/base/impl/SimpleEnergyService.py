@@ -5,11 +5,12 @@ from typing import Literal, Mapping, Sequence
 import pandas as pd
 from dotenv import load_dotenv
 
-from dynreact.base.EnergyService import EnergyService, EnergyServiceMetadata, EnergyPriceService, EnergyPropertyServiceMetadata,  EnergyPrediction
+from dynreact.base.EnergyService import EnergyService, EnergyServiceMetadata, \
+    EnergyKpiServiceMetadata, EnergyPrediction, EnergyKpiService
 from dynreact.base.NotApplicableException import NotApplicableException
 from dynreact.base.SnapshotProvider import SnapshotProvider
 from dynreact.base.model import Site, Order, Material
-from dynreact.base.model_timeseries import MemoryTimeseries, DataPoint
+from dynreact.base.model_timeseries import MemoryTimeseries, DataPoint, Timeseries
 
 
 class EnergyConfig:
@@ -109,8 +110,7 @@ class EnergyCostConfig:
         self.cost_steps = cost_steps
 
 
-# TODO migrate to EnergyKpiService
-class SimpleEnergyCostService(EnergyPriceService):
+class SimpleEnergyCostService(EnergyKpiService):
 
     def __init__(self, url: str, config: EnergyCostConfig|None=None):  # TODO pass the energy type?
         super().__init__(url)
@@ -118,8 +118,9 @@ class SimpleEnergyCostService(EnergyPriceService):
             raise NotApplicableException(f"URL {url} not applicable to simple energy cost service")
         self._config = config if config is not None else EnergyCostConfig()
 
-    def service(self) -> EnergyPropertyServiceMetadata:
-        return EnergyPropertyServiceMetadata(id="simple", label="Simple energy cost service for testing")
+    def service(self) -> EnergyKpiServiceMetadata:
+        return EnergyKpiServiceMetadata(id="simple", label="Simple energy cost service for testing",
+                                        unit="€/MWh", property="energy_price", energy_type=self._config.energy_type)
 
     def energy_type(self) -> Literal["electric", "heat"]:
         return self._config.energy_type
@@ -127,7 +128,9 @@ class SimpleEnergyCostService(EnergyPriceService):
     def status(self) -> int:
         return 0
 
-    def data(self, start: datetime, end: datetime) -> MemoryTimeseries:
+    def data(self, start: datetime|None=None, end: datetime|None=None) -> MemoryTimeseries:
+        start = start or Timeseries._DAY0
+        end = end or Timeseries._LAST_DAY
         if end <= start:
             return MemoryTimeseries(entries=tuple())
         itv_start = start
